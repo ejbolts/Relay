@@ -172,8 +172,8 @@ async function render(children: ReactNode) {
 }
 
 const coach = () => document.querySelector('.setup-coach');
-const back = () => coach()?.querySelector<HTMLButtonElement>('.setup-coach-back') ?? null;
-const coachTitle = () => coach()?.querySelector('strong')?.textContent;
+const back = () => coach()?.querySelector<HTMLButtonElement>('.guide-card-back') ?? null;
+const coachTitle = () => coach()?.querySelector('.guide-card-title')?.textContent;
 const button = (label: string) =>
   [...document.querySelectorAll<HTMLButtonElement>('button')].find(
     (item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label,
@@ -523,7 +523,7 @@ describe('splits guide', () => {
     await submit('.routine-editor');
     // Saved, but not yet the split Up next follows.
     expect(finished).toEqual([]);
-    await click('Close notification');
+    await click('Dismiss notification');
     expect(coachTitle()).toBe('Make it your split');
     await click('Use split');
     expect(coachTitle()).toBe('Choose how it runs');

@@ -117,6 +117,11 @@ const shelfGains = () =>
     (cell) =>
       `${cell.querySelector('.weekly-shelf-name')?.textContent} ${cell.querySelector('.weekly-shelf-gain')?.textContent}`,
   );
+/** Each shelf total as before→after. */
+const totals = () =>
+  [...container.querySelectorAll('.weekly-shelf-roll > span')].map((roll) =>
+    [...roll.children].map((value) => value.textContent).join('→'),
+  );
 const menuItems = () =>
   [...card().querySelectorAll('.movement-overflow-menu button')].map((item) =>
     item.textContent?.replace('⇄', '').trim(),
@@ -183,13 +188,17 @@ afterEach(async () => {
 });
 
 describe('finishing an exercise by ticking its last set', () => {
-  it('folds a planned exercise away and shows its weekly totals once, for all of its sets', async () => {
+  it('updates weekly totals with each set, then folds the exercise away with its totals', async () => {
     liveDraft([60, 60, 60]);
     await mount();
     await tick(1);
+    // Each set moves its muscles' weekly totals as it is logged.
+    expect(shelfGains()).toEqual(['Chest +1', 'Triceps +0.5']);
+    expect(totals()).toEqual(['0→1', '0→0.5']);
     await tick(2);
-    // Nothing is announced or folded while sets remain.
-    expect(shelfGains()).toEqual([]);
+    expect(shelfGains()).toEqual(['Chest +1', 'Triceps +0.5']);
+    expect(totals()).toEqual(['1→2', '0.5→1']);
+    // Nothing folds while sets remain.
     expect(card().classList.contains('is-collapsed')).toBe(false);
     expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(false);
 

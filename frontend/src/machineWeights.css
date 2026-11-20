@@ -1,28 +1,6 @@
-.machine-weights-save {
-  flex: none;
-  min-height: 2.5rem;
-  border: 0;
-  border-radius: 12px;
-  padding: 0 16px;
-  background: var(--p-accent);
-  color: #fff;
-  font: inherit;
-  font-size: 14px;
-  font-weight: 650;
-}
-
-.machine-weights-save:disabled {
-  opacity: 0.5;
-}
-
-/* The title takes the spare width, so Save sits beside the close button. */
+/* Save sits close beside the close button. */
 dialog.popup-dialog.machine-weights-dialog > header {
   gap: 0.5rem;
-}
-
-dialog.popup-dialog.machine-weights-dialog > header > div {
-  flex: 1;
-  min-width: 0;
 }
 
 .machine-weights-dialog[open] {
@@ -48,15 +26,27 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
   flex: none;
   border: 1px solid var(--p-line-strong);
   border-radius: 14px;
-  padding: 0.35rem 0.5rem 0.5rem;
+  padding: 0.35rem 0.5rem 0;
   background: var(--p-surface);
+}
+
+/* The chart folds up to the handle (swipeFold.css); swipe down or tap to bring it back. */
+.machine-weights-preview button.machine-weights-preview-handle {
+  gap: 0.35rem;
+  padding: 0.3rem 0 0.45rem;
+}
+
+/* The line follows the slider as it moves, so it never replays the chart's draw-in. */
+.machine-weights-preview .pulse-chart-line,
+.machine-weights-preview .pulse-chart-marker {
+  animation: none;
 }
 
 .machine-weights-preview-key {
   display: flex;
   align-items: center;
   gap: 0.35rem;
-  margin: 0.15rem 0 0 0.4rem;
+  margin: 0;
   color: var(--p-muted);
   font-size: 0.72rem;
 }
@@ -270,17 +260,27 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
   gap: 0.4rem;
 }
 
+/*
+ * The machines scroll in their own edge-to-edge pane below a divider, so cards pass under it the
+ * way they pass under the dialog's header, rather than being cut off against the pinned chart.
+ * Above the setup guide, they fade out instead of stopping at a hard edge.
+ */
 .machine-weights-list {
+  --edge: 0.75rem;
   display: grid;
   flex: 1;
   align-content: start;
   gap: 0.5rem;
   min-height: 0;
-  margin: 0;
+  margin: 0 -1rem;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 0;
+  border-top: 1px solid var(--p-line-strong);
+  padding: var(--edge) 1rem;
+  scroll-padding-block: var(--edge);
   list-style: none;
+  -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - var(--edge)), transparent);
+  mask-image: linear-gradient(to bottom, #000 calc(100% - var(--edge)), transparent);
 }
 
 .machine-weights-list > li {
@@ -294,7 +294,7 @@ dialog.popup-dialog.machine-weights-dialog > header > div {
 
 /* The reference leads the tree, with a gold arrow to each machine measured against it. */
 .machine-weights-list.is-tree {
-  padding-left: 1.9rem;
+  padding-left: calc(1rem + 1.9rem);
 }
 
 .machine-weights-list > li.is-reference {

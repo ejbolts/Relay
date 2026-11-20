@@ -9,29 +9,26 @@ export function DataExportDialog({
   workoutDates,
   bodyweightDates,
   onClose,
+  onExported,
 }: {
   workoutDates: string[];
   bodyweightDates: string[];
   onClose: () => void;
+  /** Called after the files download, with a confirmation for the toast. */
+  onExported: (message: string) => void;
 }) {
   const [workouts, setWorkouts] = useState(true);
   const [bodyweight, setBodyweight] = useState(false);
   const [timeFrame, setTimeFrame] = useState<TimeRange>('all');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState(false);
   const dates = [...(workouts ? workoutDates : []), ...(bodyweight ? bodyweightDates : [])];
   const range = dateRangeForDates(dates, timeFrame);
-
-  function close() {
-    if (!busy) onClose();
-  }
 
   async function save() {
     if (busy || (!workouts && !bodyweight)) return;
     setBusy(true);
     setError(null);
-    setDone(false);
     try {
       // Prepare every selected file before downloading, so a failed request creates no partial export.
       const [workoutCsv, bodyCsv] = await Promise.all([
@@ -41,22 +38,40 @@ export function DataExportDialog({
       const suffix = range.start_date ? `${range.start_date}-to-${range.end_date}` : localDate();
       if (workoutCsv) downloadCsv(workoutCsv, `gym-workouts-${suffix}.csv`);
       if (bodyCsv) downloadCsv(bodyCsv, `body-weight-${suffix}.csv`);
-      setDone(true);
+      setBusy(false);
+      onExported(workoutCsv && bodyCsv ? 'Both CSV files downloaded.' : 'CSV downloaded.');
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not export your data. Try again.');
-    } finally {
       setBusy(false);
     }
   }
 
   function changeSelection(change: () => void) {
     change();
-    setDone(false);
     setError(null);
   }
 
   return (
-    <PopupDialog title="Export Relay data" kicker="CSV EXPORT" onClose={close}>
+    <PopupDialog
+      title="Export Relay data"
+      busy={busy}
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action"
+            disabled={busy || (!workouts && !bodyweight)}
+            onClick={() => void save()}
+          >
+            {busy ? 'Preparing…' : 'Download CSV'}
+          </button>
+        </>
+      }
+    >
       <div className="data-export-dialog">
         <p>Choose what to export.</p>
         <fieldset disabled={busy} className="data-export-choices">
@@ -127,24 +142,6 @@ export function DataExportDialog({
             {error}
           </p>
         )}
-        {done && (
-          <p role="status" className="workout-import-totals">
-            {workouts && bodyweight ? 'Both CSV files downloaded.' : 'CSV downloaded.'}
-          </p>
-        )}
-        <div className="popup-dialog-actions">
-          <button type="button" disabled={busy} onClick={close}>
-            {done ? 'Done' : 'Cancel'}
-          </button>
-          <button
-            type="button"
-            className="popup-primary-action"
-            disabled={busy || (!workouts && !bodyweight)}
-            onClick={() => void save()}
-          >
-            {busy ? 'Preparing…' : done ? 'Download again' : 'Download CSV'}
-          </button>
-        </div>
       </div>
     </PopupDialog>
   );

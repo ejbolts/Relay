@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WorkoutShareCard, WorkoutSharePrompt } from './WorkoutShareCard';
+import { WorkoutShareCard } from './WorkoutShareCard';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 import { UserContext } from './userContext';
 import {
@@ -368,23 +368,9 @@ it('copies the prepared compact PNG and preserves a download fallback if clipboa
   expect(button('Download PNG').disabled).toBe(false);
 });
 
-it('keeps unsupported clipboard disabled and offers sharing through a non-blocking dismissible toast', async () => {
+it('keeps unsupported clipboard disabled', async () => {
   await mount();
   expect(button('Copy image').disabled).toBe(true);
-  await act(async () =>
-    root.render(
-      <WorkoutSharePrompt key="prompt" workout={workout} records={2} onClose={onClose} />,
-    ),
-  );
-  expect(document.querySelector('dialog, [aria-modal="true"]')).toBeNull();
-  expect(document.querySelector('.app-notification-toast')?.textContent).toContain('Workout saved');
-  await act(async () =>
-    document.querySelector<HTMLButtonElement>('[aria-label="Close notification"]')!.click(),
-  );
-  expect(onClose).toHaveBeenCalledOnce();
-  await act(async () => button('Share card').click());
-  expect(document.querySelector('dialog h2')?.textContent).toBe('Share workout');
-  expect(document.querySelectorAll('dialog')).toHaveLength(1);
 });
 
 it('keeps Settings and the card toggle synchronized, persists disabling and preserves manual sharing', async () => {
@@ -406,19 +392,11 @@ it('keeps Settings and the card toggle synchronized, persists disabling and pres
   expect(switches().map((item) => item.getAttribute('aria-checked'))).toEqual(['false', 'false']);
   expect(document.querySelector('dialog')).not.toBeNull();
   expect(window.localStorage.getItem('relay-workout-share-reminder:device')).toBe('off');
-  await act(async () =>
-    root.render(<WorkoutSharePrompt workout={workout} records={0} onClose={onClose} />),
-  );
-  expect(document.querySelector('.notification-toast-action')).toBeNull();
-  expect(onClose).toHaveBeenCalledOnce();
   await mount();
   expect(switches()[0].getAttribute('aria-checked')).toBe('false');
   expect(button('Download PNG').disabled).toBe(false);
   await act(async () => switches()[0].click());
-  await act(async () =>
-    root.render(<WorkoutSharePrompt workout={workout} records={0} onClose={onClose} />),
-  );
-  expect(document.querySelector('.notification-toast-action')).not.toBeNull();
+  expect(window.localStorage.getItem('relay-workout-share-reminder:device')).not.toBe('off');
 });
 
 it('keeps reminder choices isolated between signed-in accounts', async () => {

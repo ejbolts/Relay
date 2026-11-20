@@ -7,6 +7,7 @@ import {
   homeSectionGaps,
   homeSectionSpans,
   moveHomeSection,
+  showHomeSectionAfter,
   toggleHomeSection,
   toggleHomeSectionWidth,
   homeSectionSettings,
@@ -100,6 +101,17 @@ describe('Home layout edits', () => {
     const last = HOME_SECTIONS.at(-1)!.id;
     expect(moveHomeSection(reordered, 'consistency', last).order.at(-1)).toBe('consistency');
     expect(moveHomeSection(saved, 'records', 'records')).toBe(saved);
+  });
+
+  it('shows an added section straight after the first card, keeping its width', () => {
+    const saved = { ...defaultHomeLayout(), widths: { 'body-goal': 'full' as const } };
+    const shown = showHomeSectionAfter(saved, 'body-goal', 'next-workout');
+    expect(shown.order.slice(0, 2)).toEqual(['next-workout', 'body-goal']);
+    expect(shown.order).toHaveLength(saved.order.length);
+    expect(shown.hidden).not.toContain('body-goal');
+    expect(shown.widths).toEqual(saved.widths);
+    expect(saved.order).toEqual(defaultHomeLayout().order);
+    expect(showHomeSectionAfter(saved, 'body-goal', undefined).order[0]).toBe('body-goal');
   });
 
   it('restores hidden sections at their saved position', () => {

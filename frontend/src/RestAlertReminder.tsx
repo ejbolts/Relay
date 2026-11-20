@@ -1,25 +1,16 @@
-import { useEffect, useId, useState, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
-import { Icon } from './Icon';
+import { useId, useState } from 'react';
 import { PopupDialog } from './PopupDialog';
 import { enablePhonePushNotifications } from './push';
 import { dismissRestAlertReminder } from './restAlertReminderState';
+import { useToast } from './Toast';
 import './restAlertReminder.css';
-
-const CONFIRMATION_MS = 3000;
 
 export function RestAlertReminder({ onClose }: { onClose: () => void }) {
   const checkboxId = useId();
   const [dontShowAgain, setDontShowAgain] = useState(false);
   const [enabling, setEnabling] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [enabled, setEnabled] = useState(false);
-
-  useEffect(() => {
-    if (!enabled) return;
-    const timer = window.setTimeout(onClose, CONFIRMATION_MS);
-    return () => window.clearTimeout(timer);
-  }, [enabled, onClose]);
+  const toast = useToast();
 
   function close() {
     if (enabling) return;
@@ -35,7 +26,8 @@ export function RestAlertReminder({ onClose }: { onClose: () => void }) {
       // Called straight from the tap, which browsers require before asking for permission.
       await enablePhonePushNotifications();
       if (dontShowAgain) dismissRestAlertReminder();
-      setEnabled(true);
+      toast.show('Rest alerts on');
+      onClose();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not turn on rest alerts.');
     } finally {
@@ -43,30 +35,28 @@ export function RestAlertReminder({ onClose }: { onClose: () => void }) {
     }
   }
 
-  if (enabled) {
-    return createPortal(
-      <div
-        className="undo-toast top-toast"
-        role="status"
-        aria-atomic="true"
-        style={{ '--undo-toast-duration': `${CONFIRMATION_MS}ms` } as CSSProperties}
-      >
-        <span>Rest alerts on</span>
-        <button
-          className="undo-toast-close"
-          type="button"
-          aria-label="Dismiss rest alerts notification"
-          onClick={onClose}
-        >
-          <Icon name="close" />
-        </button>
-      </div>,
-      document.body,
-    );
-  }
-
   return (
-    <PopupDialog title="Turn on rest alerts?" className="rest-alert-reminder" onClose={close}>
+    <PopupDialog
+      title="Turn on rest alerts?"
+      className="rest-alert-reminder"
+      busy={enabling}
+      onClose={close}
+      actions={
+        <>
+          <button type="button" disabled={enabling} onClick={close}>
+            Not now
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action"
+            disabled={enabling}
+            onClick={() => void turnOn()}
+          >
+            {enabling ? 'Turning on…' : 'Turn on'}
+          </button>
+        </>
+      }
+    >
       <div className="rest-alert-reminder-body">
         <p>Get a notification when your rest is over, even with your phone locked.</p>
         <label className="rest-alert-reminder-dismiss" htmlFor={checkboxId}>
@@ -84,19 +74,6 @@ export function RestAlertReminder({ onClose }: { onClose: () => void }) {
             {error}
           </p>
         )}
-        <footer className="popup-dialog-actions">
-          <button type="button" disabled={enabling} onClick={close}>
-            Not now
-          </button>
-          <button
-            type="button"
-            className="popup-primary-action"
-            disabled={enabling}
-            onClick={() => void turnOn()}
-          >
-            {enabling ? 'Turning on…' : 'Turn on'}
-          </button>
-        </footer>
       </div>
     </PopupDialog>
   );

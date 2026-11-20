@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { api } from './api';
@@ -8,6 +8,7 @@ import { localDate } from './utils';
 import { readActiveWorkoutDraft, writeActiveWorkoutDraft } from './workoutDraft';
 import { createWorkoutSet } from './workoutSets';
 import type { DashboardData, Exercise, TrackedWorkout } from './types';
+import { createToastRoot, toastButton, toastText } from './toastTestUtils';
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
@@ -202,7 +203,7 @@ beforeEach(() => {
   });
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
 });
 
 afterEach(async () => {
@@ -220,6 +221,8 @@ describe('swapping an exercise mid-workout', () => {
     await click(button('Swap exercise'));
     const sheet = document.querySelector<HTMLDialogElement>('.exercise-swap-sheet')!;
     expect(sheet.open).toBe(true);
+    expect(sheet.classList).toContain('popup-dialog--sheet');
+    expect(sheet.querySelector('header > .sheet-grabber')).not.toBeNull();
     expect(sheet.querySelector('h2')?.textContent).toBe(`Swap ${chestPress.name}`);
     expect(sheet.querySelector('.exercise-swap-carry')?.textContent).toBe(
       '2 planned sets move across · 1 logged set stays',
@@ -247,9 +250,8 @@ describe('swapping an exercise mid-workout', () => {
     expect(container.querySelector('.movement-swapped-from')?.textContent).toContain(
       `Swapped from ${chestPress.name}`,
     );
-    expect(container.querySelector('.undo-toast')?.textContent).toContain(
-      `Swapped to ${dumbbellBench.name}`,
-    );
+    expect(toastText()).toBe(`Swapped to ${dumbbellBench.name}`);
+    expect(toastButton('Undo')).toBeDefined();
 
     const [original, replacement] = readActiveWorkoutDraft()!.movements;
     expect(original).toMatchObject({ key: 'press', exerciseId: chestPress.id, isComplete: true });

@@ -43,7 +43,6 @@ export function MachineSettingsEditor({
   const [loadError, setLoadError] = useState(false);
   const [attempt, setAttempt] = useState(0);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const newInput = useRef<HTMLInputElement>(null);
   const focusNew = useRef(false);
@@ -98,7 +97,6 @@ export function MachineSettingsEditor({
     setRows((current) =>
       current.map((item) => (item.key === key ? { ...item, [field]: value } : item)),
     );
-    setMessage('');
     setError('');
   }
 
@@ -109,18 +107,15 @@ export function MachineSettingsEditor({
       .filter(({ name, value }) => name || value);
     if (settings.some(({ name, value }) => !name || !value)) {
       setError('Enter a setting name and value.');
-      setMessage('');
       return;
     }
     if (settings.some(({ value }) => !numericValue.test(value))) {
       setError('Enter a number for each value.');
-      setMessage('');
       return;
     }
     savingRef.current = true;
     setSaving(true);
     setError('');
-    setMessage('');
     try {
       const saved = await (onSave
         ? onSave(settings)
@@ -130,7 +125,6 @@ export function MachineSettingsEditor({
       if (!mounted.current) return;
       setRows(rowsFor(saved.settings));
       onChangeRef.current(saved.settings);
-      setMessage('Settings saved');
       onSaved?.();
     } catch (reason) {
       if (mounted.current)
@@ -153,7 +147,11 @@ export function MachineSettingsEditor({
       ) : loadError ? (
         <div className="machine-settings-error" role="alert">
           Could not load settings.
-          <button type="button" onClick={() => setAttempt((value) => value + 1)}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => setAttempt((value) => value + 1)}
+          >
             Retry
           </button>
         </div>
@@ -191,7 +189,6 @@ export function MachineSettingsEditor({
                       currentRow?.previousElementSibling?.querySelector('input') ??
                       addButton.current;
                     setRows((current) => current.filter(({ key }) => key !== item.key));
-                    setMessage('');
                     setError('');
                   }}
                 >
@@ -208,7 +205,6 @@ export function MachineSettingsEditor({
                 onClick={() => {
                   focusNew.current = true;
                   setRows((current) => [...current, row()]);
-                  setMessage('');
                   setError('');
                 }}
               >
@@ -227,7 +223,6 @@ export function MachineSettingsEditor({
             </div>
           </fieldset>
           {error && <p role="alert">{error}</p>}
-          {message && <p role="status">{message}</p>}
         </>
       )}
     </section>

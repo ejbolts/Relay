@@ -1,0 +1,34 @@
+/* Settings > Account & privacy: sign out of this device, or of every device after confirming. */
+.account-session > .profile-secondary {
+  margin-top: 0.75rem;
+}
+
+.account-session .account-session-everywhere {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  min-height: 2.75rem;
+  margin-top: 0.25rem;
+}
+
+.account-session .account-session-everywhere:disabled {
+  opacity: 0.6;
+}
+
+.sign-out-dialog > p {
+  margin: 0;
+  padding: 1rem 1rem 0;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.sign-out-dialog > p.sign-out-dialog-warning {
+  color: var(--p-danger);
+}
+
+.sign-out-dialog > p:last-of-type {
+  padding-bottom: 1rem;
+}

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import { emitAuthExpired } from './authEvents';
 import { AuthGate } from './AuthGate';
-import { LAST_USER_KEY } from './sessionCleanup';
+import { LAST_USER_KEY, readSignedOutAccount } from './sessionCleanup';
 import {
   ACTIVE_WORKOUT_DRAFT_KEY,
   readActiveWorkoutDraft,
@@ -18,9 +18,10 @@ vi.mock('./workoutCache', async (original) => ({
   ...(await original<typeof import('./workoutCache')>()),
   clearWorkoutCache: clearCache,
 }));
-const { applyUpdateOnSignIn, signIn } = vi.hoisted(() => ({
+const { applyUpdateOnSignIn, signIn, signInProps } = vi.hoisted(() => ({
   applyUpdateOnSignIn: vi.fn<() => Promise<boolean>>(),
   signIn: { current: null as ((user: User) => Promise<void>) | null },
+  signInProps: { current: {} as { notice?: string; initialUsername?: string } },
 }));
 vi.mock('./appUpdates', async (original) => ({
   ...(await original<typeof import('./appUpdates')>()),
@@ -28,8 +29,17 @@ vi.mock('./appUpdates', async (original) => ({
 }));
 vi.mock('./AuthScreen', () => ({
   AuthBrand: () => null,
-  AuthScreen: ({ onAuthenticated }: { onAuthenticated: (user: User) => Promise<void> }) => {
+  AuthScreen: ({
+    onAuthenticated,
+    notice,
+    initialUsername,
+  }: {
+    onAuthenticated: (user: User) => Promise<void>;
+    notice?: string;
+    initialUsername?: string;
+  }) => {
     signIn.current = onAuthenticated;
+    signInProps.current = { notice, initialUsername };
     return <p>Sign in</p>;
   },
 }));
@@ -50,6 +60,8 @@ beforeEach(() => {
   clearCache.mockClear();
   applyUpdateOnSignIn.mockReset().mockResolvedValue(false);
   signIn.current = null;
+  signInProps.current = {};
+  sessionStorage.clear();
   container = document.createElement('div');
   document.body.append(container);
   root = createRoot(container);
@@ -63,7 +75,22 @@ afterEach(async () => {
   vi.unstubAllGlobals();
 });
 
-it('unmounts account content and clears offline data when a live session ends', async () => {
+function writeLiveWorkout() {
+  const startedAt = Date.now() - 20 * 60_000;
+  writeActiveWorkoutDraft({
+    version: 1,
+    clientSessionId: '0d6c1f5e-3c35-4bb0-9d55-2f1c8d7a8e11',
+    startedAt,
+    updatedAt: startedAt,
+    name: 'Sample upper session',
+    workoutDate: '2026-11-19',
+    category: 'upper',
+    notes: '',
+    movements: [],
+  });
+}
+
+it('unmounts account content and keeps the live workout when a live session ends', async () => {
   await act(async () =>
     root.render(
       <AuthGate>
@@ -72,7 +99,8 @@ it('unmounts account content and clears offline data when a live session ends', 
     ),
   );
   expect(container.textContent).toContain('Account workout');
-  localStorage.setItem(ACTIVE_WORKOUT_DRAFT_KEY, 'sample unfinished workout');
+  writeLiveWorkout();
+  localStorage.setItem('relay.active-workout-sync', JSON.stringify({ userId: user.id, base: {} }));
   clearCache.mockClear();
 
   await act(async () => emitAuthExpired());
@@ -80,8 +108,42 @@ it('unmounts account content and clears offline data when a live session ends', 
   expect(container.textContent).toContain('Sign in');
   expect(container.textContent).not.toContain('Account workout');
   expect(localStorage.getItem(LAST_USER_KEY)).toBeNull();
-  expect(localStorage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBeNull();
   expect(clearCache).toHaveBeenCalledOnce();
+  // The sets logged here wait for the same account to sign in again.
+  expect(readActiveWorkoutDraft()?.name).toBe('Sample upper session');
+  expect(localStorage.getItem('relay.active-workout-sync')).not.toBeNull();
+  expect(readSignedOutAccount()).toEqual({ id: user.id, username: user.username });
+  expect(signInProps.current).toEqual({
+    notice: 'You were signed out. Your workout is saved.',
+    initialUsername: user.username,
+  });
+
+  await act(async () => signIn.current!(user));
+  expect(readActiveWorkoutDraft()?.name).toBe('Sample upper session');
+  expect(readSignedOutAccount()).toBeNull();
+});
+
+it('discards the kept workout when a different account signs in after the session ended', async () => {
+  await act(async () =>
+    root.render(
+      <AuthGate>
+        <p>Account workout</p>
+      </AuthGate>,
+    ),
+  );
+  writeLiveWorkout();
+  await act(async () => emitAuthExpired());
+
+  await act(async () => signIn.current!({ ...user, id: 'someone-else', username: 'someone' }));
+
+  expect(localStorage.getItem(ACTIVE_WORKOUT_DRAFT_KEY)).toBeNull();
+  expect(container.textContent).toContain('Account workout');
+});
+
+it('says the account was deleted when the app restarts after deleting it', async () => {
+  sessionStorage.setItem('relay.account-deleted', '1');
+  await showSignIn();
+  expect(signInProps.current.notice).toBe('Your account was deleted.');
 });
 
 it('keeps only a finished workout that still has to sync when a live session ends', async () => {

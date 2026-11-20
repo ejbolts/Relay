@@ -2,11 +2,27 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { REACTIONS, reactionEmoji } from './friendFeedData';
+import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { useHeightAnimation } from './motionHooks';
 import { ProfileAvatar } from './ProfileAvatar';
 import { PopupDialog } from './PopupDialog';
+import { ShowMoreButton } from './ShowMoreButton';
 import type { WorkoutComment, WorkoutReactions } from './types';
+import { localDate, localDateOf } from './utils';
+
+/** A comment's time, with its day when it was not posted today. */
+function commentTime(createdAt: string): string {
+  const posted = new Date(createdAt);
+  const time = posted.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  if (localDateOf(createdAt) === localDate()) return time;
+  const day = posted.toLocaleDateString([], {
+    day: 'numeric',
+    month: 'short',
+    ...(posted.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
+  });
+  return `${day}, ${time}`;
+}
 
 export function WorkoutComments({
   workoutId,
@@ -32,6 +48,7 @@ export function WorkoutComments({
   const [next, setNext] = useState<number | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [body, setBody] = useState('');
   const [reply, setReply] = useState<WorkoutComment | null>(null);
@@ -169,14 +186,12 @@ export function WorkoutComments({
           </div>
           <div className="comment-actions">
             <time dateTime={item.created_at}>
-              {new Date(item.created_at).toLocaleTimeString([], {
-                hour: '2-digit',
-                minute: '2-digit',
-              })}
+              {commentTime(item.created_at)}
               {item.edited_at ? ' · edited' : ''}
             </time>
             <button
               type="button"
+              className="pulse-button link small"
               aria-expanded={picker === item.id}
               onClick={() => setPicker(picker === item.id ? null : item.id)}
             >
@@ -184,6 +199,7 @@ export function WorkoutComments({
             </button>
             <button
               type="button"
+              className="pulse-button link small"
               onClick={() => {
                 setReply(item);
                 setEditing(null);
@@ -195,6 +211,7 @@ export function WorkoutComments({
             {item.can_edit && (
               <button
                 type="button"
+                className="pulse-button link small"
                 onClick={() => {
                   setEditing(item);
                   setBody(item.body);
@@ -206,7 +223,12 @@ export function WorkoutComments({
               </button>
             )}
             {item.can_delete && (
-              <button type="button" disabled={busy} onClick={() => setDeleting(item)}>
+              <button
+                type="button"
+                className="pulse-button link small comment-delete"
+                disabled={busy}
+                onClick={() => setDeleting(item)}
+              >
                 Delete
               </button>
             )}
@@ -272,41 +294,44 @@ export function WorkoutComments({
   return (
     <section ref={section} className="workout-comments" aria-label="Workout comments">
       {deleting && (
-        <PopupDialog title="Delete comment?" onClose={() => !busy && setDeleting(null)}>
+        <PopupDialog
+          title="Delete comment?"
+          className="comment-delete-dialog"
+          size="compact"
+          busy={busy}
+          onClose={() => setDeleting(null)}
+          actions={
+            <>
+              <button type="button" autoFocus disabled={busy} onClick={() => setDeleting(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action is-danger comment-delete-confirm"
+                disabled={busy}
+                onClick={() =>
+                  void run(async () => {
+                    await api.sharing.deleteComment(deleting.id);
+                    setDeleting(null);
+                    await refresh();
+                  })
+                }
+              >
+                Delete
+              </button>
+            </>
+          }
+        >
           <p>
-            {deleting.parent_id
-              ? 'This comment will be permanently deleted.'
-              : 'This comment and its replies will be permanently deleted.'}
+            {items.some((item) => item.parent_id === deleting.id)
+              ? 'This comment and its replies will be permanently deleted.'
+              : 'This comment will be permanently deleted.'}
           </p>
           {error && (
             <p className="inline-error" role="alert">
               {error}
             </p>
           )}
-          <div className="profile-actions">
-            <button
-              type="button"
-              className="profile-secondary"
-              disabled={busy}
-              onClick={() => setDeleting(null)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="profile-primary"
-              disabled={busy}
-              onClick={() =>
-                void run(async () => {
-                  await api.sharing.deleteComment(deleting.id);
-                  setDeleting(null);
-                  await refresh();
-                })
-              }
-            >
-              Delete
-            </button>
-          </div>
         </PopupDialog>
       )}
       {loading ? (
@@ -324,27 +349,25 @@ export function WorkoutComments({
           ))
       )}
       {next !== null && (
-        <button
-          type="button"
-          className="text-link"
-          disabled={busy}
-          onClick={() =>
+        <ShowMoreButton
+          loading={loadingMore}
+          onClick={() => {
+            setLoadingMore(true);
             void run(async () => {
               const page = await api.sharing.comments(workoutId, next);
               setItems((current) => [...current, ...page.items]);
               setNext(page.next_offset);
               countRef.current(page.total);
-            })
-          }
-        >
-          Show more comments
-        </button>
+            }).finally(() => setLoadingMore(false));
+          }}
+        />
       )}
       {(reply || editing) && (
         <div className="comment-replying">
           {editing ? 'Editing comment' : <>Replying to {member(reply!.author, true)}</>}
           <button
             type="button"
+            className="pulse-button small icon-only"
             aria-label="Cancel comment reply or edit"
             onClick={() => {
               setReply(null);
@@ -352,7 +375,7 @@ export function WorkoutComments({
               setBody('');
             }}
           >
-            ×
+            <Icon name="close" />
           </button>
         </div>
       )}
@@ -396,7 +419,7 @@ export function WorkoutComments({
           {error}
           <button
             type="button"
-            className="text-link"
+            className="pulse-button link small"
             disabled={busy}
             onClick={() =>
               void run(async () => {

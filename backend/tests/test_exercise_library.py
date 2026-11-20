@@ -142,3 +142,20 @@ def test_library_counts_multiple_sessions_but_bounds_trend_to_one_point_per_day(
     [summary] = client.get("/api/progress").json()
     assert summary["session_count"] == 2
     assert len(summary["trend"]) == 1
+
+
+def test_exercises_list_alternative_names_for_standard_exercises_only(client):
+    assert exercise(client, "Overhead Press")["alternative_names"] == ["Military Press"]
+    assert exercise(client)["alternative_names"] == ["Bench Press"]
+    created = client.post(
+        "/api/exercises",
+        json={
+            "name": "Landmine Press",
+            "category": "push",
+            "kind": "strength",
+            "muscle_group": "Front delts",
+            "equipment": "Barbell",
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["alternative_names"] == []

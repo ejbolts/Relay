@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProgressScreen } from './App';
 import { api } from './api';
 import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
 import { useExerciseLibrary } from './useExerciseLibrary';
 import type { Exercise, ExerciseLibrarySummary, ExerciseProgress, TrackedWorkout } from './types';
+import { createToastRoot, toastButton, toastText } from './toastTestUtils';
 
 const pec: Exercise = {
   id: 'pec',
@@ -135,7 +136,7 @@ beforeEach(() => {
   onOpenWorkout.mockReset();
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -268,7 +269,7 @@ it('renames a custom exercise from its options menu', async () => {
   expect(update).toHaveBeenCalledExactlyOnceWith('custom-row', { name: 'Seated cable row' });
   expect(refreshed).toHaveBeenCalledOnce();
   expect(document.querySelector('.exercise-rename-dialog')).toBeNull();
-  expect(document.querySelector('.undo-toast')?.textContent).toContain('Exercise renamed');
+  expect(toastText()).toBe('Exercise renamed');
 });
 it('keeps the rename dialog open with the reason when the name is taken', async () => {
   const custom = { ...row, id: 'custom-row', name: 'My cable row', is_custom: true };
@@ -309,10 +310,11 @@ it('hides an exercise with Undo, and lists hidden exercises under their own pill
   await click(named('Hide from exercise lists'));
   expect(update).toHaveBeenCalledExactlyOnceWith('pec', { hidden: true });
   expect(refreshed).toHaveBeenCalledOnce();
-  const toast = document.querySelector('.undo-toast')!;
-  expect(toast.textContent).toContain('Hidden from exercise lists');
-  await click([...toast.querySelectorAll('button')].find((b) => b.textContent === 'Undo')!);
+  expect(toastText()).toBe('Hidden from exercise lists');
+  await click(toastButton('Undo')!);
   expect(update).toHaveBeenLastCalledWith('pec', { hidden: false });
+  expect(toastText()).toBe('Shown in exercise lists');
+  expect(toastButton('Undo')).toBeUndefined();
 
   // With the refreshed catalogue, the hidden lift leaves the list until the Hidden pill is on.
   await act(async () =>
@@ -433,13 +435,16 @@ it('loads the selected session sets in a sheet before opening the actual workout
   vi.spyOn(api, 'getWorkout').mockResolvedValue(workout);
   await render();
   await click(host.querySelector('[data-exercise-id="pec"]')!);
-  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(5);
-  await click(host.querySelector('.show-more-button')!);
-  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(10);
+  // Ten sessions, eight to a page.
+  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(8);
+  await click(host.querySelector('[aria-label="Next session page"]')!);
+  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(2);
+  await click(host.querySelector('[aria-label="Page 1 of 2"]')!);
+  expect(host.querySelectorAll('.progress-sessions li')).toHaveLength(8);
   await click(host.querySelector('.progress-sessions li button')!);
   expect(document.querySelector('dialog')?.textContent).toContain('69 kg');
   expect(onOpenWorkout).not.toHaveBeenCalled();
-  await click(document.querySelector('dialog .primary')!);
+  await click(document.querySelector('dialog .popup-primary-action')!);
   expect(onOpenWorkout).toHaveBeenCalledWith('session-9', 'pec');
   expect(document.querySelector('dialog')).toBeNull();
 });
@@ -569,9 +574,9 @@ it('retries a failed session read and keeps the workout action unavailable until
   expect(document.querySelector('dialog [role="alert"]')?.textContent).toContain(
     'Could not load this session',
   );
-  expect(document.querySelector('dialog .primary')).toBeNull();
-  await click(document.querySelector('dialog .text-link')!);
-  expect(document.querySelector('dialog .primary')).not.toBeNull();
+  expect(document.querySelector('dialog .popup-primary-action')).toBeNull();
+  await click(document.querySelector('dialog [role="alert"] .pulse-button.link')!);
+  expect(document.querySelector('dialog .popup-primary-action')).not.toBeNull();
   vi.mocked(api.getWorkout).mockResolvedValue({ ...workout, name: 'Updated upper body' });
   await render('remote-sheet-change');
   expect(document.querySelector('dialog')?.textContent).toContain('Updated upper body');

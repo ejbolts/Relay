@@ -11,8 +11,9 @@ from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from . import client_versions
@@ -22,7 +23,7 @@ from .account_limits import (
     account_limits_read,
     save_account_limits,
 )
-from .accounts import no_store
+from .accounts import no_store, normalize_username
 from .auth import (
     AdminUser,
     AppSettings,
@@ -58,6 +59,7 @@ from .server_settings import (
     save_runtime_setting,
 )
 from .session_events import session_events
+from .username_reminder_requests import open_username_request_time
 
 DbDependency = Annotated[Session, Depends(get_db)]
 Throttle = Annotated[LoginThrottle, Depends(get_login_throttle)]
@@ -98,6 +100,8 @@ class AdminUserRead(BaseModel):
     must_change_password: bool
     # The person asked for a temporary password from the sign-in screen and is still waiting.
     password_reset_requested_at: datetime | None = None
+    # Someone asked for this account's username from the sign-in screen and is still waiting.
+    username_reminder_requested_at: datetime | None = None
     created_at: datetime
     last_active_at: datetime | None
     presence: FriendPresence
@@ -117,6 +121,15 @@ class AdminUserUpdate(BaseModel):
 class AdminSexUpdate(BaseModel):
     # None clears it, so the person can choose again.
     sex: Sex | None
+
+
+class AdminUsernameUpdate(BaseModel):
+    username: str
+
+    @field_validator("username")
+    @classmethod
+    def validate_username(cls, value: str) -> str:
+        return normalize_username(value)
 
 
 class TemporaryPasswordRead(BaseModel):
@@ -231,6 +244,7 @@ def _admin_user_reads(
             disabled_at=as_utc(user.disabled_at) if user.disabled_at else None,
             must_change_password=user.must_change_password,
             password_reset_requested_at=open_request_time(user, now),
+            username_reminder_requested_at=open_username_request_time(user, now),
             created_at=as_utc(user.created_at),
             last_active_at=as_utc(user.last_active_at) if user.last_active_at else None,
             presence=activity[user.id],
@@ -365,6 +379,34 @@ def set_user_sex(
     db.commit()
     db.refresh(user)
     return _admin_user_reads(db, settings, [user])[0]
+
+
+@admin_router.put("/users/{user_id}/username", response_model=AdminUserRead)
+def set_user_username(
+    user_id: str, payload: AdminUsernameUpdate, db: DbDependency, settings: AppSettings
+) -> AdminUserRead:
+    """The only way to change a username: people cannot change their own."""
+    user = db.get(User, user_id)
+    if user is None:
+        raise api_error(404, "user_not_found", "That account was not found.")
+    if payload.username != user.username:
+        taken = db.scalar(
+            select(User.id).where(User.username == payload.username, User.id != user.id)
+        )
+        if taken is not None:
+            raise username_taken()
+        user.username = payload.username
+        try:
+            db.commit()
+        except IntegrityError as error:
+            db.rollback()
+            raise username_taken() from error
+    db.refresh(user)
+    return _admin_user_reads(db, settings, [user])[0]
+
+
+def username_taken():
+    return api_error(409, "username_taken", "An account with that username already exists.")
 
 
 @admin_router.post("/users/{user_id}/reset-password", response_model=TemporaryPasswordRead)

@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import {
+  type AppTab,
   appTabFromHash,
   createAppHistoryState,
   historySectionForTab,
   isAppHistoryState,
   isAppTab,
   mainTabFor,
+  isMainTabScreen,
+  tabScrollKey,
 } from './appNavigation';
 
 describe('app navigation history', () => {
@@ -49,5 +52,21 @@ describe('app navigation history', () => {
     expect(mainTabFor('body')).toBe('body');
     expect(mainTabFor('settings')).toBeNull();
     expect(mainTabFor('log')).toBeNull();
+  });
+});
+
+describe('tab bar screens', () => {
+  it('treats Home, Training and its sections, Social and Body as main screens', () => {
+    for (const tab of ['dashboard', 'training', 'history', 'progress', 'cardio', 'social', 'body'])
+      expect(isMainTabScreen(tab as AppTab)).toBe(true);
+    for (const tab of ['settings', 'profile', 'shared-profile', 'log', 'split'])
+      expect(isMainTabScreen(tab as AppTab)).toBe(false);
+  });
+
+  it('remembers Training and its Sessions section as one scroll position', () => {
+    expect(tabScrollKey('training')).toBe('history');
+    expect(tabScrollKey('history')).toBe('history');
+    expect(tabScrollKey('progress')).toBe('progress');
+    expect(tabScrollKey('dashboard')).toBe('dashboard');
   });
 });

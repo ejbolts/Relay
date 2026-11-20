@@ -1,4 +1,4 @@
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { PopupDialog } from './PopupDialog';
 import { Icon } from './Icon';
@@ -33,7 +33,6 @@ export function ExerciseMuscleHelp({
   const today = localDate();
   const currentWeek = weekStartFor(today, weekStartDay);
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
-  const triggerRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (!controlled || !openedElsewhere) return;
     setSelectedWeek(weekStartFor(localDate(), weekStartDay));
@@ -70,7 +69,6 @@ export function ExerciseMuscleHelp({
     >
       {!controlled && (
         <button
-          ref={triggerRef}
           type="button"
           className="exercise-muscle-help-button"
           aria-label={`Muscle set credits for ${exercise.name}`}
@@ -97,7 +95,6 @@ export function ExerciseMuscleHelp({
           onClose={() => {
             setOpen(false);
             onClose?.();
-            requestAnimationFrame(() => triggerRef.current?.focus());
           }}
         >
           {cardio ? (

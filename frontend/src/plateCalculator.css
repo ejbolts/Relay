@@ -35,7 +35,7 @@
 .plate-calculator-body {
   display: grid;
   gap: 0.625rem;
-  padding: 1rem 1rem 0;
+  padding: 1rem;
 }
 
 .plate-calculator-total {
@@ -286,12 +286,4 @@
   color: var(--p-muted);
   font-size: 0.75rem;
   text-align: center;
-}
-
-.plate-calculator .popup-dialog-actions {
-  padding: 0 1rem 1rem;
-}
-
-.plate-calculator .popup-dialog-actions .popup-primary-action {
-  flex: 1;
 }

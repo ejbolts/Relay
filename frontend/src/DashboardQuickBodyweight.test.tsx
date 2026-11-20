@@ -3,6 +3,7 @@ import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DashboardQuickBodyweight } from './TodayScreen';
+import { TOAST_MS } from './Toast';
 import { useDailyCheckIns } from './useDailyCheckIns';
 
 let root: Root;
@@ -50,13 +51,11 @@ async function submit() {
 }
 
 function toast() {
-  return document.querySelector('.bodyweight-undo-toast');
+  return document.querySelector('.toast');
 }
 
 async function clickUndo() {
-  await act(async () =>
-    (toast()!.querySelector('.undo-toast-action') as HTMLButtonElement).click(),
-  );
+  await act(async () => (toast()!.querySelector('.toast-action') as HTMLButtonElement).click());
 }
 
 describe('daily bodyweight check-in', () => {
@@ -150,7 +149,38 @@ describe('daily bodyweight check-in', () => {
     );
     expect(saveFat).not.toHaveBeenCalled();
   });
-  it('keeps the saved value beside a tick while editing and shows a five-second undo popup', async () => {
+  it('asks for today’s weight beside body fat in Body fat only until a weight is logged', async () => {
+    const saveFat = vi.fn();
+    const both = vi.fn().mockResolvedValue(undo);
+    const view = (today: number | null) => (
+      <DashboardQuickBodyweight
+        mode="fat"
+        latestBodyweight={84.2}
+        todayBodyweight={today}
+        latestBodyFat={18}
+        onSave={both}
+        onSaveBodyFat={saveFat}
+      />
+    );
+    await act(async () => root.render(view(null)));
+    expect(container.querySelector('[aria-label="Body weight check-in"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Log today’s body weight first.');
+    const header = container.querySelector<HTMLButtonElement>('.quick-check-in-save')!;
+    expect(header.disabled).toBe(false);
+    expect(header.getAttribute('aria-label')).toBe('Log check-in');
+    await act(async () =>
+      header.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    );
+    expect(both).toHaveBeenCalledExactlyOnceWith(84.2, 18);
+    expect(saveFat).not.toHaveBeenCalled();
+    // Once today's weight is in, the card is body fat only again.
+    await act(async () => root.render(view(84.2)));
+    expect(container.querySelector('[aria-label="Body weight check-in"]')).toBeNull();
+    expect(container.querySelector('.quick-check-in-save')!.getAttribute('aria-label')).toBe(
+      'Log body fat',
+    );
+  });
+  it('keeps the saved value beside a tick while editing and shows an Undo toast that clears itself', async () => {
     await render();
     expect(toast()).toBeNull();
     expect(container.querySelector('[role="status"]')!.textContent).toBe('Last 83.9 kg');
@@ -170,8 +200,8 @@ describe('daily bodyweight check-in', () => {
     expect(container.querySelector('input')!.value).toBe('84.3');
     expect(status.textContent).toBe('0.384.2 kg');
     expect(container.querySelector('.quick-bodyweight-message')).toBeNull();
-    expect(toast()!.getAttribute('style')).toContain('5000ms');
-    await act(async () => vi.advanceTimersByTime(4999));
+    expect(toast()!.getAttribute('style')).toContain(`${TOAST_MS.action}ms`);
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.action - 1));
     expect(toast()).not.toBeNull();
     await act(async () => vi.advanceTimersByTime(1));
     expect(toast()).toBeNull();
@@ -218,7 +248,7 @@ describe('daily bodyweight check-in', () => {
     expect(toast()).not.toBeNull();
     await act(async () => rejectUndo(new Error('Could not undo. Try again.')));
     expect(container.querySelector('[role="alert"]')!.textContent).toContain('Could not undo');
-    await act(async () => vi.advanceTimersByTime(4999));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.action - 1));
     expect(toast()).not.toBeNull();
     await clickUndo();
     expect(undo).toHaveBeenCalledTimes(2);
@@ -238,9 +268,7 @@ describe('daily bodyweight check-in', () => {
   it('dismisses without undoing and cleans up on unmount', async () => {
     await render();
     await submit();
-    await act(async () =>
-      (toast()!.querySelector('.undo-toast-close') as HTMLButtonElement).click(),
-    );
+    await act(async () => (toast()!.querySelector('.toast-close') as HTMLButtonElement).click());
     expect(toast()).toBeNull();
     expect(undo).not.toHaveBeenCalled();
     await submit();
@@ -282,7 +310,7 @@ describe('independent Home check-in cards', () => {
         .querySelectorAll('form')[1]
         .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
     );
-    expect(document.querySelectorAll('.bodyweight-undo-toast')).toHaveLength(1);
+    expect(document.querySelectorAll('.toast')).toHaveLength(1);
     expect(toast()?.textContent).toContain('Body fat saved');
     await clickUndo();
     expect(fatUndo).toHaveBeenCalledOnce();

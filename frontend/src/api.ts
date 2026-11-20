@@ -43,6 +43,7 @@ import type {
   MuscleVolume,
   MuscleSetCreditInput,
   PasswordResetRequest,
+  UsernameReminderRequest,
   PersonalRecord,
   TrainingBlockInput,
   TrainingBlockSummary,
@@ -458,12 +459,26 @@ export const api = {
         { method: 'POST', headers: jsonHeaders, body: JSON.stringify(payload) },
         { signalExpiredSession: false },
       ),
+    /** Ends every session the account has, on all devices. */
     logout: () =>
       request<void>('/api/auth/logout', { method: 'POST' }, { signalExpiredSession: false }),
+    /** Ends this device's session only. */
+    logoutSession: () =>
+      request<void>(
+        '/api/auth/logout-session',
+        { method: 'POST' },
+        { signalExpiredSession: false },
+      ),
     requestPasswordReset: (username: string) =>
       request<void>(
         '/api/auth/password-reset-request',
         { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ username }) },
+        { signalExpiredSession: false },
+      ),
+    requestUsernameReminder: (name: string) =>
+      request<void>(
+        '/api/auth/username-reminder-request',
+        { method: 'POST', headers: jsonHeaders, body: JSON.stringify({ name }) },
         { signalExpiredSession: false },
       ),
   },
@@ -490,6 +505,13 @@ export const api = {
         headers: jsonHeaders,
         body: JSON.stringify({ sex }),
       }),
+    /** The only way to change a username: people cannot change their own. */
+    setUserUsername: (userId: string, username: string) =>
+      request<AdminUser>(`/api/admin/users/${encodeURIComponent(userId)}/username`, {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify({ username }),
+      }),
     resetUserPassword: (userId: string) =>
       request<{ temporary_password: string }>(
         `/api/admin/users/${encodeURIComponent(userId)}/reset-password`,
@@ -499,6 +521,12 @@ export const api = {
       request<PasswordResetRequest[]>('/api/admin/password-reset-requests'),
     dismissPasswordResetRequest: (userId: string) =>
       request<void>(`/api/admin/password-reset-requests/${encodeURIComponent(userId)}`, {
+        method: 'DELETE',
+      }),
+    usernameReminderRequests: () =>
+      request<UsernameReminderRequest[]>('/api/admin/username-reminder-requests'),
+    dismissUsernameReminderRequest: (userId: string) =>
+      request<void>(`/api/admin/username-reminder-requests/${encodeURIComponent(userId)}`, {
         method: 'DELETE',
       }),
     settings: () => request<ServerSettings>('/api/admin/settings'),
@@ -578,18 +606,11 @@ export const api = {
       request<SharedCardioPage>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/cardio?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`,
       ),
-    /** Your exercises with your best and a member's, and the ones your head to heads show. */
+    /** Your exercises with your best and a member's. */
     lifts: (userId: string) =>
       request<import('./types').LiftComparisons>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/lifts`,
       ),
-    /** Saves the exercises your head to heads show, for every member you compare with. */
-    chooseLifts: (exercise_ids: string[]) =>
-      request<{ exercise_ids: string[] }>('/api/sharing/lifts', {
-        method: 'PUT',
-        headers: jsonHeaders,
-        body: JSON.stringify({ exercise_ids }),
-      }),
     /** One of your lifts, ranked against the friends who have logged it. */
     liftLeaderboard: (exerciseId: string) =>
       request<{ entries: import('./types').LiftRanking[] }>(

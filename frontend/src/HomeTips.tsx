@@ -20,8 +20,8 @@ import { tipAction, TIP_DEFINITIONS, type TipId } from './tipsState';
 import { GUIDE_FOR_TIP, openSetupGuide } from './setupGuides';
 import type { BodyWeightGoal, TrackedWorkout } from './types';
 
-/** The most new tips the bulb counts out loud; beyond it, it says "3+". */
-const COUNTED_TIPS = 3;
+/** The most new tips the bulb counts out loud; beyond it, it says "9+". */
+const COUNTED_TIPS = 9;
 
 /**
  * Tips at the end of Home's date line: amber with a count while tips are unread, grey once read.

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { TOAST_MS } from './Toast';
 
-/** How long a swiped-away goal can be brought back before it is deleted. */
-export const GOAL_UNDO_MS = 4000;
+/** How long a swiped-away goal can be brought back before it is deleted: the Undo toast's time. */
+export const GOAL_UNDO_MS = TOAST_MS.action;
 
 export interface PendingGoalRemoval<G extends { id: string }> {
   goal: G;
@@ -11,8 +12,9 @@ export interface PendingGoalRemoval<G extends { id: string }> {
 
 /**
  * Hides a swiped-away goal at once and deletes it only when the Undo window closes, so Undo
- * never has to recreate it. Starting another removal, dismissing the popup or leaving the
- * screen deletes the pending goal straight away.
+ * never has to recreate it. The window is the Undo toast's: pass `dismiss` as its `onDismiss`,
+ * so its countdown (which pauses while held), a newer toast, or the close button deletes the
+ * pending goal. Starting another removal or leaving the screen deletes it straight away too.
  */
 export function useGoalRemoval<G extends { id: string }>({
   remove,
@@ -45,12 +47,6 @@ export function useGoalRemoval<G extends { id: string }>({
         callbacks.current.onFailed('Could not remove this goal. It has been restored.');
       });
   }, []);
-
-  useEffect(() => {
-    if (!pending) return;
-    const timer = window.setTimeout(commit, GOAL_UNDO_MS);
-    return () => window.clearTimeout(timer);
-  }, [pending, commit]);
 
   // Leaving the screen keeps the removal rather than silently cancelling it.
   useEffect(() => commit, [commit]);

@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from .cardio_zones import CardioGoalWeek, CardioPreferences
+from .exercise_aliases import alternative_exercise_names
 from .machine_settings import MachineSetting, NumericMachineSetting
 from .models import (
     ExerciseKind,
@@ -111,6 +112,12 @@ class ExerciseRead(BaseModel):
     @property
     def partial_sets_enabled(self) -> bool:
         return partial_sets_enabled_on(self, date.today())
+
+    @computed_field
+    @property
+    def alternative_names(self) -> list[str]:
+        # Lets the app suggest a standard exercise for a custom one named differently.
+        return [] if self.is_custom else alternative_exercise_names(self.name)
 
     @computed_field
     @property
@@ -438,6 +445,8 @@ class WorkoutHistorySummaryRead(BaseModel):
     first_workout_date: date | None
     last_workout_date: date | None
     has_sample_workouts: bool
+    # Workouts other than cardio-only sessions, which are counted as cardio.
+    strength_workouts: int | None = None
 
 
 class WeightRepsRead(BaseModel):
@@ -667,6 +676,8 @@ class WorkoutRecommendationRead(BaseModel):
     scheduled_date: date | None = None
     split_name: str | None = None
     routine_day: RoutineDayRead | None = None
+    # On a split's rest day: the next training day, which starting a workout then trains.
+    next_training_day: WorkoutRecommendationRead | None = None
 
 
 class WeeklyMuscleContributionRead(BaseModel):

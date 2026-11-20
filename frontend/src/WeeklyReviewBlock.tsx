@@ -83,7 +83,7 @@ export function WeeklyReviewBlock({
           <p className="pulse-empty-line">{blockSuggestionLabel(suggestion)}</p>
           <button
             type="button"
-            className="text-link"
+            className="pulse-button link small"
             aria-haspopup="dialog"
             onClick={() => setStarting(true)}
           >

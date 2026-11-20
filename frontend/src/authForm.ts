@@ -41,6 +41,10 @@ export function authErrorMessage(reason: unknown): string {
         return 'Too many attempts. Wait a few minutes before trying again.';
       case 'username_taken':
         return 'An account with that username already exists. Try signing in instead.';
+      case 'display_name_taken':
+        return 'Another account already uses that name. Add a surname, initial or nickname.';
+      case 'username_locked':
+        return 'Only an administrator can change your username.';
       case 'registration_closed':
         return 'New accounts are not being accepted right now.';
       case 'setup_required':
@@ -101,7 +105,12 @@ export interface AuthApi {
 }
 
 export type AuthSubmitResult =
-  | { ok: true; user: User }
+  | {
+      ok: true;
+      user: User;
+      /** The account was created, but signing in to it straight afterwards failed. */
+      needsSignIn?: true;
+    }
   | {
       ok: false;
       message: string;
@@ -128,16 +137,21 @@ export async function submitAuthForm(
   }
   try {
     const username = values.username.trim().toLowerCase();
-    const user =
-      mode === 'sign-in'
-        ? await endpoints.login({ username, password: values.password })
-        : await endpoints.register({
-            username,
-            password: values.password,
-            display_name: values.displayName.trim(),
-            invite_code: values.inviteCode.trim() || null,
-          });
-    return { ok: true, user };
+    if (mode === 'sign-in') {
+      return { ok: true, user: await endpoints.login({ username, password: values.password }) };
+    }
+    const created = await endpoints.register({
+      username,
+      password: values.password,
+      display_name: values.displayName.trim(),
+      invite_code: values.inviteCode.trim() || null,
+    });
+    // Registering does not start a session, so sign in to the new account with the same details.
+    try {
+      return { ok: true, user: await endpoints.login({ username, password: values.password }) };
+    } catch {
+      return { ok: true, user: created, needsSignIn: true };
+    }
   } catch (reason) {
     const code = reason instanceof ApiError ? reason.code : '';
     return {
@@ -146,9 +160,11 @@ export async function submitAuthForm(
       fieldErrors:
         code === 'username_taken'
           ? { username: 'This username is already registered.' }
-          : code === 'invalid_invite_code'
-            ? { inviteCode: 'This invite code was not accepted.' }
-            : {},
+          : code === 'display_name_taken'
+            ? { displayName: 'This name is already used.' }
+            : code === 'invalid_invite_code'
+              ? { inviteCode: 'This invite code was not accepted.' }
+              : {},
       needsInviteCode: code === 'invalid_invite_code',
     };
   }

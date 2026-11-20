@@ -170,30 +170,8 @@
   position: relative;
 }
 
-.profile-follow-button {
-  min-height: 2.25rem;
-  display: inline-flex;
-  align-items: center;
+.pulse-button.profile-follow-button {
   gap: 0.35rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 999px;
-  padding: 0.35rem 0.85rem;
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  touch-action: manipulation;
-}
-
-.profile-follow-button.is-follow {
-  border-color: transparent;
-  padding-inline: 1.1rem;
-  background: var(--p-accent);
-  color: #fff;
-}
-
-.profile-follow-button.is-follow:hover:not(:disabled) {
-  background: var(--p-accent-hover);
 }
 
 .profile-summary-copy .profile-follow-button span {
@@ -374,13 +352,6 @@
   list-style: none;
 }
 
-.profile-cardio-pagination {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  min-width: 0;
-}
-
 .profile-cardio-error {
   margin-top: 0.75rem;
 }
@@ -516,38 +487,6 @@
   display: none;
 }
 
-.shared-workout-pager.pagination-controls {
-  grid-template-columns: 2.75rem minmax(5.5rem, auto) 2.75rem;
-  align-items: center;
-  margin-top: 1rem;
-  border-top: 0;
-  padding-top: 0;
-}
-
-.shared-workout-pager .pagination-arrow {
-  border-color: var(--p-line);
-  border-radius: 12px;
-  background: var(--p-surface);
-  color: var(--p-ink);
-}
-
-.shared-workout-pager .pagination-arrow:not(:disabled):hover {
-  border-color: var(--p-accent);
-  color: var(--p-ink);
-}
-
-.shared-workout-pager .pagination-arrow .pulse-icon {
-  width: 1.15rem;
-  height: 1.15rem;
-}
-
-.shared-workout-pager .pagination-status {
-  grid-column: auto;
-  color: var(--p-muted);
-  font-size: 0.75rem;
-  font-weight: 600;
-}
-
 .shared-workout-pages {
   scroll-margin-top: 0.5rem;
 }
@@ -676,7 +615,6 @@
 }
 .profile-account-id-row button {
   flex-shrink: 0;
-  font-size: 0.75rem;
 }
 .people-search-form {
   display: flex;
@@ -760,49 +698,6 @@
 
 .suggested-friends h3 {
   scroll-margin-top: 5.5rem;
-}
-
-.suggested-friends-range {
-  margin: 0.8rem 0 0;
-  color: var(--p-muted);
-  font-size: 0.75rem;
-  text-align: center;
-}
-
-.suggested-friends-pages {
-  display: flex;
-  justify-content: center;
-  gap: 0.25rem;
-  margin-top: 0.65rem;
-}
-
-.suggested-friends-pages button {
-  width: 2rem;
-  min-height: 2.5rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 9px;
-  padding: 0;
-  background: var(--p-surface-2);
-  color: var(--p-ink-2);
-  font: inherit;
-  font-size: 0.8125rem;
-  cursor: pointer;
-}
-
-.suggested-friends-pages button[aria-current='page'] {
-  border-color: var(--p-accent);
-  background: var(--p-accent-soft);
-  color: var(--p-accent-text);
-}
-
-.suggested-friends-pages button:disabled {
-  cursor: default;
-  opacity: 0.4;
-}
-
-.suggested-friends-pages button:focus-visible {
-  outline: 2px solid var(--p-accent);
-  outline-offset: 2px;
 }
 
 .friends-panel > header + * {
@@ -1063,17 +958,6 @@
   padding: 1rem;
   line-height: 1.5;
 }
-.friend-block-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  padding: 0 1rem 1rem;
-}
-.friend-block-actions > button {
-  width: auto;
-  min-height: 2.5rem;
-  padding: 0.45rem 1rem;
-}
 .friend-react-error {
   width: 100%;
   margin: 0.25rem;
@@ -1101,23 +985,6 @@
   }
 }
 
-.friends-activity-more {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0.35rem auto 0;
-  border: 0;
-  padding: 0.35rem 0.75rem;
-  background: none;
-  color: var(--p-muted);
-  font-size: 0.8125rem;
-  font-weight: 600;
-}
-
-.friends-activity-more:hover {
-  color: var(--p-ink-2);
-}
-
 /* Profile page: Add friend or Accept and Decline, beside a menu of further actions */
 
 .profile-friend-actions {
@@ -1125,12 +992,6 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
-}
-
-.profile-follow-button.is-more {
-  width: 2.25rem;
-  justify-content: center;
-  padding: 0;
 }
 
 .profile-follow-button.is-more .pulse-icon {
@@ -1186,6 +1047,60 @@
 .friend-skeleton-meta {
   width: min(9rem, 100%);
   height: 0.65rem;
+}
+
+/* Social's Friends list outline while it loads, in the shape of its first cards. */
+.find-loading-skeleton {
+  display: grid;
+  gap: 1rem;
+}
+
+.find-skeleton-group {
+  display: grid;
+  gap: 0.75rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: var(--p-radius);
+  padding: 1rem;
+  background: var(--p-surface);
+}
+
+/* The blocks sit on a card, so they start a step darker than its surface to stay visible. */
+.find-loading-skeleton .find-skeleton-group .skeleton-block {
+  background-image: linear-gradient(
+    90deg,
+    var(--p-surface-2) 0%,
+    var(--p-surface-3) 50%,
+    var(--p-surface-2) 100%
+  );
+}
+
+.find-loading-skeleton .find-skeleton-heading {
+  width: min(6rem, 50%);
+  height: 0.9rem;
+}
+
+.find-loading-skeleton .find-skeleton-search {
+  height: 2.75rem;
+  border-radius: 12px;
+}
+
+.find-skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+}
+
+.find-loading-skeleton .friend-skeleton-avatar {
+  flex-shrink: 0;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 50%;
+}
+
+.find-skeleton-copy {
+  flex: 1;
+  display: grid;
+  gap: 0.4rem;
 }
 
 /* A profile's outline while it loads. */
@@ -1517,6 +1432,12 @@
   text-align: left;
 }
 
+.comment-delete-dialog > p {
+  margin: 0;
+  padding: 1rem;
+  line-height: 1.5;
+}
+
 /* Pair the app's height glide with a small entrance for discussion content, including
    threads reopened with a saved draft and reaction pickers inside comments. */
 :is(
@@ -1570,7 +1491,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--p-accent);
+  color: var(--p-accent-text);
   font: inherit;
   font-weight: 650;
   cursor: pointer;
@@ -1597,9 +1518,12 @@
   border: 0;
   padding: 0.4rem 0;
   background: none;
-  color: var(--p-accent);
+  color: var(--p-accent-text);
   font: inherit;
   cursor: pointer;
+}
+.comment-actions .comment-delete {
+  color: var(--p-danger);
 }
 .comment-actions .comment-reaction {
   border: 1px solid var(--p-line-strong);
@@ -1645,12 +1569,6 @@
 }
 .comment-replying > button:last-child {
   margin-left: auto;
-  border: 0;
-  background: none;
-  color: var(--p-ink);
-  min-width: 32px;
-  min-height: 32px;
-  font-size: 1.2rem;
 }
 .comment-composer {
   display: flex;

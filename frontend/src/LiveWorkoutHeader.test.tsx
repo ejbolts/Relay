@@ -75,6 +75,26 @@ it('shows a compact title, live time and set count with secondary actions in the
   ]);
 });
 
+it("shows the day of a workout from an earlier day, such as last night's resumed session", async () => {
+  expect(container.querySelector('.live-workout-date')).toBeNull();
+  await act(async () =>
+    root.render(
+      <LiveWorkoutHeader
+        name="Upper A"
+        dateLabel="Wed 18 Nov"
+        durationLabel="Live 1:13:02"
+        loggedSets={19}
+        paused={false}
+        menuButtonRef={menuButtonRef}
+        {...actions}
+      />,
+    ),
+  );
+  expect(container.querySelector('.live-workout-meta')?.textContent).toBe(
+    'Wed 18 Nov·Live 1:13:02·19 sets',
+  );
+});
+
 it.each([
   ['Rename workout', 'onRename'],
   ['Adjust workout time', 'onAdjustTime'],

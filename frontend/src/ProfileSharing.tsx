@@ -1,13 +1,12 @@
-import { useEffect, useState, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { CollapsibleSection } from './CollapsibleSection';
-import { Icon } from './Icon';
 import { HelpPopup } from './HelpPopup';
 import { liveWorkoutReport, type PresenceStatus } from './presence';
 import { PresenceAvatar } from './PresenceAvatar';
 import { VISIBILITY_LABELS } from './sharedProfileDisplay';
+import { useToast } from './Toast';
 import { useUserSession } from './userContext';
 import type { ProfileVisibility, SharingChoices, SharingSettings } from './types';
 
@@ -79,8 +78,6 @@ const LIVE_OPTIONS: Array<{ key: LiveChoice; label: string }> = [
   { key: 'share_live_workouts', label: 'Live workouts' },
 ];
 
-const STATUS_TOAST_MS = 5000;
-
 const PRIVATE_DEFAULTS: SharingChoices = {
   visibility: 'private',
   share_notes: false,
@@ -129,7 +126,7 @@ export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
   const [draft, setDraft] = useState<SharingChoices>(PRIVATE_DEFAULTS);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<{ message: string; id: number } | null>(null);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -153,23 +150,16 @@ export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
 
   const sharing = saved !== null && saved.visibility !== 'private';
 
-  useEffect(() => {
-    if (!status) return;
-    const timer = window.setTimeout(() => setStatus(null), STATUS_TOAST_MS);
-    return () => window.clearTimeout(timer);
-  }, [status]);
-
   async function save(next: SharingChoices, message: string) {
     if (saving) return;
     setSaving(true);
     setDraft(next);
-    setStatus(null);
     setError(null);
     try {
       const stored = await api.sharing.updateChoices(next);
       setSaved(stored);
       setDraft(choicesFrom(stored));
-      setStatus({ message, id: Date.now() });
+      toast.show(message);
       onSaved?.();
     } catch (reason) {
       setDraft(saved ? choicesFrom(saved) : PRIVATE_DEFAULTS);
@@ -184,17 +174,13 @@ export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
   const visibilityPending = saved !== null && draft.visibility !== saved.visibility;
 
   function changeVisibility(visibility: ProfileVisibility) {
-    setStatus(null);
     if (sharing && visibility === saved.visibility) setDraft(choicesFrom(saved));
     else setDraft({ ...draft, visibility });
   }
 
   function toggle(next: SharingChoices) {
     if (sharing && !visibilityPending) void save(next, 'Sharing choices saved.');
-    else {
-      setDraft(next);
-      setStatus(null);
-    }
+    else setDraft(next);
   }
 
   return (
@@ -262,15 +248,18 @@ export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
               </label>
             ))}
           </fieldset>
-          <button
-            type="button"
-            className="profile-primary sharing-start"
-            disabled={saving || !visibilityPending}
-            onClick={() => void save(draft, VISIBILITY_SAVED[draft.visibility])}
-          >
-            {saving && <Spinner />}
-            <span>{VISIBILITY_CONFIRM[draft.visibility]}</span>
-          </button>
+          {/* The saved choice is shown by its radio and the badge; the button only confirms a change. */}
+          {(visibilityPending || saving) && (
+            <button
+              type="button"
+              className="profile-primary sharing-start"
+              disabled={saving}
+              onClick={() => void save(draft, VISIBILITY_SAVED[draft.visibility])}
+            >
+              {saving && <Spinner />}
+              <span>{VISIBILITY_CONFIRM[draft.visibility]}</span>
+            </button>
+          )}
           <CollapsibleSection
             className="sharing-options"
             title="What you share"
@@ -347,27 +336,6 @@ export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
           <small className="sharing-never">
             Shared accounts can be found by username. Your videos and sample data are never shared.
           </small>
-          {status &&
-            createPortal(
-              <div
-                key={status.id}
-                className="undo-toast top-toast"
-                role="status"
-                aria-atomic="true"
-                style={{ '--undo-toast-duration': `${STATUS_TOAST_MS}ms` } as CSSProperties}
-              >
-                <span>{status.message}</span>
-                <button
-                  className="undo-toast-close"
-                  type="button"
-                  aria-label="Dismiss sharing notification"
-                  onClick={() => setStatus(null)}
-                >
-                  <Icon name="close" />
-                </button>
-              </div>,
-              document.body,
-            )}
           {error && (
             <p className="inline-error" role="alert">
               {error}

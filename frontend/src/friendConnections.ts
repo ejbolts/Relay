@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
 import { authErrorMessage } from './authForm';
 import { onFriendPresence } from './presence';
@@ -9,16 +9,19 @@ export type FriendConnectionsState = 'loading' | 'ready' | 'locked' | 'error';
 /**
  * Friends, requests and blocks for Social, refreshed while `active`: on focus, when the app is
  * shown again or comes back online, and every 30 seconds. Friends' live activity updates as soon
- * as the presence connection reports it.
+ * as the presence connection reports it. With `preload`, the list is read once in the background
+ * before Social is first opened, so it opens without waiting.
  */
-export function useFriendConnections(active: boolean) {
+export function useFriendConnections(active: boolean, preload = false) {
   const [connections, setConnections] = useState<FriendConnections | null>(null);
   const [state, setState] = useState<FriendConnectionsState>('loading');
   const [error, setError] = useState<string | null>(null);
   const [version, setVersion] = useState(0);
+  const settled = useRef(false);
 
   useEffect(() => {
-    if (!active) return;
+    // A background read happens once; refreshing waits until the screen is shown.
+    if (!active && (!preload || settled.current)) return;
     let cancelled = false;
     let request = 0;
     function load() {
@@ -28,12 +31,14 @@ export function useFriendConnections(active: boolean) {
         .friends()
         .then((next) => {
           if (cancelled || current !== request) return;
+          settled.current = true;
           setConnections(next);
           setState(next.locked ? 'locked' : 'ready');
           setError(null);
         })
         .catch((reason: unknown) => {
           if (cancelled || current !== request) return;
+          settled.current = true;
           if (reason instanceof ApiError && reason.code === 'sharing_required') {
             setConnections(null);
             setState('locked');
@@ -45,6 +50,11 @@ export function useFriendConnections(active: boolean) {
         });
     }
     load();
+    if (!active) {
+      return () => {
+        cancelled = true;
+      };
+    }
     const timer = window.setInterval(load, 30_000);
     window.addEventListener('focus', load);
     window.addEventListener('online', load);
@@ -56,7 +66,7 @@ export function useFriendConnections(active: boolean) {
       window.removeEventListener('online', load);
       document.removeEventListener('visibilitychange', load);
     };
-  }, [active, version]);
+  }, [active, preload, version]);
 
   useEffect(
     () =>

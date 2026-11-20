@@ -1,4 +1,6 @@
 import { createContext, useContext, useEffect, useRef } from 'react';
+import { searchWords, typoMatch } from './fuzzyText';
+import type { TipAction } from './tipActions';
 
 export const SETTINGS_GROUP_LABELS = {
   training: 'Training',
@@ -10,16 +12,22 @@ export const SETTINGS_GROUP_LABELS = {
 } as const;
 export type SettingsGroupId = keyof typeof SETTINGS_GROUP_LABELS;
 
+/** Screens a search result can open; settings found elsewhere live on Cardio, Home and Admin. */
+export type SettingsPage = 'settings' | 'profile' | 'cardio' | 'dashboard' | 'admin';
+
 export interface SettingsDestination {
   id: string;
   title: string;
-  page: 'settings' | 'profile';
+  page: SettingsPage;
   group?: SettingsGroupId;
   keywords: string;
   selector: string;
   reveal?: string[];
   editProfile?: boolean;
   requiresAccount?: boolean;
+  requiresAdmin?: boolean;
+  /** Opens the place another way, such as Home's edit mode, instead of jumping to `selector`. */
+  action?: TipAction;
 }
 
 export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
@@ -54,7 +62,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     title: 'Your split',
     page: 'settings',
     keywords:
-      'schedule rotation upper lower push pull legs ppl full body fbeod cardio rest templates cycle',
+      'schedule rotation routine routines upper lower push pull legs ppl full body fbeod cardio rest templates cycle',
     selector: '#training-split-settings',
   },
   {
@@ -96,7 +104,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     group: 'notifications',
     title: 'Phone alerts',
     page: 'settings',
-    keywords: 'notifications reminders push',
+    keywords: 'notifications reminders push rest alert alerts sound vibrate vibration',
     selector: '#notification-settings-title',
   },
   {
@@ -105,7 +113,7 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     title: 'App theme',
     page: 'settings',
     keywords:
-      'appearance light dark mode colour color palette accent blue green purple plum emerald amber coral neutral silver grey gray frosted glass blur transparency oled',
+      'appearance light dark mode automatic system colour color palette accent blue green purple plum emerald amber coral neutral silver grey gray frosted glass blur transparency oled',
     selector: '#colour-theme-title',
   },
   {
@@ -201,10 +209,10 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
   },
   {
     id: 'username',
-    title: 'Change username',
+    title: 'Username',
     page: 'profile',
-    keywords: 'account login name edit',
-    selector: '.profile-identity input[autocomplete="username"]',
+    keywords: 'account login name handle change edit',
+    selector: '.profile-username-field',
     editProfile: true,
   },
   {
@@ -289,6 +297,38 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     selector: '#profile-session-title',
   },
   {
+    id: 'profile-sex',
+    title: 'Sex',
+    page: 'profile',
+    requiresAccount: true,
+    keywords: 'male female gender profile body figure',
+    selector: '.profile-sex-field',
+    editProfile: true,
+  },
+  {
+    id: 'cardio-zones',
+    title: 'Heart-rate zones',
+    page: 'cardio',
+    keywords: 'cardio zone zones heart rate hr bpm zone 2 weekly goal minutes',
+    selector: '[aria-label="Edit heart-rate zones and goals"]',
+  },
+  {
+    id: 'home-check-in',
+    title: 'Home check-in card',
+    page: 'dashboard',
+    keywords: 'check-in checkin weigh-in bodyweight body weight fat customise layout home card',
+    selector: '.home-section',
+    action: { target: 'home-edit' },
+  },
+  {
+    id: 'admin',
+    title: 'Admin console',
+    page: 'admin',
+    requiresAdmin: true,
+    keywords: 'administrator accounts users sign-ups registration limits server storage feedback',
+    selector: '#admin-users-title',
+  },
+  {
     id: 'delete',
     group: 'account',
     title: 'Delete account',
@@ -299,18 +339,99 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
   },
 ];
 
-export function searchSettings(query: string, includeProfile = true): SettingsDestination[] {
-  const words = query.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean);
+interface SearchField {
+  words: string[];
+  /** Neighbouring words written together, so "signout" finds Sign out. */
+  joined: { text: string; first: string }[];
+  weight: number;
+}
+
+function searchField(text: string, weight: number): SearchField {
+  const words = searchWords(text);
+  const joined = words
+    .slice(1)
+    .map((word, index) => ({ text: words[index] + word, first: words[index] }));
+  return { words, joined, weight };
+}
+
+const SEARCH_FIELDS = new Map(
+  SETTINGS_DESTINATIONS.map((entry) => [
+    entry.id,
+    [
+      searchField(entry.title, 0),
+      searchField(entry.keywords, 2),
+      searchField(entry.group ? SETTINGS_GROUP_LABELS[entry.group] : '', 3),
+    ],
+  ]),
+);
+
+/** "timers" and "colours" also match timer and colour. */
+const singular = (word: string) =>
+  word.length > 3 && word.endsWith('s') && !word.endsWith('ss') ? word.slice(0, -1) : null;
+
+/**
+ * Scores one searched word against a field as typed: a whole word, the start of a word (so
+ * "plate" does not find templates) or words written together. Lower is better.
+ */
+function exactScore(query: string, field: SearchField): number | null {
+  const stem = singular(query);
+  const scores: number[] = [];
+  for (const word of field.words) {
+    if (word === query) scores.push(0);
+    else if (word.startsWith(query)) scores.push(1 + (word.length - query.length) * 0.01);
+    else if (stem && word === stem) scores.push(0.5);
+  }
+  for (const { text, first } of field.joined) {
+    if (query.length > first.length && text.startsWith(query))
+      scores.push(text === query ? 0.5 : 1.5);
+  }
+  return scores.length ? Math.min(...scores) + field.weight : null;
+}
+
+/** Scores a mistyped word, such as "pasword" or "notifcations". */
+function typoScore(query: string, field: SearchField): number | null {
+  const scores = [...field.words, ...field.joined.map(({ text }) => text)].flatMap((word) => {
+    const match = typoMatch(query, word);
+    return match ? [3 + match.distance + (match.length === word.length ? 0 : 0.5)] : [];
+  });
+  return scores.length ? Math.min(...scores) + field.weight : null;
+}
+
+export function searchSettings(
+  query: string,
+  includeProfile = true,
+  includeAdmin = false,
+): SettingsDestination[] {
+  const words = searchWords(query);
   if (!words.length) return [];
-  const inTitle = (entry: SettingsDestination) =>
-    words.every((word) => entry.title.toLocaleLowerCase().includes(word));
-  const matches = SETTINGS_DESTINATIONS.filter(
+  const available = SETTINGS_DESTINATIONS.filter(
     (entry) =>
       (includeProfile || (entry.page !== 'profile' && !entry.requiresAccount)) &&
-      words.every((word) => `${entry.title} ${entry.keywords}`.toLocaleLowerCase().includes(word)),
+      (includeAdmin || !entry.requiresAdmin),
   );
-  // "rest" should lead with Rest timer, not a section that only mentions rest days.
-  return [...matches.filter(inTitle), ...matches.filter((entry) => !inTitle(entry))];
+  const fields = (entry: SettingsDestination) => SEARCH_FIELDS.get(entry.id) ?? [];
+  // Typing mistakes are only forgiven for a word that matches nothing as typed, so "timer"
+  // finds Rest timer but not Show rest times.
+  const forgiving = words.map(
+    (word) =>
+      !available.some((entry) => fields(entry).some((field) => exactScore(word, field) !== null)),
+  );
+  return available
+    .map((entry, index) => {
+      let score = 0;
+      for (const [position, word] of words.entries()) {
+        const scores = fields(entry).flatMap((field) => {
+          const value = forgiving[position] ? typoScore(word, field) : exactScore(word, field);
+          return value === null ? [] : [value];
+        });
+        if (!scores.length) return null;
+        score += Math.min(...scores);
+      }
+      return { entry, index, score };
+    })
+    .filter((match) => match !== null)
+    .sort((first, second) => first.score - second.score || first.index - second.index)
+    .map(({ entry }) => entry);
 }
 
 export interface SettingsJump {
@@ -333,7 +454,7 @@ export function useSettingsReveal(title: string, reveal: () => void) {
 }
 
 /** Runs after page navigation and destination controls have been revealed. */
-export function useSettingsPageJump(page: 'settings' | 'profile', active: boolean) {
+export function useSettingsPageJump(page: SettingsPage, active: boolean) {
   const navigation = useContext(SettingsNavigationContext);
   const handled = useRef(0);
   useEffect(() => {
@@ -357,9 +478,12 @@ export function useSettingsPageJump(page: 'settings' | 'profile', active: boolea
       first = requestAnimationFrame(() => {
         second = requestAnimationFrame(() => {
           queued = false;
-          const root = document.querySelector(`[data-settings-page="${page}"]`);
-          const target = root?.querySelector<HTMLElement>(destination.selector);
-          if (!target || target.closest('.is-collapsed, [hidden]')) return;
+          // Screens other than Settings and Profile are found by the control itself.
+          const root = document.querySelector(`[data-settings-page="${page}"]`) ?? document;
+          const target = Array.from(root.querySelectorAll<HTMLElement>(destination.selector)).find(
+            (element) => !element.closest('.is-collapsed, [hidden]'),
+          );
+          if (!target) return;
           handled.current = serial;
           observer.disconnect();
           clearTimeout(expiry);

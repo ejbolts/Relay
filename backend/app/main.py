@@ -91,6 +91,7 @@ from .tracker import router as tracker_router
 from .tracker import seed_default_exercises, sync_all_workout_cardio_sessions
 from .training_blocks import router as training_blocks_router
 from .training_metrics import rebuild_personal_records
+from .username_reminder_requests import admin_username_request_router, username_request_router
 from .weight_mapping import router as weight_mapping_router
 from .workout_type_exercises import router as workout_type_exercises_router
 from .youtube_connections import OAuthAccessLogFilter, YouTubeConnectionError, require_connection
@@ -718,6 +719,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(admin_feedback_router)
     app.include_router(request_router)
     app.include_router(admin_request_router)
+    app.include_router(username_request_router)
+    app.include_router(admin_username_request_router)
     app.include_router(sharing_router)
     app.include_router(presence_router)
     app.include_router(protected)

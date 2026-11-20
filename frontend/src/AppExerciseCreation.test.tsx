@@ -160,9 +160,11 @@ it.each(['history', 'progress'] as const)(
       }),
     );
     expect(document.querySelector('.create-exercise-dialog')).toBeNull();
-    expect(host.querySelector('.training-exercise-notice')?.textContent).toContain(
-      'Custom press added',
-    );
+    // The confirmation is a toast that clears itself, not a line that stays under the tabs.
+    expect(host.querySelector('.training-exercise-notice')).toBeNull();
+    const toast = document.querySelector('.toast');
+    expect(toast?.textContent).toContain('Custom press added');
+    expect(toast?.querySelector('.toast-action')?.textContent).toBe('Open');
     expect(
       host.querySelector('[aria-label="Training sections"] [aria-selected="true"]')?.textContent,
     ).toBe('Exercises');

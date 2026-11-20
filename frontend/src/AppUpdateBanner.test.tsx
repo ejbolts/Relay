@@ -18,14 +18,14 @@ describe('AppUpdateBanner', () => {
   });
 });
 
-describe('AppUpdateBanner pill', () => {
+describe('AppUpdateBanner button', () => {
   it('shows a visible Update button and marks a required update', () => {
     const optional = renderToStaticMarkup(
       <AppUpdateBanner version="1.3.0" refreshing={false} error={null} onRefresh={vi.fn()} />,
     );
     expect(optional).toContain('class="app-update-banner"');
     expect(optional).toMatch(
-      /<button[^>]*class="app-update-refresh"[^>]*>.*<span>Update<\/span><\/button>/s,
+      /<button[^>]*class="pulse-button primary small app-update-refresh"[^>]*>.*<span>Update<\/span><\/button>/s,
     );
     const required = renderToStaticMarkup(
       <AppUpdateBanner required refreshing error={null} onRefresh={vi.fn()} />,

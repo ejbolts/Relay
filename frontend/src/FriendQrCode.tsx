@@ -6,6 +6,7 @@ import { FriendQrScanner } from './FriendQrScanner';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
+import { useToast } from './Toast';
 import type { User } from './types';
 
 /** A QR code drawn as one SVG path, dark on light so every camera can read it in any theme. */
@@ -50,7 +51,7 @@ export function FriendInviteDialog({
   const url = friendInviteUrl(user.id, window.location.origin, inviteCode);
   const [mode, setMode] = useState<SheetMode>('code');
   const [shareable, setShareable] = useState<Shareable>('checking');
-  const [copied, setCopied] = useState(false);
+  const toast = useToast();
   const [shareError, setShareError] = useState<string | null>(null);
   const canShare = typeof navigator.share === 'function';
 
@@ -84,14 +85,14 @@ export function FriendInviteDialog({
     }
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
+      toast.show('Link copied');
     } catch {
       setShareError('Could not copy the link.');
     }
   }
 
   return (
-    <PopupDialog title="QR code" className="friend-invite-dialog" swipeToDismiss onClose={onClose}>
+    <PopupDialog title="QR code" className="friend-invite-dialog" onClose={onClose}>
       <div
         className="segmented-control friend-invite-modes"
         role="tablist"
@@ -162,12 +163,9 @@ export function FriendInviteDialog({
             disabled={shareable !== 'shared'}
             onClick={() => void share()}
           >
-            <Icon name={copied ? 'check' : 'link'} />
-            <span>{copied ? 'Link copied' : canShare ? 'Share link' : 'Copy link'}</span>
+            <Icon name="link" />
+            <span>{canShare ? 'Share link' : 'Copy link'}</span>
           </button>
-          <p className="sr-only" role="status">
-            {copied ? 'Invite link copied.' : ''}
-          </p>
           {shareError && (
             <p className="inline-error" role="alert">
               {shareError}

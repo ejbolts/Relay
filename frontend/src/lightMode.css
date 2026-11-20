@@ -88,14 +88,11 @@
   border-bottom-color: var(--p-line-strong);
   background: rgb(255 255 255 / 97%);
 }
-:root[data-colour-mode='light'] .edge-swipe-indicator,
-:root[data-colour-mode='light'] .undo-toast {
+:root[data-colour-mode='light'] .edge-swipe-indicator {
   background: rgb(255 255 255 / 94%);
   box-shadow: 0 14px 36px rgb(16 24 32 / 18%);
 }
-:root[data-colour-mode='light'] .modal-backdrop,
-:root[data-colour-mode='light'] .popup-dialog::backdrop,
-:root[data-colour-mode='light'] .notification-dialog::backdrop {
+:root[data-colour-mode='light'] .popup-dialog::backdrop {
   background: rgb(16 24 32 / 38%);
 }
 :root[data-colour-mode='light'] .pulse-chart-bg-dot {
@@ -172,19 +169,20 @@
   border-color: var(--p-accent-text);
   background: var(--p-accent-soft);
 }
+/* The cardio form's screenshot button and calorie note are pale colours meant for dark cards. */
+:root[data-colour-mode='light'] .cardio-screenshot-import > label {
+  color: var(--p-accent-text);
+}
+:root[data-colour-mode='light'] .cardio-calorie-hint {
+  color: var(--p-ink-2);
+}
 :root[data-colour-mode='light'] .body-row-menu .body-history-actions {
   background: var(--p-surface);
   box-shadow: 0 12px 30px rgb(16 24 32 / 16%);
 }
-:root[data-colour-mode='light'] .notification-setting-row > button,
-:root[data-colour-mode='light'] .settings-actions > button,
-:root[data-colour-mode='light'] .settings-actions .inline-confirmation > button {
+:root[data-colour-mode='light'] .notification-setting-row > button {
   border-color: var(--p-line-strong);
   background: var(--p-surface-2);
-}
-:root[data-colour-mode='light'] .settings-actions > button,
-:root[data-colour-mode='light'] .settings-actions .inline-confirmation > button {
-  color: var(--p-ink);
 }
 :root[data-colour-mode='light'] .notification-setting-row + .notification-setting-row {
   border-top-color: var(--p-line-strong);
@@ -232,11 +230,6 @@
 :root[data-colour-mode='light'] .movement-overflow-menu button:disabled {
   color: var(--p-muted);
 }
-:root[data-colour-mode='light'] .add-set-fields textarea {
-  border-color: var(--p-line-strong);
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-}
 
 :root[data-colour-mode='light']
   .logger-screen
@@ -275,7 +268,10 @@
 }
 :root[data-colour-mode='light'] .body-history-panel > article,
 :root[data-colour-mode='light'] .body-row-menu .body-history-actions,
-:root[data-colour-mode='light'] .body-row-menu .body-history-actions button {
+:root[data-colour-mode='light']
+  .body-row-menu
+  .body-history-actions
+  button:where(:not(.pulse-button)) {
   border-color: var(--p-line-strong);
 }
 :root[data-colour-mode='light'] .app-tab-start.live .app-tab-start-bubble {
@@ -300,10 +296,6 @@
   border-color: var(--p-line-strong);
   background: var(--p-surface-2);
   color: var(--p-ink);
-}
-:root[data-colour-mode='light'] .workout-csv-guide .workout-csv-guide-actions {
-  border-top-color: var(--p-line-strong);
-  background: var(--p-surface);
 }
 
 /* Add to Home Screen guide: show the light iOS share sheet. */

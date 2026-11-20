@@ -4,6 +4,7 @@ import {
   applyColourMode,
   applyColourTheme,
   browserThemeColour,
+  COLOUR_MODES,
   COLOUR_THEMES,
   darkStylePreference,
   glassPreference,
@@ -14,8 +15,10 @@ import {
   lightStylePreference,
   colourModePreference,
   colourThemePreference,
+  followSystemColourMode,
   saveColourMode,
   saveColourTheme,
+  shownColourMode,
 } from './colourThemes';
 afterEach(() => {
   localStorage.clear();
@@ -27,7 +30,32 @@ afterEach(() => {
   delete document.documentElement.dataset.lightStyle;
   document.head.querySelector('meta[name="theme-color"]')?.remove();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
+
+/** Stands in for the phone's light or dark setting; `set` flips it like the phone would. */
+function stubPhoneMode(initial: 'dark' | 'light') {
+  let dark = initial === 'dark';
+  const listeners = new Set<() => void>();
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn((query: string) => ({
+      media: query,
+      get matches() {
+        return dark;
+      },
+      addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+      removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+    })),
+  );
+  return {
+    set(mode: 'dark' | 'light') {
+      dark = mode === 'dark';
+      listeners.forEach((listener) => listener());
+    },
+    listeners,
+  };
+}
 it('persists a selected theme and applies its accent without affecting status colours', () => {
   expect(saveColourTheme('amber')).toBe(true);
   expect(colourThemePreference()).toBe('amber');
@@ -46,8 +74,8 @@ it('uses Blue for invalid storage and keeps the theme usable when storage is una
   applyColourTheme('blue');
   expect(document.documentElement.style.getPropertyValue('--p-accent')).toBe('#2c74d0');
 });
-it('defaults to dark mode and keeps the saved accent when switching to light', () => {
-  expect(colourModePreference()).toBe('dark');
+it('defaults to Automatic and keeps the saved accent when switching to light', () => {
+  expect(colourModePreference()).toBe('auto');
   saveColourTheme('emerald');
   expect(saveColourMode('light')).toBe(true);
   expect(colourModePreference()).toBe('light');
@@ -78,7 +106,7 @@ it('keeps white text on every accent button at WCAG AA contrast', () => {
 });
 it('ignores invalid modes and applies light mode when storage is unavailable', () => {
   localStorage.setItem('gym-logger-colour-mode', 'sepia');
-  expect(colourModePreference()).toBe('dark');
+  expect(colourModePreference()).toBe('auto');
   vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
     throw new Error('unavailable');
   });
@@ -171,7 +199,7 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   localStorage.setItem('gym-logger-appearance-reset', '3');
   resetAppearanceOnce();
   expect(colourThemePreference()).toBe('coral');
-  expect(colourModePreference()).toBe('dark');
+  expect(colourModePreference()).toBe('auto');
   expect(darkStylePreference()).toBe('default');
   expect(lightStylePreference()).toBe('default');
   // The retired Background choice is cleared too.
@@ -185,4 +213,49 @@ it('moves a device onto the default look once, keeping its accent colour', () =>
   resetAppearanceOnce();
   expect(glassPreference()).toBe('strong');
   expect(colourModePreference()).toBe('light');
+});
+it('offers Dark, Light and Automatic modes and keeps a saved Dark or Light choice', () => {
+  expect(COLOUR_MODES.map((mode) => mode.name)).toEqual(['Dark', 'Light', 'Automatic']);
+  localStorage.setItem('gym-logger-colour-mode', 'dark');
+  expect(colourModePreference()).toBe('dark');
+  localStorage.setItem('gym-logger-colour-mode', 'light');
+  expect(colourModePreference()).toBe('light');
+  expect(saveColourMode('auto')).toBe(true);
+  expect(colourModePreference()).toBe('auto');
+});
+it('shows the phone setting in Automatic and follows it when the phone switches', () => {
+  const meta = document.createElement('meta');
+  meta.name = 'theme-color';
+  document.head.append(meta);
+  const phone = stubPhoneMode('light');
+  const stop = followSystemColourMode();
+  saveColourTheme('plum');
+  applyColourMode('auto');
+  expect(shownColourMode('auto')).toBe('light');
+  expect(document.documentElement.dataset.colourMode).toBe('light');
+  expect(document.documentElement.style.getPropertyValue('--p-accent-text')).toBe('#663f9e');
+  expect(meta.content).toBe('#f3f5f7');
+  phone.set('dark');
+  expect(document.documentElement.dataset.colourMode).toBe('dark');
+  expect(document.documentElement.style.getPropertyValue('--p-accent-text')).toBe('#c4a2ef');
+  expect(meta.content).toBe('#0b0d0f');
+  stop();
+  expect(phone.listeners.size).toBe(0);
+});
+it('leaves a chosen Dark or Light mode alone when the phone switches', () => {
+  const phone = stubPhoneMode('dark');
+  const stop = followSystemColourMode();
+  saveColourMode('dark');
+  phone.set('light');
+  expect(document.documentElement.dataset.colourMode).toBe('dark');
+  saveColourMode('light');
+  phone.set('dark');
+  expect(document.documentElement.dataset.colourMode).toBe('light');
+  stop();
+});
+it('shows dark in Automatic when the browser cannot report the phone setting', () => {
+  vi.stubGlobal('matchMedia', undefined);
+  applyColourMode('auto');
+  expect(document.documentElement.dataset.colourMode).toBe('dark');
+  expect(followSystemColourMode()).toBeTypeOf('function');
 });

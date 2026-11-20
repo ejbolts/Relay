@@ -3,6 +3,7 @@ import { api, ApiError } from './api';
 import { friendSession, loggedTime, relativeDay } from './friendFeedData';
 import { WorkoutReactionControl } from './WorkoutReactionControl';
 import { PresenceAvatar } from './PresenceAvatar';
+import { ShowMoreButton } from './ShowMoreButton';
 import {
   byLiveActivity,
   onFriendPresence,
@@ -151,7 +152,7 @@ export function FriendsActivityCard({
         <h2 id={titleId}>{title}</h2>
         <button
           type="button"
-          className="text-link"
+          className="pulse-button link small"
           onClick={state.kind === 'locked' ? (onChooseSharing ?? onOpenFriends) : onOpenFriends}
         >
           {state.kind === 'locked' ? 'Share' : friendsLabel}
@@ -256,16 +257,7 @@ export function FriendsActivityCard({
       {state.kind === 'ready' &&
         state.items.length > 0 &&
         state.with_sessions > state.items.length && (
-          <button
-            type="button"
-            className="friends-activity-more"
-            onClick={() => void loadMore()}
-            disabled={loadingMore}
-            aria-busy={loadingMore}
-          >
-            {loadingMore && <span className="calendar-older-spinner" aria-hidden="true" />}
-            {loadingMore ? 'Loading…' : `+${state.with_sessions - state.items.length} more`}
-          </button>
+          <ShowMoreButton loading={loadingMore} onClick={() => void loadMore()} />
         )}
       {moreError && (
         <p className="pulse-empty-line" role="alert">

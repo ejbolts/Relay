@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import {
   buildFinishSummary,
   FINISH_SUMMARY_MAX_AGE_MS,
+  finishSummaryWorkoutGone,
   readFinishSummary,
   writeFinishSummary,
 } from './finishSummary';
@@ -99,7 +100,7 @@ function finished(
 const exercises = [legPress, extension, bike];
 
 describe('buildFinishSummary', () => {
-  it('totals logged sets and working volume, leaving out warm-ups, unticked sets and cardio', () => {
+  it('totals working sets and volume, leaving out warm-ups, unticked sets and cardio', () => {
     const summary = buildFinishSummary(
       finished([
         {
@@ -121,7 +122,8 @@ describe('buildFinishSummary', () => {
       sessionId: 'session-1',
       name: 'Lower body workout',
       durationMinutes: 55,
-      sets: 4,
+      // The two working sets, as history and the share card count them.
+      sets: 2,
       volumeKg: 1600,
       previous: null,
       machineChanges: [],
@@ -261,6 +263,40 @@ describe('buildFinishSummary', () => {
         'resumed',
       ).plateaus,
     ).toEqual([]);
+  });
+});
+
+describe('finish summary of a deleted workout', () => {
+  const summary = buildFinishSummary(finished([]), exercises, [], 1);
+  const synced = { id: 'w1', client_session_id: 'session-1' };
+
+  it('is gone once the synced workout is no longer in loaded history', () => {
+    expect(finishSummaryWorkoutGone(summary, [synced], [], '2026-11-01')).toBe(false);
+    expect(finishSummaryWorkoutGone(summary, [], [], '2026-11-01')).toBe(true);
+  });
+
+  it('waits while the workout is still waiting to sync, or its day is not loaded', () => {
+    const waiting = [{ id: null, client_session_id: 'session-1' }];
+    expect(finishSummaryWorkoutGone(summary, [], waiting, '2026-11-01')).toBe(false);
+    expect(finishSummaryWorkoutGone(summary, [], [], '2026-11-18')).toBe(false);
+  });
+
+  it('follows a resumed workout by its saved id', () => {
+    const resumed = buildFinishSummary(
+      { ...finished([]), client_session_id: undefined },
+      exercises,
+      [],
+      1,
+      'w7',
+    );
+    expect(resumed.workoutId).toBe('w7');
+    expect(finishSummaryWorkoutGone(resumed, [{ id: 'w7' }], [], '2026-11-01')).toBe(false);
+    expect(finishSummaryWorkoutGone(resumed, [synced], [], '2026-11-01')).toBe(true);
+  });
+
+  it('leaves alone an older summary that cannot name its workout', () => {
+    const unnamed = { ...summary, sessionId: null, workoutId: undefined };
+    expect(finishSummaryWorkoutGone(unnamed, [], [], '2026-11-01')).toBe(false);
   });
 });
 

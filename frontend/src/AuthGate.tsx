@@ -6,15 +6,21 @@ import { subscribeAuthExpired } from './authEvents';
 import { reportSavedDataUsed } from './connectionStatus';
 import { PasswordChangeRequired } from './PasswordChangeRequired';
 import { phonePushPermissionPromptSettled } from './push';
-import { adoptSignedInUser, resolveSession, type AuthState } from './authSession';
+import {
+  adoptSignedInUser,
+  endExpiredSession,
+  resolveSession,
+  type AuthState,
+} from './authSession';
 import {
   browserDeps,
+  browserSignOutDeps,
   clearAfterAccountDeletion,
-  clearUserDeviceData,
   rememberUser,
   restartApp,
   signOutAndClear,
 } from './sessionCleanup';
+import { rememberAccountDeleted, signInNoticeText, takeAccountDeleted } from './signInNotice';
 import { TodaySkeleton } from './TodayScreen';
 import type { AuthConfig, User } from './types';
 import { UserContext, type UserSession } from './userContext';
@@ -96,6 +102,12 @@ export function AuthGateView({
             <AuthScreen
               config={authConfig}
               onAuthenticated={onAuthenticated}
+              notice={
+                state.status === 'signed-out' && state.notice
+                  ? signInNoticeText(state.notice)
+                  : undefined
+              }
+              initialUsername={state.status === 'signed-out' ? state.username : undefined}
               exiting={signedIn}
               onExited={onSignInExited}
             />
@@ -129,7 +141,12 @@ export function AuthGate({ children }: { children: ReactNode }) {
     }).then((next) => {
       if (cancelled || generation.current !== started) return;
       if (next.status === 'authenticated' && next.offline) reportSavedDataUsed();
-      setState(next);
+      // Deleting the account reloads the app at the sign-in screen, which then says so.
+      setState(
+        next.status === 'signed-out' && takeAccountDeleted()
+          ? { status: 'signed-out', notice: 'account-deleted' }
+          : next,
+      );
     });
     return () => {
       cancelled = true;
@@ -140,12 +157,11 @@ export function AuthGate({ children }: { children: ReactNode }) {
     () =>
       subscribeAuthExpired(() => {
         generation.current += 1;
-        // Drop the app's in-memory state and its offline account data together, keeping only
-        // a finished workout that still has to reach the server.
-        setState({ status: 'signed-out' });
-        cleanup.current = clearUserDeviceData(browserDeps(), { keepUnsyncedWorkout: true }).catch(
-          () => undefined,
-        );
+        // Drop the app's in-memory state and its offline account data together, keeping the
+        // workout for when the same account signs in again.
+        const { state: next, cleaned } = endExpiredSession(browserDeps());
+        setState(next);
+        cleanup.current = cleaned;
       }),
     [],
   );
@@ -206,11 +222,16 @@ export function AuthGate({ children }: { children: ReactNode }) {
         );
       },
       signOut: async () => {
-        await signOutAndClear();
+        await signOutAndClear(browserSignOutDeps());
+        restartApp();
+      },
+      signOutEverywhere: async () => {
+        await signOutAndClear(browserSignOutDeps({ everywhere: true }));
         restartApp();
       },
       accountDeleted: async () => {
         await clearAfterAccountDeletion();
+        rememberAccountDeleted();
         restartApp();
       },
       signingIn: signInExiting,

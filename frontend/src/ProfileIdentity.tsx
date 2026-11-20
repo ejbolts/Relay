@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { api, ApiError } from './api';
-import { authErrorMessage, USERNAME_HINT, validateUsername } from './authForm';
+import { authErrorMessage } from './authForm';
 import { FriendInviteButton } from './FriendQrCode';
 import { Icon } from './Icon';
 import { optimisePhoto } from './photoOptimise';
@@ -17,7 +17,7 @@ import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
 import { ProfilePhotoCrop } from './ProfilePhotoCrop';
 import { DEFAULT_PHOTO_CROP, type PhotoCrop } from './profilePhotoGeometry';
-import { NotificationDialog } from './NotificationDialog';
+import { useToast } from './Toast';
 import { motionReduced } from './motion';
 import { formatMemberSince, SEX_LABELS } from './profileDisplay';
 import { SexMark } from './SexMark';
@@ -52,7 +52,6 @@ export function ProfileIdentity({
   const editButton = useRef<HTMLButtonElement>(null);
   const [editing, setEditing] = useState(false);
   const [displayName, setDisplayName] = useState(user.display_name);
-  const [username, setUsername] = useState(user.username);
   // Chosen once: the draft exists only until the account has a sex.
   const [sex, setSex] = useState<Sex | null>(null);
   const [confirmingSex, setConfirmingSex] = useState(false);
@@ -65,7 +64,7 @@ export function ProfileIdentity({
   const cropButton = useRef<HTMLButtonElement>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const navigation = useContext(SettingsNavigationContext);
   const handledJump = useRef(0);
@@ -77,12 +76,10 @@ export function ProfileIdentity({
     if (!editing) {
       requestedFocus.current = editRequest.destination.selector;
       setDisplayName(user.display_name);
-      setUsername(user.username);
-      setStatus(null);
       setError(null);
       setEditing(true);
     }
-  }, [editRequest, editing, user.display_name, user.username]);
+  }, [editRequest, editing, user.display_name]);
 
   useEffect(() => {
     if (!photo) {
@@ -144,20 +141,17 @@ export function ProfileIdentity({
     ? (preview ?? (removePhoto ? null : user.profile_photo_url))
     : user.profile_photo_url;
   const sexDirty = !user.sex && sex !== null;
-  const textDirty =
-    displayName.trim() !== user.display_name || username.trim() !== user.username || sexDirty;
+  const textDirty = displayName.trim() !== user.display_name || sexDirty;
   const dirty = textDirty || photo !== null || removePhoto;
   const joined = formatMemberSince(user.created_at);
 
   function edit() {
     setDisplayName(user.display_name);
-    setUsername(user.username);
     setSex(null);
     setPhoto(null);
     setPhotoSource(null);
     setPhotoCrop(DEFAULT_PHOTO_CROP);
     setRemovePhoto(false);
-    setStatus(null);
     setError(null);
     setEditing(true);
   }
@@ -178,14 +172,8 @@ export function ProfileIdentity({
     event?.preventDefault();
     if (saving || !dirty) return;
     setError(null);
-    setStatus(null);
     if (!displayName.trim()) {
       setError('Enter a name to show in the app.');
-      return;
-    }
-    const usernameError = validateUsername(username);
-    if (usernameError) {
-      setError(usernameError);
       return;
     }
     // A sex cannot be changed later, so saving one is confirmed first.
@@ -205,7 +193,6 @@ export function ProfileIdentity({
             ...(displayName.trim() !== user.display_name
               ? { display_name: displayName.trim() }
               : {}),
-            ...(username.trim() !== user.username ? { username: username.trim() } : {}),
             ...(sexDirty && sex ? { sex } : {}),
           }),
         );
@@ -214,13 +201,13 @@ export function ProfileIdentity({
       if (upload) onSaved(await api.uploadProfilePhoto(upload));
       else if (removePhoto) onSaved(await api.removeProfilePhoto());
       close();
-      if (!photo && !removePhoto) setStatus('Profile saved.');
+      if (!photo && !removePhoto) toast.show('Profile saved.');
     } catch (reason) {
       const message =
         reason instanceof ApiError && PHOTO_ERRORS.has(reason.code)
           ? reason.message
           : authErrorMessage(reason);
-      setError(`${detailsSaved ? 'Your name and username were saved. ' : ''}${message}`);
+      setError(`${detailsSaved ? 'Your details were saved. ' : ''}${message}`);
     } finally {
       setSaving(false);
     }
@@ -339,30 +326,19 @@ export function ProfileIdentity({
                 onChange={(e) => setDisplayName(e.target.value)}
               />
             </label>
-            <label className="auth-field" htmlFor={`${id}-username`}>
+            {/* Only an administrator can change a username. */}
+            <div className="auth-field profile-username-field">
               <span>Username</span>
-              <input
-                id={`${id}-username`}
-                type="text"
-                autoComplete="username"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
-                required
-                maxLength={32}
-                disabled={saving}
-                value={username}
-                aria-describedby={`${id}-username-hint`}
-                onChange={(e) => setUsername(e.target.value)}
-              />
-            </label>
-            <small id={`${id}-username-hint`} className="auth-hint">
-              {USERNAME_HINT}
-            </small>
+              <p className="profile-locked-value">
+                {user.username}
+                <Icon name="lock" />
+                <span className="sr-only">Locked</span>
+              </p>
+            </div>
             <div className="auth-field profile-sex-field">
               <span id={`${id}-sex`}>Sex</span>
               {user.sex ? (
-                <p className="profile-sex-locked">
+                <p className="profile-locked-value">
                   <Icon name={user.sex} />
                   {SEX_LABELS[user.sex]}
                   <Icon name="lock" />
@@ -413,33 +389,35 @@ export function ProfileIdentity({
           </form>
         </>
       )}
-      {status && <NotificationDialog message={status} onClose={() => setStatus(null)} />}
       {confirmingSex && sex && (
         <PopupDialog
           title={`Save your sex as ${SEX_LABELS[sex]}?`}
           className="profile-sex-confirm"
+          size="compact"
           onClose={() => setConfirmingSex(false)}
+          actions={
+            <>
+              <button type="button" onClick={() => setConfirmingSex(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action"
+                onClick={() => {
+                  sexConfirmed.current = true;
+                  setConfirmingSex(false);
+                  void save();
+                }}
+              >
+                Save
+              </button>
+            </>
+          }
         >
           <p>
             It sets your body measurement outline. After you save, only an administrator can change
             it.
           </p>
-          <div className="popup-dialog-actions">
-            <button type="button" onClick={() => setConfirmingSex(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="popup-primary-action"
-              onClick={() => {
-                sexConfirmed.current = true;
-                setConfirmingSex(false);
-                void save();
-              }}
-            >
-              Save
-            </button>
-          </div>
         </PopupDialog>
       )}
       {cropSource && (

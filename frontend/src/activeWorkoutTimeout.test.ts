@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   extendInactiveWorkoutFinishAt,
+  inactiveWorkoutEndAt,
   inactiveWorkoutFinishAt,
   MAX_INACTIVE_WORKOUT_MS,
   RECENT_WORKOUT_ACTIVITY_MS,
@@ -10,6 +11,15 @@ import {
 
 describe('inactive workout timeout', () => {
   const startedAt = Date.UTC(2026, 8, 19, 9);
+
+  it('ends a workout left running at its last activity, within the start and the cutoff', () => {
+    const finishAt = startedAt + MAX_INACTIVE_WORKOUT_MS;
+    expect(inactiveWorkoutEndAt(startedAt, startedAt + 30 * 60_000, finishAt)).toBe(
+      startedAt + 30 * 60_000,
+    );
+    expect(inactiveWorkoutEndAt(startedAt, startedAt - 1, finishAt)).toBe(startedAt);
+    expect(inactiveWorkoutEndAt(startedAt, finishAt + 1, finishAt)).toBe(finishAt);
+  });
 
   it('finishes an inactive workout at three hours', () => {
     expect(shouldAutoFinishWorkout(startedAt, startedAt, startedAt + MAX_INACTIVE_WORKOUT_MS)).toBe(

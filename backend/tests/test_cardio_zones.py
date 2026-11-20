@@ -67,10 +67,11 @@ def test_classification_uses_average_not_manual_zone(client, heart_rate, zone):
     assert session["qualifies_zone2"] == (zone == 2)
 
 
-def test_unconfigured_keeps_saved_zones_and_settings_reclassify_existing_sessions(client):
+def test_unconfigured_sessions_have_no_zone_and_settings_reclassify_existing_sessions(client):
+    # Without heart-rate ranges, a session is not counted as Zone 2 by default.
     session = log_session(client, average_heart_rate_bpm=165, zone=None, qualifies_zone2=False)
-    assert session["zone"] == "Zone 2"
-    assert client.get("/api/dashboard").json()["zone2"]["completed_minutes"] == 30
+    assert (session["zone"], session["qualifies_zone2"]) == (None, False)
+    assert client.get("/api/dashboard").json()["zone2"]["completed_minutes"] == 0
     save_preferences(client)
     assert client.get("/api/cardio").json()["goal_weeks"][0]["completed_minutes"] == 0
     client.patch(f"/api/cardio/{session['id']}/metrics", json={"average_heart_rate_bpm": 130})
@@ -241,3 +242,22 @@ def test_workout_weighted_average_and_metric_edit_do_not_double_count(client):
     assert [goal["completed_minutes"] for goal in overview["goal_weeks"]] == [0, 30]
     workout = client.get(f"/api/workouts/{response.json()['id']}").json()
     assert workout["movements"][0]["sets"][0]["average_heart_rate_bpm"] == 170
+
+
+def test_unconfigured_workout_cardio_has_no_zone_until_ranges_are_set(client):
+    treadmill = next(
+        item["id"]
+        for item in client.get("/api/exercises").json()
+        if item["name"] == "Incline Treadmill Walking"
+    )
+    # Logged on the Cardio tab: saved with its own workout, as older apps sent it.
+    logged = log_session(client, exercise_id=treadmill, average_heart_rate_bpm=150)
+    assert logged["source_workout_id"]
+    assert logged["zone"] is None
+    overview = client.get("/api/cardio").json()
+    assert overview["sessions"][0]["zone"] is None
+    assert overview["goal_weeks"][0]["completed_minutes"] == 0
+
+    save_preferences(client)
+    overview = client.get("/api/cardio").json()
+    assert overview["sessions"][0]["zone"] == "Zone 3"

@@ -16,9 +16,12 @@ import {
   videoQueueSummary,
 } from './adminDisplay';
 import { authErrorMessage } from './authForm';
+import { Icon } from './Icon';
 import { SEX_LABELS } from './profileDisplay';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { motionReduced } from './motion';
+import { Toast, useToast } from './Toast';
+import { AdminUsernameDialog } from './AdminUsernameDialog';
 import type {
   AccountLimits,
   AppFeedback,
@@ -30,6 +33,7 @@ import type {
   VideoUploadMode,
 } from './types';
 import { useUserSession } from './userContext';
+import './adminScreen.css';
 
 /** A temporary password an admin has just generated; shown once, then discarded. */
 export interface TemporaryPasswordReveal {
@@ -47,6 +51,9 @@ export interface AdminScreenViewProps {
   limits: AccountLimitsSettings | null;
   loading: boolean;
   error: string | null;
+  /** Where the error belongs: 'switches', 'limits', 'user:<id>' or 'feedback:<id>'; none for the page. */
+  errorScope?: string | null;
+  /** A confirmation shown in the top toast. */
   notice: string | null;
   savingSetting: boolean;
   savingLimits: boolean;
@@ -61,19 +68,25 @@ export interface AdminScreenViewProps {
   onResetPassword: (user: AdminUser) => Promise<void>;
   /** Changes or clears an account's sex; absent hides the control. */
   onUserSexChange?: (user: AdminUser, sex: Sex | null) => void;
-  onResetRequestDismiss?: (user: AdminUser) => void;
+  /** Clears the account's waiting password reset and username requests. */
+  onRequestDismiss?: (user: AdminUser) => void;
+  /** Rejects with the server's error, for the Change username dialog to show. */
+  onUsernameChange?: (user: AdminUser, username: string) => Promise<void>;
   onTemporaryPasswordDismiss: () => void;
+  onNoticeDismiss?: () => void;
   onRefresh: () => void;
 }
 
 function SwitchesPanel({
   settings,
   saving,
+  error,
   onVideoUploadsChange,
   onRegistrationChange,
 }: {
   settings: ServerSettings;
   saving: boolean;
+  error: string | null;
   onVideoUploadsChange: (mode: VideoUploadMode) => void;
   onRegistrationChange: (open: boolean) => void;
 }) {
@@ -139,6 +152,11 @@ function SwitchesPanel({
           {settings.allow_registration ? 'On' : 'Off'}
         </button>
       </div>
+      {error && (
+        <p className="inline-error" role="alert">
+          {error}
+        </p>
+      )}
     </section>
   );
 }
@@ -146,10 +164,12 @@ function SwitchesPanel({
 function LimitsPanel({
   limits,
   saving,
+  error,
   onSave,
 }: {
   limits: AccountLimitsSettings;
   saving: boolean;
+  error: string | null;
   onSave: (values: AccountLimits) => void;
 }) {
   const [draft, setDraft] = useState(() => limitDraft(limits.values));
@@ -222,6 +242,11 @@ function LimitsPanel({
             </div>
           );
         })}
+        {error && (
+          <p className="inline-error" role="alert">
+            {error}
+          </p>
+        )}
         <div className="admin-limit-actions">
           <button
             type="button"
@@ -330,15 +355,14 @@ function TemporaryPasswordPanel({
   reveal: TemporaryPasswordReveal;
   onDismiss: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const toast = useToast();
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(reveal.password);
-      setCopied(true);
+      toast.show('Password copied');
     } catch {
       // The password stays selectable, so it can still be copied by hand.
-      setCopied(false);
     }
   }
 
@@ -353,7 +377,7 @@ function TemporaryPasswordPanel({
       <small>Shown once. {reveal.displayName} must choose a new password after signing in.</small>
       <div className="admin-temp-password-actions">
         <button type="button" className="profile-secondary" onClick={() => void copy()}>
-          {copied ? 'Copied' : 'Copy'}
+          Copy
         </button>
         <button type="button" className="profile-primary" onClick={onDismiss}>
           Done
@@ -368,22 +392,26 @@ function UserRow({
   now,
   isSelf,
   busy,
+  error,
   temporaryPassword,
   onDisabledChange,
   onResetPassword,
   onSexChange,
-  onResetRequestDismiss,
+  onRequestDismiss,
+  onUsernameChange,
   onTemporaryPasswordDismiss,
 }: {
   user: AdminUser;
   now: number;
   isSelf: boolean;
   busy: boolean;
+  error: string | null;
   temporaryPassword: TemporaryPasswordReveal | null;
   onDisabledChange: (user: AdminUser, disabled: boolean) => Promise<void>;
   onResetPassword: (user: AdminUser) => Promise<void>;
   onSexChange?: (user: AdminUser, sex: Sex | null) => void;
-  onResetRequestDismiss?: (user: AdminUser) => void;
+  onRequestDismiss?: (user: AdminUser) => void;
+  onUsernameChange?: (user: AdminUser, username: string) => Promise<void>;
   onTemporaryPasswordDismiss: () => void;
 }) {
   const disabled = user.disabled_at !== null;
@@ -391,161 +419,387 @@ function UserRow({
   const live = disabled ? null : user.presence?.workout;
   const versions = user.client_versions ?? [];
   const resetRequestedAt = user.password_reset_requested_at ?? null;
+  const usernameRequestedAt = user.username_reminder_requested_at ?? null;
+  const requested = Boolean(resetRequestedAt || usernameRequestedAt);
+  // Accounts that need something done start open; the rest show one line until tapped.
+  const needsAction = Boolean(requested || temporaryPassword || error || busy);
+  const [toggled, setToggled] = useState<boolean | null>(null);
+  const [renaming, setRenaming] = useState(false);
+  const open = toggled ?? needsAction;
+  const detailsId = `${adminUserRowId(user.id)}-details`;
   return (
     <li
       id={adminUserRowId(user.id)}
       tabIndex={-1}
-      className={`admin-user ${disabled ? 'is-disabled' : ''} ${resetRequestedAt ? 'has-reset-request' : ''}`}
+      className={`admin-user ${disabled ? 'is-disabled' : ''} ${requested ? 'has-request' : ''}`}
     >
-      <div className="admin-user-heading">
-        <strong>
-          {user.display_name}
-          {user.is_admin && <span className="profile-badge">Admin</span>}
-          {isSelf && <span className="admin-tag">You</span>}
-          {disabled && <span className="admin-tag is-danger">Disabled</span>}
-          {resetRequestedAt && <span className="admin-tag is-request">Reset requested</span>}
-          {user.must_change_password && <span className="admin-tag">Temporary password</span>}
-        </strong>
-        <span>{user.username}</span>
-      </div>
-      <dl className="admin-user-stats">
-        {resetRequestedAt && (
-          <div className="admin-user-request">
-            <dt>Asked for a reset</dt>
-            <dd>{formatLastActive(resetRequestedAt, new Date(now))}</dd>
+      <button
+        type="button"
+        className="admin-user-summary"
+        aria-expanded={open}
+        aria-controls={detailsId}
+        onClick={() => setToggled(!open)}
+      >
+        <span className="admin-user-heading">
+          <strong>
+            {user.display_name}
+            {user.is_admin && <span className="profile-badge">Admin</span>}
+            {isSelf && <span className="admin-tag">You</span>}
+            {disabled && <span className="admin-tag is-danger">Disabled</span>}
+            {resetRequestedAt && <span className="admin-tag is-request">Reset requested</span>}
+            {usernameRequestedAt && (
+              <span className="admin-tag is-request">Username requested</span>
+            )}
+            {user.must_change_password && <span className="admin-tag">Temporary password</span>}
+          </strong>
+          <span>{user.username}</span>
+        </span>
+        <span className={`admin-user-activity${online ? ' admin-user-online' : ''}`}>
+          {online
+            ? live
+              ? `Live · ${live.name}`
+              : 'Active now'
+            : formatLastActive(user.last_active_at, new Date(now))}
+        </span>
+        <Icon name="chevron-down" />
+      </button>
+      <div id={detailsId} className="admin-user-details" hidden={!open}>
+        <dl className="admin-user-stats">
+          {resetRequestedAt && (
+            <div className="admin-user-request">
+              <dt>Asked for a reset</dt>
+              <dd>{formatLastActive(resetRequestedAt, new Date(now))}</dd>
+            </div>
+          )}
+          {usernameRequestedAt && (
+            <div className="admin-user-request">
+              <dt>Asked for username</dt>
+              <dd>{formatLastActive(usernameRequestedAt, new Date(now))}</dd>
+            </div>
+          )}
+          <div>
+            <dt>Joined</dt>
+            <dd>{formatJoined(user.created_at)}</dd>
           </div>
-        )}
-        <div>
-          <dt>Joined</dt>
-          <dd>{formatJoined(user.created_at)}</dd>
-        </div>
-        <div>
-          <dt>Last active</dt>
-          <dd className={online ? 'admin-user-online' : undefined}>
-            {online ? 'Active now' : formatLastActive(user.last_active_at, new Date(now))}
-          </dd>
-        </div>
-        {live && (
-          <div className="admin-user-workout">
-            <dt>Live workout</dt>
-            <dd>
-              {live.name} · {workoutElapsed(live.started_at, now)}
+          <div>
+            <dt>Last active</dt>
+            <dd className={online ? 'admin-user-online' : undefined}>
+              {online ? 'Active now' : formatLastActive(user.last_active_at, new Date(now))}
             </dd>
           </div>
-        )}
-        <div>
-          <dt>Signed in on</dt>
-          <dd>{plural(user.signed_in_devices, 'device')}</dd>
-        </div>
-        <div>
-          <dt>App versions</dt>
-          <dd>
-            {versions.length
-              ? versions
-                  .map(
-                    (usage) =>
-                      `${usage.version ? `v${usage.version}` : 'Not reported'} (${plural(usage.devices, 'device')})`,
-                  )
-                  .join(', ')
-              : user.signed_in_devices === 0
-                ? 'No signed-in devices'
-                : 'Not reported'}
-          </dd>
-        </div>
-        <div>
-          <dt>Workouts</dt>
-          <dd>{user.workouts}</dd>
-        </div>
-        <div>
-          <dt>Photos</dt>
-          <dd>
-            {user.photos} · {formatBytes(user.photo_bytes)}
-          </dd>
-        </div>
-        <div>
-          <dt>Video sessions</dt>
-          <dd>{user.video_sessions}</dd>
-        </div>
-        {onSexChange && (
-          <div className="admin-user-sex">
-            <dt>
-              <label htmlFor={`admin-sex-${user.id}`}>Sex</label>
-            </dt>
+          {live && (
+            <div className="admin-user-workout">
+              <dt>Live workout</dt>
+              <dd>
+                {live.name} · {workoutElapsed(live.started_at, now)}
+              </dd>
+            </div>
+          )}
+          <div>
+            <dt>Signed in on</dt>
+            <dd>{plural(user.signed_in_devices, 'device')}</dd>
+          </div>
+          <div>
+            <dt>App versions</dt>
             <dd>
-              <select
-                id={`admin-sex-${user.id}`}
-                value={user.sex ?? ''}
+              {versions.length
+                ? versions
+                    .map(
+                      (usage) =>
+                        `${usage.version ? `v${usage.version}` : 'Not reported'} (${plural(usage.devices, 'device')})`,
+                    )
+                    .join(', ')
+                : user.signed_in_devices === 0
+                  ? 'No signed-in devices'
+                  : 'Not reported'}
+            </dd>
+          </div>
+          <div>
+            <dt>Workouts</dt>
+            <dd>{user.workouts}</dd>
+          </div>
+          <div>
+            <dt>Photos</dt>
+            <dd>
+              {user.photos} · {formatBytes(user.photo_bytes)}
+            </dd>
+          </div>
+          <div>
+            <dt>Video sessions</dt>
+            <dd>{user.video_sessions}</dd>
+          </div>
+          {onSexChange && (
+            <div className="admin-user-sex">
+              <dt>
+                <label htmlFor={`admin-sex-${user.id}`}>Sex</label>
+              </dt>
+              <dd>
+                <select
+                  id={`admin-sex-${user.id}`}
+                  value={user.sex ?? ''}
+                  disabled={busy}
+                  onChange={(event) =>
+                    onSexChange(
+                      user,
+                      event.target.value === '' ? null : (event.target.value as Sex),
+                    )
+                  }
+                >
+                  <option value="">Not set</option>
+                  <option value="male">{SEX_LABELS.male}</option>
+                  <option value="female">{SEX_LABELS.female}</option>
+                </select>
+              </dd>
+            </div>
+          )}
+        </dl>
+        {temporaryPassword && (
+          <TemporaryPasswordPanel
+            reveal={temporaryPassword}
+            onDismiss={onTemporaryPasswordDismiss}
+          />
+        )}
+        {error && (
+          <p className="inline-error" role="alert">
+            {error}
+          </p>
+        )}
+        {(!isSelf || onUsernameChange || (requested && onRequestDismiss)) && (
+          <div className="admin-user-actions">
+            {!isSelf && (
+              <InlineConfirmButton
+                label="Reset password"
+                confirmLabel="Reset and sign out"
+                workingLabel="Resetting…"
+                confirmationMessage="Signs them out everywhere. They choose a new password at next sign-in."
+                className={resetRequestedAt ? 'profile-primary' : 'profile-secondary'}
+                size="default"
                 disabled={busy}
-                onChange={(event) =>
-                  onSexChange(user, event.target.value === '' ? null : (event.target.value as Sex))
-                }
+                onConfirm={() => onResetPassword(user)}
+              />
+            )}
+            {onUsernameChange && (
+              <button
+                type="button"
+                className="profile-secondary"
+                disabled={busy}
+                onClick={() => setRenaming(true)}
               >
-                <option value="">Not set</option>
-                <option value="male">{SEX_LABELS.male}</option>
-                <option value="female">{SEX_LABELS.female}</option>
-              </select>
-            </dd>
+                Change username
+              </button>
+            )}
+            {requested && onRequestDismiss && (
+              <button
+                type="button"
+                className="profile-secondary"
+                disabled={busy}
+                onClick={() => onRequestDismiss(user)}
+              >
+                {resetRequestedAt && usernameRequestedAt ? 'Dismiss requests' : 'Dismiss request'}
+              </button>
+            )}
+            {isSelf ? null : disabled ? (
+              <button
+                type="button"
+                className="profile-secondary"
+                disabled={busy}
+                onClick={() => void onDisabledChange(user, false)}
+              >
+                {busy ? 'Enabling…' : 'Enable account'}
+              </button>
+            ) : (
+              <InlineConfirmButton
+                label="Disable account"
+                confirmLabel="Disable and sign out"
+                workingLabel="Disabling…"
+                confirmationMessage="Signs them out everywhere and blocks sign-in. Their data is kept, so enabling the account restores everything."
+                className="profile-danger"
+                size="default"
+                disabled={busy}
+                onConfirm={() => onDisabledChange(user, true)}
+              />
+            )}
           </div>
         )}
-      </dl>
-      {temporaryPassword && (
-        <TemporaryPasswordPanel reveal={temporaryPassword} onDismiss={onTemporaryPasswordDismiss} />
-      )}
-      {(!isSelf || (resetRequestedAt && onResetRequestDismiss)) && (
-        <div className="admin-user-actions">
-          {!isSelf && (
-            <InlineConfirmButton
-              label="Reset password"
-              confirmLabel="Reset and sign out"
-              workingLabel="Resetting…"
-              confirmationMessage="Signs them out everywhere. They choose a new password at next sign-in."
-              className={resetRequestedAt ? 'profile-primary' : 'profile-secondary'}
-              disabled={busy}
-              onConfirm={() => onResetPassword(user)}
-            />
-          )}
-          {resetRequestedAt && onResetRequestDismiss && (
-            <button
-              type="button"
-              className="profile-secondary"
-              disabled={busy}
-              onClick={() => onResetRequestDismiss(user)}
-            >
-              Dismiss request
-            </button>
-          )}
-          {isSelf ? null : disabled ? (
-            <button
-              type="button"
-              className="profile-secondary"
-              disabled={busy}
-              onClick={() => void onDisabledChange(user, false)}
-            >
-              {busy ? 'Enabling…' : 'Enable account'}
-            </button>
-          ) : (
-            <InlineConfirmButton
-              label="Disable account"
-              confirmLabel="Disable and sign out"
-              workingLabel="Disabling…"
-              className="profile-danger"
-              disabled={busy}
-              onConfirm={() => onDisabledChange(user, true)}
-            />
-          )}
-        </div>
+      </div>
+      {renaming && onUsernameChange && (
+        <AdminUsernameDialog
+          user={user}
+          onSave={async (username) => {
+            await onUsernameChange(user, username);
+            setRenaming(false);
+          }}
+          onClose={() => setRenaming(false)}
+        />
       )}
     </li>
+  );
+}
+
+const ACCOUNT_FILTERS = [
+  {
+    id: 'reset',
+    label: 'Reset requested',
+    matches: (user: AdminUser) => !!user.password_reset_requested_at,
+  },
+  {
+    id: 'username',
+    label: 'Username requested',
+    matches: (user: AdminUser) => !!user.username_reminder_requested_at,
+  },
+  { id: 'disabled', label: 'Disabled', matches: (user: AdminUser) => user.disabled_at !== null },
+  {
+    id: 'temporary',
+    label: 'Temporary password',
+    matches: (user: AdminUser) => user.must_change_password,
+  },
+] as const;
+type AccountFilter = (typeof ACCOUNT_FILTERS)[number]['id'];
+
+function AccountsPanel({
+  users,
+  now,
+  currentUserId,
+  loading,
+  busyUserId,
+  error,
+  errorScope,
+  temporaryPassword,
+  onRefresh,
+  onUserDisabledChange,
+  onResetPassword,
+  onUserSexChange,
+  onRequestDismiss,
+  onUsernameChange,
+  onTemporaryPasswordDismiss,
+}: Pick<
+  AdminScreenViewProps,
+  | 'currentUserId'
+  | 'loading'
+  | 'busyUserId'
+  | 'error'
+  | 'errorScope'
+  | 'temporaryPassword'
+  | 'onRefresh'
+  | 'onUserDisabledChange'
+  | 'onResetPassword'
+  | 'onUserSexChange'
+  | 'onRequestDismiss'
+  | 'onUsernameChange'
+  | 'onTemporaryPasswordDismiss'
+> & { users: AdminUser[] | null; now: number }) {
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<AccountFilter | null>(null);
+  const disabledCount = users?.filter((user) => user.disabled_at !== null).length ?? 0;
+  const resetRequests = users?.filter((user) => user.password_reset_requested_at).length ?? 0;
+  const usernameRequests = users?.filter((user) => user.username_reminder_requested_at).length ?? 0;
+  const waitingRequests =
+    resetRequests && usernameRequests
+      ? plural(resetRequests + usernameRequests, 'request')
+      : resetRequests
+        ? plural(resetRequests, 'reset request')
+        : usernameRequests
+          ? plural(usernameRequests, 'username request')
+          : null;
+  const words = query.trim().toLocaleLowerCase();
+  // Only offer filters that would find someone, and keep a chosen one until it is cleared.
+  const filters = ACCOUNT_FILTERS.filter(
+    (option) => option.id === filter || users?.some(option.matches),
+  );
+  const chosen = ACCOUNT_FILTERS.find((option) => option.id === filter);
+  const shown =
+    users?.filter(
+      (user) =>
+        (!words ||
+          user.display_name.toLocaleLowerCase().includes(words) ||
+          user.username.toLocaleLowerCase().includes(words)) &&
+        (!chosen || chosen.matches(user)),
+    ) ?? null;
+  return (
+    <section className="settings-panel panel admin-accounts" aria-labelledby="admin-users-title">
+      <header>
+        <div>
+          <p className="section-kicker">ACCOUNTS</p>
+          <h2 id="admin-users-title">
+            {users ? plural(users.length, 'account') : 'Accounts'}
+            {disabledCount > 0 && ` · ${disabledCount} disabled`}
+          </h2>
+        </div>
+        {waitingRequests && <span className="sharing-state is-on">{waitingRequests}</span>}
+        <button
+          type="button"
+          className="icon-button-pulse admin-refresh"
+          aria-label={loading ? 'Refreshing' : 'Refresh'}
+          disabled={loading}
+          onClick={onRefresh}
+        >
+          <Icon name="reset" />
+        </button>
+      </header>
+      {users && users.length > 1 && (
+        <div className="admin-account-tools">
+          <label className="admin-account-search">
+            <Icon name="search" />
+            <input
+              type="search"
+              value={query}
+              autoComplete="off"
+              aria-label="Search accounts"
+              placeholder="Search name or username"
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+          {filters.length > 0 && (
+            <div className="admin-account-filters" role="group" aria-label="Show only">
+              {filters.map((option) => (
+                <button
+                  type="button"
+                  key={option.id}
+                  aria-pressed={filter === option.id}
+                  onClick={() => setFilter(filter === option.id ? null : option.id)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {shown && (
+        <ul className="admin-user-list">
+          {shown.map((user) => (
+            <UserRow
+              key={user.id}
+              user={user}
+              now={now}
+              isSelf={user.id === currentUserId}
+              busy={busyUserId === user.id}
+              error={errorScope === `user:${user.id}` ? error : null}
+              temporaryPassword={temporaryPassword?.userId === user.id ? temporaryPassword : null}
+              onDisabledChange={onUserDisabledChange}
+              onResetPassword={onResetPassword}
+              onSexChange={onUserSexChange}
+              onRequestDismiss={onRequestDismiss}
+              onUsernameChange={onUsernameChange}
+              onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
+            />
+          ))}
+        </ul>
+      )}
+      {shown?.length === 0 && <p className="admin-accounts-empty">No accounts match.</p>}
+    </section>
   );
 }
 
 function FeedbackRow({
   item,
   busy,
+  error,
   onResolvedChange,
 }: {
   item: AppFeedback;
   busy: boolean;
+  error: string | null;
   onResolvedChange?: (item: AppFeedback, resolved: boolean) => void;
 }) {
   const resolved = item.resolved_at !== null;
@@ -559,6 +813,11 @@ function FeedbackRow({
           Resolved{item.resolved_by && ` by @${item.resolved_by}`} ·{' '}
           <time dateTime={item.resolved_at!}>{new Date(item.resolved_at!).toLocaleString()}</time>
         </small>
+      )}
+      {error && (
+        <p className="inline-error" role="alert">
+          {error}
+        </p>
       )}
       {onResolvedChange && (
         <button
@@ -583,6 +842,7 @@ export function AdminScreenView({
   limits,
   loading,
   error,
+  errorScope = null,
   notice,
   savingSetting,
   savingLimits,
@@ -596,47 +856,42 @@ export function AdminScreenView({
   onUserDisabledChange,
   onResetPassword,
   onUserSexChange,
-  onResetRequestDismiss,
+  onRequestDismiss,
+  onUsernameChange,
   onTemporaryPasswordDismiss,
+  onNoticeDismiss,
   onRefresh,
 }: AdminScreenViewProps) {
   const now = useNow(users !== null, 60_000);
-  const disabledCount = users?.filter((user) => user.disabled_at !== null).length ?? 0;
-  const resetRequests = users?.filter((user) => user.password_reset_requested_at).length ?? 0;
   const openFeedback = feedback?.filter((item) => item.resolved_at === null).length ?? 0;
+  const scoped = (scope: string) => (errorScope === scope ? error : null);
+  const usedPercent = status?.disk.total_bytes
+    ? Math.round((status.disk.used_bytes / status.disk.total_bytes) * 100)
+    : null;
   return (
     <section className="settings-screen admin-screen content-page">
-      <div aria-live="polite" aria-atomic="true">
-        {notice && (
-          <p className="notification-setting-status" role="status">
-            {notice}
-          </p>
-        )}
-        {error && (
-          <p className="inline-error" role="alert">
-            {error}
-          </p>
-        )}
-      </div>
-      {settings && (
-        <SwitchesPanel
-          settings={settings}
-          saving={savingSetting}
-          onVideoUploadsChange={onVideoUploadsChange}
-          onRegistrationChange={onRegistrationChange}
-        />
+      {error && errorScope === null && (
+        <p className="inline-error" role="alert">
+          {error}
+        </p>
       )}
-      {limits && (
-        // Keyed by the saved values, so the form restarts from what the server holds.
-        <LimitsPanel
-          key={JSON.stringify(limits.values)}
-          limits={limits}
-          saving={savingLimits}
-          onSave={onSaveLimits}
-        />
-      )}
-      {status && <StatusPanel status={status} />}
-      {status && <ClientVersionsPanel status={status} now={now} />}
+      <AccountsPanel
+        users={users}
+        now={now}
+        currentUserId={currentUserId}
+        loading={loading}
+        busyUserId={busyUserId}
+        error={error}
+        errorScope={errorScope}
+        temporaryPassword={temporaryPassword}
+        onRefresh={onRefresh}
+        onUserDisabledChange={onUserDisabledChange}
+        onResetPassword={onResetPassword}
+        onUserSexChange={onUserSexChange}
+        onRequestDismiss={onRequestDismiss}
+        onUsernameChange={onUsernameChange}
+        onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
+      />
       {feedback && (
         <section className="settings-panel panel" aria-labelledby="admin-feedback-title">
           <header>
@@ -657,54 +912,49 @@ export function AdminScreenView({
                 key={item.id}
                 item={item}
                 busy={busyFeedbackId === item.id}
+                error={scoped(`feedback:${item.id}`)}
                 onResolvedChange={onFeedbackResolvedChange}
               />
             ))}
           </ul>
         </section>
       )}
-      <section className="settings-panel panel" aria-labelledby="admin-users-title">
-        <header>
-          <div>
-            <p className="section-kicker">ACCOUNTS</p>
-            <h2 id="admin-users-title">
-              {users ? plural(users.length, 'account') : 'Accounts'}
-              {disabledCount > 0 && ` · ${disabledCount} disabled`}
-            </h2>
-          </div>
-          {resetRequests > 0 && (
-            <span className="sharing-state is-on">
-              {resetRequests} {resetRequests === 1 ? 'reset request' : 'reset requests'}
+      {settings && (
+        <SwitchesPanel
+          settings={settings}
+          saving={savingSetting}
+          error={scoped('switches')}
+          onVideoUploadsChange={onVideoUploadsChange}
+          onRegistrationChange={onRegistrationChange}
+        />
+      )}
+      {(limits || status) && (
+        // Limits, storage and versions are checked now and then, so they stay folded away.
+        <details className="admin-server" open={errorScope === 'limits' || undefined}>
+          <summary>
+            <span>
+              <strong>Server</strong>
+              {usedPercent !== null && <small>{usedPercent}% disk used</small>}
             </span>
+            <Icon name="chevron-down" />
+          </summary>
+          {limits && (
+            // Keyed by the saved values, so the form restarts from what the server holds.
+            <LimitsPanel
+              key={JSON.stringify(limits.values)}
+              limits={limits}
+              saving={savingLimits}
+              error={scoped('limits')}
+              onSave={onSaveLimits}
+            />
           )}
-        </header>
-        <p>
-          Disabling an account signs it out on every device and blocks sign-in. Its data is kept, so
-          enabling it again restores everything.
-        </p>
-        {users && (
-          <ul className="admin-user-list">
-            {users.map((user) => (
-              <UserRow
-                key={user.id}
-                user={user}
-                now={now}
-                isSelf={user.id === currentUserId}
-                busy={busyUserId === user.id}
-                temporaryPassword={temporaryPassword?.userId === user.id ? temporaryPassword : null}
-                onDisabledChange={onUserDisabledChange}
-                onResetPassword={onResetPassword}
-                onSexChange={onUserSexChange}
-                onResetRequestDismiss={onResetRequestDismiss}
-                onTemporaryPasswordDismiss={onTemporaryPasswordDismiss}
-              />
-            ))}
-          </ul>
-        )}
-        <button type="button" className="profile-secondary" disabled={loading} onClick={onRefresh}>
-          {loading ? 'Refreshing…' : 'Refresh'}
-        </button>
-      </section>
+          {status && <StatusPanel status={status} />}
+          {status && <ClientVersionsPanel status={status} now={now} />}
+        </details>
+      )}
+      {notice && (
+        <Toast id={notice} message={notice} onDismiss={onNoticeDismiss ?? (() => undefined)} />
+      )}
     </section>
   );
 }
@@ -720,7 +970,7 @@ export function AdminScreen({ active }: { active: boolean }) {
   const [limits, setLimits] = useState<AccountLimitsSettings | null>(null);
   const [savingLimits, setSavingLimits] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; scope: string | null } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [savingSetting, setSavingSetting] = useState(false);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
@@ -750,7 +1000,7 @@ export function AdminScreen({ active }: { active: boolean }) {
       setLimits(nextLimits);
       setFeedback(nextFeedback);
     } catch (reason) {
-      setError(authErrorMessage(reason));
+      setError({ message: authErrorMessage(reason), scope: null });
     } finally {
       setLoading(false);
     }
@@ -799,7 +1049,7 @@ export function AdminScreen({ active }: { active: boolean }) {
         setNotice(saved.allow_registration ? 'Sign-ups are open.' : 'Sign-ups are closed.');
       }
     } catch (reason) {
-      setError(authErrorMessage(reason));
+      setError({ message: authErrorMessage(reason), scope: 'switches' });
     } finally {
       setSavingSetting(false);
     }
@@ -814,7 +1064,7 @@ export function AdminScreen({ active }: { active: boolean }) {
       setLimits(await api.admin.updateLimits(values));
       setNotice('Limits saved.');
     } catch (reason) {
-      setError(authErrorMessage(reason));
+      setError({ message: authErrorMessage(reason), scope: 'limits' });
     } finally {
       setSavingLimits(false);
     }
@@ -835,7 +1085,7 @@ export function AdminScreen({ active }: { active: boolean }) {
           : `${updated.display_name} can sign in again.`,
       );
     } catch (reason) {
-      setError(authErrorMessage(reason));
+      setError({ message: authErrorMessage(reason), scope: `user:${target.id}` });
     } finally {
       setBusyUserId(null);
     }
@@ -856,7 +1106,7 @@ export function AdminScreen({ active }: { active: boolean }) {
           : `${updated.display_name} can choose their sex again.`,
       );
     } catch (reason) {
-      setError(authErrorMessage(reason));
+      setError({ message: authErrorMessage(reason), scope: `user:${target.id}` });
     } finally {
       setBusyUserId(null);
     }
@@ -889,28 +1139,49 @@ export function AdminScreen({ active }: { active: boolean }) {
         password: temporary_password,
       });
     } catch (reason) {
-      setError(authErrorMessage(reason));
+      setError({ message: authErrorMessage(reason), scope: `user:${target.id}` });
     } finally {
       setBusyUserId(null);
     }
   }
 
-  async function dismissResetRequest(target: AdminUser) {
+  async function changeUsername(target: AdminUser, username: string) {
     setBusyUserId(target.id);
     setError(null);
     setNotice(null);
     try {
-      await api.admin.dismissPasswordResetRequest(target.id);
-      // The tag and the header count clear; the card keeps its place until the next refresh.
+      const updated = await api.admin.setUserUsername(target.id, username);
+      setUsers((current) =>
+        current ? current.map((row) => (row.id === updated.id ? updated : row)) : current,
+      );
+      setNotice(`${updated.display_name}’s username is now @${updated.username}.`);
+    } finally {
+      setBusyUserId(null);
+    }
+  }
+
+  async function dismissRequests(target: AdminUser) {
+    setBusyUserId(target.id);
+    setError(null);
+    setNotice(null);
+    // The tag and the header count clear; the card keeps its place until the next refresh.
+    const clear = (fields: Partial<AdminUser>) =>
       setUsers((current) =>
         current
-          ? current.map((row) =>
-              row.id === target.id ? { ...row, password_reset_requested_at: null } : row,
-            )
+          ? current.map((row) => (row.id === target.id ? { ...row, ...fields } : row))
           : current,
       );
+    try {
+      if (target.password_reset_requested_at) {
+        await api.admin.dismissPasswordResetRequest(target.id);
+        clear({ password_reset_requested_at: null });
+      }
+      if (target.username_reminder_requested_at) {
+        await api.admin.dismissUsernameReminderRequest(target.id);
+        clear({ username_reminder_requested_at: null });
+      }
     } catch (reason) {
-      setError(authErrorMessage(reason));
+      setError({ message: authErrorMessage(reason), scope: `user:${target.id}` });
     } finally {
       setBusyUserId(null);
     }
@@ -933,7 +1204,7 @@ export function AdminScreen({ active }: { active: boolean }) {
           : `Reopened feedback from @${updated.username}.`,
       );
     } catch (reason) {
-      setError(authErrorMessage(reason));
+      setError({ message: authErrorMessage(reason), scope: `feedback:${target.id}` });
     } finally {
       setBusyFeedbackId(null);
     }
@@ -950,7 +1221,8 @@ export function AdminScreen({ active }: { active: boolean }) {
       status={status}
       limits={limits}
       loading={loading}
-      error={error}
+      error={error?.message ?? null}
+      errorScope={error?.scope ?? null}
       notice={notice}
       savingSetting={savingSetting}
       savingLimits={savingLimits}
@@ -964,8 +1236,10 @@ export function AdminScreen({ active }: { active: boolean }) {
       onUserDisabledChange={changeUserDisabled}
       onResetPassword={resetUserPassword}
       onUserSexChange={(target, sex) => void changeUserSex(target, sex)}
-      onResetRequestDismiss={(target) => void dismissResetRequest(target)}
+      onRequestDismiss={(target) => void dismissRequests(target)}
+      onUsernameChange={changeUsername}
       onTemporaryPasswordDismiss={() => setTemporaryPassword(null)}
+      onNoticeDismiss={() => setNotice(null)}
       onRefresh={() => void load()}
     />
   );

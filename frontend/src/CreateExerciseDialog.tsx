@@ -1,8 +1,10 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { PopupDialog } from './PopupDialog';
 import { prepareExerciseInput, type ExerciseCreationDraft } from './exerciseCreation';
+import { similarExercises } from './exerciseSearch';
 import type { Exercise, ExerciseCreateInput, ExerciseKind, WorkoutCategory } from './types';
+import './createExercise.css';
 
 export function CreateExerciseDialog({
   exercises,
@@ -13,6 +15,7 @@ export function CreateExerciseDialog({
   viewportTop,
   onCreate,
   onCreated,
+  onUseExisting = onCreated,
   onClose,
 }: {
   exercises: Exercise[];
@@ -23,11 +26,17 @@ export function CreateExerciseDialog({
   viewportTop?: number;
   onCreate: (input: ExerciseCreateInput) => Promise<Exercise>;
   onCreated: (exercise: Exercise) => void;
+  /**
+   * Picks an existing exercise suggested while the name is typed, instead of adding a new one.
+   * Without it, the existing exercise goes to `onCreated`, as the exercise picker wants.
+   */
+  onUseExisting?: (exercise: Exercise) => void;
   onClose: () => void;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const savingRef = useRef(false);
-  const titleId = useId();
+  const formId = useId();
+  const duplicateId = useId();
   const [viewport, setViewport] = useState(() => ({
     height: viewportHeight ?? window.visualViewport?.height ?? window.innerHeight,
     top: viewportTop ?? window.visualViewport?.offsetTop ?? 0,
@@ -42,6 +51,12 @@ export function CreateExerciseDialog({
   }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Existing exercises that look like the name being typed, checked as it changes.
+  const matches = useMemo(() => similarExercises(exercises, draft.name), [exercises, draft.name]);
+  const duplicate = matches.some(
+    (exercise) =>
+      exercise.name.trim().toLocaleLowerCase() === draft.name.trim().toLocaleLowerCase(),
+  );
   const strength = draft.kind !== 'cardio' && draft.category !== 'cardio';
   const muscleGroups = [
     ...new Set(
@@ -54,15 +69,6 @@ export function CreateExerciseDialog({
         ),
     ),
   ].sort();
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    dialog.showModal();
-    return () => {
-      if (dialog.open) dialog.close();
-    };
-  }, []);
 
   useEffect(() => {
     if (viewportHeight !== undefined) return;
@@ -86,6 +92,11 @@ export function CreateExerciseDialog({
     event.preventDefault();
     if (savingRef.current) return;
     setError(null);
+    // The duplicate is already flagged beside the name, with the existing exercise to use.
+    if (duplicate) {
+      nameRef.current?.focus();
+      return;
+    }
     try {
       const input = prepareExerciseInput(draft, exercises);
       savingRef.current = true;
@@ -100,55 +111,73 @@ export function CreateExerciseDialog({
     }
   }
 
-  return createPortal(
-    <dialog
-      ref={dialogRef}
-      className="notification-dialog create-exercise-dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
+  return (
+    <PopupDialog
+      title="Add exercise"
+      className="create-exercise-dialog"
+      busy={saving}
+      // Kept inside the visible area above the keyboard.
       style={
         {
           '--create-exercise-viewport-height': `${viewportHeight ?? viewport.height}px`,
           '--create-exercise-viewport-top': `${viewportTop ?? viewport.top}px`,
         } as CSSProperties
       }
-      onKeyDown={(event) => {
-        // Escape should close this prompt, not the exercise picker beneath it.
-        if (event.key === 'Escape') event.stopPropagation();
-      }}
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!savingRef.current) onClose();
-      }}
+      onClose={onClose}
+      actions={
+        <>
+          <button
+            type="button"
+            className="create-exercise-cancel"
+            disabled={saving}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button type="submit" form={formId} className="popup-primary-action" disabled={saving}>
+            {saving ? 'Adding…' : 'Add exercise'}
+          </button>
+        </>
+      }
     >
-      <header>
-        <h2 id={titleId}>Add exercise</h2>
-        <button
-          type="button"
-          className="notification-close"
-          aria-label="Close add exercise"
-          disabled={saving}
-          onClick={onClose}
-        >
-          ×
-        </button>
-      </header>
-      <form onSubmit={(event) => void submit(event)} aria-busy={saving}>
+      <form id={formId} onSubmit={(event) => void submit(event)} aria-busy={saving}>
         <fieldset disabled={saving}>
           <legend className="sr-only">Exercise details</legend>
           <label className="create-exercise-name">
             Name
             <input
+              ref={nameRef}
               autoFocus
               required
               maxLength={160}
               value={draft.name}
+              aria-invalid={duplicate || undefined}
+              aria-describedby={duplicate ? duplicateId : undefined}
               onChange={(event) =>
                 setDraft((current) => ({ ...current, name: event.target.value }))
               }
               placeholder="Exercise name"
             />
           </label>
+          {matches.length > 0 && (
+            <div className="create-exercise-matches">
+              {duplicate && (
+                <p className="create-exercise-duplicate" id={duplicateId}>
+                  Already in your library
+                </p>
+              )}
+              {matches.map((exercise) => (
+                <button
+                  type="button"
+                  className="create-exercise-match"
+                  key={exercise.id}
+                  onClick={() => onUseExisting(exercise)}
+                >
+                  Use {exercise.name}
+                </button>
+              ))}
+            </div>
+          )}
           <label>
             Category
             <select
@@ -260,7 +289,7 @@ export function CreateExerciseDialog({
                 </div>
               ))}
               <button
-                className="create-exercise-add-muscle"
+                className="pulse-button tonal small create-exercise-add-muscle"
                 type="button"
                 disabled={draft.muscle_set_credits.length >= muscleGroups.length}
                 onClick={() =>
@@ -313,21 +342,7 @@ export function CreateExerciseDialog({
             {error}
           </p>
         )}
-        <footer>
-          <button
-            type="button"
-            className="create-exercise-cancel"
-            disabled={saving}
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button type="submit" className="notification-ok" disabled={saving}>
-            {saving ? 'Adding…' : 'Add exercise'}
-          </button>
-        </footer>
       </form>
-    </dialog>,
-    document.body,
+    </PopupDialog>
   );
 }

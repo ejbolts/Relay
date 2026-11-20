@@ -102,8 +102,12 @@ function isPendingSave(value: unknown, draft: Record<string, unknown>): boolean 
     Number.isInteger(payload.duration_minutes) &&
     payload.duration_minutes >= 1 &&
     payload.duration_minutes <= 1440 &&
-    payload.start_time === null &&
-    payload.end_time === null &&
+    // A new live workout saves its clock times; older saves and resumed workouts have none.
+    ((payload.start_time === null && payload.end_time === null) ||
+      (typeof payload.start_time === 'string' &&
+        /^\d{2}:\d{2}(?::\d{2})?$/.test(payload.start_time) &&
+        typeof payload.end_time === 'string' &&
+        /^\d{2}:\d{2}(?::\d{2})?$/.test(payload.end_time))) &&
     Array.isArray(payload.movements) &&
     payload.movements.length > 0 &&
     payload.movements.every(

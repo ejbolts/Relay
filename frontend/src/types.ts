@@ -109,6 +109,8 @@ export interface MuscleContribution {
 
 export interface Exercise {
   merged_from_ids?: string[];
+  /** Other names for a standard exercise, such as Military Press for Overhead Press. */
+  alternative_names?: string[];
   id: string;
   name: string;
   category: WorkoutCategory;
@@ -363,6 +365,8 @@ export interface WorkoutRecommendation {
   scheduled_date?: string | null;
   split_name?: string | null;
   routine_day?: RoutineDay | null;
+  /** On a split's rest day: the next training day, which starting a workout then trains. */
+  next_training_day?: WorkoutRecommendation | null;
 }
 
 export type SplitProgression = 'calendar' | 'workouts';
@@ -500,6 +504,8 @@ export interface DashboardData {
 
 export interface WorkoutHistorySummary {
   total_workouts: number;
+  /** Workouts other than cardio-only sessions; missing from older servers. */
+  strength_workouts?: number | null;
   first_workout_date: string | null;
   last_workout_date: string | null;
   has_sample_workouts: boolean;
@@ -904,6 +910,8 @@ export interface AdminUser {
   must_change_password: boolean;
   /** The person asked for a temporary password from the sign-in screen and is still waiting. */
   password_reset_requested_at?: string | null;
+  /** Someone gave this account's name on the sign-in screen and is waiting for its username. */
+  username_reminder_requested_at?: string | null;
   created_at: string;
   last_active_at: string | null;
   /** Admin-only live activity, including accounts that do not share with friends. */
@@ -925,6 +933,9 @@ export interface PasswordResetRequest {
   display_name: string;
   requested_at: string;
 }
+
+/** A signed-out person who gave this account's name and is waiting to be told its username. */
+export type UsernameReminderRequest = PasswordResetRequest;
 
 export interface ServerSettings {
   video_uploads: VideoUploadMode;
@@ -1061,9 +1072,11 @@ export interface SharedProfileSummary {
   /** Workouts in the last 30 days. */
   recent_workout_count: number | null;
   last_workout_date: string | null;
-  /** Shared cardio sessions and weight and volume PRs, as counted on the member's Today. */
+  /** Shared cardio sessions and PRs (one per set), as counted on the member's Today. */
   cardio_count?: number | null;
   record_count?: number | null;
+  /** Workouts other than cardio-only sessions; missing from older servers. */
+  strength_workout_count?: number | null;
   shares: {
     notes: boolean;
     body_weight: boolean;

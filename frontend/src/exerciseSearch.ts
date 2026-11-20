@@ -1,6 +1,7 @@
 import { equipmentSearchTerms, exerciseEquipment } from './exerciseEquipment';
+import { typoMatch } from './fuzzyText';
 
-function searchTokens(query: string): string[] {
+export function searchTokens(query: string): string[] {
   const aliases: Record<string, string> = {
     db: 'dumbbell',
     dumbbells: 'dumbbell',
@@ -35,7 +36,7 @@ function isWordCharacter(character: string | undefined): boolean {
   return Boolean(character && /[\p{L}\p{N}]/u.test(character));
 }
 
-function bestFuzzyMatch(value: string, query: string): FuzzyMatch | null {
+function bestFuzzyMatch(value: string, query: string, typos = false): FuzzyMatch | null {
   const source = value.toLocaleLowerCase();
   const needle = query.trim().toLocaleLowerCase();
   if (!needle) return { indices: [], score: 0 };
@@ -87,18 +88,34 @@ function bestFuzzyMatch(value: string, query: string): FuzzyMatch | null {
       bestSubsequence = candidate;
     }
   }
-  return bestSubsequence;
+  return bestSubsequence ?? (typos ? bestTypoMatch(source, needle) : null);
+}
+
+/** Matches a word typed with a mistake, such as "bemch" or "tricepps", after every other match. */
+function bestTypoMatch(source: string, needle: string): FuzzyMatch | null {
+  let best: FuzzyMatch | null = null;
+  for (const word of source.matchAll(/[\p{L}\p{N}]+/gu)) {
+    const match = typoMatch(needle, word[0]);
+    if (!match) continue;
+    const start = word.index;
+    const candidate = {
+      indices: Array.from({ length: match.length }, (_, index) => start + index),
+      score: 200 + match.distance * 20 + (match.length === word[0].length ? 0 : 10) + start * 0.01,
+    };
+    if (best === null || candidate.score < best.score) best = candidate;
+  }
+  return best;
 }
 
 export function fuzzyMatchIndices(value: string, query: string): number[] | null {
   return bestFuzzyMatch(value, query)?.indices ?? null;
 }
 
-export function fuzzyScoreFields(values: string[], query: string): number | null {
+export function fuzzyScoreFields(values: string[], query: string, typos = false): number | null {
   let score = 0;
   for (const token of searchTokens(query)) {
     const fieldScores = values.flatMap((value, fieldIndex) => {
-      const match = bestFuzzyMatch(value, token);
+      const match = bestFuzzyMatch(value, token, typos);
       return match ? [match.score + fieldIndex * 8] : [];
     });
     if (!fieldScores.length) return null;
@@ -118,7 +135,15 @@ interface SearchableExercise {
   equipment: string | null;
 }
 
-export function exerciseSearchScore(exercise: SearchableExercise, query: string): number | null {
+/**
+ * Scores an exercise against a search, or null when it does not match. With `typos`, words typed
+ * with a mistake also match; use {@link exerciseSearchAllowsTypos} to decide.
+ */
+export function exerciseSearchScore(
+  exercise: SearchableExercise,
+  query: string,
+  typos = false,
+): number | null {
   const equipment = exerciseEquipment(exercise.equipment);
   const tokens = searchTokens(query);
   // Equipment words are constraints, so fuzzy letters cannot select another variant.
@@ -144,6 +169,21 @@ export function exerciseSearchScore(exercise: SearchableExercise, query: string)
       searchTokens(`${exercise.name} ${exercise.muscle_group}`).join(' '),
     ],
     words.join(' '),
+    typos,
+  );
+}
+
+/**
+ * Typing mistakes are only forgiven when nothing matches the search as typed, so "pull" never
+ * adds Full Can Raise to the Pulldowns, while "bemch" still finds the bench presses.
+ */
+export function exerciseSearchAllowsTypos(
+  exercises: readonly SearchableExercise[],
+  query: string,
+): boolean {
+  return (
+    searchTokens(query).length > 0 &&
+    !exercises.some((exercise) => exerciseSearchScore(exercise, query) !== null)
   );
 }
 
@@ -163,6 +203,7 @@ export function rankExerciseSearchMatches<T extends SearchableExercise>(
   recentExerciseIds: readonly string[],
 ): T[] {
   const recencyById = new Map(recentExerciseIds.map((id, index) => [id, index]));
+  const typos = exerciseSearchAllowsTypos(exercises, query);
 
   return exercises
     .map((exercise, originalIndex) => ({
@@ -170,7 +211,7 @@ export function rankExerciseSearchMatches<T extends SearchableExercise>(
       originalIndex,
       named: nameContainsQuery(exercise.name, query),
       recency: recencyById.get(exercise.id),
-      score: exerciseSearchScore(exercise, query),
+      score: exerciseSearchScore(exercise, query, typos),
     }))
     .filter(
       (
@@ -194,6 +235,47 @@ export function rankExerciseSearchMatches<T extends SearchableExercise>(
     .map((match) => match.exercise);
 }
 
+/** How many existing exercises a new name suggests using instead. */
+const SIMILAR_EXERCISE_LIMIT = 3;
+
+/**
+ * Library exercises whose names resemble a name being added, closest first, so a near-duplicate
+ * such as "DB Bench" for "Dumbbell Bench Press" can be picked instead. Every word of the name
+ * must appear in the exercise's name, abbreviations included; at most one word may only match
+ * loosely, letter by letter.
+ */
+export function similarExercises<T extends Pick<SearchableExercise, 'name'>>(
+  exercises: T[],
+  name: string,
+  limit = SIMILAR_EXERCISE_LIMIT,
+): T[] {
+  const query = name.trim();
+  const words = searchTokens(query);
+  if (query.length < 3 || !words.length) return [];
+  const exact = query.toLocaleLowerCase();
+  return exercises
+    .map((exercise, index) => {
+      const same = exercise.name.trim().toLocaleLowerCase() === exact;
+      const score = same
+        ? 0
+        : fuzzyScoreFields([exercise.name, searchTokens(exercise.name).join(' ')], query);
+      return { exercise, index, same, score };
+    })
+    .filter(
+      (match): match is typeof match & { score: number } =>
+        match.score !== null && match.score / words.length < 100,
+    )
+    .sort(
+      (first, second) =>
+        Number(second.same) - Number(first.same) ||
+        first.score - second.score ||
+        first.exercise.name.length - second.exercise.name.length ||
+        first.index - second.index,
+    )
+    .slice(0, limit)
+    .map((match) => match.exercise);
+}
+
 export function progressExerciseMatches<T extends SearchableExercise>(
   exercises: T[],
   query: string,
@@ -205,7 +287,7 @@ export function progressExerciseMatches<T extends SearchableExercise>(
 export function fuzzyHighlightIndices(value: string, query: string): number[] {
   const matches = new Set<number>();
   searchTokens(query).forEach((token) => {
-    fuzzyMatchIndices(value, token)?.forEach((index) => matches.add(index));
+    bestFuzzyMatch(value, token, true)?.indices.forEach((index) => matches.add(index));
   });
   return [...matches].sort((first, second) => first - second);
 }

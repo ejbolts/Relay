@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { AuthGate } from './AuthGate';
+import { ToastProvider } from './Toast';
 import { registerAppUpdates } from './appUpdates';
 import { captureFriendInvite } from './friendInvite';
 import { captureInstallPrompt } from './installPrompt';
@@ -16,12 +17,15 @@ import {
   colourModePreference,
   colourThemePreference,
   darkStylePreference,
+  followSystemColourMode,
   glassPreference,
   resetAppearanceOnce,
   lightStylePreference,
 } from './colourThemes';
 import './styles.css';
 import './pulse.css';
+import './buttons.css';
+import './popupDialog.css';
 import './lightMode.css';
 import './workoutSetColours.css';
 import './auth.css';
@@ -47,11 +51,14 @@ applyLightStyle(lightStylePreference());
 applyGlass(glassPreference());
 applyColourMode(colourModePreference());
 applyColourTheme(colourThemePreference());
+followSystemColourMode();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <AuthGate>
-      <App />
-    </AuthGate>
+    <ToastProvider>
+      <AuthGate>
+        <App />
+      </AuthGate>
+    </ToastProvider>
   </StrictMode>,
 );

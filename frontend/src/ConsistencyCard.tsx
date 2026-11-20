@@ -1,13 +1,17 @@
 import { useId, type ReactNode } from 'react';
+import { CONSISTENCY_WEEKS } from './consistencyWeeks';
 import { Icon } from './Icon';
 export function ConsistencyCard({
   streak,
   trainingDays,
+  weeks = CONSISTENCY_WEEKS,
   children,
   onOpenSplits,
 }: {
   streak: number;
   trainingDays: number;
+  /** Weeks the average covers: fewer than twelve while training started recently. */
+  weeks?: number;
   children: ReactNode;
   onOpenSplits?: () => void;
 }) {
@@ -19,7 +23,7 @@ export function ConsistencyCard({
         <div className="consistency-header-actions">
           <span>Last 12 weeks</span>
           {onOpenSplits && (
-            <button type="button" className="text-link" onClick={onOpenSplits}>
+            <button type="button" className="pulse-button link small" onClick={onOpenSplits}>
               My splits <Icon name="chevron-right" />
             </button>
           )}
@@ -38,7 +42,7 @@ export function ConsistencyCard({
         </div>
         <div>
           <span>Avg / week</span>
-          <b>{(trainingDays / 12).toFixed(1)}</b>
+          <b>{(trainingDays / weeks).toFixed(1)}</b>
         </div>
       </div>
       {children}

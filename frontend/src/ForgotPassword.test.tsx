@@ -116,3 +116,73 @@ describe('forgot password', () => {
     expect(buttonNamed('Forgot password?')).toBeUndefined();
   });
 });
+
+describe('forgot username', () => {
+  const usernameDialog = () =>
+    document.querySelector<HTMLDialogElement>('dialog.forgot-username-dialog');
+  const nameInput = () => usernameDialog()!.querySelector<HTMLInputElement>('input[name="name"]')!;
+
+  it('asks the admins for the username of the account with that name', async () => {
+    const send = vi.spyOn(api.auth, 'requestUsernameReminder').mockResolvedValue(undefined);
+    await render();
+    // What was typed as a username is not a name, so it is not carried over.
+    await type(container.querySelector<HTMLInputElement>('input[name="username"]')!, 'sam');
+
+    await click(buttonNamed('Forgot username?')!);
+
+    expect(usernameDialog()?.open).toBe(true);
+    expect(dialog()).toBeNull();
+    expect(usernameDialog()!.querySelector('label')?.textContent).toBe('Name on your profile');
+    expect(nameInput().value).toBe('');
+    await type(nameInput(), '  Sam   Sample ');
+    await click(buttonNamed('Ask admin')!);
+
+    expect(send).toHaveBeenCalledWith('Sam Sample');
+    const sent = usernameDialog()!.querySelector('[role="status"]')!;
+    expect(sent.textContent).toContain('Request sent for Sam Sample');
+    expect(sent.textContent).toContain('Your admin will tell you your username.');
+    expect(document.activeElement).toBe(buttonNamed('Done'));
+
+    await click(buttonNamed('Done')!);
+    expect(usernameDialog()).toBeNull();
+  });
+
+  it('needs a name before sending', async () => {
+    const send = vi.spyOn(api.auth, 'requestUsernameReminder').mockResolvedValue(undefined);
+    await render();
+    await click(buttonNamed('Forgot username?')!);
+
+    await type(nameInput(), '   ');
+    await click(buttonNamed('Ask admin')!);
+
+    expect(send).not.toHaveBeenCalled();
+    expect(nameInput().getAttribute('aria-invalid')).toBe('true');
+    expect(usernameDialog()!.textContent).toContain('Enter your name.');
+    expect(document.activeElement).toBe(nameInput());
+
+    await type(nameInput(), 'Sam Sample');
+    expect(nameInput().getAttribute('aria-invalid')).toBe('false');
+    expect(usernameDialog()!.textContent).not.toContain('Enter your name.');
+  });
+
+  it('keeps the form open with the reason when the request fails', async () => {
+    vi.spyOn(api.auth, 'requestUsernameReminder').mockRejectedValue(
+      new ApiError('Too many requests. Try again later.', 'too_many_attempts', 429),
+    );
+    await render();
+    await click(buttonNamed('Forgot username?')!);
+    await type(nameInput(), 'Sam Sample');
+
+    await click(buttonNamed('Ask admin')!);
+
+    expect(usernameDialog()!.querySelector('[role="alert"]')?.textContent).toBe(
+      'Too many attempts. Wait a few minutes before trying again.',
+    );
+    expect(usernameDialog()!.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('is only offered on the sign-in form', async () => {
+    await render('create-account');
+    expect(buttonNamed('Forgot username?')).toBeUndefined();
+  });
+});

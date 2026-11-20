@@ -105,6 +105,13 @@
   font-weight: 700;
 }
 
+/* Last time's RPE stands in, faint, until one is picked; it is never logged by itself. */
+.logger-screen .set-grid .completed-set-summary > .completed-set-rpe.is-last-time {
+  color: var(--p-muted);
+  font-weight: 400;
+  opacity: 0.75;
+}
+
 /* Native pickers keep their own platform presentation; the selected value is coloured. */
 .logger-screen .set-editor > select[data-set-field='rpe'] option {
   color: var(--p-ink);

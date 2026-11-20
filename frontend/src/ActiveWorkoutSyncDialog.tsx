@@ -1,6 +1,8 @@
 import { PopupDialog } from './PopupDialog';
 import type { WorkoutSyncConflict } from './activeWorkoutSync';
-import type { ActiveWorkoutDraft } from './workoutDraft';
+import { workoutSyncDifferences } from './activeWorkoutSyncDiff';
+import { useWeightUnit } from './trainingPreferencesContext';
+import { finalizeWorkoutIdentity } from './workoutCategory';
 import type { Exercise } from './types';
 import './activeWorkoutSync.css';
 
@@ -15,55 +17,62 @@ export function ActiveWorkoutSyncDialog({
   onResolve: (useLocal: boolean) => void;
   onClose: () => void;
 }) {
-  function preview(draft: ActiveWorkoutDraft | null) {
-    if (!draft) return <p>Workout ended</p>;
-    return (
-      <>
-        <strong>{draft.name || 'Workout'}</strong>
-        {draft.movements.map((movement) => (
-          <div key={movement.key}>
-            <b>
-              {exercises.find((exercise) => exercise.id === movement.exerciseId)?.name ??
-                'Exercise'}
-            </b>
-            <ol>
-              {movement.sets.map((set) => (
-                <li key={set.key}>
-                  {set.weight_kg !== null ? `${set.weight_kg} kg · ` : ''}
-                  {set.reps !== null ? `${set.reps} reps` : `${set.duration_seconds ?? 0} sec`}
-                  {set.completed ? ' ✓' : ''}
-                  {set.notes && <span>{set.notes}</span>}
-                </li>
-              ))}
-            </ol>
-            {movement.notes && <p>{movement.notes}</p>}
-          </div>
-        ))}
-        {draft.notes && <p>{draft.notes}</p>}
-      </>
-    );
-  }
+  const unit = useWeightUnit();
+  const remote = conflict.remote.draft;
+  const named = conflict.local ?? remote;
+  // Named as the logger shows it: typed, or from its exercises unless its type was chosen.
+  const name = named
+    ? finalizeWorkoutIdentity(
+        named.movements
+          .map((movement) => exercises.find((exercise) => exercise.id === movement.exerciseId))
+          .filter((exercise): exercise is Exercise => exercise !== undefined),
+        named.category,
+        named.name,
+        !named.workoutTypeExplicit,
+      ).name
+    : 'Workout';
+  const differences = workoutSyncDifferences(
+    conflict.local,
+    remote,
+    (id) => exercises.find((exercise) => exercise.id === id)?.name ?? 'Exercise',
+    unit,
+  );
   return (
-    <PopupDialog title="Workout sync conflict" onClose={onClose} className="workout-sync-dialog">
-      <p>Both devices changed the same workout. Choose which version to keep.</p>
-      <div className="workout-sync-comparison">
-        <section>
-          <h3>This device</h3>
-          {preview(conflict.local)}
-        </section>
-        <section>
-          <h3>Other device</h3>
-          {preview(conflict.remote.draft)}
-        </section>
-      </div>
-      <div className="popup-dialog-actions workout-sync-actions">
-        <button type="button" onClick={() => onResolve(false)}>
-          Use other device
-        </button>
-        <button type="button" className="popup-primary-action" onClick={() => onResolve(true)}>
-          Keep this device
-        </button>
-      </div>
+    <PopupDialog
+      title="Workout sync conflict"
+      onClose={onClose}
+      className="workout-sync-dialog"
+      actions={
+        <>
+          <button type="button" onClick={() => onResolve(false)}>
+            Use other device
+          </button>
+          <button type="button" className="popup-primary-action" onClick={() => onResolve(true)}>
+            Keep this device
+          </button>
+        </>
+      }
+    >
+      <p className="workout-sync-intro">
+        Both devices changed <strong>{name}</strong>. Choose which version to keep.
+      </p>
+      {differences.length > 0 && (
+        <ul className="workout-sync-differences">
+          {differences.map((difference) => (
+            <li key={difference.key}>
+              <b>{difference.label}</b>
+              <span>
+                <small>This device</small>
+                {difference.local}
+              </span>
+              <span>
+                <small>Other device</small>
+                {difference.remote}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
     </PopupDialog>
   );
 }

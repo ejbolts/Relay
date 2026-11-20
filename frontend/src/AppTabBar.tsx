@@ -19,7 +19,8 @@ export interface StartMenuActions {
   /** The recommended session's name, such as "Pull day", shown under Up next. */
   upNextLabel: string | null;
   onCardio: () => void;
-  onUpNext: () => void;
+  /** Null hides Up next, such as on a rest day with no training day to start. */
+  onUpNext: (() => void) | null;
   onEmpty: () => void;
 }
 
@@ -141,20 +142,22 @@ export function AppTabBar({
               </span>
               <span className="start-menu-label">Cardio</span>
             </button>
-            <button
-              type="button"
-              className="start-menu-option"
-              aria-label={startMenu.upNextLabel ? `Up next: ${startMenu.upNextLabel}` : 'Up next'}
-              onClick={() => choose(startMenu.onUpNext)}
-            >
-              <span className="start-menu-icon">
-                <Icon name="next" />
-              </span>
-              <span className="start-menu-label">Up next</span>
-              {startMenu.upNextLabel && (
-                <small className="start-menu-detail">{startMenu.upNextLabel}</small>
-              )}
-            </button>
+            {startMenu.onUpNext && (
+              <button
+                type="button"
+                className="start-menu-option"
+                aria-label={startMenu.upNextLabel ? `Up next: ${startMenu.upNextLabel}` : 'Up next'}
+                onClick={() => choose(startMenu.onUpNext!)}
+              >
+                <span className="start-menu-icon">
+                  <Icon name="next" />
+                </span>
+                <span className="start-menu-label">Up next</span>
+                {startMenu.upNextLabel && (
+                  <small className="start-menu-detail">{startMenu.upNextLabel}</small>
+                )}
+              </button>
+            )}
             <button
               type="button"
               className="start-menu-option"

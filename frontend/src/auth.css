@@ -127,7 +127,8 @@ html:not([data-colour-mode='light']):has(.auth-screen) {
   color: var(--p-ink);
 }
 
-.auth-tabs button:disabled {
+.auth-tabs button:disabled,
+.auth-tabs button[aria-disabled='true'] {
   opacity: 0.4;
 }
 
@@ -260,48 +261,21 @@ html:not([data-colour-mode='light']):has(.auth-screen) {
   line-height: 1.45;
 }
 
+/* Full-width account buttons. Their look (primary, secondary, danger-soft) is in buttons.css. */
 .auth-submit,
 .profile-primary,
 .profile-secondary,
 .profile-danger {
   width: 100%;
-  min-height: 2.9rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.55rem;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  padding: 0.65rem 1rem;
-  font-size: 0.9375rem;
-  font-weight: 700;
-  touch-action: manipulation;
 }
 
-.auth-submit,
-.profile-primary {
-  background: var(--p-accent);
-  color: #fff;
-}
-
-.auth-submit:hover:not(:disabled),
-.profile-primary:hover:not(:disabled) {
-  background: var(--p-accent-hover);
-}
-
-.profile-secondary {
-  border-color: var(--p-line-strong);
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-}
-
-.profile-danger {
-  border-color: rgb(230 103 103 / 55%);
-  background: rgb(230 103 103 / 10%);
-  color: var(--p-danger);
-}
-
-.auth-spinner {
+/* Spinner inside a primary or danger button while a network action runs. */
+.auth-spinner,
+.button-spinner {
   width: 1rem;
   height: 1rem;
   flex-shrink: 0;
@@ -703,15 +677,6 @@ html:not([data-colour-mode='light']):has(.auth-screen) {
   gap: 0.5rem;
 }
 
-.admin-user .inline-confirmation > button:last-child {
-  min-height: 2.9rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 12px;
-  background: var(--p-surface);
-  color: var(--p-ink);
-  font-weight: 700;
-}
-
 /* ───────── Sign-in exit ─────────
    After signing in, the app mounts underneath and starts loading while this screen leaves:
    the form closes from top and bottom to its middle, the tagline fades, the logo and name
@@ -1009,7 +974,7 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
 .sample-profile-body {
   display: grid;
   gap: 0.75rem;
-  padding: 0.75rem 1rem 0.25rem;
+  padding: 0.75rem 1rem 1rem;
 }
 
 .sample-profile-intro {
@@ -1102,14 +1067,6 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
   color: var(--p-ink-2);
 }
 
-.sample-profile-dialog .popup-dialog-actions {
-  padding: 0.5rem 1rem 1rem;
-}
-
-.sample-profile-dialog .popup-dialog-actions .popup-primary-action {
-  flex: 1;
-}
-
 .admin-user .admin-user-stats dd.admin-user-online {
   color: var(--p-good);
 }
@@ -1154,53 +1111,54 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
   gap: 0.5rem;
 }
 
-/* ───────── Forgot password: the sign-in link, its dialog, and the admin console's request ───────── */
+/* ───────── Forgot password or username: the sign-in links, their dialog, and the admin console's requests ───────── */
 
-.auth-forgot-password {
+/* A 44px target for fingers that leaves the label row's height alone. */
+.auth-forgot {
   position: relative;
-  margin-left: auto;
+  min-height: 2.75rem;
+  margin: -0.875rem -0.5rem -0.875rem auto;
   border: 0;
-  padding: 0;
+  padding: 0 0.5rem;
   background: transparent;
   color: var(--p-accent-text);
   font-size: 0.8125rem;
   font-weight: 650;
 }
 
-/* A larger invisible target for fingers. */
-.auth-forgot-password::after {
-  position: absolute;
-  inset: -0.6rem -0.4rem;
-  content: '';
+/* Room below the link, so its target stays clear of the field. */
+.auth-label-row:has(.auth-forgot) {
+  margin-bottom: 0.5rem;
 }
 
-.popup-dialog.forgot-password-dialog {
+/* One-field dialogs: Forgot password, Forgot username and the admin's Change username. */
+.popup-dialog.field-dialog {
   width: min(24rem, calc(100vw - 2rem));
 }
 
-.forgot-password-body {
+.field-dialog-body {
   display: grid;
   gap: 0.75rem;
   padding: 1rem;
 }
 
-.forgot-password-body .inline-error {
+.field-dialog-body .inline-error {
   margin: 0;
 }
 
-.forgot-password-dialog .popup-dialog-actions {
+.field-dialog .popup-dialog-actions {
   margin: 0;
   padding: 0.875rem 1rem 1rem;
 }
 
-.forgot-password-sent {
+.admin-request-sent {
   display: flex;
   align-items: flex-start;
   gap: 0.75rem;
   padding: 1rem;
 }
 
-.forgot-password-sent-icon {
+.admin-request-sent-icon {
   flex: none;
   width: 2.25rem;
   height: 2.25rem;
@@ -1211,12 +1169,12 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
   color: var(--p-accent-text);
 }
 
-.forgot-password-sent-icon .pulse-icon {
+.admin-request-sent-icon .pulse-icon {
   width: 1.2rem;
   height: 1.2rem;
 }
 
-.forgot-password-sent p {
+.admin-request-sent p {
   display: grid;
   gap: 0.2rem;
   margin: 0;
@@ -1225,13 +1183,13 @@ html[data-reduce-motion] .profile-identity.is-editing .profile-photo-edit > .pul
   line-height: 1.45;
 }
 
-.forgot-password-sent strong {
+.admin-request-sent strong {
   overflow-wrap: anywhere;
   color: var(--p-ink);
   font-size: 0.9375rem;
 }
 
-.admin-user.has-reset-request {
+.admin-user.has-request {
   border-color: color-mix(in srgb, var(--p-accent) 55%, transparent);
   background: color-mix(in srgb, var(--p-accent-soft) 45%, var(--p-surface-2));
 }

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot } from './toastTestUtils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProfileIdentity } from './ProfileIdentity';
@@ -51,7 +52,7 @@ beforeEach(async () => {
   vi.spyOn(api, 'removeProfilePhoto').mockResolvedValue({ ...user, profile_photo_url: null });
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
   function Harness() {
     const [current, setCurrent] = useState(user);
     return <ProfileIdentity user={current} onSaved={setCurrent} />;
@@ -199,6 +200,15 @@ describe('profile viewing and editing', () => {
     expect(api.uploadProfilePhoto).not.toHaveBeenCalled();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:draft-photo');
   });
+  it('shows the username locked, since only an administrator can change it', async () => {
+    await act(async () => button('Edit profile').click());
+    const field = container.querySelector('.profile-username-field')!;
+    expect(field.querySelector('.profile-locked-value')?.textContent).toBe('sampleLocked');
+    expect(container.querySelector('input[autocomplete="username"]')).toBeNull();
+    await changeName();
+    await save();
+    expect(api.updateProfile).toHaveBeenCalledExactlyOnceWith({ display_name: 'New name' });
+  });
   it('saves text and photo together, then returns to viewing', async () => {
     await act(async () => button('Edit profile').click());
     await changeName();
@@ -208,7 +218,7 @@ describe('profile viewing and editing', () => {
     expect(api.uploadProfilePhoto).toHaveBeenCalledTimes(1);
     expect(container.querySelector('input')).toBeNull();
     expect(container.querySelector('img')?.getAttribute('src')).toBe('/saved-photo.png');
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
   });
   it('keeps a failed photo draft available to retry and explains partially saved details', async () => {
     vi.mocked(api.uploadProfilePhoto).mockRejectedValueOnce(new Error('Offline'));
@@ -217,7 +227,7 @@ describe('profile viewing and editing', () => {
     await choosePhoto();
     await save();
     expect(container.querySelector('[role=alert]')?.textContent).toContain(
-      'Your name and username were saved.',
+      'Your details were saved.',
     );
     expect(container.querySelector('.profile-photo-edit')).not.toBeNull();
     await save();
@@ -264,16 +274,14 @@ describe('profile viewing and editing', () => {
       expect.objectContaining({ name: 'profile-photo.jpg', type: 'image/jpeg' }),
     );
     expect(api.updateProfile).not.toHaveBeenCalled();
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
   });
 
   it('keeps the existing confirmation for a name-only save', async () => {
     await act(async () => button('Edit profile').click());
     await changeName();
     await save();
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Profile saved.',
-    );
+    expect(document.querySelector('.toast')?.textContent).toContain('Profile saved.');
     expect(api.uploadProfilePhoto).not.toHaveBeenCalled();
   });
 });

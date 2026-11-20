@@ -107,6 +107,17 @@
   padding: 0 0.625rem;
   font-size: 0.75rem;
 }
+
+/* Home's header buttons stay in place but sit out the layout edit; only the pencil works. */
+.home-header-locks {
+  display: contents;
+  gap: inherit;
+}
+
+.home-header-locks[inert] > * {
+  opacity: 0.35;
+}
+
 .home-sections.is-editing {
   padding-top: 0.25rem;
 }
@@ -448,11 +459,32 @@
     transform: rotate(0.35deg) translateY(0.3px);
   }
 }
-html[data-reduce-motion] .home-sections.is-editing .home-edit-card {
+/* A section just added from Add sections rings once where it landed. */
+.home-section.is-added::after {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--p-radius);
+  box-shadow: 0 0 0 2px var(--p-accent);
+  content: '';
+  pointer-events: none;
+  animation: home-section-added 1.4s var(--ease-out) forwards;
+}
+@keyframes home-section-added {
+  0%,
+  45% {
+    box-shadow: 0 0 0 2px var(--p-accent);
+  }
+  100% {
+    box-shadow: 0 0 0 10px transparent;
+  }
+}
+html[data-reduce-motion] .home-sections.is-editing .home-edit-card,
+html[data-reduce-motion] .home-section.is-added::after {
   animation: none !important;
 }
 @media (prefers-reduced-motion: reduce) {
-  .home-sections.is-editing .home-edit-card {
+  .home-sections.is-editing .home-edit-card,
+  .home-section.is-added::after {
     animation: none !important;
   }
 }
@@ -510,5 +542,4 @@ html[data-reduce-motion] .home-sections.is-editing .home-edit-card {
 }
 .home-customiser-done {
   width: 100%;
-  margin-top: 1.25rem;
 }

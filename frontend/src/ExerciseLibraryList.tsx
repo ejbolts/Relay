@@ -6,12 +6,9 @@ import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { exerciseEquipment } from './exerciseEquipment';
-import { exerciseSearchScore } from './exerciseSearch';
-import {
-  TrainingBlockDialog,
-  TrainingBlockToast,
-  type TrainingBlockDialogStart,
-} from './TrainingBlockDialog';
+import { exerciseSearchAllowsTypos, exerciseSearchScore } from './exerciseSearch';
+import { TrainingBlockDialog, type TrainingBlockDialogStart } from './TrainingBlockDialog';
+import { useToast } from './Toast';
 import { blockOn } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import type { Exercise, ExerciseLibrarySummary } from './types';
@@ -99,7 +96,7 @@ export function ExerciseLibraryList({
   const [pageSize, setPageSize] = useState(savedPageSize);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [blockDialog, setBlockDialog] = useState<TrainingBlockDialogStart | null>(null);
-  const [blockNotice, setBlockNotice] = useState('');
+  const toast = useToast();
   const blocks = useTrainingBlocks();
   const currentBlock = blockOn(blocks.config.blocks, localDate());
   const blockScope = blocks.block
@@ -126,6 +123,7 @@ export function ExerciseLibraryList({
   ].sort();
   const hiddenCount = exercises.filter((exercise) => exercise.hidden).length;
   const showHidden = hiddenOnly && hiddenCount > 0;
+  const typos = exerciseSearchAllowsTypos(exercises, query);
   const list = exercises
     .filter(
       (exercise) =>
@@ -133,7 +131,7 @@ export function ExerciseLibraryList({
         (!customOnly || exercise.is_custom) &&
         (muscle === 'All' || exerciseMuscles(exercise).includes(muscle)) &&
         (!equipment || exerciseEquipment(exercise.equipment) === equipment) &&
-        exerciseSearchScore(exercise, query) !== null,
+        exerciseSearchScore(exercise, query, typos) !== null,
     )
     .sort((a, b) => {
       const first = byId.get(a.id),
@@ -247,13 +245,7 @@ export function ExerciseLibraryList({
         </div>
       </div>
       {optionsOpen && (
-        <PopupDialog
-          title="Exercise list"
-          onClose={() => {
-            setOptionsOpen(false);
-            requestAnimationFrame(() => optionsButton.current?.focus());
-          }}
-        >
+        <PopupDialog title="Exercise list" onClose={() => setOptionsOpen(false)}>
           {blocks.config.blocks.length > 0 && (
             <label className="exercise-page-size">
               Training block
@@ -322,7 +314,7 @@ export function ExerciseLibraryList({
           {blocks.error && (
             <p className="exercise-list-options-error" role="alert">
               {blocks.error}{' '}
-              <button type="button" className="text-link" onClick={blocks.retry}>
+              <button type="button" className="pulse-button link small" onClick={blocks.retry}>
                 Retry
               </button>
             </p>
@@ -361,10 +353,9 @@ export function ExerciseLibraryList({
             setBlockDialog(null);
             requestAnimationFrame(() => optionsButton.current?.focus());
           }}
-          onNotice={setBlockNotice}
+          onNotice={toast.show}
         />
       )}
-      <TrainingBlockToast notice={blockNotice} onDismiss={() => setBlockNotice('')} />
       {loading && summaries === null && (
         <p className="exercise-list-status" role="status">
           Loading trends…
@@ -373,7 +364,7 @@ export function ExerciseLibraryList({
       {error && (
         <div className="exercise-progress-error" role="alert">
           Could not load exercise trends.{' '}
-          <button type="button" className="text-link" onClick={retry}>
+          <button type="button" className="pulse-button link small" onClick={retry}>
             Retry
           </button>
         </div>
@@ -429,6 +420,11 @@ export function ExerciseLibraryList({
               <ExerciseMuscleHelp exercise={exercise} />
               <Sparkline summary={summary} />
               <span className="exercise-list-value">
+                {summary?.latest_estimated_1rm != null && (
+                  <small className="exercise-list-metric">
+                    <abbr title="Estimated one-rep max">e1RM</abbr>
+                  </small>
+                )}
                 <b title={summary?.normalised ? 'In your reference machine’s weights' : undefined}>
                   {summary?.latest_estimated_1rm == null ? (
                     '—'
@@ -443,7 +439,7 @@ export function ExerciseLibraryList({
                 {change != null && (
                   <small className={change > 0 ? 'up' : change < 0 ? 'down' : ''}>
                     {change > 0 ? '+' : change < 0 ? '−' : ''}
-                    {Number(weightFromKg(Math.abs(change), weightUnit).toFixed(1))}
+                    {Number(weightFromKg(Math.abs(change), weightUnit).toFixed(1))} {weightUnit}
                   </small>
                 )}
               </span>
@@ -455,15 +451,8 @@ export function ExerciseLibraryList({
         currentPage={currentPage}
         totalPages={totalPages}
         label="exercises"
-        onPageChange={(nextPage) => {
-          setPage(nextPage);
-          listRef.current?.scrollIntoView?.({ block: 'start' });
-          requestAnimationFrame(() =>
-            listRef.current
-              ?.querySelector<HTMLButtonElement>('[data-exercise-id]')
-              ?.focus({ preventScroll: true }),
-          );
-        }}
+        onPageChange={setPage}
+        scrollTarget={listRef}
       />
     </section>
   );

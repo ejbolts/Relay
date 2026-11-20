@@ -1,7 +1,8 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { api } from './api';
 import { AuthBrand } from './AuthScreen';
 import { authErrorMessage, MIN_PASSWORD_LENGTH, validateNewPassword } from './authForm';
+import { PasswordInput } from './PasswordInput';
 import { useUserSession } from './userContext';
 
 /**
@@ -16,6 +17,10 @@ export function PasswordChangeRequired() {
   const [confirm, setConfirm] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const first = useRef<HTMLInputElement>(null);
+
+  // Nothing else can be done here, so start typing the temporary password straight away.
+  useEffect(() => first.current?.focus(), []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -57,13 +62,12 @@ export function PasswordChangeRequired() {
           <form noValidate onSubmit={(event) => void submit(event)}>
             <div className="auth-field">
               <label htmlFor={`${id}-current`}>Temporary password</label>
-              <input
+              <PasswordInput
+                ref={first}
                 id={`${id}-current`}
-                type="password"
+                revealLabel="Show temporary password"
                 autoComplete="current-password"
-                autoCapitalize="none"
-                autoCorrect="off"
-                spellCheck={false}
+                enterKeyHint="next"
                 required
                 value={current}
                 onChange={(event) => setCurrent(event.target.value)}
@@ -71,10 +75,11 @@ export function PasswordChangeRequired() {
             </div>
             <div className="auth-field">
               <label htmlFor={`${id}-new`}>New password</label>
-              <input
+              <PasswordInput
                 id={`${id}-new`}
-                type="password"
+                revealLabel="Show new password"
                 autoComplete="new-password"
+                enterKeyHint="next"
                 required
                 minLength={MIN_PASSWORD_LENGTH}
                 value={next}
@@ -84,10 +89,11 @@ export function PasswordChangeRequired() {
             </div>
             <div className="auth-field">
               <label htmlFor={`${id}-confirm`}>Confirm new password</label>
-              <input
+              <PasswordInput
                 id={`${id}-confirm`}
-                type="password"
+                revealLabel="Show confirmed password"
                 autoComplete="new-password"
+                enterKeyHint="go"
                 required
                 value={confirm}
                 onChange={(event) => setConfirm(event.target.value)}

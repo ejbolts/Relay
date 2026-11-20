@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { requestAdminAccountFocus, useAdminAccountFocus } from './adminAccountFocus';
-import { publishAdminActivity, resetRequestsFirst } from './adminActivity';
+import { publishAdminActivity, requestsFirst } from './adminActivity';
 import { AdminScreen } from './AdminScreen';
 import type { AdminUser, ServerStatus, User } from './types';
 import { UserContext, type UserSession } from './userContext';
@@ -115,7 +115,7 @@ afterEach(async () => {
 
 describe('password reset requests in the admin console', () => {
   it('sorts waiting accounts first and otherwise keeps the server order', () => {
-    expect(resetRequestsFirst([owner, casey, riley]).map((user) => user.id)).toEqual([
+    expect(requestsFirst([owner, casey, riley]).map((user) => user.id)).toEqual([
       'riley',
       'owner',
       'casey',
@@ -128,7 +128,7 @@ describe('password reset requests in the admin console', () => {
 
     const [first] = cards();
     expect(first.id).toBe('admin-user-riley');
-    expect(first.classList.contains('has-reset-request')).toBe(true);
+    expect(first.classList.contains('has-request')).toBe(true);
     expect(first.textContent).toContain('Reset requested');
     expect(first.querySelector('.admin-user-request')?.textContent).toBe(
       'Asked for a reset2 h ago',
@@ -143,7 +143,7 @@ describe('password reset requests in the admin console', () => {
 
     expect(dismiss).toHaveBeenCalledWith('riley');
     expect(cards()[0].id).toBe('admin-user-riley');
-    expect(cards()[0].classList.contains('has-reset-request')).toBe(false);
+    expect(cards()[0].classList.contains('has-request')).toBe(false);
     expect(cards()[0].textContent).not.toContain('Reset requested');
     expect(buttonNamed('Dismiss request')).toBeUndefined();
     expect(accountsHeader()).not.toContain('reset request');
@@ -240,5 +240,120 @@ describe('password reset requests in the admin console', () => {
     });
 
     expect(scrolled).toEqual([host.querySelector('#admin-user-riley')]);
+  });
+});
+
+describe('changing a username in the admin console', () => {
+  it('saves through the admin API and updates the card in place', async () => {
+    HTMLDialogElement.prototype.showModal = function () {
+      this.open = true;
+    };
+    HTMLDialogElement.prototype.close = function () {
+      this.open = false;
+    };
+    const save = vi
+      .spyOn(api.admin, 'setUserUsername')
+      .mockResolvedValue({ ...casey, username: 'casey.s' });
+    await render(true);
+
+    const card = host.querySelector('#admin-user-casey')!;
+    const change = [...card.querySelectorAll('button')].find(
+      (button) => button.textContent === 'Change username',
+    )!;
+    await act(async () => change.click());
+    const input = document.querySelector<HTMLInputElement>(
+      'dialog.admin-username-dialog input[name="username"]',
+    )!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
+        input,
+        'Casey.S',
+      );
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () =>
+      [...document.querySelectorAll('button')]
+        .find((button) => button.textContent === 'Save username')!
+        .click(),
+    );
+
+    expect(save).toHaveBeenCalledWith('casey', 'casey.s');
+    expect(document.querySelector('dialog.admin-username-dialog')).toBeNull();
+    expect(card.querySelector('.admin-user-heading')?.textContent).toContain('casey.s');
+    expect(document.body.textContent).toContain('Casey’s username is now @casey.s.');
+  });
+});
+
+describe('username requests in the admin console', () => {
+  const jordan = account('jordan', { username_reminder_requested_at: requestedAt });
+
+  it('sorts accounts waiting for their username first too', () => {
+    expect(requestsFirst([owner, casey, jordan]).map((user) => user.id)).toEqual([
+      'jordan',
+      'owner',
+      'casey',
+    ]);
+  });
+
+  it('highlights the account with its username and dismisses the request in place', async () => {
+    vi.mocked(api.admin.users).mockResolvedValue([owner, casey, jordan]);
+    const dismissReset = vi.spyOn(api.admin, 'dismissPasswordResetRequest').mockResolvedValue();
+    const dismiss = vi.spyOn(api.admin, 'dismissUsernameReminderRequest').mockResolvedValue();
+    await render(true);
+
+    const [first] = cards();
+    expect(first.id).toBe('admin-user-jordan');
+    expect(first.classList.contains('has-request')).toBe(true);
+    expect(first.textContent).toContain('Username requested');
+    expect(first.textContent).not.toContain('Reset requested');
+    expect(first.querySelector('.admin-user-heading')?.textContent).toContain('jordan');
+    expect(first.querySelector('.admin-user-request')?.textContent).toBe(
+      'Asked for username2 h ago',
+    );
+    // Telling them their username needs no reset, so it is not the main action.
+    expect(first.querySelector('.admin-user-actions .profile-primary')).toBeNull();
+    expect(accountsHeader()).toContain('1 username request');
+
+    await act(async () => buttonNamed('Dismiss request')!.click());
+
+    expect(dismiss).toHaveBeenCalledWith('jordan');
+    expect(dismissReset).not.toHaveBeenCalled();
+    expect(cards()[0].classList.contains('has-request')).toBe(false);
+    expect(cards()[0].textContent).not.toContain('Username requested');
+    expect(accountsHeader()).not.toContain('request');
+  });
+
+  it('dismisses both requests when an account has asked for each', async () => {
+    const both = account('riley', {
+      password_reset_requested_at: requestedAt,
+      username_reminder_requested_at: requestedAt,
+    });
+    vi.mocked(api.admin.users).mockResolvedValue([owner, both, jordan]);
+    const dismissReset = vi.spyOn(api.admin, 'dismissPasswordResetRequest').mockResolvedValue();
+    const dismissUsername = vi
+      .spyOn(api.admin, 'dismissUsernameReminderRequest')
+      .mockResolvedValue();
+    await render(true);
+
+    expect(accountsHeader()).toContain('3 requests');
+    const riley = host.querySelector('#admin-user-riley')!;
+    expect(riley.textContent).toContain('Reset requested');
+    expect(riley.textContent).toContain('Username requested');
+
+    await act(async () => buttonNamed('Dismiss requests')!.click());
+
+    expect(dismissReset).toHaveBeenCalledWith('riley');
+    expect(dismissUsername).toHaveBeenCalledWith('riley');
+    expect(riley.classList.contains('has-request')).toBe(false);
+    expect(accountsHeader()).toContain('1 username request');
+  });
+
+  it('filters to accounts waiting for their username', async () => {
+    vi.mocked(api.admin.users).mockResolvedValue([owner, casey, riley, jordan]);
+    await render(true);
+
+    await act(async () => buttonNamed('Username requested')!.click());
+
+    expect(cards().map((card) => card.id)).toEqual(['admin-user-jordan']);
   });
 });

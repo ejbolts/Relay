@@ -1,11 +1,16 @@
 import { useId, useState } from 'react';
 
+/**
+ * A destructive button that asks again in place. `className` styles the first button only; the
+ * confirm step always looks the same: the danger fill beside a secondary Cancel.
+ */
 export function InlineConfirmButton({
   label,
   confirmLabel = 'Confirm delete',
   workingLabel = 'Deleting…',
   confirmationMessage,
   className,
+  size = 'small',
   disabled = false,
   onConfirm,
 }: {
@@ -14,12 +19,15 @@ export function InlineConfirmButton({
   workingLabel?: string;
   confirmationMessage?: string;
   className?: string;
+  /** Size of the confirm and Cancel buttons: small in rows and cards, default in forms. */
+  size?: 'small' | 'default';
   disabled?: boolean;
   onConfirm: () => void | Promise<void>;
 }) {
   const [confirming, setConfirming] = useState(false);
   const [working, setWorking] = useState(false);
   const messageId = useId();
+  const sizeClass = size === 'small' ? ' small' : '';
 
   if (!confirming) {
     return (
@@ -48,7 +56,7 @@ export function InlineConfirmButton({
       )}
       <button
         type="button"
-        className={className}
+        className={`pulse-button danger${sizeClass}`}
         disabled={disabled || working}
         onClick={() => {
           setWorking(true);
@@ -63,7 +71,12 @@ export function InlineConfirmButton({
       >
         {working ? workingLabel : confirmLabel}
       </button>
-      <button type="button" disabled={working} onClick={() => setConfirming(false)}>
+      <button
+        type="button"
+        className={`pulse-button${sizeClass}`}
+        disabled={working}
+        onClick={() => setConfirming(false)}
+      >
         Cancel
       </button>
     </span>

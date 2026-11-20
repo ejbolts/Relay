@@ -8,6 +8,7 @@ import { HomeTips } from './HomeTips';
 import { SetupGuideHost } from './SetupGuide';
 import { activeGuide, exitGuide } from './setupGuides';
 import { onTipTarget, type TipAction } from './tipActions';
+import { Toast, ToastProvider } from './Toast';
 import { loadTips, saveTips, freshTips, TIP_COOLDOWN } from './tipsState';
 
 let root: Root, container: HTMLDivElement;
@@ -121,6 +122,26 @@ describe('shared tip presentation', () => {
       container.hidden = false;
     },
   );
+  it('waits while a toast is showing, then shows once it has gone', async () => {
+    const draw = (toast: boolean) =>
+      act(async () =>
+        root.render(
+          <ToastProvider>
+            <TipsProvider account="alice">
+              <Harness />
+              {toast && <Toast message="Set deleted" onDismiss={() => undefined} />}
+            </TipsProvider>
+          </ToastProvider>,
+        ),
+      );
+    await draw(true);
+    await advance();
+    expect(document.querySelector('.relay-tip-dot')).toBeNull();
+    expect(loadTips('alice').lastShown).toBe(0);
+    await draw(false);
+    await advance();
+    expect(document.querySelector('.relay-tip-dot')).not.toBeNull();
+  });
   it('defers a behavioural nudge until rest and enforces the threshold', async () => {
     // Prevent the unrelated dot from winning the allowance.
     saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
@@ -441,8 +462,8 @@ describe('shared tip presentation', () => {
     cutTo(80);
     await homeBulb(<HomeTips latestWeightKg={79.8} hasSplit={false} workouts={twoMachines} />);
     expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 5 new');
-    // More than three new tips are not counted out one by one.
-    expect(bulb()?.textContent).toBe('3+');
+    // The bulb shows the exact count of new tips up to nine.
+    expect(bulb()?.textContent).toBe('5');
     await act(async () => bulb()!.click());
     const titles = [popover()?.querySelector('strong')?.textContent];
     for (let step = 0; step < 4; step += 1) {
