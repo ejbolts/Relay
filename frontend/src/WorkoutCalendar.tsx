@@ -397,7 +397,11 @@ export function WorkoutCalendar({
           {olderHistory.olderError ? (
             <>
               <p>Earlier months could not load.</p>
-              <button type="button" onClick={olderHistory.onLoadOlder}>
+              <button
+                type="button"
+                className="pulse-button secondary small"
+                onClick={olderHistory.onLoadOlder}
+              >
                 Try again
               </button>
             </>
@@ -407,7 +411,11 @@ export function WorkoutCalendar({
               <p>Loading earlier months…</p>
             </>
           ) : (
-            <button type="button" onClick={olderHistory.onLoadOlder}>
+            <button
+              type="button"
+              className="pulse-button secondary small"
+              onClick={olderHistory.onLoadOlder}
+            >
               Load earlier months
             </button>
           )}

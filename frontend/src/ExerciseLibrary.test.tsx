@@ -575,7 +575,7 @@ it('retries a failed session read and keeps the workout action unavailable until
     'Could not load this session',
   );
   expect(document.querySelector('dialog .popup-primary-action')).toBeNull();
-  await click(document.querySelector('dialog .text-link')!);
+  await click(document.querySelector('dialog [role="alert"] .pulse-button.link')!);
   expect(document.querySelector('dialog .popup-primary-action')).not.toBeNull();
   vi.mocked(api.getWorkout).mockResolvedValue({ ...workout, name: 'Updated upper body' });
   await render('remote-sheet-change');

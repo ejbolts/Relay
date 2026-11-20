@@ -464,7 +464,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   </div>
                   <button
                     type="button"
-                    className="profile-secondary release-notification-view"
+                    className="pulse-button secondary small release-notification-view"
                     aria-label={`View Relay ${row.item.version} release notes`}
                     onClick={() => {
                       setOpen(false);
@@ -494,7 +494,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   </div>
                   <button
                     type="button"
-                    className="profile-secondary release-notification-view"
+                    className="pulse-button secondary small release-notification-view"
                     aria-label="View last week's review"
                     onClick={() => {
                       setOpen(false);
@@ -520,7 +520,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   </div>
                   <button
                     type="button"
-                    className="profile-secondary release-notification-view"
+                    className="pulse-button secondary small release-notification-view"
                     aria-label={`Review ${row.item.display_name}’s password reset request`}
                     onClick={() => {
                       setOpen(false);

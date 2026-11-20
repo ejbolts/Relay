@@ -150,7 +150,7 @@ export function LiveWorkoutHeader({
         </button>
         <button
           type="button"
-          className="live-workout-finish"
+          className="pulse-button small live-workout-finish"
           aria-label="Finish workout"
           title="Finish workout"
           disabled={saving}

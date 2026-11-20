@@ -113,7 +113,7 @@ export function WorkoutReactionPeople({
             {!page && (
               <button
                 type="button"
-                className="text-link"
+                className="pulse-button link small text-link"
                 onClick={() => setAttempt((value) => value + 1)}
               >
                 Retry

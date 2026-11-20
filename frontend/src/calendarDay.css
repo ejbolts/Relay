@@ -43,10 +43,3 @@
   display: block;
   margin: 0.75rem auto 0;
 }
-
-/* With the row opening the session card, editing is the day sheet's secondary action. */
-.calendar-day-workouts .calendar-edit-workout.is-secondary {
-  border-color: var(--p-line-strong);
-  background: transparent;
-  color: var(--p-ink);
-}

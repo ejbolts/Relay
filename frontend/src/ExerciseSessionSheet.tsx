@@ -70,7 +70,7 @@ export function ExerciseSessionSheet({
           <p>Could not load this session.</p>
           <button
             type="button"
-            className="text-link"
+            className="pulse-button link small"
             onClick={() => setAttempt((value) => value + 1)}
           >
             Retry
