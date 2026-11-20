@@ -499,6 +499,99 @@ describe('opening a profile loaded in the background', () => {
   });
 });
 
+describe('shared workouts and cardio tabs', () => {
+  const cardioOnly: TrackedWorkout = {
+    ...workout,
+    id: 'treadmill',
+    name: 'Treadmill workout',
+    movements: [{ exercise: { kind: 'cardio' } }] as unknown as TrackedWorkout['movements'],
+  };
+  const withCardio: SharedProfile = {
+    ...profile,
+    cardio_sessions: [
+      {
+        id: 'walk',
+        session_date: '2026-10-17',
+        activity_type: 'Incline Treadmill Walking',
+        duration_minutes: 60,
+        calories_kcal: 705,
+        average_heart_rate_bpm: 138,
+        distance_km: 4.66,
+        average_speed_kph: null,
+        incline_percent: null,
+        average_power_watts: null,
+        average_mets: null,
+        zone: null,
+        qualifies_zone2: false,
+        notes: null,
+      },
+    ],
+    cardio_total: 1,
+  };
+  async function reopen() {
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await renderProfile();
+  }
+  function tab(name: string) {
+    return [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+      (item) => item.textContent === name,
+    )!;
+  }
+  function panel(name: string) {
+    return document.getElementById(tab(name).getAttribute('aria-controls')!)!;
+  }
+
+  it('shows Cardio as a tab beside Workouts and lists cardio-only workouts there', async () => {
+    vi.mocked(api.sharing.profile).mockResolvedValue(withCardio);
+    vi.mocked(api.sharing.workouts).mockImplementation(async (_id, _offset, _limit, filters) => ({
+      total: 2,
+      workouts: [workout, cardioOnly].filter(
+        (item) => !filters?.start_date || item.workout_date === filters.start_date,
+      ),
+      personal_records: [],
+    }));
+    await reopen();
+    expect(container.querySelector('.shared-workouts-header h2')).toBeNull();
+    expect(tab('Workouts').getAttribute('aria-selected')).toBe('true');
+    expect(panel('Workouts').hidden).toBe(false);
+    expect(panel('Cardio').hidden).toBe(true);
+    expect(panel('Workouts').textContent).toContain('First workout');
+    expect(panel('Workouts').textContent).not.toContain('Treadmill workout');
+
+    await act(async () => tab('Cardio').click());
+    expect(tab('Cardio').getAttribute('aria-selected')).toBe('true');
+    expect(panel('Cardio').hidden).toBe(false);
+    expect(panel('Workouts').hidden).toBe(true);
+    expect(panel('Cardio').textContent).toContain('Incline Treadmill Walking');
+    expect(container.querySelector('.shared-workout-filter-toggle')).toBeNull();
+
+    // Choosing a calendar day returns to Workouts, where a filter shows every workout that day.
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.calendar-panel .calendar-day.trained')!.click(),
+    );
+    expect(tab('Workouts').getAttribute('aria-selected')).toBe('true');
+    expect(panel('Workouts').textContent).toContain('First workout');
+    expect(panel('Workouts').textContent).toContain('Treadmill workout');
+  });
+
+  it('keeps reading past pages holding only cardio-only workouts', async () => {
+    vi.mocked(api.sharing.profile).mockResolvedValue(withCardio);
+    const older = { ...workout, id: 'older', name: 'Older lift' };
+    const all = [cardioOnly, { ...cardioOnly, id: 'treadmill-2' }, older];
+    vi.mocked(api.sharing.workouts).mockImplementation(async (_id, offset, limit) => ({
+      total: all.length,
+      workouts: all.slice(offset, offset + Math.min(limit, 1)),
+      personal_records: [],
+    }));
+    await reopen();
+    expect(panel('Workouts').textContent).toContain('Older lift');
+    expect(panel('Workouts').textContent).not.toContain('Treadmill workout');
+    expect(panel('Workouts').textContent).not.toContain('No workouts logged yet.');
+    expect(api.sharing.workouts).toHaveBeenLastCalledWith('friend', 2, 10, expect.anything());
+  });
+});
+
 describe('shared history filtering', () => {
   it('reports a removed linked workout, but not after selecting a different filter', async () => {
     await act(async () => root.unmount());

@@ -68,7 +68,6 @@ it('shows only five newest sessions, and pages forward, back and directly to the
   expect(rows()).toHaveLength(5);
   expect(rows()[0]).toContain('Cardio 1');
   expect(rows()[4]).toContain('Cardio 5');
-  expect(host.querySelector('header')?.textContent).toContain('27 sessions');
   expect(host.textContent).toContain('Page 1 of 6');
   expect(api.sharing.cardio).not.toHaveBeenCalled();
   await click('Next cardio page');
@@ -134,7 +133,7 @@ it('resets for another profile and ignores stale responses from the previous pro
   );
   await render();
   await click('Next cardio page');
-  expect(host.querySelector('section')?.getAttribute('aria-busy')).toBe('true');
+  expect(host.querySelector('.shared-cardio-card')?.getAttribute('aria-busy')).toBe('true');
   // While a page loads the pager stays enabled, so focus stays, but ignores taps.
   expect(host.querySelector('nav')?.getAttribute('aria-busy')).toBe('true');
   expect(host.querySelector<HTMLButtonElement>('[aria-label="Next cardio page"]')?.disabled).toBe(

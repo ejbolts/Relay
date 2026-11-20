@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { api, ApiError } from './api';
 import { authErrorMessage } from './authForm';
 import { PaginationControls } from './PaginationControls';
@@ -12,6 +12,8 @@ interface Props {
   sessions: SharedCardioSession[];
   total: number;
   active: boolean;
+  /** Where a page change scrolls back to; the list itself when not given. */
+  scrollTarget?: RefObject<HTMLElement | null>;
 }
 
 function cardioMetrics(session: SharedCardioSession): string {
@@ -34,7 +36,7 @@ export function ProfileCardioCard(props: Props) {
   return <CardioPages key={props.profileId} {...props} />;
 }
 
-function CardioPages({ profileId, sessions, total, active }: Props) {
+function CardioPages({ profileId, sessions, total, active, scrollTarget }: Props) {
   const [request, setRequest] = useState({ page: 1, serial: 0 });
   const [data, setData] = useState<SharedCardioPage & { page: number }>(() => ({
     page: 1,
@@ -44,7 +46,7 @@ function CardioPages({ profileId, sessions, total, active }: Props) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unavailable, setUnavailable] = useState(false);
-  const card = useRef<HTMLElement>(null);
+  const card = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!active) return;
@@ -86,20 +88,7 @@ function CardioPages({ profileId, sessions, total, active }: Props) {
   }, [profileId, sessions, total, active, request]);
 
   return (
-    <section
-      ref={card}
-      className="pulse-card shared-card"
-      aria-labelledby="shared-cardio-title"
-      aria-busy={loading}
-    >
-      <header className="pulse-card-header">
-        <h2 id="shared-cardio-title">Cardio</h2>
-        {data.total > 0 && !unavailable && (
-          <span className="num">
-            {data.total} {data.total === 1 ? 'session' : 'sessions'}
-          </span>
-        )}
-      </header>
+    <div ref={card} className="pulse-card shared-card shared-cardio-card" aria-busy={loading}>
       {!unavailable &&
         (data.sessions.length === 0 ? (
           <p className="shared-card-empty">No cardio sessions yet.</p>
@@ -145,10 +134,10 @@ function CardioPages({ profileId, sessions, total, active }: Props) {
           totalPages={Math.ceil(data.total / PAGE_SIZE)}
           label="cardio"
           busy={loading}
-          scrollTarget={card}
+          scrollTarget={scrollTarget ?? card}
           onPageChange={(page) => setRequest((current) => ({ page, serial: current.serial + 1 }))}
         />
       )}
-    </section>
+    </div>
   );
 }
