@@ -20,7 +20,7 @@ const fold = () => document.querySelector('.app-guide .swipe-fold')!;
 // Tour steps have the guide card's Next; the install page keeps the dialog footer's.
 const next = () =>
   document.querySelector<HTMLButtonElement>(
-    '.app-guide .guide-card-next, .app-guide .popup-dialog-actions .popup-primary-action',
+    '.app-guide .guide-card-next, .app-guide .guide-actions .pulse-button.primary',
   )!;
 const kicker = () => document.querySelector('.app-guide .guide-card-kicker')?.textContent;
 const cancel = () =>

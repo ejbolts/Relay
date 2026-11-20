@@ -74,15 +74,41 @@ body:has(.app-guide[open]) .tracker-content > .cached-tab-panel:not([hidden]) > 
   display: none;
 }
 
-/* The install and finishing pages keep the dialog footer, with the tour's chevrons. */
-.app-guide .popup-dialog-actions > button {
-  display: inline-flex;
+/*
+ * The guide's dialog pages (install, finishing and the import step) keep their footer on one row
+ * like the tour's card: the quiet Skip on the left, then Back and the primary, at the card's size.
+ */
+.popup-dialog-footer.guide-actions {
+  flex-flow: row nowrap;
   align-items: center;
-  justify-content: center;
-  gap: 0.25rem;
 }
 
-.app-guide .popup-dialog-actions .pulse-icon {
+.popup-dialog-footer.guide-actions > * {
+  width: auto;
+}
+
+.popup-dialog-footer.guide-actions > .popup-tertiary-action {
+  margin-right: auto;
+  padding-inline: 0.5rem;
+}
+
+.popup-dialog-footer.guide-actions > .pulse-button {
+  min-height: var(--p-button-h);
+  margin: 0;
+  border-radius: var(--p-button-r);
+  gap: 0.25rem;
+  font-size: 0.9375rem;
+}
+
+.popup-dialog-footer.guide-actions > .pulse-button.primary {
+  padding: 0 0.75rem 0 1.05rem;
+}
+
+.popup-dialog-footer.guide-actions > .pulse-button.secondary {
+  padding: 0 0.95rem 0 0.65rem;
+}
+
+.popup-dialog-footer.guide-actions .pulse-icon {
   width: 1.05rem;
   height: 1.05rem;
 }
@@ -133,47 +159,6 @@ body:has(.app-guide[open]) .tracker-content > .cached-tab-panel:not([hidden]) > 
   height: 1.35rem;
 }
 
-.app-guide-progress {
-  display: flex;
-  gap: 0.35rem;
-  margin-top: 1.2rem;
-}
-.app-guide-progress span {
-  flex: 1;
-  height: 3px;
-  border-radius: 3px;
-  background: var(--p-surface-3);
-}
-.app-guide-progress .complete {
-  background: var(--p-accent);
-}
-
-.app-guide .popup-dialog-actions {
-  position: sticky;
-  bottom: 0;
-  z-index: 2;
-  background: var(--p-surface);
-  flex-direction: row;
-  margin: 0;
-  padding: 1rem 1.25rem;
-  border-top: 1px solid var(--p-line-strong);
-}
-
-.app-guide .popup-dialog-actions > button {
-  width: auto;
-}
-
-.app-guide .guide-skip {
-  margin-right: auto;
-  padding-inline: 0.6rem;
-  background: transparent;
-  border-color: transparent;
-  font-weight: 500;
-  color: var(--p-ink-2);
-}
-.app-guide .popup-primary-action {
-  background: var(--p-accent);
-}
 .app-guide button:disabled {
   opacity: 0.5;
   cursor: default;
@@ -262,16 +247,5 @@ body:has(.app-guide[open]) .tracker-content > .cached-tab-panel:not([hidden]) > 
   }
   .app-guide-glyph {
     display: none;
-  }
-}
-
-@media (max-width: 350px) {
-  .app-guide .popup-dialog-actions {
-    padding-inline: 0.75rem;
-    gap: 0.35rem;
-  }
-  .app-guide .popup-dialog-actions > button {
-    padding-inline: 0.65rem;
-    font-size: 0.8rem;
   }
 }

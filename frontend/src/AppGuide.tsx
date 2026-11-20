@@ -113,6 +113,33 @@ export function AppGuide({
       dismissOnBackdrop={false}
       onBack={back}
       onClose={onClose}
+      actionsClassName="guide-actions"
+      actions={
+        !step && (
+          <>
+            <button
+              type="button"
+              className="popup-tertiary-action guide-skip"
+              disabled={sendingFeedback}
+              onClick={onClose}
+            >
+              {finished ? 'End guide' : 'Skip guide'}
+            </button>
+            {back && (
+              <button type="button" className="pulse-button secondary" onClick={back}>
+                <Icon name="chevron-left" />
+                Back
+              </button>
+            )}
+            {!finished && (
+              <button type="button" className="pulse-button primary" onClick={next}>
+                Next
+                <Icon name="chevron-right" />
+              </button>
+            )}
+          </>
+        )
+      }
     >
       {step && box && <div className="app-guide-spotlight" style={box} aria-hidden="true" />}
       {step ? (
@@ -161,25 +188,6 @@ export function AppGuide({
             </a>
           </details>
         </div>
-      )}
-      {!step && (
-        <footer className="popup-dialog-actions">
-          <button type="button" className="guide-skip" disabled={sendingFeedback} onClick={onClose}>
-            {finished ? 'End guide' : 'Skip guide'}
-          </button>
-          {back && (
-            <button type="button" onClick={back}>
-              <Icon name="chevron-left" />
-              Back
-            </button>
-          )}
-          {!finished && (
-            <button type="button" className="popup-primary-action" onClick={next}>
-              Next
-              <Icon name="chevron-right" />
-            </button>
-          )}
-        </footer>
       )}
     </PopupDialog>
   );

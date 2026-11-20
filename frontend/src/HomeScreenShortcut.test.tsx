@@ -99,7 +99,7 @@ it('shows the shortcut on the startup tour’s installation page and preserves B
   // Tour steps have the guide card's Next; the install page keeps the dialog footer's.
   const next = () =>
     document.querySelector<HTMLButtonElement>(
-      '.app-guide .guide-card-next, .app-guide .popup-dialog-actions .popup-primary-action',
+      '.app-guide .guide-card-next, .app-guide .guide-actions .pulse-button.primary',
     )!;
   for (let index = 0; index < appGuideSteps(false).length; index++) {
     await act(async () => next().click());
