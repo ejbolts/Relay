@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { PopupDialog } from './PopupDialog';
 import { prepareExerciseInput, type ExerciseCreationDraft } from './exerciseCreation';
 import { similarExercises } from './exerciseSearch';
 import type { Exercise, ExerciseCreateInput, ExerciseKind, WorkoutCategory } from './types';
@@ -33,10 +33,9 @@ export function CreateExerciseDialog({
   onUseExisting?: (exercise: Exercise) => void;
   onClose: () => void;
 }) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
   const nameRef = useRef<HTMLInputElement>(null);
   const savingRef = useRef(false);
-  const titleId = useId();
+  const formId = useId();
   const duplicateId = useId();
   const [viewport, setViewport] = useState(() => ({
     height: viewportHeight ?? window.visualViewport?.height ?? window.innerHeight,
@@ -70,15 +69,6 @@ export function CreateExerciseDialog({
         ),
     ),
   ].sort();
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    dialog.showModal();
-    return () => {
-      if (dialog.open) dialog.close();
-    };
-  }, []);
 
   useEffect(() => {
     if (viewportHeight !== undefined) return;
@@ -121,40 +111,36 @@ export function CreateExerciseDialog({
     }
   }
 
-  return createPortal(
-    <dialog
-      ref={dialogRef}
-      className="notification-dialog create-exercise-dialog"
-      aria-modal="true"
-      aria-labelledby={titleId}
+  return (
+    <PopupDialog
+      title="Add exercise"
+      className="create-exercise-dialog"
+      busy={saving}
+      // Kept inside the visible area above the keyboard.
       style={
         {
           '--create-exercise-viewport-height': `${viewportHeight ?? viewport.height}px`,
           '--create-exercise-viewport-top': `${viewportTop ?? viewport.top}px`,
         } as CSSProperties
       }
-      onKeyDown={(event) => {
-        // Escape should close this prompt, not the exercise picker beneath it.
-        if (event.key === 'Escape') event.stopPropagation();
-      }}
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!savingRef.current) onClose();
-      }}
+      onClose={onClose}
+      actions={
+        <>
+          <button
+            type="button"
+            className="create-exercise-cancel"
+            disabled={saving}
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button type="submit" form={formId} className="popup-primary-action" disabled={saving}>
+            {saving ? 'Adding…' : 'Add exercise'}
+          </button>
+        </>
+      }
     >
-      <header>
-        <h2 id={titleId}>Add exercise</h2>
-        <button
-          type="button"
-          className="notification-close"
-          aria-label="Close add exercise"
-          disabled={saving}
-          onClick={onClose}
-        >
-          ×
-        </button>
-      </header>
-      <form onSubmit={(event) => void submit(event)} aria-busy={saving}>
+      <form id={formId} onSubmit={(event) => void submit(event)} aria-busy={saving}>
         <fieldset disabled={saving}>
           <legend className="sr-only">Exercise details</legend>
           <label className="create-exercise-name">
@@ -356,21 +342,7 @@ export function CreateExerciseDialog({
             {error}
           </p>
         )}
-        <footer>
-          <button
-            type="button"
-            className="create-exercise-cancel"
-            disabled={saving}
-            onClick={onClose}
-          >
-            Cancel
-          </button>
-          <button type="submit" className="notification-ok" disabled={saving}>
-            {saving ? 'Adding…' : 'Add exercise'}
-          </button>
-        </footer>
       </form>
-    </dialog>,
-    document.body,
+    </PopupDialog>
   );
 }

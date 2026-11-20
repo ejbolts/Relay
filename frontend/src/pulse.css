@@ -384,7 +384,7 @@ body {
 }
 
 /* Dialogs are portalled to <body>, outside .tracker-app, so they are listed too. */
-:where(.tracker-app, .popup-dialog, .notification-dialog) :focus-visible {
+:where(.tracker-app, .popup-dialog) :focus-visible {
   outline: 2px solid var(--p-focus-ring);
   outline-offset: 2px;
 }
@@ -4966,21 +4966,17 @@ html.edge-swipe-ready .edge-swipe-indicator {
   -webkit-backdrop-filter: blur(6px);
 }
 
-.popup-dialog::backdrop,
-.notification-dialog::backdrop {
+.popup-dialog::backdrop {
   background: rgb(4 6 8 / 72%);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
 
 .popup-dialog,
-.notification-dialog,
 .exercise-picker,
 .pr-summary,
-.calendar-create-dialog,
 .calendar-day-detail,
-.superset-picker,
-.set-entry-confirmation {
+.superset-picker {
   border: 1px solid var(--p-line-strong);
   border-radius: 24px;
   background: var(--p-surface);
@@ -4992,13 +4988,10 @@ html.edge-swipe-ready .edge-swipe-indicator {
 :root:not([data-colour-mode='light'])
   :is(
     .popup-dialog,
-    .notification-dialog,
     .exercise-picker,
     .pr-summary,
-    .calendar-create-dialog,
     .calendar-day-detail,
     .superset-picker,
-    .set-entry-confirmation,
     .relay-tip-popover,
     .relay-tip-nudge
   ) {
@@ -5009,8 +5002,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   --p-line-strong: var(--p-raised-line-strong);
 }
 
-.popup-dialog > header,
-.notification-dialog > header {
+.popup-dialog > header {
   border-bottom: 1px solid var(--p-line);
 }
 
@@ -5019,8 +5011,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 .popup-dialog h2,
-.notification-dialog h2,
-.calendar-create-dialog h2,
 .calendar-day-detail h2,
 .superset-picker h2,
 .pr-summary h2 {
@@ -5030,8 +5020,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   letter-spacing: -0.01em;
 }
 
-.popup-dialog-close,
-.notification-close {
+.popup-dialog-close {
   width: 2.25rem;
   height: 2.25rem;
   border: 1px solid var(--p-line);
@@ -5040,8 +5029,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: var(--p-ink-2);
 }
 
-.popup-primary-action,
-.notification-ok {
+.popup-primary-action {
   min-height: 3rem;
   border: 0;
   border-radius: 14px;
@@ -5051,13 +5039,11 @@ html.edge-swipe-ready .edge-swipe-indicator {
   font-weight: 650;
 }
 
-.popup-dialog-actions,
-.notification-dialog > footer {
+.popup-dialog-actions {
   border-top: 1px solid var(--p-line);
 }
 
-.popup-dialog-actions button:not(.popup-primary-action),
-.notification-dialog > footer button:not(.notification-ok) {
+.popup-dialog-actions button:not(.popup-primary-action) {
   min-height: 3rem;
   border: 1px solid var(--p-line-strong);
   border-radius: 14px;
@@ -5252,8 +5238,7 @@ small.custom-exercise-label,
 
 /* Popup headings and actions */
 .popup-dialog .section-kicker,
-.modal-backdrop .section-kicker,
-.notification-dialog .section-kicker {
+.modal-backdrop .section-kicker {
   color: var(--p-muted);
   font-size: 0.6875rem;
   font-weight: 600;
@@ -5277,11 +5262,6 @@ small.custom-exercise-label,
 
 .popup-dialog-actions {
   padding-top: 0.875rem;
-}
-
-.workout-discard-dialog .popup-dialog-actions .discard-workout-button {
-  background: var(--p-danger-fill);
-  color: var(--p-on-danger);
 }
 
 .inactive-workout-dialog > p {
@@ -5450,13 +5430,11 @@ html {
 }
 
 .modal-backdrop,
-.popup-dialog[open]::backdrop,
-.notification-dialog[open]::backdrop {
+.popup-dialog[open]::backdrop {
   animation: fade-in 200ms ease backwards;
 }
 
 .popup-dialog[open],
-.notification-dialog[open],
 .modal-backdrop > [role='dialog'],
 .modal-backdrop > [role='alertdialog'],
 .modal-backdrop > section {
