@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot } from './toastTestUtils';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProgressScreen } from './App';
@@ -67,7 +68,7 @@ beforeEach(() => {
   };
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
   vi.spyOn(api.trainingBlocks, 'get').mockResolvedValue(structuredClone(config));
   vi.spyOn(api, 'getWeightMapping').mockResolvedValue({
     enabled: false,

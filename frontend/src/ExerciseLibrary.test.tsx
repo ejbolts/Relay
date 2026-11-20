@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProgressScreen } from './App';
 import { api } from './api';
 import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
 import { useExerciseLibrary } from './useExerciseLibrary';
 import type { Exercise, ExerciseLibrarySummary, ExerciseProgress, TrackedWorkout } from './types';
+import { createToastRoot, toastButton, toastText } from './toastTestUtils';
 
 const pec: Exercise = {
   id: 'pec',
@@ -135,7 +136,7 @@ beforeEach(() => {
   onOpenWorkout.mockReset();
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
 });
 afterEach(async () => {
   await act(async () => root.unmount());
@@ -268,7 +269,7 @@ it('renames a custom exercise from its options menu', async () => {
   expect(update).toHaveBeenCalledExactlyOnceWith('custom-row', { name: 'Seated cable row' });
   expect(refreshed).toHaveBeenCalledOnce();
   expect(document.querySelector('.exercise-rename-dialog')).toBeNull();
-  expect(document.querySelector('.undo-toast')?.textContent).toContain('Exercise renamed');
+  expect(toastText()).toBe('Exercise renamed');
 });
 it('keeps the rename dialog open with the reason when the name is taken', async () => {
   const custom = { ...row, id: 'custom-row', name: 'My cable row', is_custom: true };
@@ -309,10 +310,11 @@ it('hides an exercise with Undo, and lists hidden exercises under their own pill
   await click(named('Hide from exercise lists'));
   expect(update).toHaveBeenCalledExactlyOnceWith('pec', { hidden: true });
   expect(refreshed).toHaveBeenCalledOnce();
-  const toast = document.querySelector('.undo-toast')!;
-  expect(toast.textContent).toContain('Hidden from exercise lists');
-  await click([...toast.querySelectorAll('button')].find((b) => b.textContent === 'Undo')!);
+  expect(toastText()).toBe('Hidden from exercise lists');
+  await click(toastButton('Undo')!);
   expect(update).toHaveBeenLastCalledWith('pec', { hidden: false });
+  expect(toastText()).toBe('Shown in exercise lists');
+  expect(toastButton('Undo')).toBeUndefined();
 
   // With the refreshed catalogue, the hidden lift leaves the list until the Hidden pill is on.
   await act(async () =>

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastText } from './toastTestUtils';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
@@ -85,7 +86,7 @@ beforeEach(async () => {
   );
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
   await act(async () =>
     root.render(
       <WorkoutTypesProvider>
@@ -139,7 +140,7 @@ it('saves exercises to a workout type without a split', async () => {
   expect(typeId).toBe('custom-arms');
   expect(movements.map((item) => [item.exercise_id, item.sets.length])).toEqual([['curl', 4]]);
   expect(document.querySelector('dialog')).toBeNull();
-  expect(document.querySelector('.top-toast')!.textContent).toContain('Arms exercises saved');
+  expect(toastText()).toBe('Arms exercises saved');
   expect(count('Arms')).toBe('1');
 });
 

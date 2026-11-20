@@ -523,7 +523,7 @@ describe('splits guide', () => {
     await submit('.routine-editor');
     // Saved, but not yet the split Up next follows.
     expect(finished).toEqual([]);
-    await click('Close notification');
+    await click('Dismiss notification');
     expect(coachTitle()).toBe('Make it your split');
     await click('Use split');
     expect(coachTitle()).toBe('Choose how it runs');

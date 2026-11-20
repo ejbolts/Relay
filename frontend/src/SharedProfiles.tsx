@@ -7,17 +7,7 @@ import {
   maintenanceStatus,
 } from './bodyMeasurementHistory';
 import { formatWeight, weightFromKg, type WeightUnit } from './weightUnits';
-import {
-  Fragment,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
-import { createPortal } from 'react-dom';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError } from './api';
 import { authErrorMessage } from './authForm';
 import { clipBodyWeightGoalPath } from './bodyTrend';
@@ -52,7 +42,8 @@ import {
 } from './sharedProfileDisplay';
 import { byLiveActivity, presenceStatus, presenceText, useNow } from './presence';
 import { addDays, dayMonth, parseLocalDate } from './trainingSummary';
-import { GOAL_UNDO_MS, useGoalRemoval } from './useGoalRemoval';
+import { useGoalRemoval } from './useGoalRemoval';
+import { Toast } from './Toast';
 import { localDate, localDateOf } from './utils';
 import {
   cachedSharedProfile,
@@ -82,8 +73,6 @@ import type {
 } from './types';
 
 const BODY_WEIGHT_CHART_DAYS = 90;
-const INVITE_NOTICE_MS = 6000;
-
 /** What scanning a friend QR code did: sent a request, accepted theirs, or could not send. */
 type InviteResult = {
   kind: 'sent' | 'friends' | 'failed' | 'undo-failed';
@@ -457,29 +446,15 @@ function ProfileFriendControl({
           </p>
         </PopupDialog>
       )}
-      {removal.pending &&
-        createPortal(
-          <div
-            className="undo-toast top-toast"
-            role="status"
-            aria-atomic="true"
-            style={{ '--undo-toast-duration': `${GOAL_UNDO_MS}ms` } as CSSProperties}
-          >
-            <span>Removed {profile.display_name}</span>
-            <button className="undo-toast-action" type="button" onClick={removal.undo}>
-              Undo
-            </button>
-            <button
-              className="undo-toast-close"
-              type="button"
-              aria-label="Dismiss friend removal notification"
-              onClick={removal.dismiss}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
+      {removal.pending && (
+        <Toast
+          id={removal.pending.goal.id}
+          message={`Removed ${profile.display_name}`}
+          action={{ label: 'Undo', run: removal.undo }}
+          dismissLabel="Dismiss friend removal notification"
+          onDismiss={removal.dismiss}
+        />
+      )}
     </div>
   );
 }
@@ -1563,10 +1538,9 @@ export function SharedProfileScreen({
   }
 
   useEffect(() => {
-    if (!inviteResult) return;
-    const timer = setTimeout(() => setInviteResult(null), INVITE_NOTICE_MS);
-    return () => clearTimeout(timer);
-  }, [inviteResult]);
+    // The notice belongs to this visit to the profile; leaving it ends the notice.
+    if (!active) setInviteResult(null);
+  }, [active]);
 
   async function undoInviteRequest() {
     if (undoing) return;
@@ -1585,38 +1559,25 @@ export function SharedProfileScreen({
   }
 
   const inviteNotice =
-    inviteResult && active
-      ? createPortal(
-          <div
-            key={inviteResult.serial}
-            className="undo-toast top-toast friend-invite-toast"
-            role="status"
-            aria-atomic="true"
-            style={{ '--undo-toast-duration': `${INVITE_NOTICE_MS}ms` } as CSSProperties}
-          >
-            <span>{inviteMessage(inviteResult)}</span>
-            {inviteResult.kind === 'sent' && (
-              <button
-                className="undo-toast-action"
-                type="button"
-                disabled={undoing}
-                onClick={() => void undoInviteRequest()}
-              >
-                Undo
-              </button>
-            )}
-            <button
-              className="undo-toast-close"
-              type="button"
-              aria-label="Dismiss friend request notification"
-              onClick={() => setInviteResult(null)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )
-      : null;
+    inviteResult && active ? (
+      <Toast
+        id={inviteResult.serial}
+        message={inviteMessage(inviteResult)}
+        variant={
+          inviteResult.kind === 'failed' || inviteResult.kind === 'undo-failed'
+            ? 'warning'
+            : undefined
+        }
+        action={
+          inviteResult.kind === 'sent'
+            ? { label: 'Undo', run: () => undoInviteRequest() }
+            : undefined
+        }
+        busy={undoing}
+        dismissLabel="Dismiss friend request notification"
+        onDismiss={() => setInviteResult(null)}
+      />
+    ) : null;
 
   const ownIdentity =
     ownProfile?.user.id === profileId ? (

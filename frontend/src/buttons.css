@@ -331,7 +331,7 @@
   .workout-actions
   button:where(:not(.pulse-button, [role='menuitem'], .inline-confirmation > button)),
 .body-sizes-entry-actions button:where(:not(.pulse-button)),
-.workout-types-settings button:where(:not(.pulse-button, .undo-toast-close, .undo-toast-action)),
+.workout-types-settings button:where(:not(.pulse-button, .toast-close, .toast-action)),
 .routine-editor-save,
 .machine-weights-save {
   position: relative;
@@ -353,8 +353,7 @@
   .workout-actions
   button:where(:not(.pulse-button, [role='menuitem'], .inline-confirmation > button))::before,
 .body-sizes-entry-actions button:where(:not(.pulse-button))::before,
-.workout-types-settings
-  button:where(:not(.pulse-button, .undo-toast-close, .undo-toast-action))::before,
+.workout-types-settings button:where(:not(.pulse-button, .toast-close, .toast-action))::before,
 .routine-editor-save::before,
 .machine-weights-save::before {
   content: '';
@@ -379,7 +378,7 @@
 .calendar-edit-workout,
 .calendar-day-workouts .calendar-edit-workout.is-secondary,
 .body-sizes-entry-actions button:where(:not(.pulse-button)),
-.workout-types-settings button:where(:not(.pulse-button, .undo-toast-close, .undo-toast-action)) {
+.workout-types-settings button:where(:not(.pulse-button, .toast-close, .toast-action)) {
   border-color: var(--p-line-strong);
   background: var(--p-surface-2);
   color: var(--p-ink);

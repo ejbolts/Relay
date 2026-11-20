@@ -584,9 +584,3 @@ html[data-reduce-motion] .lift-picker-check .pulse-icon {
   flex: none;
   margin-inline: -1rem;
 }
-
-/* Unselect all's Undo floats over the bottom of the sheet, above the pages. */
-.popup-dialog.lift-picker .lift-picker-toast {
-  position: absolute;
-  bottom: 4.5rem;
-}

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot } from './toastTestUtils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { TrainingPreferencesContext } from './trainingPreferencesContext';
@@ -53,7 +54,7 @@ beforeEach(() => {
   onDataChange.mockClear();
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
 });
 
 afterEach(async () => {

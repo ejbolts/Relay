@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { api } from './api';
 import { InlineConfirmButton } from './InlineConfirmButton';
-import { StatusToast } from './StatusToast';
+import { Toast } from './Toast';
 import type { YouTubeConnection } from './types';
 import './YouTubeConnectionPanel.css';
 
@@ -130,7 +130,7 @@ export function YouTubeConnectionPanel({
           </span>
         </div>
       </div>
-      {notice && <StatusToast message={notice} onClose={() => setNotice(null)} />}
+      {notice && <Toast id={notice} message={notice} onDismiss={() => setNotice(null)} />}
       {connection?.channel_title && (
         <a
           className="youtube-channel-name"

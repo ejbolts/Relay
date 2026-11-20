@@ -1,12 +1,14 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
 import { api } from './api';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { createWorkoutSet } from './workoutSets';
 import type { DashboardData, Exercise, TrackedWorkout } from './types';
+import { createToastRoot, toastButton, toastElement, toastText } from './toastTestUtils';
+import { TOAST_MS } from './Toast';
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
@@ -170,7 +172,7 @@ beforeEach(() => {
   vi.mocked(writeDashboardCache).mockResolvedValue(undefined);
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
 });
 
 afterEach(async () => {
@@ -299,5 +301,30 @@ describe('past workout actions', () => {
     await act(async () => vi.advanceTimersByTime(1));
     expect(api.deleteWorkout).toHaveBeenCalledExactlyOnceWith('saved-workout');
     expect(toast()).toBeNull();
+  });
+
+  it('keeps the Undo open while the toast is held, and reports a failed delete as an error', async () => {
+    vi.mocked(api.deleteWorkout).mockRejectedValueOnce(new Error('Could not delete that workout.'));
+    await openCard();
+    // The toast keeps the time left with Date.now(), so the clock is faked too.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const press = (target: EventTarget, type: string) =>
+      target.dispatchEvent(
+        Object.assign(new MouseEvent(type, { bubbles: true }), { pointerType: 'touch' }),
+      );
+    await act(async () => button('Delete', container).click());
+    await act(async () => button('Confirm delete', container).click());
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.action - 1000));
+    await act(async () => press(toastElement()!, 'pointerdown'));
+    await act(async () => vi.advanceTimersByTime(10_000));
+    expect(api.deleteWorkout).not.toHaveBeenCalled();
+    expect(toastButton('Undo')).toBeDefined();
+    await act(async () => press(document.body, 'pointerup'));
+    await act(async () => vi.advanceTimersByTime(1000));
+    expect(api.deleteWorkout).toHaveBeenCalledExactlyOnceWith('saved-workout');
+    await vi.waitFor(() => expect(toastText()).toBe('Could not delete that workout.'));
+    expect(toastElement()?.dataset.variant).toBe('error');
+    expect(toastElement()?.getAttribute('role')).toBe('alert');
+    expect(container.querySelector('.history-card')).not.toBeNull();
   });
 });

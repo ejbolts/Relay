@@ -5,7 +5,7 @@ import { api } from './api';
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import './liveSession.css';
-import { createPortal } from 'react-dom';
+import { Toast } from './Toast';
 import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 import { ConsistencyCard } from './ConsistencyCard';
 import { consistencyWeeks } from './consistencyWeeks';
@@ -957,8 +957,6 @@ export function TodayScreen({
   );
 }
 
-const BODYWEIGHT_UNDO_MS = 5000;
-
 function CheckInStatus({
   prior,
   today,
@@ -1076,12 +1074,6 @@ export function DashboardQuickBodyweight({
     const nextWeight = todayBodyweight ?? latestBodyweight;
     setWeight(nextWeight);
   }, [latestBodyweight, todayBodyweight]);
-
-  useEffect(() => {
-    if (!undo || saving) return;
-    const timer = window.setTimeout(() => setUndo(null), BODYWEIGHT_UNDO_MS);
-    return () => window.clearTimeout(timer);
-  }, [undo, saving]);
 
   async function save() {
     if (saving || busy) return;
@@ -1364,49 +1356,28 @@ export function DashboardQuickBodyweight({
           )}
         </section>
       )}
-      {undo &&
-        undo.version === undoVersion &&
-        createPortal(
-          <div
-            key={undo.attempt}
-            className={`undo-toast bodyweight-undo-toast${saving ? ' is-undoing' : ''}`}
-            role="status"
-            aria-atomic="true"
-            style={{ '--undo-toast-duration': `${BODYWEIGHT_UNDO_MS}ms` } as CSSProperties}
-          >
-            <span>
-              {saving
-                ? 'Undoing check-in…'
-                : undo.kind === 'combined'
-                  ? 'Check-in saved'
-                  : undo.kind === 'fat'
-                    ? 'Body fat saved'
-                    : 'Body weight saved'}
-            </span>
-            <button
-              className="undo-toast-action"
-              type="button"
-              disabled={saving || busy}
-              onClick={() => void undoSave()}
-            >
-              Undo
-            </button>
-            <button
-              className="undo-toast-close"
-              type="button"
-              disabled={saving || busy}
-              aria-label={
-                undo.kind === 'fat'
-                  ? 'Dismiss body fat notification'
-                  : 'Dismiss body weight notification'
-              }
-              onClick={() => setUndo(null)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
+      {undo && undo.version === undoVersion && (
+        <Toast
+          id={undo.attempt}
+          message={
+            saving
+              ? 'Undoing check-in…'
+              : undo.kind === 'combined'
+                ? 'Check-in saved'
+                : undo.kind === 'fat'
+                  ? 'Body fat saved'
+                  : 'Body weight saved'
+          }
+          action={{ label: 'Undo', run: undoSave }}
+          busy={saving || busy}
+          dismissLabel={
+            undo.kind === 'fat'
+              ? 'Dismiss body fat notification'
+              : 'Dismiss body weight notification'
+          }
+          onDismiss={() => setUndo(null)}
+        />
+      )}
       {error && (
         <p className="inline-error" role="alert">
           {error}

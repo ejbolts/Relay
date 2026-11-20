@@ -12,7 +12,7 @@ import { api } from './api';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
-import { NotificationDialog } from './NotificationDialog';
+import { Toast } from './Toast';
 import { PopupDialog } from './PopupDialog';
 import { RoutineMovementList } from './RoutineMovementList';
 import { CARDIO_ROW, SplitVolumeChart } from './SplitVolumeChart';
@@ -359,7 +359,7 @@ export function RoutinePanel({
           </button>
         </p>
       )}
-      {notice && <NotificationDialog message={notice} onClose={() => setNotice(null)} />}
+      {notice && <Toast id={notice} message={notice} onDismiss={() => setNotice(null)} />}
       {showView && (
         <div className="routine-notice">
           <button

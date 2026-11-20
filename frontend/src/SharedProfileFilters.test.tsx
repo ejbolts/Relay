@@ -228,11 +228,11 @@ describe('shared profile friend control', () => {
       await act(async () => button('Remove friend').click());
       // The removal waits out its Undo window, showing the result at once.
       expect(api.sharing.removeFriend).not.toHaveBeenCalled();
-      expect(document.querySelector('.undo-toast')?.textContent).toContain('Removed Sample Friend');
+      expect(document.querySelector('.toast')?.textContent).toContain('Removed Sample Friend');
       expect(button('Add friend')).toBeTruthy();
       await act(async () => vi.advanceTimersByTime(GOAL_UNDO_MS));
       expect(api.sharing.removeFriend).toHaveBeenCalledExactlyOnceWith('friend');
-      expect(document.querySelector('.undo-toast')).toBeNull();
+      expect(document.querySelector('.toast')).toBeNull();
     } finally {
       vi.useRealTimers();
     }
@@ -244,9 +244,9 @@ describe('shared profile friend control', () => {
     try {
       await act(async () => button('Friends').click());
       await act(async () => button('Remove friend').click());
-      const undo = document.querySelector<HTMLButtonElement>('.undo-toast .undo-toast-action')!;
+      const undo = document.querySelector<HTMLButtonElement>('.toast .toast-action')!;
       await act(async () => undo.click());
-      expect(document.querySelector('.undo-toast')).toBeNull();
+      expect(document.querySelector('.toast')).toBeNull();
       expect(button('Friends')).toBeTruthy();
       await act(async () => vi.advanceTimersByTime(GOAL_UNDO_MS * 2));
       expect(remove).not.toHaveBeenCalled();

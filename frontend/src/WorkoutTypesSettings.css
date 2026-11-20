@@ -64,6 +64,12 @@
   gap: 0.45rem;
 }
 
+/* Keep the variant buttons their own size: the legacy .primary/.secondary rules stretch them. */
+.workout-types-settings .pulse-button {
+  width: auto;
+  margin-top: 0;
+}
+
 .workout-types-settings button:where(:not(.pulse-button)) {
   min-height: 2.25rem;
   border: 1px solid var(--line);

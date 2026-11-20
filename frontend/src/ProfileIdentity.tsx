@@ -17,7 +17,7 @@ import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
 import { ProfilePhotoCrop } from './ProfilePhotoCrop';
 import { DEFAULT_PHOTO_CROP, type PhotoCrop } from './profilePhotoGeometry';
-import { NotificationDialog } from './NotificationDialog';
+import { useToast } from './Toast';
 import { motionReduced } from './motion';
 import { formatMemberSince, SEX_LABELS } from './profileDisplay';
 import { SexMark } from './SexMark';
@@ -64,7 +64,7 @@ export function ProfileIdentity({
   const cropButton = useRef<HTMLButtonElement>(null);
   const [removePhoto, setRemovePhoto] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [status, setStatus] = useState<string | null>(null);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
   const navigation = useContext(SettingsNavigationContext);
   const handledJump = useRef(0);
@@ -76,7 +76,6 @@ export function ProfileIdentity({
     if (!editing) {
       requestedFocus.current = editRequest.destination.selector;
       setDisplayName(user.display_name);
-      setStatus(null);
       setError(null);
       setEditing(true);
     }
@@ -153,7 +152,6 @@ export function ProfileIdentity({
     setPhotoSource(null);
     setPhotoCrop(DEFAULT_PHOTO_CROP);
     setRemovePhoto(false);
-    setStatus(null);
     setError(null);
     setEditing(true);
   }
@@ -174,7 +172,6 @@ export function ProfileIdentity({
     event?.preventDefault();
     if (saving || !dirty) return;
     setError(null);
-    setStatus(null);
     if (!displayName.trim()) {
       setError('Enter a name to show in the app.');
       return;
@@ -204,7 +201,7 @@ export function ProfileIdentity({
       if (upload) onSaved(await api.uploadProfilePhoto(upload));
       else if (removePhoto) onSaved(await api.removeProfilePhoto());
       close();
-      if (!photo && !removePhoto) setStatus('Profile saved.');
+      if (!photo && !removePhoto) toast.show('Profile saved.');
     } catch (reason) {
       const message =
         reason instanceof ApiError && PHOTO_ERRORS.has(reason.code)
@@ -392,7 +389,6 @@ export function ProfileIdentity({
           </form>
         </>
       )}
-      {status && <NotificationDialog message={status} onClose={() => setStatus(null)} />}
       {confirmingSex && sex && (
         <PopupDialog
           title={`Save your sex as ${SEX_LABELS[sex]}?`}

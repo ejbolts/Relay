@@ -1,25 +1,14 @@
-import {
-  useCallback,
-  useEffect,
-  useId,
-  useState,
-  type CSSProperties,
-  type FormEvent,
-  type ReactNode,
-} from 'react';
-import { createPortal } from 'react-dom';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { api, ApiError } from './api';
 import { authErrorMessage, MIN_PASSWORD_LENGTH, validateNewPassword } from './authForm';
 import { CollapsibleSection } from './CollapsibleSection';
-import { Icon } from './Icon';
 import { PasswordInput } from './PasswordInput';
 import { PopupDialog } from './PopupDialog';
 import { ProfileSharingPanel } from './ProfileSharing';
 import { hasUnsyncedWorkout } from './sessionCleanup';
+import { useToast } from './Toast';
 import { useUserSession } from './userContext';
 import './accountSession.css';
-
-const PASSWORD_TOAST_MS = 5000;
 
 function Spinner() {
   return <span className="auth-spinner" aria-hidden="true" />;
@@ -57,42 +46,13 @@ function FormFeedback({ error }: { error: string | null }) {
   );
 }
 
-/** A brief confirmation at the top of the screen that clears by itself. */
-function PasswordUpdatedToast({ onClose }: { onClose: () => void }) {
-  useEffect(() => {
-    const timer = window.setTimeout(onClose, PASSWORD_TOAST_MS);
-    return () => window.clearTimeout(timer);
-  }, [onClose]);
-  return createPortal(
-    <div
-      className="undo-toast top-toast"
-      role="status"
-      aria-atomic="true"
-      style={{ '--undo-toast-duration': `${PASSWORD_TOAST_MS}ms` } as CSSProperties}
-    >
-      <span>Password updated. Other devices were signed out.</span>
-      <button
-        type="button"
-        className="undo-toast-close"
-        aria-label="Dismiss password notification"
-        onClick={onClose}
-      >
-        <Icon name="close" />
-      </button>
-    </div>,
-    document.body,
-  );
-}
-
 function PasswordForm() {
   const id = useId();
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
   const [saving, setSaving] = useState(false);
-  // Counts updates, so each one shows the confirmation afresh.
-  const [updated, setUpdated] = useState(0);
-  const closeToast = useCallback(() => setUpdated(0), []);
+  const toast = useToast();
   const [error, setError] = useState<string | null>(null);
 
   async function save(event: FormEvent<HTMLFormElement>) {
@@ -118,7 +78,7 @@ function PasswordForm() {
       setCurrent('');
       setNext('');
       setConfirm('');
-      setUpdated((count) => count + 1);
+      toast.show('Password updated. Other devices were signed out.');
     } catch (reason) {
       setError(
         reason instanceof ApiError && reason.code === 'invalid_password'
@@ -185,7 +145,6 @@ function PasswordForm() {
           <span>{saving ? 'Updating…' : 'Update password'}</span>
         </button>
       </form>
-      {updated > 0 && <PasswordUpdatedToast key={updated} onClose={closeToast} />}
     </CollapsibleSection>
   );
 }

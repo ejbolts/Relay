@@ -11,12 +11,9 @@ import {
   nextBlockName,
   weeksEnd,
 } from './trainingBlocks';
-import {
-  TrainingBlockDialog,
-  TrainingBlockToast,
-  type TrainingBlockDialogStart,
-} from './TrainingBlockDialog';
+import { TrainingBlockDialog, type TrainingBlockDialogStart } from './TrainingBlockDialog';
 import { TrainingBlockHomeCard, TrainingBlockStartCard } from './TrainingBlockHomeCard';
+import { useToast } from './Toast';
 import type { TrainingBlockCardStyle } from './homeLayout';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { formatVolume, addDays } from './trainingSummary';
@@ -345,7 +342,7 @@ export function TrainingBlockHome({
 }) {
   const [summarised, setSummarised] = useState<TrainingBlock | null>(null);
   const [managing, setManaging] = useState<TrainingBlockDialogStart | null>(null);
-  const [notice, setNotice] = useState('');
+  const toast = useToast();
   const trigger = useRef<HTMLElement | null>(null);
   const card = useRef<HTMLButtonElement>(null);
   const manage = (start: TrainingBlockDialogStart) => {
@@ -381,13 +378,12 @@ export function TrainingBlockHome({
           today={today}
           onClose={() => setSummarised(null)}
           onOpenProgress={onOpen}
-          onStarted={setNotice}
+          onStarted={toast.show}
         />
       )}
       {managing && (
-        <TrainingBlockDialog start={managing} onClose={closeManaging} onNotice={setNotice} />
+        <TrainingBlockDialog start={managing} onClose={closeManaging} onNotice={toast.show} />
       )}
-      <TrainingBlockToast notice={notice} onDismiss={() => setNotice('')} />
     </>
   );
 }

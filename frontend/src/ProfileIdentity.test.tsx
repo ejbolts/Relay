@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot } from './toastTestUtils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProfileIdentity } from './ProfileIdentity';
@@ -51,7 +52,7 @@ beforeEach(async () => {
   vi.spyOn(api, 'removeProfilePhoto').mockResolvedValue({ ...user, profile_photo_url: null });
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
   function Harness() {
     const [current, setCurrent] = useState(user);
     return <ProfileIdentity user={current} onSaved={setCurrent} />;

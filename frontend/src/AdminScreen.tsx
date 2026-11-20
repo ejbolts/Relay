@@ -20,7 +20,7 @@ import { Icon } from './Icon';
 import { SEX_LABELS } from './profileDisplay';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { motionReduced } from './motion';
-import { StatusToast } from './StatusToast';
+import { Toast, useToast } from './Toast';
 import { AdminUsernameDialog } from './AdminUsernameDialog';
 import type {
   AccountLimits,
@@ -355,15 +355,14 @@ function TemporaryPasswordPanel({
   reveal: TemporaryPasswordReveal;
   onDismiss: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const toast = useToast();
 
   async function copy() {
     try {
       await navigator.clipboard.writeText(reveal.password);
-      setCopied(true);
+      toast.show('Password copied');
     } catch {
       // The password stays selectable, so it can still be copied by hand.
-      setCopied(false);
     }
   }
 
@@ -378,7 +377,7 @@ function TemporaryPasswordPanel({
       <small>Shown once. {reveal.displayName} must choose a new password after signing in.</small>
       <div className="admin-temp-password-actions">
         <button type="button" className="profile-secondary" onClick={() => void copy()}>
-          {copied ? 'Copied' : 'Copy'}
+          Copy
         </button>
         <button type="button" className="profile-primary" onClick={onDismiss}>
           Done
@@ -954,7 +953,7 @@ export function AdminScreenView({
         </details>
       )}
       {notice && (
-        <StatusToast key={notice} message={notice} onClose={onNoticeDismiss ?? (() => undefined)} />
+        <Toast id={notice} message={notice} onDismiss={onNoticeDismiss ?? (() => undefined)} />
       )}
     </section>
   );
