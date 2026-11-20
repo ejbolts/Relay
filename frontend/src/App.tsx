@@ -137,6 +137,9 @@ import { NotificationDialog } from './NotificationDialog';
 import { StatusToast } from './StatusToast';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
+import { CalendarCreateWorkoutDialog } from './CalendarCreateWorkoutDialog';
+import { SetEntryConfirmationDialog } from './SetEntryConfirmationDialog';
+import { WorkoutNameDialog } from './WorkoutNameDialog';
 import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
 import { loggedOnlyWarmups } from './workingSetCheck';
 import { PlateCalculatorDialog } from './PlateCalculator';
@@ -3119,86 +3122,6 @@ function OverlayScreenHeader({
   );
 }
 
-function CalendarCreateWorkoutDialog({
-  workoutDate,
-  activeWorkout,
-  onCancel,
-  onConfirm,
-}: {
-  workoutDate: string;
-  activeWorkout: boolean;
-  onCancel: () => void;
-  onConfirm: () => void;
-}) {
-  const cancelButtonRef = useRef<HTMLButtonElement>(null);
-  const onCancelRef = useRef(onCancel);
-  const backdropDismiss = useBackdropDismiss(onCancel);
-
-  useEffect(() => {
-    onCancelRef.current = onCancel;
-  }, [onCancel]);
-
-  useEffect(() => {
-    const root = document.getElementById('root');
-    const rootWasInert = root?.hasAttribute('inert') ?? false;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    root?.setAttribute('inert', '');
-    cancelButtonRef.current?.focus();
-
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancelRef.current();
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      if (!rootWasInert) root?.removeAttribute('inert');
-      window.removeEventListener('keydown', closeOnEscape);
-    };
-  }, []);
-
-  return createPortal(
-    <div className="modal-backdrop calendar-create-backdrop" {...backdropDismiss}>
-      <section
-        className="calendar-create-dialog panel"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="calendar-create-title"
-        aria-describedby="calendar-create-description"
-      >
-        <div
-          className={`calendar-create-icon ${activeWorkout ? 'active-conflict' : ''}`}
-          aria-hidden="true"
-        >
-          {activeWorkout ? '!' : '+'}
-        </div>
-        <p className="section-kicker">{activeWorkout ? 'WORKOUT IN PROGRESS' : 'NEW WORKOUT'}</p>
-        <h2 id="calendar-create-title">
-          {activeWorkout ? 'Cancel your current workout?' : 'Create a new workout?'}
-        </h2>
-        <p id="calendar-create-description">
-          {activeWorkout
-            ? `Creating a workout for ${prettyDate(workoutDate)} will discard your current unsaved workout.`
-            : `Start a workout for ${prettyDate(workoutDate)}?`}
-        </p>
-        <div className="calendar-create-actions">
-          <button ref={cancelButtonRef} type="button" onClick={onCancel}>
-            {activeWorkout ? 'Keep current workout' : 'Cancel'}
-          </button>
-          <button
-            className={activeWorkout ? 'cancel-current-workout-button' : 'create-workout-button'}
-            type="button"
-            onClick={onConfirm}
-          >
-            {activeWorkout ? 'Cancel & create new' : 'Create workout'}
-          </button>
-        </div>
-      </section>
-    </div>,
-    document.body,
-  );
-}
-
 function InteractiveWorkoutCalendar({
   entries,
   workouts,
@@ -5974,13 +5897,7 @@ function WorkoutLogger({
           title="Assign sets to machines"
           className="machine-assignment-dialog"
           onClose={() => setMachineAssignmentError(null)}
-        >
-          <p>
-            {machineAssignmentError} has multiple machines pinned. Choose a machine beneath each
-            completed set before finishing the exercise or saving the workout, so its weights and
-            progress are recorded against the right machine.
-          </p>
-          <div className="popup-dialog-actions">
+          actions={
             <button
               type="button"
               className="popup-primary-action"
@@ -5996,7 +5913,13 @@ function WorkoutLogger({
             >
               Choose machines
             </button>
-          </div>
+          }
+        >
+          <p>
+            {machineAssignmentError} has multiple machines pinned. Choose a machine beneath each
+            completed set before finishing the exercise or saving the workout, so its weights and
+            progress are recorded against the right machine.
+          </p>
         </PopupDialog>
       )}
 
@@ -6028,9 +5951,32 @@ function WorkoutLogger({
       {finishConfirmationOpen && (
         <PopupDialog
           title={finishBlocker ? "Can't finish yet" : 'Finish workout?'}
-          kicker={finishBlocker ? 'FINISH WORKOUT' : 'PLEASE CONFIRM'}
+          size="compact"
           className="workout-finish-dialog"
           onClose={() => setFinishConfirmationOpen(false)}
+          actionsClassName="workout-finish-actions"
+          actions={
+            <>
+              <button
+                type="button"
+                className={finishBlocker ? 'popup-primary-action' : undefined}
+                autoFocus
+                onClick={() => setFinishConfirmationOpen(false)}
+              >
+                Keep working out
+              </button>
+              {!finishBlocker && (
+                <button
+                  type="button"
+                  className="popup-primary-action"
+                  disabled={saving}
+                  onClick={confirmFinish}
+                >
+                  Finish workout
+                </button>
+              )}
+            </>
+          }
         >
           {finishBlocker ? (
             <p className="inline-error workout-finish-blocker" role="alert">
@@ -6043,26 +5989,6 @@ function WorkoutLogger({
               </strong>
             </p>
           )}
-          <div className="popup-dialog-actions workout-finish-actions">
-            <button
-              type="button"
-              className={finishBlocker ? 'popup-primary-action' : undefined}
-              autoFocus
-              onClick={() => setFinishConfirmationOpen(false)}
-            >
-              Keep working out
-            </button>
-            {!finishBlocker && (
-              <button
-                type="button"
-                className="popup-primary-action"
-                disabled={saving}
-                onClick={confirmFinish}
-              >
-                Finish workout
-              </button>
-            )}
-          </div>
         </PopupDialog>
       )}
 
@@ -6136,92 +6062,6 @@ function WorkoutLogger({
         />
       )}
     </section>
-  );
-}
-
-function WorkoutNameDialog({
-  value,
-  fallbackName,
-  onChange,
-  onCancel,
-  onSave,
-}: {
-  value: string;
-  fallbackName: string;
-  onChange: (value: string) => void;
-  onCancel: () => void;
-  onSave: () => void;
-}) {
-  const dialogRef = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dialog = dialogRef.current;
-    if (!dialog) return;
-    dialog.showModal();
-    return () => {
-      if (dialog.open) dialog.close();
-    };
-  }, []);
-
-  const backdropDismiss = useBackdropDismiss(onCancel);
-
-  return createPortal(
-    <dialog
-      ref={dialogRef}
-      className="notification-dialog workout-name-dialog"
-      aria-modal="true"
-      aria-labelledby="workout-name-dialog-title"
-      aria-describedby="workout-name-dialog-description"
-      onCancel={(event) => {
-        event.preventDefault();
-        onCancel();
-      }}
-      {...backdropDismiss}
-    >
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSave();
-        }}
-      >
-        <header>
-          <div>
-            <p className="section-kicker">WORKOUT</p>
-            <h2 id="workout-name-dialog-title">Name this workout</h2>
-          </div>
-          <button
-            type="button"
-            className="notification-close"
-            onClick={onCancel}
-            aria-label="Close"
-          >
-            ×
-          </button>
-        </header>
-        <p id="workout-name-dialog-description">
-          Give this session a name, or leave it blank to use “{fallbackName}”.
-        </p>
-        <label>
-          Workout name
-          <input
-            autoFocus
-            value={value}
-            onChange={(event) => onChange(event.target.value)}
-            placeholder={fallbackName}
-            maxLength={120}
-          />
-        </label>
-        <footer>
-          <button type="button" onClick={onCancel}>
-            Cancel
-          </button>
-          <button type="submit" className="notification-ok">
-            Save name
-          </button>
-        </footer>
-      </form>
-    </dialog>,
-    document.body,
   );
 }
 
@@ -6417,9 +6257,24 @@ function WorkoutCloseDialog({
             ? 'Discard this resumed session?'
             : 'Discard this workout?'
       }
-      kicker="PLEASE CONFIRM"
+      size="compact"
       className="workout-finish-dialog workout-discard-dialog"
       onClose={onCancel}
+      actionsClassName="workout-finish-actions"
+      actions={
+        <>
+          <button type="button" autoFocus onClick={onCancel}>
+            Keep workout
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action is-danger discard-workout-button"
+            onClick={onConfirm}
+          >
+            {editing ? 'Delete workout' : resuming ? 'Discard session' : 'Discard workout'}
+          </button>
+        </>
+      }
     >
       <p>
         {editing
@@ -6428,18 +6283,6 @@ function WorkoutCloseDialog({
             ? 'Changes made since resuming will be lost. The saved workout will stay in History.'
             : 'Your active workout, sets, and notes will be permanently removed. This cannot be undone.'}
       </p>
-      <div className="popup-dialog-actions workout-finish-actions">
-        <button type="button" autoFocus onClick={onCancel}>
-          Keep workout
-        </button>
-        <button
-          type="button"
-          className="popup-primary-action discard-workout-button"
-          onClick={onConfirm}
-        >
-          {editing ? 'Delete workout' : resuming ? 'Discard session' : 'Discard workout'}
-        </button>
-      </div>
     </PopupDialog>
   );
 }
@@ -7738,72 +7581,6 @@ function MovementCard({
   );
 }
 
-function SetEntryConfirmationDialog({
-  warning,
-  confirmLabel,
-  onConfirm,
-  onCancel,
-}: {
-  warning: SetEntryWarning;
-  confirmLabel: string;
-  onConfirm: (skipHighRepWarning: boolean) => void;
-  onCancel: () => void;
-}) {
-  const [skipHighRepWarning, setSkipHighRepWarning] = useState(false);
-  const confirmButtonRef = useRef<HTMLButtonElement>(null);
-  const onCancelRef = useRef(onCancel);
-  const backdropDismiss = useBackdropDismiss(onCancel);
-  onCancelRef.current = onCancel;
-
-  useEffect(() => {
-    window.requestAnimationFrame(() => confirmButtonRef.current?.focus());
-    const cancelOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCancelRef.current();
-    };
-    window.addEventListener('keydown', cancelOnEscape);
-    return () => window.removeEventListener('keydown', cancelOnEscape);
-  }, []);
-
-  return createPortal(
-    <div className="modal-backdrop set-entry-confirmation-backdrop" {...backdropDismiss}>
-      <section
-        className="set-entry-confirmation panel"
-        role="alertdialog"
-        aria-modal="true"
-        aria-labelledby="set-entry-confirmation-title"
-        aria-describedby="set-entry-confirmation-message"
-      >
-        <h3 id="set-entry-confirmation-title">{warning.title}</h3>
-        <p id="set-entry-confirmation-message">{warning.message}</p>
-        {warning.highReps && (
-          <label className="set-entry-warning-preference">
-            <input
-              type="checkbox"
-              checked={skipHighRepWarning}
-              onChange={(event) => setSkipHighRepWarning(event.target.checked)}
-            />
-            <span>Don't show high-rep warnings again for this workout</span>
-          </label>
-        )}
-        <footer>
-          <button type="button" onClick={onCancel}>
-            Go back
-          </button>
-          <button
-            ref={confirmButtonRef}
-            type="button"
-            className="confirm-unusual-set"
-            onClick={() => onConfirm(skipHighRepWarning)}
-          >
-            {confirmLabel}
-          </button>
-        </footer>
-      </section>
-    </div>,
-    document.body,
-  );
-}
-
 function MachinePhotoChooser({
   id,
   exercise,
@@ -8769,6 +8546,8 @@ export function ExercisePicker({
     root?.setAttribute('inert', '');
 
     const closeOnEscape = (event: KeyboardEvent) => {
+      // A pop-up opened over the picker (Add exercise, muscle help) closes on its own.
+      if (event.target instanceof Element && event.target.closest('dialog[open]')) return;
       if (event.key === 'Escape') onCloseRef.current();
     };
     window.addEventListener('keydown', closeOnEscape);
