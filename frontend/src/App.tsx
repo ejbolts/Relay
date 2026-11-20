@@ -3609,7 +3609,6 @@ function WorkoutLogger({
   const deleteButtonRef = useRef<HTMLButtonElement>(null);
   const [detailsOpen, setDetailsOpen] = useState(Boolean(initialWorkout));
   const detailsRef = useRef<HTMLDetailsElement>(null);
-  const supersetButtonRef = useRef<HTMLButtonElement>(null);
   const startedAt = useState(() => restoredDraft?.startedAt ?? activeStartedAt ?? Date.now())[0];
   // Paused time is left out of the live time and the saved duration; the real start is kept.
   const [pause, setPause] = useState<WorkoutPause>(() => draftPause(restoredDraft));
@@ -4240,15 +4239,13 @@ function WorkoutLogger({
     setUndoDeletion(null);
   }
 
-  function openSupersetPicker(movementKey: string, button: HTMLButtonElement) {
-    supersetButtonRef.current = button;
+  function openSupersetPicker(movementKey: string) {
     setError(null);
     setSupersetPickerKey(movementKey);
   }
 
   function closeSupersetPicker() {
     setSupersetPickerKey(null);
-    window.requestAnimationFrame(() => supersetButtonRef.current?.focus());
   }
 
   function saveSuperset(movementKey: string, partnerKeys: string[]) {
@@ -5478,7 +5475,7 @@ function WorkoutLogger({
               onMoveSet={(fromIndex, toIndex) => moveSet(movement.key, fromIndex, toIndex)}
               onDeleteSet={(index) => deleteSet(movement, index)}
               onRemoveRestTime={(item) => removeRestTime(movement, item)}
-              onSuperset={(button) => openSupersetPicker(movement.key, button)}
+              onSuperset={() => openSupersetPicker(movement.key)}
               onMachinePhotos={(machinePhotoIds, machineSettings, chosen) =>
                 setMovements((current) =>
                   current.map((item) =>
@@ -7858,7 +7855,6 @@ export function ProgressScreen({
   const [mergeRequest, setMergeRequest] = useState<{ sourceId?: string; targetId?: string } | null>(
     null,
   );
-  const mergeTrigger = useRef<HTMLButtonElement | null>(null);
   const { show: showToast, dismiss: dismissToast } = useToast();
   const strengthExercises = useMemo(
     () => exercises.filter((exercise) => exercise.kind === 'strength'),
@@ -7907,24 +7903,15 @@ export function ProgressScreen({
   const canMergeSelected = Boolean(selectedExercise?.is_custom && onExercisesMerged);
   const canEditSelected = Boolean(selectedExercise && onExercisesMerged);
   const openSelectedMerge = useCallback(
-    (trigger: HTMLButtonElement) => {
-      mergeTrigger.current = trigger;
-      setMergeRequest({ sourceId: exerciseId });
-    },
+    () => setMergeRequest({ sourceId: exerciseId }),
     [exerciseId],
   );
   const openSuggestedMerge = useCallback(
-    (targetId: string, trigger: HTMLButtonElement) => {
-      mergeTrigger.current = trigger;
-      setMergeRequest({ sourceId: exerciseId, targetId });
-    },
+    (targetId: string) => setMergeRequest({ sourceId: exerciseId, targetId }),
     [exerciseId],
   );
   const [renameOpen, setRenameOpen] = useState(false);
-  const openSelectedRename = useCallback((trigger: HTMLButtonElement) => {
-    mergeTrigger.current = trigger;
-    setRenameOpen(true);
-  }, []);
+  const openSelectedRename = useCallback(() => setRenameOpen(true), []);
   const setSelectedHidden = useCallback(
     async (exercise: Exercise, hidden: boolean, undoable: boolean) => {
       try {
@@ -8211,12 +8198,7 @@ export function ProgressScreen({
           exercises={exercises}
           initialSourceId={mergeRequest.sourceId}
           initialTargetId={mergeRequest.targetId}
-          onClose={() => {
-            setMergeRequest(null);
-            requestAnimationFrame(
-              () => mergeTrigger.current?.isConnected && mergeTrigger.current.focus(),
-            );
-          }}
+          onClose={() => setMergeRequest(null)}
           onChanged={() => void onExercisesMerged?.()}
           onMerged={(_sourceId, target) => {
             setMergeRequest(null);
@@ -8229,12 +8211,7 @@ export function ProgressScreen({
       {renameOpen && selectedExercise && (
         <ExerciseRenameDialog
           exercise={selectedExercise}
-          onClose={() => {
-            setRenameOpen(false);
-            requestAnimationFrame(
-              () => mergeTrigger.current?.isConnected && mergeTrigger.current.focus(),
-            );
-          }}
+          onClose={() => setRenameOpen(false)}
           onRenamed={() => {
             setRenameOpen(false);
             showToast('Exercise renamed');

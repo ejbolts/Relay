@@ -4792,7 +4792,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   }
 }
 
-/* ───────── Popups: one sheet style everywhere ───────── */
+/* ───────── Popups: the PopupDialog surface ───────── */
 
 .popup-dialog::backdrop {
   background: rgb(4 6 8 / 72%);
@@ -4800,8 +4800,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   -webkit-backdrop-filter: blur(6px);
 }
 
-.popup-dialog,
-.pr-summary {
+.popup-dialog {
   border: 1px solid var(--p-line-strong);
   border-radius: 24px;
   background: var(--p-surface);
@@ -4810,8 +4809,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 /* Dark mode: overlays sit one step above cards, and the tiles inside them step up too. */
-:root:not([data-colour-mode='light'])
-  :is(.popup-dialog, .pr-summary, .relay-tip-popover, .relay-tip-nudge) {
+:root:not([data-colour-mode='light']) :is(.popup-dialog, .relay-tip-popover, .relay-tip-nudge) {
   --p-surface: var(--p-surface-raised);
   --p-surface-2: var(--p-raised-2);
   --p-surface-3: var(--p-raised-3);
@@ -4821,37 +4819,14 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 .popup-dialog > header {
   border-bottom: 1px solid var(--p-line);
-}
-
-.popup-dialog > header {
   background: color-mix(in srgb, var(--p-surface) 97%, transparent);
 }
 
-.popup-dialog h2,
-.pr-summary h2 {
+.popup-dialog h2 {
   color: var(--p-ink);
   font-size: 1.1875rem;
   font-weight: 650;
   letter-spacing: -0.01em;
-}
-
-.popup-dialog-close {
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-  background: var(--p-surface-2);
-  color: var(--p-ink-2);
-}
-
-.popup-primary-action {
-  min-height: 3rem;
-  border: 0;
-  border-radius: 14px;
-  background: var(--p-accent);
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 650;
 }
 
 .popup-dialog-actions {
