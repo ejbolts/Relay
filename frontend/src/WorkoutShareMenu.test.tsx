@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastElement, toastText } from './toastTestUtils';
+import { TOAST_MS } from './Toast';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WorkoutShareMenu } from './WorkoutShareMenu';
 import { api } from './api';
@@ -32,7 +34,7 @@ beforeEach(() => {
   });
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
   act(() => root.render(<WorkoutShareMenu workout={workout} onShareCard={onShareCard} />));
 });
 
@@ -107,13 +109,11 @@ describe('workout share menu', () => {
 
     expect(api.exportWorkout).toHaveBeenCalledWith('workout-1');
     expect(downloads).toEqual(['workout-2026-11-14-push-day-chest-triceps.csv']);
-    expect(document.body.querySelector('.top-toast[role="status"]')?.textContent).toContain(
-      'Workout exported',
-    );
+    expect(toastText()).toBe('Workout exported');
     expect(container.querySelector('[role="alert"]')).toBeNull();
 
-    act(() => vi.advanceTimersByTime(4000));
-    expect(document.body.querySelector('.top-toast')).toBeNull();
+    act(() => vi.advanceTimersByTime(TOAST_MS.status));
+    expect(toastElement()).toBeNull();
   });
 
   it('shows an export failure beside the button and creates no download', async () => {
@@ -123,7 +123,7 @@ describe('workout share menu', () => {
 
     expect(downloads).toEqual([]);
     expect(container.querySelector('[role="alert"]')?.textContent).toBe('You are offline.');
-    expect(document.body.querySelector('.top-toast')).toBeNull();
+    expect(toastElement()).toBeNull();
     expect(trigger().disabled).toBe(false);
   });
 });

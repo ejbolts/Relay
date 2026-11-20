@@ -143,7 +143,10 @@ async function openLink(hash: string, strict = false) {
   );
 }
 
-const toast = () => document.querySelector('.friend-invite-toast');
+const toast = () =>
+  document
+    .querySelector('.toast [aria-label="Dismiss friend request notification"]')
+    ?.closest('.toast') ?? null;
 const buttonNamed = (name: string) =>
   [...document.querySelectorAll('button')].find((button) => button.textContent === name);
 
@@ -297,6 +300,7 @@ it('falls back to Add friend when the request cannot be sent', async () => {
   await openLink('/');
 
   expect(toast()?.textContent).toContain('Could not send the friend request');
+  expect(toast()?.getAttribute('data-variant')).toBe('warning');
   expect(buttonNamed('Add friend')).toBeDefined();
 });
 

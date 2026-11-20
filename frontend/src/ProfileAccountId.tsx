@@ -1,27 +1,14 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
-import { Icon } from './Icon';
-
-const COPY_NOTICE_MS = 5000;
+import { useRef } from 'react';
+import { useToast } from './Toast';
 
 /** A stable account identifier that someone else can paste into people search. */
 export function ProfileAccountId({ accountId }: { accountId: string }) {
   const value = useRef<HTMLElement>(null);
-  const [status, setStatus] = useState<{ id: string; message: string; serial: number } | null>(
-    null,
-  );
-  useEffect(() => {
-    if (!status) return;
-    const timer = setTimeout(() => setStatus(null), COPY_NOTICE_MS);
-    return () => clearTimeout(timer);
-  }, [status]);
-  function notify(message: string) {
-    setStatus((current) => ({ id: accountId, message, serial: (current?.serial ?? 0) + 1 }));
-  }
+  const toast = useToast();
   async function copy() {
     try {
       await navigator.clipboard.writeText(accountId);
-      notify('UUID copied.');
+      toast.show('UUID copied.');
     } catch {
       if (value.current) {
         const range = document.createRange();
@@ -30,7 +17,7 @@ export function ProfileAccountId({ accountId }: { accountId: string }) {
         selection?.removeAllRanges();
         selection?.addRange(range);
       }
-      notify('UUID selected. Use your device’s copy action.');
+      toast.show('UUID selected. Use your device’s copy action.');
     }
   }
   return (
@@ -42,27 +29,6 @@ export function ProfileAccountId({ accountId }: { accountId: string }) {
           Copy UUID
         </button>
       </div>
-      {status?.id === accountId &&
-        createPortal(
-          <div
-            key={status.serial}
-            className="undo-toast top-toast"
-            role="status"
-            aria-atomic="true"
-            style={{ '--undo-toast-duration': `${COPY_NOTICE_MS}ms` } as CSSProperties}
-          >
-            <span>{status.message}</span>
-            <button
-              type="button"
-              className="undo-toast-close"
-              aria-label="Dismiss UUID notification"
-              onClick={() => setStatus(null)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
     </div>
   );
 }

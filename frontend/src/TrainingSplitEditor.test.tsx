@@ -172,7 +172,7 @@ it('blocks an unchanged saved template, including after renaming and reloading',
   await input('.routine-editor input', 'My full body plan');
   await submit();
   expect(button('Full body / Rest').disabled).toBe(true);
-  await click('Close notification');
+  await click('Dismiss notification');
   await click('Full body / Rest');
   expect(document.querySelector('.routine-editor')).toBeNull();
   expect(api.routines.create).toHaveBeenCalledTimes(1);
@@ -192,7 +192,7 @@ it('makes templates available only after a saved day change and blocks them agai
   await mount();
   await click('Full body / Rest');
   await submit();
-  await click('Close notification');
+  await click('Dismiss notification');
   await editCopy();
   await click('Add rest day');
   expect(button('Full body / Rest').disabled).toBe(true);
@@ -202,7 +202,7 @@ it('makes templates available only after a saved day change and blocks them agai
   await click('Add rest day');
   await submit();
   expect(button('Full body / Rest').disabled).toBe(false);
-  await click('Close notification');
+  await click('Dismiss notification');
   await editCopy();
   await act(async () =>
     document.querySelectorAll<HTMLButtonElement>('.routine-day-toggle')[2].click(),
@@ -224,7 +224,7 @@ it('does not reserve a template after cancelling or a failed save, and releases 
   expect(button('Full body / Rest').disabled).toBe(false);
   await click('Full body / Rest');
   await submit();
-  await click('Close notification');
+  await click('Dismiss notification');
   expect(button('Full body / Rest').disabled).toBe(true);
   await click('Options for Full body / Rest');
   await click('Delete split');

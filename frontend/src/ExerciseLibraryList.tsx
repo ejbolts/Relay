@@ -7,11 +7,8 @@ import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { exerciseEquipment } from './exerciseEquipment';
 import { exerciseSearchAllowsTypos, exerciseSearchScore } from './exerciseSearch';
-import {
-  TrainingBlockDialog,
-  TrainingBlockToast,
-  type TrainingBlockDialogStart,
-} from './TrainingBlockDialog';
+import { TrainingBlockDialog, type TrainingBlockDialogStart } from './TrainingBlockDialog';
+import { useToast } from './Toast';
 import { blockOn } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import type { Exercise, ExerciseLibrarySummary } from './types';
@@ -99,7 +96,7 @@ export function ExerciseLibraryList({
   const [pageSize, setPageSize] = useState(savedPageSize);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [blockDialog, setBlockDialog] = useState<TrainingBlockDialogStart | null>(null);
-  const [blockNotice, setBlockNotice] = useState('');
+  const toast = useToast();
   const blocks = useTrainingBlocks();
   const currentBlock = blockOn(blocks.config.blocks, localDate());
   const blockScope = blocks.block
@@ -362,10 +359,9 @@ export function ExerciseLibraryList({
             setBlockDialog(null);
             requestAnimationFrame(() => optionsButton.current?.focus());
           }}
-          onNotice={setBlockNotice}
+          onNotice={toast.show}
         />
       )}
-      <TrainingBlockToast notice={blockNotice} onDismiss={() => setBlockNotice('')} />
       {loading && summaries === null && (
         <p className="exercise-list-status" role="status">
           Loading trends…

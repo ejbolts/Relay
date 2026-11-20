@@ -311,6 +311,18 @@ function retry() {
 }
 
 /** The finished workout waiting to sync on this device, if any. */
+/** Home's brief "Workout saved" toast, shown after finishing. */
+function savedToast() {
+  return [...document.querySelectorAll('.toast')].find((toast) =>
+    toast.textContent?.startsWith('Workout saved'),
+  );
+}
+
+/** Toasts other than Home's "Workout saved": the app's own notices. */
+function otherToasts() {
+  return [...document.querySelectorAll('.toast')].filter((toast) => toast !== savedToast());
+}
+
 function finishedSave() {
   return readFinishedWorkouts()[0]?.pendingSave;
 }
@@ -2285,7 +2297,7 @@ describe('finishing workouts in the background', () => {
     await act(async () => finish.click());
     expect(document.querySelector('.workout-finish-dialog')).toBeNull();
     expect(api.createWorkout).toHaveBeenCalledOnce();
-    expect(document.querySelector('.workout-saved-toast')?.textContent).toContain('Workout saved');
+    expect(savedToast()).toBeDefined();
   });
 
   it('explains how to finish an empty workout without discarding it', async () => {
@@ -2385,7 +2397,7 @@ describe('finishing workouts in the background', () => {
     expect(container.querySelector('.app-tab-start.live')).toBeNull();
     expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
-    expect(document.querySelector('.toast')).toBeNull();
+    expect(otherToasts()).toEqual([]);
     expectPreserved(draft);
     expect(window.dispatchEvent(new Event(BEFORE_APP_REFRESH_EVENT, { cancelable: true }))).toBe(
       true,
@@ -2509,7 +2521,7 @@ describe('finishing workouts in the background', () => {
     );
     await mount();
     await confirmFinish();
-    const toast = () => document.querySelector('.toast');
+    const toast = () => otherToasts()[0] ?? null;
     expect(toast()).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
 
@@ -2908,7 +2920,7 @@ describe('durable workout completion', () => {
     expect(container.querySelector('.logger-screen')).toBeNull();
     expect(container.querySelector('.pending-workout-save')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
-    expect(document.querySelector('.toast')).toBeNull();
+    expect(otherToasts()).toEqual([]);
     expect(finishedSave()?.payload.duration_minutes).toBe(45);
     expect(readActiveWorkoutDraft()).toBeNull();
 
@@ -2936,7 +2948,7 @@ describe('durable workout completion', () => {
       'Second workout',
     ]);
     expect(container.querySelector('.pending-workout-save')).toBeNull();
-    expect(document.querySelector('.toast')).toBeNull();
+    expect(otherToasts()).toEqual([]);
 
     vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(true);
     vi.mocked(api.createWorkout).mockImplementation(async (payload) => ({
@@ -3368,10 +3380,10 @@ describe('cardio set editing defaults', () => {
     writeActiveWorkoutDraft(storedDraft());
     await mount();
     await confirmFinish();
-    expect(document.querySelector('.toast')).toBeNull();
+    expect(otherToasts()).toEqual([]);
     // Only Home's brief "Workout saved" toast; no cardio share or zone popup.
     expect(document.body.textContent?.split('Workout saved')).toHaveLength(2);
-    expect(document.querySelector('.workout-saved-toast')).not.toBeNull();
+    expect(savedToast()).toBeDefined();
     expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     expect(api.cardioOverview).not.toHaveBeenCalled();
   });
@@ -4319,7 +4331,7 @@ describe('live muscle totals while logging', () => {
     );
     await confirmFinish();
     expect(chestTotals()).toEqual(['1']);
-    expect(document.querySelector('.toast')).toBeNull();
+    expect(otherToasts()).toEqual([]);
     expect(container.querySelector('.background-activity-bar')).toBeNull();
     let refresh!: (data: DashboardData) => void;
     vi.mocked(api.dashboard).mockReturnValueOnce(
@@ -4335,7 +4347,7 @@ describe('live muscle totals while logging', () => {
     expect(readFinishedWorkouts()).toEqual([]);
     expect(readActiveWorkoutDraft()).toBeNull();
     expect(chestTotals()).toEqual(['1']);
-    expect(document.querySelector('.toast')).toBeNull();
+    expect(otherToasts()).toEqual([]);
     expect(document.querySelector('[aria-modal="true"]')).toBeNull();
     await act(async () =>
       refresh({
@@ -4348,7 +4360,7 @@ describe('live muscle totals while logging', () => {
       } as unknown as DashboardData),
     );
     expect(chestTotals()).toEqual(['1']);
-    expect(document.querySelector('.toast-action')).toBeNull();
+    expect(otherToasts().some((toast) => toast.querySelector('.toast-action'))).toBe(false);
   });
 
   it('updates Home immediately, opens the live source, and reverses unticking', async () => {

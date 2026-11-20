@@ -103,7 +103,11 @@ async function swipe(label: string, x: number) {
   await act(async () => vi.advanceTimersByTimeAsync(300));
 }
 
-const toast = () => document.querySelector<HTMLElement>('.undo-toast');
+const toast = () => document.querySelector<HTMLElement>('.toast');
+const pointer = (target: EventTarget, type: string) =>
+  target.dispatchEvent(
+    Object.assign(new MouseEvent(type, { bubbles: true }), { pointerType: 'touch', pointerId: 1 }),
+  );
 
 it('swipes a goal away with Undo, then deletes it once the Undo window closes', async () => {
   const remove = vi.spyOn(api, 'deleteBodyWeightGoal').mockResolvedValue(undefined);
@@ -121,7 +125,7 @@ it('swipes a goal away with Undo, then deletes it once the Undo window closes', 
   expect(toast()?.textContent).toContain('Goal removed');
   expect(remove).not.toHaveBeenCalled();
 
-  await act(async () => toast()!.querySelector<HTMLButtonElement>('.undo-toast-action')!.click());
+  await act(async () => toast()!.querySelector<HTMLButtonElement>('.toast-action')!.click());
   expect(dividers()).toHaveLength(2);
   expect(toast()).toBeNull();
   await act(async () => vi.advanceTimersByTimeAsync(GOAL_UNDO_MS));
@@ -133,6 +137,20 @@ it('swipes a goal away with Undo, then deletes it once the Undo window closes', 
   expect(onDataChange).toHaveBeenCalledTimes(1);
   expect(toast()).toBeNull();
   expect(dividers()).toEqual([expect.stringContaining('Lose to 82 kg')]);
+});
+
+it('keeps the Undo open while the toast is held, then deletes the goal', async () => {
+  const remove = vi.spyOn(api, 'deleteBodyWeightGoal').mockResolvedValue(undefined);
+  await mount();
+  await swipe('Lose to 82 kg', -160);
+  await act(async () => pointer(toast()!, 'pointerdown'));
+  await act(async () => vi.advanceTimersByTimeAsync(GOAL_UNDO_MS * 2));
+  expect(remove).not.toHaveBeenCalled();
+  expect(toast()?.textContent).toContain('Goal removed');
+  await act(async () => pointer(window, 'pointerup'));
+  await act(async () => vi.advanceTimersByTimeAsync(GOAL_UNDO_MS));
+  expect(remove).toHaveBeenCalledExactlyOnceWith('lose');
+  expect(toast()).toBeNull();
 });
 
 it('deletes the pending goal at once when another is swiped or the popup is dismissed', async () => {

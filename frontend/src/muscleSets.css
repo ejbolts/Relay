@@ -250,12 +250,6 @@
   margin: 0;
   -webkit-appearance: none;
 }
-/* Undo the popover defaults so it sits where every other top toast does. */
-.muscle-goal-toast[popover] {
-  right: auto;
-  height: auto;
-  margin: 0;
-}
 .muscle-goal-form .inline-error {
   margin: 0;
 }

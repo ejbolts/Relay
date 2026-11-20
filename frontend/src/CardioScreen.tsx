@@ -12,7 +12,9 @@ import { DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
 import { fatEnergyEquivalent } from './cardioEnergy';
 import { PaginationControls } from './PaginationControls';
 import { Icon } from './Icon';
-import { WorkoutShareCard, WorkoutSharePrompt } from './WorkoutShareCard';
+import { WorkoutShareCard } from './WorkoutShareCard';
+import { useWorkoutShareReminder } from './useWorkoutShareReminder';
+import { useToast } from './Toast';
 import { cardioWorkoutForSharing } from './workoutCard';
 import { weekStartDayFrom } from './trainingSummary';
 import { localDate } from './utils';
@@ -84,10 +86,9 @@ export function CardioScreen({
   const [zoneSettingsOpen, setZoneSettingsOpen] = useState(false);
   const [draft, setDraft] = useState<CardioSessionInput>(empty);
   const [metricSession, setMetricSession] = useState<CardioSession | null>(null);
-  const [cardioSharing, setCardioSharing] = useState<{
-    session: CardioSession;
-    prompt: boolean;
-  } | null>(null);
+  const [cardioSharing, setCardioSharing] = useState<CardioSession | null>(null);
+  const [shareReminder] = useWorkoutShareReminder();
+  const toast = useToast();
   const [saving, setSaving] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<{ message: string; warning: boolean } | null>(null);
@@ -213,11 +214,26 @@ export function CardioScreen({
         qualifies_zone2: false,
       };
       setSaving(true);
-      if (editingId) await api.updateCardio(editingId, payload);
-      else {
+      if (editingId) {
+        await api.updateCardio(editingId, payload);
+        toast.show('Cardio saved');
+      } else {
         const saved = await api.createCardio(payload);
         if (!scanStatus) tips.event('manual-cardio', 'cardio', 2);
-        setCardioSharing({ session: saved, prompt: true });
+        toast.show(
+          shareReminder
+            ? {
+                message: 'Workout saved',
+                action: {
+                  label: 'Share card',
+                  run: () => {
+                    toast.dismiss();
+                    setCardioSharing(saved);
+                  },
+                },
+              }
+            : 'Cardio saved',
+        );
       }
       setDraft(empty);
       setScanStatus(null);
@@ -248,20 +264,13 @@ export function CardioScreen({
   const zonesSet = Boolean(overview.cardio_preferences?.heart_rate_zones.length);
   return (
     <div className="cardio-screen">
-      {cardioSharing &&
-        (cardioSharing.prompt ? (
-          <WorkoutSharePrompt
-            workout={cardioWorkoutForSharing(cardioSharing.session)}
-            records={0}
-            onClose={() => setCardioSharing(null)}
-          />
-        ) : (
-          <WorkoutShareCard
-            workout={cardioWorkoutForSharing(cardioSharing.session)}
-            records={0}
-            onClose={() => setCardioSharing(null)}
-          />
-        ))}
+      {cardioSharing && (
+        <WorkoutShareCard
+          workout={cardioWorkoutForSharing(cardioSharing)}
+          records={0}
+          onClose={() => setCardioSharing(null)}
+        />
+      )}
       {zoneSettingsOpen && (
         <CardioZoneSettings
           preferences={overview.cardio_preferences ?? DEFAULT_CARDIO_PREFERENCES}
@@ -655,10 +664,7 @@ export function CardioScreen({
                     </small>
                   </div>
                   <div className="cardio-session-actions">
-                    <button
-                      type="button"
-                      onClick={() => setCardioSharing({ session, prompt: false })}
-                    >
+                    <button type="button" onClick={() => setCardioSharing(session)}>
                       Share card
                     </button>
                     <button

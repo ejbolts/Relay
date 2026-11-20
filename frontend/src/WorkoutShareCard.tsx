@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { TrackedWorkout } from './types';
 import { PopupDialog } from './PopupDialog';
-import { NotificationDialog } from './NotificationDialog';
+import { Toast } from './Toast';
 import { useWeightUnit } from './trainingPreferencesContext';
 import {
   downloadWorkoutCard,
@@ -15,7 +15,6 @@ import {
   type WorkoutCardLayout,
 } from './workoutCard';
 import './workoutShareCard.css';
-import { useWorkoutShareReminder } from './useWorkoutShareReminder';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 
 export function WorkoutShareCard({
@@ -234,37 +233,8 @@ export function WorkoutShareCard({
             )}
           </p>
         )}
-        {message && (
-          <NotificationDialog message={message} onClose={() => setMessage(null)} portal={false} />
-        )}
+        {message && <Toast id={message} message={message} onDismiss={() => setMessage(null)} />}
       </PopupDialog>
     </>
-  );
-}
-
-export function WorkoutSharePrompt({
-  workout,
-  records,
-  onClose,
-}: {
-  workout: TrackedWorkout;
-  records: number;
-  onClose: () => void;
-}) {
-  const [sharing, setSharing] = useState(false);
-  const [enabled] = useWorkoutShareReminder();
-  useEffect(() => {
-    if (!enabled && !sharing) onClose();
-  }, [enabled, sharing, onClose]);
-  if (sharing) return <WorkoutShareCard workout={workout} records={records} onClose={onClose} />;
-  if (!enabled) return null;
-  return (
-    <NotificationDialog
-      message="Workout saved"
-      durationMs={3000}
-      countdown
-      onClose={onClose}
-      action={{ label: 'Share card', onClick: () => setSharing(true) }}
-    />
   );
 }
