@@ -1,7 +1,5 @@
-import { useEffect, useRef, type CSSProperties } from 'react';
-import { Icon } from './Icon';
-import { useElementHeight } from './useElementHeight';
-import { useSwipeToggle } from './useSwipeToggle';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { GuideCard, type GuideNext } from './GuideCard';
 import './setupGuide.css';
 
 export interface CoachStep {
@@ -10,14 +8,15 @@ export interface CoachStep {
   /** The control this step is about, found inside the coach's own dialog or page. */
   target?: string;
   /** Steps that finish by themselves (a switch turned on, a dialog opened) have no button. */
-  next?: { label?: string; disabled?: boolean; onClick: () => void };
+  next?: GuideNext;
 }
 
 /**
- * A setup guide's current step, pinned to the bottom of the screen it is guiding. It highlights
- * the control the step is about; the person uses the real control to move on. Swiping its handle
- * down minimises it to the header, to see more of the screen; swiping up or tapping brings it back,
- * and so does moving to another step.
+ * A setup guide's current step, pinned to the bottom of the screen it is guiding, as a guide card.
+ * It highlights the control the step is about; the person uses the real control to move on.
+ * Swiping its grabber down folds it to its title and Next, to see more of the screen; swiping up
+ * or tapping brings it back, and so does moving to another step. Inside a dialog it sits above the
+ * dialog's footer, so the dialog's main action stays in reach.
  */
 export function GuideCoach({
   step,
@@ -37,9 +36,24 @@ export function GuideCoach({
   onExit: () => void;
 }) {
   const ref = useRef<HTMLElement>(null);
-  const [bodyRef, full] = useElementHeight<HTMLDivElement>();
-  const { open, dragged, handleProps } = useSwipeToggle({ opens: 'up', full, resetKey: index });
+  const [dock, setDock] = useState(0);
   const { target, title } = step;
+  // Dialogs keep their actions in a sticky footer; stay above it rather than over it.
+  useLayoutEffect(() => {
+    const footer = floating
+      ? null
+      : ref.current?.closest('dialog')?.querySelector<HTMLElement>(':scope > .popup-dialog-footer');
+    if (!footer) {
+      setDock(0);
+      return;
+    }
+    const measure = () => setDock(footer.offsetHeight);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(footer);
+    return () => observer.disconnect();
+  }, [floating, index]);
   useEffect(() => {
     if (!target) return;
     const scope = (): ParentNode => ref.current?.closest('dialog') ?? document;
@@ -80,61 +94,21 @@ export function GuideCoach({
   return (
     <aside
       ref={ref}
-      className={`setup-coach${floating ? ' is-floating' : ''}${dragged === null ? '' : ' is-dragging'}`}
+      className={`setup-coach${floating ? ' is-floating' : ''}`}
       aria-label="Setup guide"
-      style={{ '--open': dragged ?? (open ? 1 : 0), '--full': `${full}px` } as CSSProperties}
+      style={dock ? ({ '--coach-dock': `calc(${dock}px + 0.5rem)` } as CSSProperties) : undefined}
     >
-      <button
-        type="button"
-        className="setup-coach-handle"
-        aria-label={open ? 'Minimise setup guide' : 'Show setup guide'}
-        {...handleProps}
+      <GuideCard
+        guide="Setup guide"
+        index={index}
+        total={total}
+        title={step.title}
+        onBack={onBack}
+        next={step.next}
+        onLeave={onExit}
       >
-        <span className="setup-coach-grabber" aria-hidden="true" />
-      </button>
-      <header>
-        <span className="setup-coach-kicker">
-          <Icon name="sparkle" />
-          Setup guide · {index + 1} of {total}
-        </span>
-        <button type="button" className="setup-coach-exit" onClick={onExit}>
-          Exit guide
-        </button>
-      </header>
-      <div className="setup-coach-body" aria-hidden={!open}>
-        <div ref={bodyRef}>
-          <div aria-live="polite">
-            <strong>{step.title}</strong>
-            <p>{step.body}</p>
-          </div>
-          {(onBack || step.next) && (
-            <div className="setup-coach-actions">
-              {onBack && (
-                <button type="button" className="setup-coach-back" onClick={onBack}>
-                  <Icon name="chevron-left" />
-                  Back
-                </button>
-              )}
-              {step.next && (
-                <button
-                  type="button"
-                  className="setup-coach-next"
-                  disabled={step.next.disabled}
-                  onClick={step.next.onClick}
-                >
-                  {step.next.label ?? 'Next'}
-                  <Icon name="chevron-right" />
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
-      <span className="setup-coach-progress" aria-hidden="true">
-        {Array.from({ length: total }, (_, item) => (
-          <i key={item} className={item <= index ? 'is-done' : undefined} />
-        ))}
-      </span>
+        <p>{step.body}</p>
+      </GuideCard>
     </aside>
   );
 }
