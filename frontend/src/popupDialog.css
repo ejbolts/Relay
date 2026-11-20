@@ -11,6 +11,11 @@
   outline: none;
 }
 
+/* The control a tapped dialog closed back to (see dialogFocus.ts). Beats every component ring. */
+[data-quiet-focus]:focus-visible {
+  outline: none !important;
+}
+
 .popup-dialog {
   --popup-pad: 1rem;
   --popup-radius: 24px;
