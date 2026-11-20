@@ -70,6 +70,7 @@ import type {
   SharingConnection,
   TrackedWorkout,
   User,
+  WorkoutType,
 } from './types';
 
 const BODY_WEIGHT_CHART_DAYS = 90;
@@ -1141,6 +1142,8 @@ export interface SharedWorkoutListProps {
   loadMoreFailed?: boolean;
   /** Reads the next older workouts onto the end of `workouts`. */
   onLoadMore?: () => void;
+  /** The member's own workout types, so the list matches the colours of their calendar. */
+  workoutTypes?: WorkoutType[];
 }
 
 function SharedConsistencyCalendar({
@@ -1878,6 +1881,7 @@ export function SharedProfileScreen({
                   onLoadMore: () => void loadMore(),
                   focusWorkoutId: linkedWorkoutId,
                   personalRecords: records,
+                  workoutTypes: profile.consistency?.workout_types,
                   onFilterMachine: (photo) => {
                     setFilters((current) => ({ ...current, machine_photo_id: photo.id }));
                     setFiltersOpen(true);
