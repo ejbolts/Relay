@@ -137,33 +137,32 @@ describe('one slot', () => {
     expect(first.onTimeout).toHaveBeenCalledOnce();
   });
 
-  it('settles a replaced owner-timed toast through onDismiss', async () => {
-    const flush = vi.fn();
-    function Owner() {
-      const [second, setSecond] = useState(false);
+  it('counts a shown toast as active in the same render, before it takes the slot', async () => {
+    const seen: { asked: boolean; active: boolean }[] = [];
+    function Probe() {
+      const toast = useToast();
+      const [asked, setAsked] = useState(false);
+      seen.push({ asked, active: toast.active });
       return (
-        <>
-          <Toast
-            message="Workout deleted"
-            action={{ label: 'Undo', run: vi.fn() }}
-            onTimeout={null}
-            onDismiss={flush}
-          />
-          {second && <Toast {...base({ message: 'Workout saved' })} />}
-          <button type="button" className="second" onClick={() => setSecond(true)} />
-        </>
+        <button
+          type="button"
+          className="ask"
+          onClick={() => {
+            toast.show('Workout discarded.');
+            setAsked(true);
+          }}
+        />
       );
     }
     await render(
       <ToastProvider>
-        <Owner />
+        <Probe />
       </ToastProvider>,
     );
-    await advance(TOAST_MS.action * 2);
-    expect(flush).not.toHaveBeenCalled();
-    await act(async () => host.querySelector<HTMLButtonElement>('.second')!.click());
-    expect(flush).toHaveBeenCalledOnce();
-    expect(toast()?.textContent).toContain('Workout saved');
+    await act(async () => host.querySelector<HTMLButtonElement>('.ask')!.click());
+    expect(toast()?.textContent).toContain('Workout discarded.');
+    // A launch prompt checking `active` never sees the request without the toast.
+    expect(seen.filter((render) => render.asked).every((render) => render.active)).toBe(true);
   });
 
   it('shows toasts from useToast, replacing and dismissing them', async () => {
@@ -196,6 +195,32 @@ describe('one slot', () => {
 });
 
 describe('countdown', () => {
+  it('never takes focus or opens a modal, and shows its message as text', async () => {
+    const input = document.createElement('input');
+    document.body.append(input);
+    input.focus();
+    await render(<Toast {...base({ message: 'Could not import <script>.' })} />);
+    expect(toast()?.textContent).toContain('Could not import <script>.');
+    expect(document.querySelector('.toast script')).toBeNull();
+    expect(document.querySelector('dialog, [aria-modal="true"], [inert]')).toBeNull();
+    expect(document.activeElement).toBe(input);
+    input.remove();
+  });
+
+  it('keeps its countdown and bar through a re-render with the same id', async () => {
+    const onDismiss = vi.fn();
+    const draw = () => render(<Toast {...base({ onDismiss: () => onDismiss() })} />);
+    await draw();
+    const bar = document.querySelector('.toast-timer');
+    await advance(TOAST_MS.status / 2);
+    await draw();
+    expect(document.querySelector('.toast-timer')).toBe(bar);
+    await advance(TOAST_MS.status / 2 - 1);
+    expect(onDismiss).not.toHaveBeenCalled();
+    await advance(1);
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
   it('pauses while pressed or focused and keeps the time left', async () => {
     const onDismiss = vi.fn();
     await render(

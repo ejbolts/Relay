@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import { BodyCompositionScreen } from './App';
-import { PrToast } from './PrToast';
 import { DashboardQuickBodyweight } from './TodayScreen';
 import { TrainingPreferencesContext } from './trainingPreferencesContext';
 import { WeightInput } from './WeightInput';
@@ -69,18 +68,11 @@ describe('weight display preference across personal screens', () => {
     expect(measurements.map((item) => item.weight_kg)).toEqual([84.2, 83.8]);
   });
 
-  it('uses the same preferred unit in set inputs and live PR popups', () => {
+  it('uses the preferred unit in set inputs', () => {
     const markup = renderPounds(
-      <>
-        <WeightInput weightKg={100} onWeightChange={vi.fn()} aria-label="Weight pounds" />
-        <PrToast
-          entries={[{ exercise: 'Bench', labels: ['Weight PR'], reps: 5, weightKg: 100 }]}
-          onClose={vi.fn()}
-        />
-      </>,
+      <WeightInput weightKg={100} onWeightChange={vi.fn()} aria-label="Weight pounds" />,
     );
     expect(markup).toContain('value="220.46"');
-    expect(markup).toContain('5 reps at 220.46 lb');
     expect(markup).not.toContain(' kg');
   });
 

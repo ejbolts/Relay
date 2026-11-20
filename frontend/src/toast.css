@@ -231,9 +231,3 @@ html[data-reduce-motion] .toast .toast-timer {
   animation-delay: var(--toast-offset, 0ms) !important;
   animation-timing-function: steps(4, end) !important;
 }
-
-/* The live logger's bottom stack, until it docks the shared viewport. */
-.logger-bottom-toasts > .toast {
-  width: 100%;
-  animation-name: toast-in-bottom;
-}

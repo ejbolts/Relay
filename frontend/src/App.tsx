@@ -79,7 +79,6 @@ import {
   weightUnitName,
 } from './weightUnits';
 import type { WeightUnit } from './weightUnits';
-import { PrToast, type PrToastEntry } from './PrToast';
 import { RestAlertReminder } from './RestAlertReminder';
 import { shouldShowRestAlertReminder } from './restAlertReminderState';
 import type {
@@ -133,8 +132,6 @@ import {
   prependOlderDays,
 } from './historyWindow';
 import { InlineConfirmButton } from './InlineConfirmButton';
-import { NotificationDialog } from './NotificationDialog';
-import { StatusToast } from './StatusToast';
 import { useTrainingDataSync } from './useTrainingDataSync';
 import { PopupDialog } from './PopupDialog';
 import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
@@ -186,7 +183,6 @@ import { ImportHistoryPrompt } from './ImportHistoryPrompt';
 import { plural } from './sharedProfileDisplay';
 import { CONTRIBUTING_URL, PROJECT_URL } from './appGuideSteps';
 import { CreateExerciseDialog } from './CreateExerciseDialog';
-import { ExerciseCreatedToast } from './ExerciseCreatedToast';
 import { BackgroundActivityBar } from './BackgroundActivityBar';
 import { cardioSetUpdateFromScan } from './cardioScreenshot';
 import { CardioSetScreenshotUpload } from './CardioSetScreenshotUpload';
@@ -396,7 +392,7 @@ import { LiveWorkoutSheet } from './LiveWorkoutSheet';
 import { FinishedWorkoutCard } from './FinishedWorkoutCard';
 import { hasLikelyDuplicateMachines, multiMachineExerciseId } from './machineUsage';
 import { onTipTarget, type TipAction } from './tipActions';
-import { TimedToast } from './TimedToast';
+import { Toast, useToast, useToastPlacement } from './Toast';
 import { TrainingBlockDialog } from './TrainingBlockDialog';
 import {
   buildFinishSummary,
@@ -472,7 +468,7 @@ import {
   upsertWorkoutByRecency,
   weekGroupPage,
 } from './workoutHistory';
-import { calculateScopedDraftPrs } from './workoutPr';
+import { calculateScopedDraftPrs, prToastLines, type PrToastEntry } from './workoutPr';
 import {
   bodyweightOn,
   bodyweightContext,
@@ -538,12 +534,6 @@ type HistoryBaselines = {
   before: string;
   byExercise: Map<string, ExerciseHistoryBaseline>;
 };
-
-const UNDO_TOAST_MS = 4000;
-/** Long enough to read the toast and reach Undo before a deleted workout is removed. */
-const WORKOUT_DELETE_UNDO_MS = 6000;
-/** How long a logger notice, such as why a set can't be deleted, stays up. */
-const LOGGER_NOTICE_MS = 5000;
 
 function emptySet(
   kind: Exercise['kind'],
@@ -641,55 +631,6 @@ function completionRecordDetail(record: PersonalRecord, unit: WeightUnit): strin
       : '',
     record.bodyweight_kg != null ? ` · at ${formatWeight(record.bodyweight_kg, unit)} BW` : '',
   ].join('');
-}
-
-function WorkoutCompletionToast({
-  records,
-  onClose,
-}: {
-  records: PersonalRecord[];
-  onClose: () => void;
-}) {
-  const weightUnit = useWeightUnit();
-  const onCloseRef = useRef(onClose);
-  onCloseRef.current = onClose;
-  useEffect(() => {
-    const timer = window.setTimeout(() => onCloseRef.current(), 8000);
-    return () => window.clearTimeout(timer);
-  }, [records]);
-
-  return createPortal(
-    <aside
-      className="pr-summary panel workout-completion-toast"
-      role="status"
-      aria-live="polite"
-      aria-atomic="true"
-      aria-labelledby="workout-completion-title"
-    >
-      <button
-        type="button"
-        className="icon-button popup-close"
-        onClick={onClose}
-        aria-label="Close personal record summary"
-      >
-        ×
-      </button>
-      <span className="pr-trophy" aria-hidden="true">
-        🏆
-      </span>
-      <p className="section-kicker">WORKOUT COMPLETE</p>
-      <h2 id="workout-completion-title">
-        {records.length} new PR{records.length === 1 ? '' : 's'}
-      </h2>
-      {records.map((record) => (
-        <div key={record.id}>
-          <strong>{record.exercise_name}</strong>
-          <span>{completionRecordDetail(record, weightUnit)}</span>
-        </div>
-      ))}
-    </aside>,
-    document.body,
-  );
 }
 
 /** Set just before the reload that follows a backup restore, so it can be confirmed. */
@@ -928,7 +869,6 @@ function AppContent() {
   const [editingWorkout, setEditingWorkout] = useState<TrackedWorkout | null>(null);
   /** Set by the open editor: asks before Back throws away its unsaved changes. */
   const workoutEditGuardRef = useRef<LeaveGuard | null>(null);
-  const [workoutSavedToast, setWorkoutSavedToast] = useState(0);
   const [resumingWorkoutId, setResumingWorkoutId] = useState<string | null>(() => {
     const draft = readActiveWorkoutDraft();
     return draft?.pendingSave ? null : (draft?.resumingWorkoutId ?? null);
@@ -974,7 +914,7 @@ function AppContent() {
   const [workoutStartType, setWorkoutStartType] = useState<WorkoutType | null>(null);
   const [loading, setLoading] = useState(true);
   const exerciseLibrary = useExerciseLibrary(exercises, dataRevision, !loading);
-  const [message, setMessage] = useState<string | null>(null);
+  const { show: showToast, active: toastActive } = useToast();
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [editingWorkoutSaving, setWorkoutSaving] = useState(false);
   const finishedQueue = useFinishedWorkoutQueue(user?.id ?? null, (saved, resumedId, queued) =>
@@ -1018,7 +958,7 @@ function AppContent() {
   /** Reports and refuses changes to a workout whose save has not reached the server yet. */
   const blockedWhileSyncing = (id: string) => {
     if (!isPendingWorkoutId(id) && !queuedWorkoutIds.has(id)) return false;
-    setMessage('You can change this workout once it has synced.');
+    showToast({ message: 'You can change this workout once it has synced.', variant: 'warning' });
     return true;
   };
   // After each save, its on-device figures stay until the refreshed dashboard replaces them.
@@ -1035,7 +975,7 @@ function AppContent() {
     [dashboard, savedPreviews],
   );
   // A deleted workout disappears at once and is removed once its Undo has passed.
-  const workoutDeletion = useDeferredDelete(commitWorkoutDelete, WORKOUT_DELETE_UNDO_MS);
+  const workoutDeletion = useDeferredDelete(commitWorkoutDelete);
   const deletingWorkoutId = workoutDeletion.pending?.id ?? null;
   const shownWorkouts = useMemo(
     () =>
@@ -1115,7 +1055,7 @@ function AppContent() {
       clearActiveWorkoutDraft();
       setActiveWorkoutStartedAt(null);
       setResumingWorkoutId(null);
-      setMessage('Your inactive empty workout was cleared.');
+      showToast('Your inactive empty workout was cleared.');
     };
     expireEmptyDraft();
     const interval = window.setInterval(expireEmptyDraft, 30_000);
@@ -1126,7 +1066,7 @@ function AppContent() {
       window.removeEventListener('focus', expireEmptyDraft);
       document.removeEventListener('visibilitychange', expireEmptyDraft);
     };
-  }, [activeWorkoutStartedAt, loading]);
+  }, [activeWorkoutStartedAt, loading, showToast]);
   useEffect(() => {
     // Accounts without upload access never reach the video screen, even from an old #videos link.
     if (tab !== 'videos' || videosAllowed) return;
@@ -1443,14 +1383,14 @@ function AppContent() {
           (index !== 1 || (activeWorkoutStartedAt === null && tab !== 'log')),
       );
 
-      if (!silent)
-        setMessage(
-          firstFailure
-            ? firstFailure.reason instanceof Error
+      if (!silent && firstFailure)
+        showToast({
+          message:
+            firstFailure.reason instanceof Error
               ? firstFailure.reason.message
-              : 'Could not load all of your training data.'
-            : null,
-        );
+              : 'Could not load all of your training data.',
+          variant: 'error',
+        });
       setLoading(false);
     };
 
@@ -1682,9 +1622,11 @@ function AppContent() {
         return;
       }
       if (currentTabRef.current !== 'log')
-        setMessage(
-          'Your workout could not be saved. Return to the workout to retry; your entries are still here.',
-        );
+        showToast({
+          message:
+            'Your workout could not be saved. Return to the workout to retry; your entries are still here.',
+          variant: 'error',
+        });
       throw error;
     } finally {
       setWorkoutSaving(false);
@@ -1706,7 +1648,7 @@ function AppContent() {
       setEditingWorkout(null);
       // A deletion still waiting for its Undo goes through, so the two toasts never overlap.
       workoutDeletion.flush();
-      setWorkoutSavedToast((toast) => toast + 1);
+      showToast({ message: 'Workout saved', dismissLabel: 'Dismiss workout saved notification' });
     }
 
     if (!wasEditing) {
@@ -1775,7 +1717,10 @@ function AppContent() {
         await refreshData({ activityLabel: null });
       });
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not delete that workout.');
+      showToast({
+        message: error instanceof Error ? error.message : 'Could not delete that workout.',
+        variant: 'error',
+      });
     }
   }
 
@@ -1786,7 +1731,7 @@ function AppContent() {
       await refreshData({ activityLabel: null });
       return undone;
     });
-    setMessage(
+    showToast(
       `Import undone: removed ${plural(result.workouts_removed, 'session')} and ${plural(result.body_measurements_removed, 'check-in')}.${result.body_measurements_preserved ? ` Kept ${plural(result.body_measurements_preserved, 'edited check-in')}.` : ''}`,
     );
   }
@@ -1800,7 +1745,7 @@ function AppContent() {
       return imported;
     });
     const bodyweightCount = result.body_measurements_created + result.body_measurements_updated;
-    setMessage(
+    showToast(
       !result.sets_imported &&
         !result.workouts_created &&
         !result.workouts_skipped &&
@@ -1837,9 +1782,12 @@ function AppContent() {
         await api.refreshBodyMeasurements().catch(() => undefined);
         await refreshData({ activityLabel: null });
       });
-      setMessage('Sample workouts removed. They will not be seeded again.');
+      showToast('Sample workouts removed. They will not be seeded again.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not remove sample data.');
+      showToast({
+        message: error instanceof Error ? error.message : 'Could not remove sample data.',
+        variant: 'error',
+      });
     }
   }
 
@@ -1909,9 +1857,12 @@ function AppContent() {
     try {
       await api.deleteBodyMeasurement(id);
       setMeasurements(await api.localBodyMeasurements());
-      setMessage('Body measurement deleted.');
+      showToast('Body measurement deleted.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Could not delete that measurement.');
+      showToast({
+        message: error instanceof Error ? error.message : 'Could not delete that measurement.',
+        variant: 'error',
+      });
     }
   }
 
@@ -2040,11 +1991,11 @@ function AppContent() {
                 ? { title: 'Admin console', subtitle: 'Accounts • switches • server' }
                 : null;
   useEffect(() => {
-    // After the first load, which replaces any message with its own outcome when it finishes.
+    // After the first load, so a load error shown when it finishes cannot replace it.
     if (loading || !backupRestoredNotice) return;
     backupRestoredNotice = false;
-    setMessage(BACKUP_RESTORED_MESSAGE);
-  }, [loading]);
+    showToast(BACKUP_RESTORED_MESSAGE);
+  }, [loading, showToast]);
 
   const activeMainTab = mainTabFor(tab);
   const liveSheetOpen = tab === 'log' && !editingWorkout && activeWorkoutStartedAt !== null;
@@ -2055,7 +2006,7 @@ function AppContent() {
     tab,
     // Onboarding waits until a new member has seen the profile their invite opened.
     hasOtherDialog:
-      message !== null ||
+      toastActive ||
       completionRecords.length > 0 ||
       (tab === 'shared-profile' && sharedProfile?.invite === true),
     signingIn,
@@ -2104,7 +2055,7 @@ function AppContent() {
         !releaseAfterImport &&
         !homeScreenGuide.open &&
         !home.editing &&
-        !message &&
+        !toastActive &&
         completionRecords.length === 0 &&
         !workoutSaveBlocked &&
         finishedQueue.items.length === 0,
@@ -2129,7 +2080,7 @@ function AppContent() {
     releaseAfterImport,
     homeScreenGuide.open,
     home.editing,
-    message,
+    toastActive,
     completionRecords.length,
     workoutSaveBlocked,
     finishedQueue.items.length,
@@ -2182,13 +2133,13 @@ function AppContent() {
   async function openMuscleWorkout(contribution: WeeklyMuscleContribution) {
     if (contribution.workout_id === muscleSets.workoutId) {
       if (activeWorkoutStartedAt !== null) setTab('log');
-      else setMessage('This workout is waiting to sync.');
+      else showToast({ message: 'This workout is waiting to sync.', variant: 'warning' });
       return;
     }
     if (isPendingWorkoutId(contribution.workout_id)) {
       if (shownWorkouts.some((workout) => workout.id === contribution.workout_id))
         openSavedWorkout(contribution.workout_id, contribution.exercise_id);
-      else setMessage('This workout is waiting to sync.');
+      else showToast({ message: 'This workout is waiting to sync.', variant: 'warning' });
       return;
     }
     if (
@@ -2337,19 +2288,17 @@ function AppContent() {
           enabled={canNavigateBack}
         />
         <BackgroundActivityBar label={backgroundActivityLabel} />
-        {message && (
-          <NotificationDialog
-            key={message}
-            message={message}
-            onClose={() => {
-              setMessage(null);
-            }}
-          />
-        )}
         {completionRecords.length > 0 && (
-          <WorkoutCompletionToast
-            records={completionRecords}
-            onClose={() => setCompletionRecords([])}
+          <Toast
+            id={completionRecords.map((record) => record.id).join()}
+            variant="celebrate"
+            message={`${completionRecords.length} new PR${completionRecords.length === 1 ? '' : 's'}`}
+            lines={completionRecords.map((record) => ({
+              title: record.exercise_name ?? 'Personal record',
+              detail: completionRecordDetail(record, weightUnit),
+            }))}
+            dismissLabel="Close personal record summary"
+            onDismiss={() => setCompletionRecords([])}
           />
         )}
         {restAlertReminderOpen && <RestAlertReminder onClose={closeRestAlertReminder} />}
@@ -2357,31 +2306,20 @@ function AppContent() {
           <TrainingBlockDialog
             start="new"
             onClose={() => setTipBlocksOpen(false)}
-            onNotice={setMessage}
+            onNotice={showToast}
           />
         )}
         <SetupGuideHost workouts={workouts} />
         {conflictPrompt.dialog}
-        {workoutDeletion.pending ? (
-          <TimedToast
-            key={workoutDeletion.pending.id}
+        {workoutDeletion.pending && (
+          <Toast
+            id={workoutDeletion.pending.id}
             message="Workout deleted"
-            durationMs={WORKOUT_DELETE_UNDO_MS}
             action={{ label: 'Undo', run: workoutDeletion.undo }}
             dismissLabel="Dismiss workout deleted notification"
             onDismiss={workoutDeletion.flush}
-            onTimeout={null}
+            onTimeout={workoutDeletion.flush}
           />
-        ) : (
-          workoutSavedToast > 0 && (
-            <TimedToast
-              key={workoutSavedToast}
-              message="Workout saved"
-              durationMs={UNDO_TOAST_MS}
-              dismissLabel="Dismiss workout saved notification"
-              onDismiss={() => setWorkoutSavedToast(0)}
-            />
-          )
         )}
 
         {nestedHeader && (
@@ -2413,7 +2351,7 @@ function AppContent() {
                   onRetry={finishedQueue.retry}
                   onDiscard={() => {
                     if (!finishedQueue.discard(key)) return;
-                    setMessage('Workout discarded.');
+                    showToast('Workout discarded.');
                     const { workoutId, payload } = finished.pendingSave;
                     const summary = finishSummaryRef.current;
                     if (
@@ -2513,7 +2451,7 @@ function AppContent() {
                             setMachineWeightsFor(exerciseId);
                             openHistorySection('progress', exerciseId);
                           }}
-                          onNotice={setMessage}
+                          onNotice={showToast}
                         />
                         {finishShareOpen && finishedSaved && (
                           <WorkoutShareCard
@@ -3862,6 +3800,7 @@ function WorkoutLogger({
   const [switchingMovementKey, setSwitchingMovementKey] = useState<string | null>(null);
   const [swapSheetMovementKey, setSwapSheetMovementKey] = useState<string | null>(null);
   const [swapUndo, setSwapUndo] = useState<{
+    id: number;
     movements: DraftMovement[];
     exerciseName: string;
   } | null>(null);
@@ -4239,29 +4178,10 @@ function WorkoutLogger({
     index: number;
   } | null>(null);
 
-  // The undo toast is temporary; each new deletion restarts its timer.
-  useEffect(() => {
-    if (!undoDeletion) return;
-    const timer = window.setTimeout(() => setUndoDeletion(null), UNDO_TOAST_MS);
-    return () => window.clearTimeout(timer);
-  }, [undoDeletion]);
-
-  useEffect(() => {
-    if (!swapUndo) return;
-    const timer = window.setTimeout(() => setSwapUndo(null), UNDO_TOAST_MS);
-    return () => window.clearTimeout(timer);
-  }, [swapUndo]);
-
   /** A brief popup explaining why an action didn't happen; each one restarts the countdown. */
   const [loggerNotice, setLoggerNotice] = useState<{ id: number; message: string } | null>(null);
   const showLoggerNotice = (message: string) =>
     setLoggerNotice((current) => ({ id: (current?.id ?? 0) + 1, message }));
-
-  useEffect(() => {
-    if (!loggerNotice) return;
-    const timer = window.setTimeout(() => setLoggerNotice(null), LOGGER_NOTICE_MS);
-    return () => window.clearTimeout(timer);
-  }, [loggerNotice]);
 
   // Older history only precedes workouts inside the window it was condensed for. An earlier
   // date (editing an older loaded workout) compares with the loaded workouts alone.
@@ -4462,7 +4382,11 @@ function WorkoutLogger({
     );
     if (next === movements) return;
     tips.learn('swap');
-    setSwapUndo({ movements, exerciseName: replacement.name });
+    setSwapUndo((current) => ({
+      id: (current?.id ?? 0) + 1,
+      movements,
+      exerciseName: replacement.name,
+    }));
     setMovements(next);
   }
 
@@ -5328,6 +5252,29 @@ function WorkoutLogger({
   const restNextSet = restDone
     ? nextSetAfterRest(movements, restDone.movementKey, weightUnit)
     : null;
+  // While training, toasts sit at the bottom above the rest pill or notch and the weekly sets
+  // shelf, so they never cover the workout's header, timer or Finish.
+  const toastBottom = weeklySetsUpdate
+    ? dockSpacing
+      ? '9.25rem'
+      : '5.75rem'
+    : dockSpacing === 'has-rest-pill'
+      ? '5rem'
+      : dockSpacing === 'has-rest-notch'
+        ? '4rem'
+        : '1rem';
+  useToastPlacement(
+    screenVisible ? 'bottom' : 'top',
+    `calc(${toastBottom} + env(safe-area-inset-bottom))`,
+  );
+  // The workout's toasts belong to its screen; leaving it ends them, as their countdown would.
+  useEffect(() => {
+    if (screenVisible) return;
+    setUndoDeletion(null);
+    setSwapUndo(null);
+    setLoggerNotice(null);
+    setPrToastEntries([]);
+  }, [screenVisible]);
 
   // The tab bar's bell rings while a finished rest waits, for as long as the workout is live.
   const finishedRestAt = showRestDone ? restDone.endedAt : null;
@@ -5809,77 +5756,42 @@ function WorkoutLogger({
         </div>
       )}
 
-      {(undoDeletion || swapUndo || loggerNotice || prToastEntries.length > 0) && (
-        // Popups that stay up while you train sit at the bottom, above the timer dock.
-        <div
-          className={`logger-bottom-toasts ${dockSpacing}${weeklySetsUpdate ? ' has-weekly-shelf' : ''}`}
-        >
-          {prToastEntries.length > 0 && (
-            <PrToast
-              key={`pr-toast-${prToastId}`}
-              entries={prToastEntries}
-              onClose={closePrToast}
-            />
-          )}
-          {loggerNotice && (
-            <div
-              key={loggerNotice.id}
-              className="undo-toast logger-notice-toast"
-              role="alert"
-              style={{ '--undo-toast-duration': `${LOGGER_NOTICE_MS}ms` } as CSSProperties}
-            >
-              <span>{loggerNotice.message}</span>
-              <button
-                className="undo-toast-close"
-                type="button"
-                onClick={() => setLoggerNotice(null)}
-                aria-label="Dismiss notice"
-              >
-                <Icon name="close" />
-              </button>
-            </div>
-          )}
-          {swapUndo && (
-            <div
-              className="undo-toast"
-              role="status"
-              style={{ '--undo-toast-duration': `${UNDO_TOAST_MS}ms` } as CSSProperties}
-            >
-              <span>Swapped to {swapUndo.exerciseName}</span>
-              <button className="undo-toast-action" type="button" onClick={undoSwap}>
-                Undo
-              </button>
-              <button
-                className="undo-toast-close"
-                type="button"
-                onClick={() => setSwapUndo(null)}
-                aria-label="Dismiss swap notification"
-              >
-                <Icon name="close" />
-              </button>
-            </div>
-          )}
-          {undoDeletion && (
-            <div
-              className="undo-toast"
-              role="status"
-              style={{ '--undo-toast-duration': `${UNDO_TOAST_MS}ms` } as CSSProperties}
-            >
-              <span>{undoDeletion.kind === 'rest' ? 'Rest time removed' : 'Set deleted'}</span>
-              <button className="undo-toast-action" type="button" onClick={undoLastDeletion}>
-                Undo
-              </button>
-              <button
-                className="undo-toast-close"
-                type="button"
-                onClick={() => setUndoDeletion(null)}
-                aria-label="Dismiss deletion notification"
-              >
-                <Icon name="close" />
-              </button>
-            </div>
-          )}
-        </div>
+      {screenVisible && prToastEntries.length > 0 && (
+        <Toast
+          id={prToastId}
+          variant="celebrate"
+          message={prToastEntries.map((entry) => entry.labels.join(' + ')).join(', ')}
+          lines={prToastLines(prToastEntries, weightUnit)}
+          dismissLabel="Dismiss personal record popup"
+          onDismiss={closePrToast}
+        />
+      )}
+      {screenVisible && loggerNotice && (
+        <Toast
+          id={loggerNotice.id}
+          variant="warning"
+          message={loggerNotice.message}
+          dismissLabel="Dismiss notice"
+          onDismiss={() => setLoggerNotice(null)}
+        />
+      )}
+      {screenVisible && swapUndo && (
+        <Toast
+          id={swapUndo.id}
+          message={`Swapped to ${swapUndo.exerciseName}`}
+          action={{ label: 'Undo', run: undoSwap }}
+          dismissLabel="Dismiss swap notification"
+          onDismiss={() => setSwapUndo(null)}
+        />
+      )}
+      {screenVisible && undoDeletion && (
+        <Toast
+          id={`${undoDeletion.kind}:${undoDeletion.set.key}`}
+          message={undoDeletion.kind === 'rest' ? 'Rest time removed' : 'Set deleted'}
+          action={{ label: 'Undo', run: undoLastDeletion }}
+          dismissLabel="Dismiss deletion notification"
+          onDismiss={() => setUndoDeletion(null)}
+        />
       )}
       {showTimerDock && (
         <WorkoutTimerDock
@@ -6386,7 +6298,7 @@ function DismissibleInlineError({
     <div className="inline-error inline-error-dismissible" role="alert">
       <span>{message}</span>
       <button
-        className="undo-toast-close"
+        className="inline-error-dismiss"
         type="button"
         aria-label="Dismiss error"
         onClick={onDismiss}
@@ -8273,9 +8185,8 @@ function MachinePhotoDetail({
   onShowHistory?: () => void;
 }) {
   const [editingSettings, setEditingSettings] = useState(false);
-  const [settingsNotice, setSettingsNotice] = useState(0);
+  const { show: showToast } = useToast();
   const [caption, setCaption] = useState(photo.caption);
-  const [saveNotice, setSaveNotice] = useState(0);
   const [imageIndex, setImageIndex] = useState(0);
   const images = photo.images?.length ? photo.images : [photo];
   const image = images[Math.min(imageIndex, images.length - 1)];
@@ -8288,9 +8199,8 @@ function MachinePhotoDetail({
     setError(null);
     try {
       await onUpdate(photo, caption.trim());
-      setSaveNotice((current) => current + 1);
+      showToast('Machine name saved');
     } catch (saveError) {
-      setSaveNotice(0);
       setError(saveError instanceof Error ? saveError.message : 'Could not update the caption.');
     } finally {
       setSaving(false);
@@ -8315,20 +8225,6 @@ function MachinePhotoDetail({
 
   return (
     <section className="photo-detail panel" aria-label={photo.caption}>
-      {settingsNotice > 0 && (
-        <NotificationDialog
-          key={`settings-${settingsNotice}`}
-          message="Machine settings saved"
-          onClose={() => setSettingsNotice(0)}
-        />
-      )}
-      {saveNotice > 0 && (
-        <NotificationDialog
-          key={saveNotice}
-          message="Machine name saved"
-          onClose={() => setSaveNotice(0)}
-        />
-      )}
       <div>
         <button className="photo-detail-close" type="button" onClick={onClose}>
           Close
@@ -8405,7 +8301,7 @@ function MachinePhotoDetail({
               onChange={(settings) => onSettingsSaved?.(settings)}
               onSaved={() => {
                 setEditingSettings(false);
-                setSettingsNotice((value) => value + 1);
+                showToast('Machine settings saved');
               }}
               onCancel={() => setEditingSettings(false)}
             />
@@ -8964,8 +8860,6 @@ export function ExercisePicker({
   );
 }
 
-const MAPPING_NOTICE_MS = 4000;
-
 const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: string }> = [
   { value: 'estimated_1rm', label: 'Est. 1RM', series: 'Est. 1RM' },
   { value: 'best_weight_kg', label: 'Top set', series: 'Top weight' },
@@ -9031,12 +8925,7 @@ export function ProgressScreen({
     null,
   );
   const mergeTrigger = useRef<HTMLButtonElement | null>(null);
-  const [mergeNotice, setMergeNotice] = useState(false);
-  useEffect(() => {
-    if (!mergeNotice) return;
-    const timer = setTimeout(() => setMergeNotice(false), 4000);
-    return () => clearTimeout(timer);
-  }, [mergeNotice]);
+  const { show: showToast, dismiss: dismissToast } = useToast();
   const strengthExercises = useMemo(
     () => exercises.filter((exercise) => exercise.kind === 'strength'),
     [exercises],
@@ -9076,7 +8965,6 @@ export function ProgressScreen({
     setMappingOpen(true);
     onMachineWeightsOpened?.();
   }, [openMachineWeights, mappingLoaded, onMachineWeightsOpened]);
-  const [mappingNotice, setMappingNotice] = useState(0);
   const libraryRoot = useRef<HTMLDivElement>(null);
   const libraryScroll = useRef(0);
   const metricIndicatorRef = useSlidingIndicator<HTMLDivElement>(metric);
@@ -9099,15 +8987,6 @@ export function ProgressScreen({
     [exerciseId],
   );
   const [renameOpen, setRenameOpen] = useState(false);
-  const [exerciseNotice, setExerciseNotice] = useState<{
-    text: string;
-    undo?: () => void;
-  } | null>(null);
-  useEffect(() => {
-    if (!exerciseNotice) return;
-    const timer = setTimeout(() => setExerciseNotice(null), UNDO_TOAST_MS);
-    return () => clearTimeout(timer);
-  }, [exerciseNotice]);
   const openSelectedRename = useCallback((trigger: HTMLButtonElement) => {
     mergeTrigger.current = trigger;
     setRenameOpen(true);
@@ -9117,17 +8996,26 @@ export function ProgressScreen({
       try {
         await api.updateExercise(exercise.id, { hidden });
         await onExercisesMerged?.();
-        setExerciseNotice({
-          text: hidden ? 'Hidden from exercise lists' : 'Shown in exercise lists',
-          undo: undoable ? () => void setSelectedHidden(exercise, !hidden, false) : undefined,
+        showToast({
+          message: hidden ? 'Hidden from exercise lists' : 'Shown in exercise lists',
+          action: undoable
+            ? {
+                label: 'Undo',
+                run: () => {
+                  dismissToast();
+                  void setSelectedHidden(exercise, !hidden, false);
+                },
+              }
+            : undefined,
         });
       } catch (caught) {
-        setExerciseNotice({
-          text: caught instanceof Error ? caught.message : 'The exercise could not be changed.',
+        showToast({
+          message: caught instanceof Error ? caught.message : 'The exercise could not be changed.',
+          variant: 'error',
         });
       }
     },
-    [onExercisesMerged],
+    [onExercisesMerged, showToast, dismissToast],
   );
   const toggleSelectedHidden = useCallback(() => {
     if (selectedExercise) void setSelectedHidden(selectedExercise, !selectedExercise.hidden, true);
@@ -9223,11 +9111,6 @@ export function ProgressScreen({
       cancelled = true;
     };
   }, [exerciseId, dataRevision, libraryMode]);
-  useEffect(() => {
-    if (!mappingNotice) return;
-    const timer = setTimeout(() => setMappingNotice(0), MAPPING_NOTICE_MS);
-    return () => clearTimeout(timer);
-  }, [mappingNotice]);
 
   const machineOptions = progress ? machinesWithSessions(progress, mapping) : [];
   const view =
@@ -9403,7 +9286,7 @@ export function ProgressScreen({
           onChanged={() => void onExercisesMerged?.()}
           onMerged={(_sourceId, target) => {
             setMergeRequest(null);
-            setMergeNotice(true);
+            showToast('Exercises merged');
             setExerciseId(target.id);
             void onExercisesMerged?.();
           }}
@@ -9420,57 +9303,11 @@ export function ProgressScreen({
           }}
           onRenamed={() => {
             setRenameOpen(false);
-            setExerciseNotice({ text: 'Exercise renamed' });
+            showToast('Exercise renamed');
             void onExercisesMerged?.();
           }}
         />
       )}
-      {exerciseNotice &&
-        createPortal(
-          <div
-            className="undo-toast top-toast"
-            role="status"
-            style={{ '--undo-toast-duration': `${UNDO_TOAST_MS}ms` } as CSSProperties}
-          >
-            <span>{exerciseNotice.text}</span>
-            {exerciseNotice.undo && (
-              <button
-                className="undo-toast-action"
-                type="button"
-                onClick={() => {
-                  exerciseNotice.undo?.();
-                  setExerciseNotice(null);
-                }}
-              >
-                Undo
-              </button>
-            )}
-            <button
-              type="button"
-              className="undo-toast-close"
-              aria-label="Dismiss exercise notification"
-              onClick={() => setExerciseNotice(null)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
-      {mergeNotice &&
-        createPortal(
-          <div className="undo-toast top-toast" role="status">
-            <span>Exercises merged</span>
-            <button
-              type="button"
-              className="undo-toast-close"
-              aria-label="Dismiss exercise merge notification"
-              onClick={() => setMergeNotice(false)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
       {sessionId && selectedExercise && (
         <ExerciseSessionSheet
           key={sessionId}
@@ -9646,33 +9483,12 @@ export function ProgressScreen({
                 onSaved={(next) => {
                   setMapping({ exerciseId: progress.exercise.id, mapping: next });
                   setMappingOpen(false);
-                  setMappingNotice((serial) => serial + 1);
+                  showToast('Machine weights saved');
                   // PRs are recalculated in the reference machine's weights.
                   void onRecordsChange?.();
                 }}
               />
             )}
-            {mappingNotice > 0 &&
-              createPortal(
-                <div
-                  key={mappingNotice}
-                  className="undo-toast top-toast"
-                  role="status"
-                  aria-atomic="true"
-                  style={{ '--undo-toast-duration': `${MAPPING_NOTICE_MS}ms` } as CSSProperties}
-                >
-                  <span>Machine weights saved</span>
-                  <button
-                    type="button"
-                    className="undo-toast-close"
-                    aria-label="Dismiss machine weights notification"
-                    onClick={() => setMappingNotice(0)}
-                  >
-                    <Icon name="close" />
-                  </button>
-                </div>,
-                document.body,
-              )}
             {viewPoints.length ? (
               <>
                 <section className={browseFirst ? 'pulse-card exercise-progress-chart' : undefined}>
@@ -9988,7 +9804,7 @@ function SettingsScreen({
     pushNotificationsSupported() ? 'checking' : 'unsupported',
   );
   const [notificationError, setNotificationError] = useState<string | null>(null);
-  const [exportToast, setExportToast] = useState<string | null>(null);
+  const { show: showToast } = useToast();
   const workoutTypes = useWorkoutTypes();
 
   useEffect(() => {
@@ -10494,11 +10310,10 @@ function SettingsScreen({
           onClose={() => setExportOpen(false)}
           onExported={(message) => {
             setExportOpen(false);
-            setExportToast(message);
+            showToast(message);
           }}
         />
       )}
-      {exportToast && <StatusToast message={exportToast} onClose={() => setExportToast(null)} />}
     </section>
   );
 }
@@ -10914,9 +10729,17 @@ function HistoryScreen({
         />
       )}
       {createdExercise && (
-        <ExerciseCreatedToast
-          name={createdExercise.name}
-          onOpen={() => onOpenExercise(createdExercise.id)}
+        <Toast
+          id={createdExercise.id}
+          message={`${createdExercise.name} added`}
+          action={{
+            label: 'Open',
+            run: () => {
+              setCreatedExercise(null);
+              onOpenExercise(createdExercise.id);
+            },
+          }}
+          dismissLabel="Dismiss exercise notification"
           onDismiss={() => setCreatedExercise(null)}
         />
       )}
