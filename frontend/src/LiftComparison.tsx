@@ -84,7 +84,6 @@ export function HeadToHeadCard({
   const [held, setHeld] = useState<string[] | null>(null);
   const [fresh, setFresh] = useState<string[]>([]);
   const card = useRef<HTMLElement>(null);
-  const opener = useRef<HTMLButtonElement>(null);
   const shownIds = held ?? selected;
   const shownKey = shownIds.join('|');
   const announceAdded = useFlipAnimation(card, shownKey);
@@ -235,7 +234,6 @@ export function HeadToHeadCard({
         </ul>
       )}
       <button
-        ref={opener}
         type="button"
         className="show-more-button pulse-button secondary block"
         aria-haspopup="dialog"
@@ -260,7 +258,6 @@ export function HeadToHeadCard({
             setFresh(selected.filter((id) => !before.includes(id)));
             setHeld(null);
             setPicking(false);
-            requestAnimationFrame(() => opener.current?.focus());
           }}
         />
       )}

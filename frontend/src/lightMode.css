@@ -92,9 +92,7 @@
   background: rgb(255 255 255 / 94%);
   box-shadow: 0 14px 36px rgb(16 24 32 / 18%);
 }
-:root[data-colour-mode='light'] .modal-backdrop,
-:root[data-colour-mode='light'] .popup-dialog::backdrop,
-:root[data-colour-mode='light'] .notification-dialog::backdrop {
+:root[data-colour-mode='light'] .popup-dialog::backdrop {
   background: rgb(16 24 32 / 38%);
 }
 :root[data-colour-mode='light'] .pulse-chart-bg-dot {

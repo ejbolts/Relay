@@ -48,7 +48,6 @@ export function WorkoutPhotos({
   const [viewingId, setViewingId] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [removeError, setRemoveError] = useState<string | null>(null);
-  const opener = useRef<HTMLButtonElement | null>(null);
   const viewing = photos.find((photo) => photo.id === viewingId) ?? null;
   const position = viewing ? photos.indexOf(viewing) : -1;
   if (!photos.length) return null;
@@ -56,7 +55,6 @@ export function WorkoutPhotos({
   function close() {
     setViewingId(null);
     setRemoveError(null);
-    requestAnimationFrame(() => opener.current?.focus());
   }
 
   return (
@@ -78,8 +76,7 @@ export function WorkoutPhotos({
             key={photo.id}
             aria-label={`View photo ${index + 1} of ${photos.length} of ${subject}`}
             aria-haspopup="dialog"
-            onClick={(event) => {
-              opener.current = event.currentTarget;
+            onClick={() => {
               setFailed(null);
               setViewingId(photo.id);
             }}

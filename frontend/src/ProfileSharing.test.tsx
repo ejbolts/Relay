@@ -73,6 +73,8 @@ describe('profile sharing visibility', () => {
     const explanation =
       'Choose who can see your training. Only members who share their own profile can see or follow others.';
     expect(container.textContent).not.toContain('Choose who can see your training.');
+    // PopupDialog returns focus to the control it opened from, as a browser focuses it.
+    help.focus();
     await act(async () => help.click());
     const dialog = document.querySelector('dialog[open]')!;
     expect(dialog.textContent).toContain(explanation);
