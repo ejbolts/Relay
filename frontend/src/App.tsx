@@ -5985,6 +5985,10 @@ function MovementCard({
   const loggedWarmupCount = onlyWarmupsLogged
     ? movement.sets.filter((item) => item.completed).length
     : 0;
+  const workingSets = movement.sets.filter((item) => item.set_type !== 'warmup' && !item.warmup);
+  const workingSetsDone = workingSets.length > 0 && workingSets.every((item) => item.completed);
+  // Finished exercises open folded, but ticking sets never folds a card: only the collapse
+  // controls do, so the next set stays in reach.
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -6066,8 +6070,18 @@ function MovementCard({
       )?.key ?? null);
 
   useEffect(() => {
-    setExpanded(!movement.isComplete);
+    if (!movement.isComplete) setExpanded(true);
   }, [movement.isComplete]);
+
+  /** Folds the card from its bottom edge, bringing its header back into view if it scrolled away. */
+  function collapseFromFooter() {
+    setExpanded(false);
+    window.requestAnimationFrame(() =>
+      cardRef.current
+        ?.querySelector('header')
+        ?.scrollIntoView?.({ block: 'nearest', behavior: motionReduced() ? 'auto' : 'smooth' }),
+    );
+  }
 
   useEffect(() => {
     if (supersetUpNext) setExpanded(true);
@@ -7154,9 +7168,21 @@ function MovementCard({
           }}
         />
       )}
-      <button type="button" className="add-set-button pulse-button tonal" onClick={onAddSet}>
-        ＋ Add set
-      </button>
+      <div className="movement-card-footer">
+        <button type="button" className="add-set-button pulse-button tonal" onClick={onAddSet}>
+          ＋ Add set
+        </button>
+        <button
+          type="button"
+          className={`movement-collapse-button pulse-button${workingSetsDone ? ' is-done' : ''}`}
+          aria-label={`Collapse ${movement.exercise.name}`}
+          onClick={collapseFromFooter}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="m4 13 6-6 6 6" />
+          </svg>
+        </button>
+      </div>
       {plateSet && barType && (
         <PlateCalculatorDialog
           exercise={movement.exercise}

@@ -3192,8 +3192,6 @@ describe('exercise completion stays consistent with its sets', () => {
   const setTicks = () => [...container.querySelectorAll<HTMLButtonElement>('.row-complete-button')];
   const savedMovement = () => readActiveWorkoutDraft()!.movements[0];
   const click = async (button: HTMLButtonElement) => act(async () => button.click());
-  const expand = () =>
-    click(container.querySelector<HTMLButtonElement>('.movement-expand-toggle')!);
 
   it.each([
     ['strength', false],
@@ -3207,7 +3205,8 @@ describe('exercise completion stays consistent with its sets', () => {
       await click(exerciseTick());
       expect(exerciseTick().getAttribute('aria-pressed')).toBe('true');
       expect(savedMovement().sets.map((set) => set.completed)).toEqual([true, true, true]);
-      await expand();
+      // Finishing keeps the card open, so its sets stay in reach.
+      expect(container.querySelector('.movement-card')!.classList).not.toContain('is-collapsed');
       await click(setTicks()[0]);
       expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
       expect(savedMovement().isComplete).toBe(false);
@@ -3224,7 +3223,6 @@ describe('exercise completion stays consistent with its sets', () => {
         'Keep set 1',
         'Keep set 2',
       ]);
-      await expand();
       await click(setTicks()[2]);
       expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
     },
@@ -3234,7 +3232,6 @@ describe('exercise completion stays consistent with its sets', () => {
     writeActiveWorkoutDraft(completionDraft());
     await mount();
     await click(exerciseTick());
-    await expand();
     await click(container.querySelector<HTMLButtonElement>('.add-set-button')!);
     expect(savedMovement().isComplete).toBe(false);
     expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
@@ -4615,6 +4612,9 @@ describe('no working sets warnings', () => {
     );
     expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(true);
     expect(card().querySelector('.exercise-icon-warning')).not.toBeNull();
+    await act(async () =>
+      card().querySelector<HTMLButtonElement>('.movement-collapse-button')!.click(),
+    );
     expect(card().querySelector('.movement-completed-summary')?.textContent).toBe('2 warm-up sets');
     // The working-set exercise keeps its usual count and no flag.
     const other = container.querySelectorAll('.movement-card')[1];
