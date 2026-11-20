@@ -2837,10 +2837,12 @@ function AppContent() {
               />
             </CachedTabPanel>
           )}
-          {user && (tab === 'social' || visitedTabs.has('social')) && (
+          {/* Like the exercise library, Social loads in the background once the app's data is in. */}
+          {user && (tab === 'social' || visitedTabs.has('social') || !loading) && (
             <CachedTabPanel active={tab === 'social'}>
               <SocialScreen
                 active={tab === 'social'}
+                preload
                 account={user}
                 openFeedback={openFeedback}
                 onOpenProfile={openSharedProfile}

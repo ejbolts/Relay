@@ -12,6 +12,7 @@ import type { SharedProfileSummary, TrackedWorkout, User } from './types';
 
 export function SocialScreen({
   active,
+  preload = false,
   onOpenProfile,
   onOpenOwnProfile,
   onChooseSharing,
@@ -20,6 +21,8 @@ export function SocialScreen({
   openFeedback,
 }: {
   active: boolean;
+  /** Reads the friend list and the feed's first page in the background before Social is opened. */
+  preload?: boolean;
   onOpenProfile: (
     profile: Pick<SharedProfileSummary, 'id' | 'display_name'>,
     workout?: Pick<TrackedWorkout, 'id' | 'workout_date'>,
@@ -32,7 +35,7 @@ export function SocialScreen({
 }) {
   const [section, setSection] = useState<'feed' | 'friends'>('feed');
   const indicator = useSlidingIndicator<HTMLDivElement>(section);
-  const { connections, state, error, refresh } = useFriendConnections(active);
+  const { connections, state, error, refresh } = useFriendConnections(active, preload);
   const requests = connections?.requests.length ?? 0;
   const focusKey = useWorkoutFocus()?.key;
 
@@ -102,6 +105,7 @@ export function SocialScreen({
       <CachedTabPanel active={section === 'feed'}>
         <SocialFeed
           active={active && section === 'feed'}
+          preload={preload}
           friends={connections?.friends ?? null}
           onOpenProfile={onOpenProfile}
           onOpenOwnProfile={onOpenOwnProfile}

@@ -268,6 +268,7 @@ function FeedSkeleton() {
  */
 export function SocialFeed({
   active,
+  preload = false,
   friends,
   today = localDate(),
   onOpenProfile,
@@ -276,6 +277,8 @@ export function SocialFeed({
   onChooseSharing,
 }: {
   active: boolean;
+  /** Reads the first page in the background before the feed is shown. */
+  preload?: boolean;
   /** Friends with live activity, from Social's friend list; null until it has loaded. */
   friends: FriendActivity[] | null;
   today?: string;
@@ -287,8 +290,10 @@ export function SocialFeed({
   onOpenFind: () => void;
   onChooseSharing: () => void;
 }) {
-  const { items, hasMore, state, error, loadingMore, refresh, loadMore, update } =
-    useTimeline(active);
+  const { items, hasMore, state, error, loadingMore, refresh, loadMore, update } = useTimeline(
+    active,
+    preload,
+  );
   const [picking, setPicking] = useState<string | null>(null);
   const viewerId = useUserSession().user?.id ?? null;
   const request = useWorkoutFocus();
