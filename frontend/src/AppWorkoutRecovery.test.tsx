@@ -3898,6 +3898,10 @@ describe('inactive workout suggestions', () => {
   });
 
   it('saves a workout left running as ending at its last activity, not the cutoff', async () => {
+    // Mid-afternoon, so the start and the last activity fall on the same day and the prompt shows
+    // the end as a time alone. Across midnight it adds the date, which this test doesn't expect.
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-20T15:00:00'));
     window.history.replaceState(null, '', '#dashboard');
     const draft = expiredSuggestions(true);
     draft.lastActiveAt = draft.startedAt + 25 * 60_000;
