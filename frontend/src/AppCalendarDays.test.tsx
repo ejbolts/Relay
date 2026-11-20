@@ -191,7 +191,7 @@ let container: HTMLDivElement;
 
 const visible = <T extends Element>(selector: string) =>
   [...container.querySelectorAll<T>(selector)].filter((item) => !item.closest('[hidden]'));
-const dialog = () => document.querySelector<HTMLElement>('[role="dialog"][aria-modal="true"]');
+const dialog = () => document.querySelector<HTMLElement>('dialog[aria-modal="true"]');
 function button(label: string, scope: ParentNode = document): HTMLButtonElement {
   const match = [...scope.querySelectorAll('button')].find(
     (item) => item.textContent?.trim() === label || item.getAttribute('aria-label') === label,
@@ -203,6 +203,13 @@ const click = (target: HTMLElement) => act(async () => target.click());
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  // The calendar sheets are PopupDialogs; jsdom has no modal dialogs.
+  HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+  };
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+    this.removeAttribute('open');
+  };
   vi.stubGlobal('matchMedia', () => ({ matches: false }));
   vi.spyOn(window, 'scrollTo').mockImplementation(() => undefined);
   Element.prototype.scrollIntoView = vi.fn();
@@ -245,6 +252,7 @@ describe('the Training calendar', () => {
     await act(async () => root.render(<App />));
     await click(visible<HTMLButtonElement>(`.calendar-day[data-date="${twoDaysAgo}"]`)[0]);
     expect(button('Edit workout', dialog()!)).toBeDefined();
+    expect(dialog()!.classList).toContain('popup-dialog--sheet');
     await click(button('Open Leg day', dialog()!));
     expect(dialog()).toBeNull();
     const open = visible('.history-card.open');

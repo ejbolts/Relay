@@ -344,7 +344,7 @@ it('slides the preview down, and a swipe or tap on its handle minimises and rest
   await remount(<Screen />);
   await switchOn();
   const preview = () => document.querySelector<HTMLElement>('.machine-weights-preview')!;
-  const body = () => preview().querySelector('.machine-weights-preview-body')!;
+  const body = () => preview().querySelector('.swipe-fold')!;
   const openness = () => preview().style.getPropertyValue('--open');
   // It starts shut and slides open on the next frames.
   await act(async () => new Promise((resolve) => setTimeout(resolve, 50)));
@@ -368,11 +368,11 @@ it('slides the preview down, and a swipe or tap on its handle minimises and rest
   // Swiping up follows the finger, then settles shut; the click after the drag is not a tap.
   await pointer('pointerdown', 300);
   await pointer('pointermove', 200);
-  expect(preview().classList.contains('is-dragging')).toBe(true);
+  expect(preview().classList.contains('sheet-dragging')).toBe(true);
   expect(openness()).toBe('0.375');
   await pointer('pointerup', 200);
   await click(handle);
-  expect(preview().classList.contains('is-dragging')).toBe(false);
+  expect(preview().classList.contains('sheet-dragging')).toBe(false);
   expect(handle.getAttribute('aria-expanded')).toBe('false');
   // Swiping down brings it back.
   await pointer('pointerdown', 200);

@@ -50,6 +50,7 @@ export function PopupDialog({
   actionsClassName = '',
   busy = false,
   role,
+  describedBy,
   dismissOnBackdrop,
   style,
   swipeToDismiss = false,
@@ -76,6 +77,8 @@ export function PopupDialog({
   /** While saving: ×, back, the backdrop, Escape, phone Back and swiping all do nothing. */
   busy?: boolean;
   role?: 'dialog' | 'alertdialog';
+  /** The id of the element that describes the decision, such as an alert dialog's message. */
+  describedBy?: string;
   /** Whether a tap on the backdrop closes it. Defaults to true, and to false for screens. */
   dismissOnBackdrop?: boolean;
   style?: CSSProperties;
@@ -156,10 +159,13 @@ export function PopupDialog({
       role={role === 'alertdialog' ? 'alertdialog' : undefined}
       aria-modal="true"
       aria-labelledby={titleId}
+      aria-describedby={describedBy}
       tabIndex={-1}
       onCancel={(event) => {
         // Escape, and phone Back through overlayBack, step back before they close.
         event.preventDefault();
+        // React passes a pop-up's cancel on to the pop-ups it was opened from; only the top one acts.
+        if (event.target !== event.currentTarget) return;
         if (latest.current.busy) return;
         if (latest.current.onBack) latest.current.onBack();
         else dismiss();

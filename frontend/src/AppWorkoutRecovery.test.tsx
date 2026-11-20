@@ -2473,7 +2473,9 @@ describe('finishing workouts in the background', () => {
       ),
     ).toEqual([true]);
     await act(async () =>
-      document.querySelector<HTMLButtonElement>('[aria-label="Close workout details"]')!.click(),
+      document
+        .querySelector<HTMLButtonElement>('.calendar-day-detail .popup-dialog-close')!
+        .click(),
     );
     expect(container.querySelector('.home-sections .selected')).toBeNull();
     expect(container.querySelector('.background-activity-bar')).toBeNull();
@@ -3307,7 +3309,7 @@ describe('high-rep warning preference', () => {
   const preference = () =>
     document.querySelector<HTMLInputElement>('.set-entry-warning-preference input')!;
   const confirm = () => document.querySelector<HTMLButtonElement>('.confirm-unusual-set')!;
-  const popup = () => document.querySelector('.set-entry-confirmation');
+  const popup = () => document.querySelector('.set-entry-confirmation-dialog');
 
   it('keeps warning by default and does not apply a checked preference when cancelled', async () => {
     writeActiveWorkoutDraft(highRepDraft());

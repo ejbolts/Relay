@@ -1,4 +1,5 @@
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { SwipeFold, SwipeFoldHandle } from './SwipeFold';
 import { useElementHeight } from './useElementHeight';
 import { useSwipeToggle } from './useSwipeToggle';
 
@@ -36,22 +37,20 @@ export function PreviewDrawer({
   const openness = dragged ?? (shown && open ? 1 : 0);
   return (
     <section
-      className={`machine-weights-preview${dragged === null ? '' : ' is-dragging'}`}
+      className={`machine-weights-preview${dragged === null ? '' : ' sheet-dragging'}`}
       aria-label={label}
       style={{ '--open': openness, '--full': `${full}px` } as CSSProperties}
     >
-      <div className="machine-weights-preview-body" aria-hidden={!open}>
-        <div ref={contentRef}>{children}</div>
-      </div>
-      <button
-        type="button"
+      <SwipeFold open={open} contentRef={contentRef}>
+        {children}
+      </SwipeFold>
+      <SwipeFoldHandle
         className="machine-weights-preview-handle"
-        aria-label={open ? 'Minimise preview' : 'Show preview'}
-        {...handleProps}
+        label="preview"
+        handleProps={handleProps}
       >
         {handle}
-        <span className="machine-weights-grabber" aria-hidden="true" />
-      </button>
+      </SwipeFoldHandle>
     </section>
   );
 }

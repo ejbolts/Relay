@@ -25,7 +25,7 @@ export function ProfileAccountId({ accountId }: { accountId: string }) {
       <span className="profile-account-id-label">Account UUID</span>
       <div className="profile-account-id-row">
         <code ref={value}>{accountId}</code>
-        <button type="button" className="text-link" onClick={() => void copy()}>
+        <button type="button" className="pulse-button link small" onClick={() => void copy()}>
           Copy UUID
         </button>
       </div>

@@ -112,7 +112,7 @@ async function render(props: Partial<Parameters<typeof PlannedDaySheet>[0]> & { 
   return { onStart, onResume };
 }
 
-const dialog = () => document.querySelector<HTMLElement>('[role="dialog"]')!;
+const dialog = () => document.querySelector<HTMLElement>('dialog')!;
 const button = (label: string) =>
   [...dialog().querySelectorAll<HTMLButtonElement>('button')].find(
     (item) => (item.getAttribute('aria-label') ?? item.textContent) === label,
@@ -120,6 +120,13 @@ const button = (label: string) =>
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  // The calendar sheets are PopupDialogs; jsdom has no modal dialogs.
+  HTMLDialogElement.prototype.showModal = function (this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+  };
+  HTMLDialogElement.prototype.close = function (this: HTMLDialogElement) {
+    this.removeAttribute('open');
+  };
   vi.mocked(api.routines.list).mockResolvedValue([routine]);
   container = document.createElement('div');
   container.id = 'root';

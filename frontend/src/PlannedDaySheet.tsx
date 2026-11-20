@@ -1,7 +1,5 @@
-import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { api } from './api';
-import { useBackdropDismiss } from './backdropDismiss';
 import { workoutTypeColor } from './dayColors';
 import { Icon } from './Icon';
 import {
@@ -11,6 +9,7 @@ import {
   routineDayFor,
   type PlannedDay,
 } from './plannedDay';
+import { PopupDialog } from './PopupDialog';
 import { useWeightUnit } from './trainingPreferencesContext';
 import {
   latestTopSets,
@@ -95,7 +94,6 @@ export function PlannedDaySheet({
 }) {
   const { types, savedExercises } = useWorkoutTypes();
   const weightUnit = useWeightUnit();
-  const titleId = useId();
   const isToday = date === today;
   const plan = useMemo(() => plannedDayOn(split, date, today, types), [split, date, today, types]);
   // From today, a rest day can start the next training day early.
@@ -144,30 +142,6 @@ export function PlannedDaySheet({
   const loading = needsRoutine && routine === 'loading';
   const shownTemplate = plan.kind === 'training' ? start?.template : null;
 
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const onCloseRef = useRef(onClose);
-  const backdropDismiss = useBackdropDismiss(onClose);
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-  useEffect(() => {
-    const root = document.getElementById('root');
-    const rootWasInert = root?.hasAttribute('inert') ?? false;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = 'hidden';
-    root?.setAttribute('inert', '');
-    closeButtonRef.current?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onCloseRef.current();
-    };
-    window.addEventListener('keydown', closeOnEscape);
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      if (!rootWasInert) root?.removeAttribute('inert');
-      window.removeEventListener('keydown', closeOnEscape);
-    };
-  }, []);
-
   const kicker = isToday
     ? 'Today'
     : parseLocalDate(date).toLocaleDateString('en-GB', {
@@ -177,38 +151,23 @@ export function PlannedDaySheet({
       });
   const canStartEmpty = isToday && !activeWorkout;
 
-  return createPortal(
-    <div className="modal-backdrop calendar-day-backdrop" {...backdropDismiss}>
-      <section
-        className="calendar-day-detail planned-day-sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-      >
-        <header>
-          <div>
-            <p className="section-kicker">
-              {plan.kind === 'training' && (
-                <i
-                  className="category-dot"
-                  style={{ background: workoutTypeColor(plan.type, categoryColors) }}
-                  aria-hidden="true"
-                />
-              )}
-              {kicker}
-            </p>
-            <h2 id={titleId}>{titleFor(plan)}</h2>
-          </div>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            className="icon-button"
-            onClick={onClose}
-            aria-label="Close planned day"
-          >
-            ×
-          </button>
-        </header>
+  return (
+    <PopupDialog
+      variant="sheet"
+      title={titleFor(plan)}
+      kicker={kicker}
+      className={`calendar-day-detail planned-day-sheet${plan.kind === 'training' ? ' has-type-dot' : ''}`}
+      // The kicker's dot shows the training day's type colour.
+      style={
+        plan.kind === 'training'
+          ? ({
+              '--planned-day-color': workoutTypeColor(plan.type, categoryColors),
+            } as CSSProperties)
+          : undefined
+      }
+      onClose={onClose}
+    >
+      <div className="calendar-day-body">
         {plan.kind === 'training' &&
           (loading ? (
             <p className="planned-day-status" role="status">
@@ -277,14 +236,13 @@ export function PlannedDaySheet({
         {onEditSplit && (
           <button
             type="button"
-            className="text-button planned-day-edit-split"
+            className="pulse-button link small planned-day-edit-split"
             onClick={onEditSplit}
           >
             {split?.enabled ? 'Edit split' : 'Set up split'}
           </button>
         )}
-      </section>
-    </div>,
-    document.body,
+      </div>
+    </PopupDialog>
   );
 }

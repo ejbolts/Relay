@@ -48,7 +48,11 @@ export function TrainingSplitEditor({
       {error ? (
         <div className="split-load-error" role="alert">
           {error}
-          <button type="button" onClick={() => setAttempt((n) => n + 1)}>
+          <button
+            type="button"
+            className="pulse-button block"
+            onClick={() => setAttempt((n) => n + 1)}
+          >
             Try again
           </button>
         </div>

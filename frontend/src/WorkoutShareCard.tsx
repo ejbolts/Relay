@@ -227,7 +227,11 @@ export function WorkoutShareCard({
           <p className="inline-error" role="alert">
             {error}{' '}
             {!file && (
-              <button type="button" onClick={() => setRetry((value) => value + 1)}>
+              <button
+                type="button"
+                className="pulse-button link small"
+                onClick={() => setRetry((value) => value + 1)}
+              >
                 Retry
               </button>
             )}

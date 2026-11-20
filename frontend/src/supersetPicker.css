@@ -1,0 +1,12 @@
+/* Group as superset: the line under the title, then the exercises to choose from. */
+.superset-picker-description {
+  margin: 0;
+  padding: 0 var(--popup-pad, 1rem) 0.75rem;
+  color: var(--p-ink-2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.superset-picker .superset-options {
+  padding: 0 var(--popup-pad, 1rem) var(--popup-pad, 1rem);
+}

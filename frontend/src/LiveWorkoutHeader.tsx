@@ -98,7 +98,7 @@ export function LiveWorkoutHeader({
           minimise();
         }}
       >
-        <span />
+        <span className="sheet-grabber" aria-hidden="true" />
       </button>
       <div className="live-workout-toolbar">
         <div className="overlay-header-copy">

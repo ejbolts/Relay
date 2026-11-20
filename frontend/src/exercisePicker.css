@@ -1,0 +1,60 @@
+/*
+ * The exercise picker: a tall sheet placed in the visible area (the visual viewport), so it stays
+ * above the on-screen keyboard. ExercisePicker sets the --exercise-picker-* sizes.
+ */
+.popup-dialog.popup-dialog--sheet.exercise-picker {
+  --exercise-picker-gap: max(0.75rem, env(safe-area-inset-bottom));
+  position: fixed;
+  top: calc(
+    var(--exercise-picker-viewport-top, 0px) + var(--exercise-picker-viewport-height, 100dvh) -
+      var(--exercise-picker-height, 44rem) - var(--exercise-picker-gap)
+  );
+  bottom: auto;
+  height: var(--exercise-picker-height, 44rem);
+  max-height: none;
+  margin: 0 auto;
+  overflow: hidden;
+}
+
+/* Header, search, filters, the scrolling list, then the selection bar. */
+.popup-dialog.popup-dialog--sheet.exercise-picker[open] {
+  display: grid;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+}
+
+.popup-dialog.exercise-picker:not(.keyboard-visible) .exercise-search-wrap {
+  margin-top: 0;
+}
+
+.popup-dialog.exercise-picker .exercise-picker-actions {
+  margin: 0;
+  padding: 0.875rem var(--popup-pad, 1rem) var(--popup-pad, 1rem);
+  background: var(--p-surface);
+}
+
+/* With the keyboard up the list gets the room: the header shrinks to its close button. */
+.popup-dialog.popup-dialog--sheet.exercise-picker.keyboard-visible {
+  --exercise-picker-gap: 0.75rem;
+}
+
+.popup-dialog.popup-dialog--sheet.exercise-picker.keyboard-visible[open] {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.popup-dialog.exercise-picker.keyboard-visible > header {
+  position: absolute;
+  z-index: 2;
+  top: 0.75rem;
+  right: 0.75rem;
+  padding: 0;
+  background: transparent;
+}
+
+.exercise-picker.keyboard-visible > header > :is(.sheet-grabber, .popup-dialog-heading),
+.popup-dialog.exercise-picker.keyboard-visible .exercise-picker-actions {
+  display: none;
+}
+
+.exercise-picker.keyboard-visible .exercise-search {
+  padding-right: 3.5rem;
+}

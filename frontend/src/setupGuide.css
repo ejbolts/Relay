@@ -65,18 +65,19 @@
   font-weight: 700;
 }
 
-/* The guide's step card, pinned to the bottom of the screen it is guiding. */
+/*
+ * The guide's step card, pinned to the bottom of the screen it is guiding. Inside a dialog it sits
+ * above the dialog's sticky footer (--coach-dock), so the dialog's main action is never covered.
+ * The card inside is the shared guide card (guideCard.css).
+ */
 .setup-coach {
   position: sticky;
-  bottom: 0;
+  bottom: var(--coach-dock, 0px);
   z-index: 5;
-  display: grid;
   margin: 0.75rem;
   margin-bottom: max(0.75rem, env(safe-area-inset-bottom));
-  padding: 0 0.95rem 0.8rem;
-  /* Plain, so the pulsing control is the only thing drawing the eye. */
   border: 1px solid var(--p-line-strong);
-  border-radius: 14px;
+  border-radius: 20px;
   background: var(--p-surface-solid, var(--p-surface));
   box-shadow: 0 12px 32px rgb(0 0 0 / 35%);
   color: var(--p-ink);
@@ -90,193 +91,6 @@
   z-index: 40;
   max-width: 30rem;
   margin: 0 auto;
-}
-
-/*
- * Swipe down to minimise the guide to its header, up to bring it back; a tap does either. The
- * coach's buttons are scoped to it, so a page's own button styles (such as the splits page's)
- * cannot restyle them.
- */
-.setup-coach button.setup-coach-handle {
-  display: grid;
-  place-items: center;
-  min-height: 0;
-  margin: 0 -0.95rem 0.25rem;
-  padding: 0.45rem 0 0.35rem;
-  border: 0;
-  border-radius: 14px 14px 0 0;
-  background: none;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.setup-coach.is-dragging button.setup-coach-handle {
-  cursor: grabbing;
-}
-
-.setup-coach-grabber {
-  width: 2.25rem;
-  height: 4px;
-  border-radius: 999px;
-  background: var(--p-line-strong);
-  transition: background-color 150ms ease;
-}
-
-.setup-coach button.setup-coach-handle:hover .setup-coach-grabber,
-.setup-coach.is-dragging .setup-coach-grabber {
-  background: var(--p-muted);
-}
-
-.setup-coach button.setup-coach-handle:focus-visible {
-  outline-offset: -3px;
-}
-
-/* The step's text and buttons, which fold away under the header while minimised. */
-.setup-coach-body {
-  height: calc(var(--full, 0px) * var(--open, 1));
-  overflow: hidden;
-  transition: height 320ms cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* Its spacing sits inside it, so it folds away too. */
-.setup-coach-body > div {
-  display: grid;
-  gap: 0.5rem;
-  padding-top: 0.5rem;
-  opacity: var(--open, 1);
-  transition: opacity 240ms ease;
-}
-
-.setup-coach.is-dragging .setup-coach-body,
-.setup-coach.is-dragging .setup-coach-body > div {
-  transition: none;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .setup-coach-body,
-  .setup-coach-body > div {
-    transition: none;
-  }
-}
-
-:root[data-reduce-motion] .setup-coach-body,
-:root[data-reduce-motion] .setup-coach-body > div {
-  transition: none;
-}
-
-.setup-coach header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-}
-
-.setup-coach-kicker {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  color: var(--p-accent-text);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.setup-coach-kicker svg {
-  width: 0.9rem;
-  height: 0.9rem;
-}
-
-.setup-coach button.setup-coach-exit {
-  min-height: 2rem;
-  padding: 0 0.25rem;
-  border: 0;
-  background: none;
-  color: var(--p-ink-2);
-  font-size: 0.8rem;
-  font-weight: 500;
-}
-
-.setup-coach strong {
-  display: block;
-  font-size: 0.98rem;
-}
-
-.setup-coach p {
-  margin: 0.25rem 0 0;
-  color: var(--p-ink-2);
-  font-size: 0.85rem;
-  line-height: 1.5;
-}
-
-.setup-coach-actions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.5rem;
-}
-
-.setup-coach button.setup-coach-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.2rem;
-  min-height: 2.5rem;
-  margin-right: auto;
-  padding: 0 0.8rem 0 0.55rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 10px;
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.setup-coach button.setup-coach-next {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
-  min-height: 2.5rem;
-  padding: 0 0.9rem;
-  border: 0;
-  border-radius: 10px;
-  background: var(--p-accent);
-  color: #fff;
-  font-size: 0.85rem;
-  font-weight: 650;
-}
-
-.setup-coach button.setup-coach-next:disabled {
-  opacity: 0.45;
-}
-
-.setup-coach button.setup-coach-back svg,
-.setup-coach button.setup-coach-next svg {
-  width: 0.9rem;
-  height: 0.9rem;
-}
-
-.setup-coach button:focus-visible {
-  outline: 2px solid var(--p-accent-text);
-  outline-offset: 2px;
-}
-
-.setup-coach-progress {
-  display: flex;
-  gap: 0.3rem;
-  margin-top: 0.5rem;
-}
-
-.setup-coach-progress i {
-  flex: 1;
-  height: 3px;
-  border-radius: 3px;
-  background: var(--p-surface-3);
-}
-
-.setup-coach-progress i.is-done {
-  background: var(--p-accent);
 }
 
 /* The control the current step is about: its outline pulses and a ring spreads out from it. */

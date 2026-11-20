@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ExercisePicker } from './App';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { ExercisePicker } from './ExercisePicker';
 import { api } from './api';
 import { formatLastDone } from './exerciseLastDone';
 import type { Exercise, MachinePhotoUsage } from './types';
@@ -344,4 +344,47 @@ describe('choosing a machine beneath an exercise', () => {
     ).toBe('Cybex crossover');
     expect(pressed()).toEqual(['Matrix cable stack']);
   });
+});
+
+it('is a tall sheet sized to the visible area, and Escape in a pop-up over it leaves it open', async () => {
+  // Reduced motion closes the sheet at once, so a stray close would show straight away.
+  document.documentElement.setAttribute('data-reduce-motion', '');
+  onTestFinished(() => document.documentElement.removeAttribute('data-reduce-motion'));
+  const onClose = vi.fn();
+  await act(async () =>
+    root.render(
+      <ExercisePicker
+        exercises={exercises}
+        excludedIds={['single']}
+        recentExerciseIds={['cable', 'db']}
+        onChoose={onChoose}
+        onClose={onClose}
+        onFavoriteChange={vi.fn()}
+        onCreateExercise={vi.fn()}
+      />,
+    ),
+  );
+  const picker = document.querySelector<HTMLDialogElement>('dialog.exercise-picker')!;
+  expect(picker.classList).toContain('popup-dialog--sheet');
+  expect(picker.classList).toContain('popup-dialog--tall');
+  expect(picker.style.getPropertyValue('--exercise-picker-height')).toMatch(/^\d+(\.\d+)?px$/);
+  expect(picker.style.getPropertyValue('--exercise-picker-viewport-height')).toMatch(/px$/);
+
+  const cancel = async (dialog: Element) =>
+    act(async () => {
+      dialog.dispatchEvent(new Event('cancel', { cancelable: true }));
+    });
+  await act(async () =>
+    document.querySelector<HTMLButtonElement>('.exercise-muscle-help-button')!.click(),
+  );
+  const help = [...document.querySelectorAll('dialog')].find((item) => item !== picker)!;
+  await cancel(help);
+  await act(async () =>
+    document.querySelector<HTMLButtonElement>('.create-exercise-trigger')!.click(),
+  );
+  await cancel(document.querySelector('dialog.create-exercise-dialog')!);
+  expect(document.querySelector('dialog.create-exercise-dialog')).toBeNull();
+  expect(onClose).not.toHaveBeenCalled();
+  await cancel(picker);
+  expect(onClose).toHaveBeenCalledTimes(1);
 });

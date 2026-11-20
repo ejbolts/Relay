@@ -1,8 +1,26 @@
 /* Calendar day sheets: a logged day's workouts, and the plan for today or a later day. */
+.calendar-day-body {
+  padding: 0 var(--popup-pad, 1rem) var(--popup-pad, 1rem);
+}
+
+.calendar-day-detail .calendar-day-workouts > article:first-child {
+  padding-top: 0.25rem;
+}
+
 .planned-day-sheet .section-kicker {
   display: flex;
   align-items: center;
   gap: 0.4rem;
+}
+
+/* A training day's kicker starts with its type's colour. */
+.planned-day-sheet.has-type-dot .section-kicker::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--planned-day-color);
+  content: '';
 }
 
 /* One column, so the sheet has room for whole exercise names. */
@@ -23,12 +41,7 @@
 
 .planned-day-sheet .planned-day-edit-split {
   display: block;
-  min-height: 2.75rem;
-  margin: 0.5rem auto 0;
-  padding: 0 0.75rem;
-  color: var(--p-accent-text);
-  font-size: 0.875rem;
-  font-weight: 600;
+  margin: 0.75rem auto 0;
 }
 
 /* With the row opening the session card, editing is the day sheet's secondary action. */
