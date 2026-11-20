@@ -23,6 +23,7 @@ class MemoryBackend implements OfflineBackend {
 }
 
 const SINCE = '2026-08-01';
+const TODAY = '2026-11-20';
 const account = { id: 'sample-account', username: 'sample', display_name: 'Sample Lifter' } as User;
 const bench = { id: 'bench', name: 'Bench press' } as Exercise;
 const record = { id: 'record-1', exercise_id: 'bench' } as PersonalRecord;
@@ -63,7 +64,7 @@ async function readOpeningData(revision: string) {
     api.listWorkouts(SINCE, revision),
     api.listBodyMeasurements(),
   ]);
-  await api.rememberStartupData(revision);
+  await api.rememberStartupData(revision, TODAY);
 }
 
 beforeEach(() => {
@@ -102,7 +103,7 @@ describe('opening with the copies saved on this device', () => {
   it('has nothing to open with before the opening data has been read', async () => {
     expect(await api.savedStartupData('rev-1', SINCE)).toBeNull();
     // A revision alone is not enough: the copies themselves must be there.
-    await api.rememberStartupData('rev-1');
+    await api.rememberStartupData('rev-1', TODAY);
     expect(await api.savedStartupData('rev-1', SINCE)).toBeNull();
   });
 
@@ -115,6 +116,8 @@ describe('opening with the copies saved on this device', () => {
         workouts: [workout],
         personalRecords: [record],
         measurements: [expect.objectContaining({ measurement_date: '2026-11-19', weight_kg: 80 })],
+        // The day the dashboard was read for, so the app knows whether it is still current.
+        dashboardDate: TODAY,
       }),
     );
     // Reading the copies never asks the server.
@@ -128,7 +131,7 @@ describe('opening with the copies saved on this device', () => {
     await vi.waitFor(async () => expect(await api.savedStartupData('rev-1', SINCE)).not.toBeNull());
     expect(await api.savedStartupData('rev-2', SINCE)).toBeNull();
     // The server moved on and only the stamp caught up: the workouts copy is still older.
-    await api.rememberStartupData('rev-2');
+    await api.rememberStartupData('rev-2', TODAY);
     expect(await api.savedStartupData('rev-2', SINCE)).toBeNull();
   });
 
@@ -145,6 +148,18 @@ describe('opening with the copies saved on this device', () => {
     expect(await api.savedStartupData('rev-1', SINCE)).toBeNull();
   });
 
+  it('does not vouch for the dashboard when the day it was read for is unknown', async () => {
+    await readOpeningData('rev-1');
+    await vi.waitFor(async () => expect(await api.savedStartupData('rev-1', SINCE)).not.toBeNull());
+    const { CLIENT_VERSION } = await import('./clientVersion');
+    await writeOffline(
+      'startup-data-v1',
+      { revision: 'rev-1', version: CLIENT_VERSION },
+      account.id,
+    );
+    expect((await api.savedStartupData('rev-1', SINCE))?.dashboardDate).toBeNull();
+  });
+
   it('never opens one account with another account’s copies', async () => {
     await readOpeningData('rev-1');
     await vi.waitFor(async () => expect(await api.savedStartupData('rev-1', SINCE)).not.toBeNull());
@@ -152,6 +167,6 @@ describe('opening with the copies saved on this device', () => {
     expect(await api.savedStartupData('rev-1', SINCE)).toBeNull();
     localStorage.clear();
     expect(await api.savedStartupData('rev-1', SINCE)).toBeNull();
-    await expect(api.rememberStartupData('rev-1')).resolves.toBeUndefined();
+    await expect(api.rememberStartupData('rev-1', TODAY)).resolves.toBeUndefined();
   });
 });

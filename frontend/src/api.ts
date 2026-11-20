@@ -422,6 +422,8 @@ interface StartupStamp {
   revision: string;
   /** The release that saved the copies; a newer one reads them again from the server. */
   version: string;
+  /** The day the saved dashboard was read for. Its figures follow the calendar. */
+  date?: string;
 }
 
 export interface SavedStartupData {
@@ -429,13 +431,18 @@ export interface SavedStartupData {
   workouts: TrackedWorkout[];
   personalRecords: PersonalRecord[];
   measurements: BodyMeasurement[];
+  /** The day the saved dashboard was read for, when known. It is current only on that day. */
+  dashboardDate: string | null;
 }
 
-/** Notes that every opening read has just been saved on this device at `revision`. */
-async function rememberStartupData(revision: string): Promise<void> {
+/**
+ * Notes that every opening read has just been saved on this device at `revision`, with the
+ * dashboard read for `date`.
+ */
+async function rememberStartupData(revision: string, date: string): Promise<void> {
   const scope = captureAccountCacheScope();
   if (!scope.owner) return;
-  const stamp: StartupStamp = { revision, version: CLIENT_VERSION };
+  const stamp: StartupStamp = { revision, version: CLIENT_VERSION, date };
   await writeOffline(STARTUP_STAMP_KEY, stamp, scope.owner, scope.isCurrent);
 }
 
@@ -464,6 +471,7 @@ async function savedStartupData(revision: string, since: string): Promise<SavedS
       workouts,
       personalRecords: personalRecords.value,
       measurements,
+      dashboardDate: stamp.value.date ?? null,
     };
   } catch {
     return null;
