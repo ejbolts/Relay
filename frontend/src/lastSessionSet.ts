@@ -45,3 +45,30 @@ export function withLastSessionReps<
     return { ...row, reps: last.reps };
   });
 }
+
+/**
+ * Planned rows with the blanks a plan leaves (weight, reps, rest) filled from last time's
+ * matching set, so a planned day suggests what was lifted, as an exercise added by hand does.
+ * Rows beyond last time's count of that kind repeat its last one. Values the plan sets are kept;
+ * a rest still blank after that gets `defaultRest`.
+ */
+export function withLastSessionValues<
+  T extends KindFields & Pick<WorkoutSetInput, 'weight_kg' | 'reps' | 'rest_seconds'>,
+>(
+  rows: readonly T[],
+  lastSession: readonly (KindFields &
+    Pick<WorkoutSetInput, 'weight_kg' | 'reps' | 'rest_seconds'>)[],
+  defaultRest: number | null,
+): T[] {
+  return rows.map((row, index) => {
+    const last =
+      matchingLastSessionSet(rows, index, lastSession) ??
+      lastSession.filter((item) => kindGroup(item) === kindGroup(row)).at(-1);
+    return {
+      ...row,
+      weight_kg: row.weight_kg ?? last?.weight_kg ?? null,
+      reps: row.reps ?? last?.reps ?? null,
+      rest_seconds: row.rest_seconds ?? last?.rest_seconds ?? defaultRest,
+    };
+  });
+}

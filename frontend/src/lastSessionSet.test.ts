@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { matchingLastSessionSet, withLastSessionReps } from './lastSessionSet';
+import {
+  matchingLastSessionSet,
+  withLastSessionReps,
+  withLastSessionValues,
+} from './lastSessionSet';
 
 const warmup = { set_type: 'warmup' as const, warmup: true, failed: false };
 const working = { set_type: 'normal' as const, warmup: false, failed: false };
@@ -64,5 +68,39 @@ describe('withLastSessionReps', () => {
     ]);
     expect(withLastSessionReps([at(null, 12)], [at(null, 15)])[0].reps).toBe(15);
     expect(withLastSessionReps([at(100, 8)], [])[0].reps).toBe(8);
+  });
+});
+
+describe('withLastSessionValues', () => {
+  const set = (
+    kind: typeof working | typeof warmup,
+    weight_kg: number | null,
+    reps: number | null,
+    rest_seconds: number | null,
+  ) => ({ ...kind, weight_kg, reps, rest_seconds });
+
+  it("fills a plan's blanks from the matching set, repeating the last of a kind beyond it", () => {
+    const last = [set(warmup, 40, 10, 60), set(working, 100, 7, 150), set(working, 100, 6, 120)];
+    const planned = [
+      set(warmup, null, null, null),
+      set(working, null, null, null),
+      set(working, 90, 8, 200),
+      set(working, null, null, null),
+    ];
+    expect(withLastSessionValues(planned, last, 180)).toEqual([
+      set(warmup, 40, 10, 60),
+      set(working, 100, 7, 150),
+      set(working, 90, 8, 200),
+      set(working, 100, 6, 120),
+    ]);
+  });
+
+  it('gives a blank rest the default when there is no last time', () => {
+    expect(withLastSessionValues([set(working, null, 8, null)], [], 180)).toEqual([
+      set(working, null, 8, 180),
+    ]);
+    expect(withLastSessionValues([set(working, null, null, null)], [], null)).toEqual([
+      set(working, null, null, null),
+    ]);
   });
 });
