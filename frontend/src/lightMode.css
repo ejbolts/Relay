@@ -233,11 +233,6 @@
 :root[data-colour-mode='light'] .movement-overflow-menu button:disabled {
   color: var(--p-muted);
 }
-:root[data-colour-mode='light'] .add-set-fields textarea {
-  border-color: var(--p-line-strong);
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-}
 
 :root[data-colour-mode='light']
   .logger-screen

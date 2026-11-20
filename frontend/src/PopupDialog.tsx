@@ -164,6 +164,8 @@ export function PopupDialog({
       onCancel={(event) => {
         // Escape, and phone Back through overlayBack, step back before they close.
         event.preventDefault();
+        // React passes a pop-up's cancel on to the pop-ups it was opened from; only the top one acts.
+        if (event.target !== event.currentTarget) return;
         if (latest.current.busy) return;
         if (latest.current.onBack) latest.current.onBack();
         else dismiss();

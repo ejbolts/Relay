@@ -44,8 +44,10 @@ export function useSheetDismiss(
       reset();
       suppressClick = false;
       if (!(target instanceof Element) || !dialog.contains(target)) return;
-      // The sticky header is always draggable. Content only drags at its scroll boundary.
+      // The sticky header is always draggable. Content only drags at its scroll boundary, and never
+      // in a tall sheet, whose list scrolls under a search field.
       if (!target.closest('header')) {
+        if (dialog.classList.contains('popup-dialog--tall')) return;
         for (let node: Element | null = target; node; node = node.parentElement) {
           if (node.scrollTop > 0) return;
           if (node === dialog) break;
