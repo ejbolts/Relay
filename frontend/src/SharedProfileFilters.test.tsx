@@ -263,7 +263,9 @@ describe('shared profile friend control', () => {
     expect(dialog?.textContent).toContain('Block Sample Friend?');
     expect(dialog?.textContent).toContain('unblock them in Social, under Friends');
     expect(block).not.toHaveBeenCalled();
-    await act(async () => dialog!.querySelector<HTMLButtonElement>('.profile-danger')!.click());
+    await act(async () =>
+      dialog!.querySelector<HTMLButtonElement>('.popup-primary-action.is-danger')!.click(),
+    );
     expect(block).toHaveBeenCalledWith('friend');
     expect(container.textContent).toContain('You blocked Sample Friend');
     expect(container.textContent).not.toContain('under Find');

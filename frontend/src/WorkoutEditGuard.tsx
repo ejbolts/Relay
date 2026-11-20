@@ -41,24 +41,29 @@ export function useDiscardChangesGuard({
     <PopupDialog
       title="Discard changes?"
       className="workout-finish-dialog workout-discard-dialog discard-changes-dialog"
+      size="compact"
       onClose={() => setAsking(false)}
+      actionsClassName="workout-finish-actions"
+      actions={
+        <>
+          <button type="button" autoFocus onClick={() => setAsking(false)}>
+            Keep editing
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action is-danger discard-workout-button"
+            onClick={() => {
+              discardedRef.current = true;
+              setAsking(false);
+              onDiscard();
+            }}
+          >
+            Discard
+          </button>
+        </>
+      }
     >
-      <div className="popup-dialog-actions workout-finish-actions">
-        <button type="button" autoFocus onClick={() => setAsking(false)}>
-          Keep editing
-        </button>
-        <button
-          type="button"
-          className="popup-primary-action discard-workout-button"
-          onClick={() => {
-            discardedRef.current = true;
-            setAsking(false);
-            onDiscard();
-          }}
-        >
-          Discard
-        </button>
-      </div>
+      {null}
     </PopupDialog>
   );
 }

@@ -56,6 +56,8 @@ beforeEach(() => {
   HTMLDialogElement.prototype.close = function () {
     this.open = false;
   };
+  // The sheet closes at once here; MuscleSetsCard.swipe.test covers its slide away.
+  document.documentElement.setAttribute('data-reduce-motion', '');
   host = document.createElement('div');
   document.body.append(host);
   root = createToastRoot(host);
@@ -63,6 +65,7 @@ beforeEach(() => {
 afterEach(async () => {
   await act(async () => root.unmount());
   host.remove();
+  document.documentElement.removeAttribute('data-reduce-motion');
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -385,10 +388,19 @@ it('edits a muscle goal from its sheet, updates the progress and confirms in a t
   await act(async () => sheetButton('One set more').click());
   await act(async () => sheetButton('One set more').click());
   expect(input.value).toBe('12');
+  const footer = document.querySelector('dialog .popup-dialog-footer')!;
+  expect([...footer.querySelectorAll('button')].map((button) => button.textContent)).toEqual([
+    'Cancel',
+    'Save',
+  ]);
+  expect(footer.querySelector('.popup-primary-action')?.getAttribute('form')).toBe(
+    input.closest('form')!.id,
+  );
   await act(async () => sheetButton('Save').click());
   expect(save).toHaveBeenCalledExactlyOnceWith('Biceps', 12);
   const dialog = document.querySelector('dialog')!;
   expect(dialog.querySelector('form')).toBeNull();
+  expect(dialog.querySelector('.popup-dialog-footer')).toBeNull();
   expect(dialog.querySelector('[role="progressbar"]')?.getAttribute('aria-valuetext')).toBe(
     '6 of 12 sets',
   );
@@ -401,6 +413,7 @@ it('returns a custom goal to the default', async () => {
   const save = vi.fn<(muscle: string, goal: number | null) => Promise<void>>(async () => {});
   const input = await openGoalEditor(<GoalHarness save={save} initial={{ Biceps: 16 }} />);
   expect(input.value).toBe('16');
+  expect(sheetButton('Use default (10)').classList).toContain('popup-tertiary-action');
   await act(async () => sheetButton('Use default (10)').click());
   expect(save).toHaveBeenCalledExactlyOnceWith('Biceps', null);
   expect(

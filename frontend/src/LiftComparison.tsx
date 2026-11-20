@@ -11,7 +11,6 @@ import { api } from './api';
 import { rankExerciseSearchMatches } from './exerciseSearch';
 import { FuzzyHighlightedText } from './FuzzyHighlightedText';
 import { Icon } from './Icon';
-import { motionReduced } from './motion';
 import { useFlipAnimation, useHeightAnimation } from './motionHooks';
 import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
@@ -27,8 +26,6 @@ import './liftComparison.css';
 const MAX_LIFTS = 20;
 /** Lifts on each page of the picker: as many as fit the sheet on a phone without scrolling. */
 const PAGE_SIZE = 6;
-/** Matches the sheet's slide-down in liftComparison.css. */
-const CLOSE_MS = 240;
 /** The gap between one new lift rising into the card and the next, as useFlipAnimation spaces them. */
 const ENTER_STAGGER_MS = 80;
 
@@ -292,16 +289,8 @@ function LiftPicker({
   const [page, setPage] = useState(0);
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
-  const [closing, setClosing] = useState(false);
-  const closeTimer = useRef<number | null>(null);
   // Unselect all can be undone while its toast is up, back to the lifts it cleared.
   const [cleared, setCleared] = useState<{ lifts: string[]; serial: number } | null>(null);
-  useEffect(
-    () => () => {
-      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
-    },
-    [],
-  );
 
   /** Offers Undo for the lifts Unselect all cleared, or with null withdraws the offer. */
   function offerUndo(previous: string[] | null) {
@@ -315,13 +304,6 @@ function LiftPicker({
     setPage(0);
   }
 
-  /** Slides the sheet back down before it unmounts. */
-  function dismiss() {
-    if (closeTimer.current !== null) return;
-    if (motionReduced()) return onClose();
-    setClosing(true);
-    closeTimer.current = window.setTimeout(onClose, CLOSE_MS);
-  }
   // Chosen lifts lead, then the ones you have both logged, then theirs, then yours, then the rest.
   // The order is fixed while the sheet is open, so a lift stays under your finger when you tick it.
   const [ordered] = useState(() => {
@@ -343,11 +325,11 @@ function LiftPicker({
 
   return (
     <PopupDialog
+      variant="sheet"
+      size="tall"
       title="Lifts to compare"
-      className={`lift-picker${closing ? ' is-closing' : ''}`}
-      closeLabel="Done"
-      swipeToDismiss
-      onClose={dismiss}
+      className="lift-picker"
+      onClose={onClose}
     >
       <div className="lift-picker-body">
         <label className="lift-picker-search">

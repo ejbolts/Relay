@@ -172,3 +172,26 @@ it('switches to scanning a friend’s code', async () => {
   // This test browser has no camera.
   expect(dialog.querySelector('[role="alert"]')?.textContent).toBe('No camera is available here.');
 });
+
+it('is a plain dialog that a downward drag does not close', async () => {
+  sharing('followers');
+  const dialog = await open();
+  expect(dialog.classList).toContain('popup-dialog--dialog');
+  expect(dialog.querySelector('.sheet-grabber')).toBeNull();
+  const header = dialog.querySelector('header')!;
+  for (const [type, y] of [
+    ['touchstart', 300],
+    ['touchmove', 420],
+    ['touchend', 420],
+  ] as const) {
+    const point = { identifier: 1, clientX: 180, clientY: y };
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.assign(event, {
+      touches: type === 'touchend' ? [] : [point],
+      changedTouches: [point],
+    });
+    await act(async () => header.dispatchEvent(event));
+  }
+  expect(dialog.style.getPropertyValue('--sheet-offset')).toBe('');
+  expect(document.querySelector('.friend-invite-dialog')).toBe(dialog);
+});

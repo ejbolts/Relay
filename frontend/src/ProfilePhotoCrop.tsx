@@ -104,7 +104,40 @@ export function ProfilePhotoCrop({
   }
 
   return (
-    <PopupDialog title="Adjust profile photo" className="profile-crop-dialog" onClose={onClose}>
+    <PopupDialog
+      title="Adjust profile photo"
+      className="profile-crop-dialog"
+      onClose={onClose}
+      actions={
+        <>
+          <button
+            type="button"
+            className="popup-tertiary-action"
+            disabled={busy || !size}
+            onClick={() => {
+              updateCrop(DEFAULT_PHOTO_CROP);
+              reveal();
+            }}
+          >
+            Reset
+          </button>
+          <button type="button" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action"
+            disabled={busy || (!size && !useCentreCrop)}
+            onClick={() => {
+              if (useCentreCrop && typeof source !== 'string') onUse(source, DEFAULT_PHOTO_CROP);
+              else void apply();
+            }}
+          >
+            {busy ? 'Cropping…' : useCentreCrop ? 'Use centre crop' : 'Use crop'}
+          </button>
+        </>
+      }
+    >
       <div className="profile-crop-body">
         <div
           className={`profile-crop-stage${showContext ? ' is-adjusting' : ''}`}
@@ -223,32 +256,6 @@ export function ProfilePhotoCrop({
             {error}
           </p>
         )}
-      </div>
-      <div className="popup-dialog-actions">
-        <button
-          type="button"
-          disabled={busy || !size}
-          onClick={() => {
-            updateCrop(DEFAULT_PHOTO_CROP);
-            reveal();
-          }}
-        >
-          Reset
-        </button>
-        <button type="button" onClick={onClose}>
-          Cancel
-        </button>
-        <button
-          type="button"
-          className="popup-primary-action"
-          disabled={busy || (!size && !useCentreCrop)}
-          onClick={() => {
-            if (useCentreCrop && typeof source !== 'string') onUse(source, DEFAULT_PHOTO_CROP);
-            else void apply();
-          }}
-        >
-          {busy ? 'Cropping…' : useCentreCrop ? 'Use centre crop' : 'Use crop'}
-        </button>
       </div>
     </PopupDialog>
   );

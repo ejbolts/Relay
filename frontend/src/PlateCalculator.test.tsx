@@ -85,7 +85,7 @@ describe('plate calculator', () => {
     expect(dialog().querySelector('.plate-calculator-side')?.textContent).toBe(
       'Each side: 25 + 15 kg',
     );
-    expect(dialog().querySelector('svg')?.getAttribute('aria-label')).toBe(
+    expect(dialog().querySelector('svg[role="img"]')?.getAttribute('aria-label')).toBe(
       'Olympic bar with 25, 15 kg on each side',
     );
     // Two plates on each side of the bar.

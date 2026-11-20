@@ -414,28 +414,31 @@ export function ProfileIdentity({
         <PopupDialog
           title={`Save your sex as ${SEX_LABELS[sex]}?`}
           className="profile-sex-confirm"
+          size="compact"
           onClose={() => setConfirmingSex(false)}
+          actions={
+            <>
+              <button type="button" onClick={() => setConfirmingSex(false)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action"
+                onClick={() => {
+                  sexConfirmed.current = true;
+                  setConfirmingSex(false);
+                  void save();
+                }}
+              >
+                Save
+              </button>
+            </>
+          }
         >
           <p>
             It sets your body measurement outline. After you save, only an administrator can change
             it.
           </p>
-          <div className="popup-dialog-actions">
-            <button type="button" onClick={() => setConfirmingSex(false)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="popup-primary-action"
-              onClick={() => {
-                sexConfirmed.current = true;
-                setConfirmingSex(false);
-                void save();
-              }}
-            >
-              Save
-            </button>
-          </div>
         </PopupDialog>
       )}
       {cropSource && (

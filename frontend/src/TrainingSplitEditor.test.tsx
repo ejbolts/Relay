@@ -62,6 +62,15 @@ function button(text: string) {
 async function click(text: string) {
   await act(async () => button(text).click());
 }
+/** The split editor is a full screen, closed with its back button. */
+async function closeEditor() {
+  const back = document.querySelector<HTMLButtonElement>(
+    'dialog.routine-editor-screen .popup-dialog-back',
+  );
+  expect(back?.getAttribute('aria-label')).toBe('Back');
+  await act(async () => back!.click());
+  expect(document.querySelector('dialog.routine-editor-screen')).toBeNull();
+}
 async function input(selector: string, value: string) {
   await act(async () => {
     const el = document.querySelector<HTMLInputElement | HTMLSelectElement>(selector)!;
@@ -187,7 +196,7 @@ it('makes templates available only after a saved day change and blocks them agai
   await editCopy();
   await click('Add rest day');
   expect(button('Full body / Rest').disabled).toBe(true);
-  await click('Close Edit split');
+  await closeEditor();
   expect(button('Full body / Rest').disabled).toBe(true);
   await editCopy();
   await click('Add rest day');
@@ -206,12 +215,12 @@ it('does not reserve a template after cancelling or a failed save, and releases 
   vi.spyOn(api.routines, 'remove').mockResolvedValue(undefined);
   await mount();
   await click('Full body / Rest');
-  await click('Close New split');
+  await closeEditor();
   expect(button('Full body / Rest').disabled).toBe(false);
   await click('Full body / Rest');
   vi.mocked(api.routines.create).mockRejectedValueOnce(new Error('Offline'));
   await submit();
-  await click('Close New split');
+  await closeEditor();
   expect(button('Full body / Rest').disabled).toBe(false);
   await click('Full body / Rest');
   await submit();

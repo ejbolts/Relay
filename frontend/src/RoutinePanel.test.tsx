@@ -63,6 +63,15 @@ async function click(text: string) {
   expect(button).toBeDefined();
   await act(async () => button!.click());
 }
+/** The split editor is a full screen, closed with its back button. */
+async function closeEditor() {
+  const back = document.querySelector<HTMLButtonElement>(
+    'dialog.routine-editor-screen .popup-dialog-back',
+  );
+  expect(back?.getAttribute('aria-label')).toBe('Back');
+  await act(async () => back!.click());
+  expect(document.querySelector('dialog.routine-editor-screen')).toBeNull();
+}
 async function input(selector: string, value: string) {
   await act(async () => {
     const el = document.querySelector<HTMLInputElement | HTMLSelectElement>(selector)!;
@@ -166,7 +175,7 @@ it('opens My splits at the imported copy after dismissing the editor', async () 
   await mount(false, open);
   expect(host.textContent).not.toContain('View my splits');
   await click('Save split');
-  await click('Close Edit split');
+  await closeEditor();
   await click('View my splits');
   expect(open).toHaveBeenCalledWith('copy');
   expect(api.routines.use).not.toHaveBeenCalled();

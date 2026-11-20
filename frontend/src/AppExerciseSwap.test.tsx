@@ -220,6 +220,8 @@ describe('swapping an exercise mid-workout', () => {
     await click(button('Swap exercise'));
     const sheet = document.querySelector<HTMLDialogElement>('.exercise-swap-sheet')!;
     expect(sheet.open).toBe(true);
+    expect(sheet.classList).toContain('popup-dialog--sheet');
+    expect(sheet.querySelector('header > .sheet-grabber')).not.toBeNull();
     expect(sheet.querySelector('h2')?.textContent).toBe(`Swap ${chestPress.name}`);
     expect(sheet.querySelector('.exercise-swap-carry')?.textContent).toBe(
       '2 planned sets move across · 1 logged set stays',

@@ -28,7 +28,16 @@ export function SampleProfileDialog({
   const name = displayName.trim().replace(/\s+/g, ' ') || SAMPLE_DISPLAY_NAME;
   const handle = username.trim().toLowerCase() || SAMPLE_USERNAME;
   return (
-    <PopupDialog title="Sample profile" className="sample-profile-dialog" onClose={onClose}>
+    <PopupDialog
+      title="Sample profile"
+      className="sample-profile-dialog"
+      onClose={onClose}
+      actions={
+        <button type="button" className="popup-primary-action" onClick={onClose}>
+          Close
+        </button>
+      }
+    >
       <div className="sample-profile-body">
         <p className="sample-profile-intro">How friends will see you. Workouts are examples.</p>
         <section className="pulse-card today-profile" aria-label="Sample profile card">
@@ -75,11 +84,6 @@ export function SampleProfileDialog({
           </div>
         </dl>
       </div>
-      <footer className="popup-dialog-actions">
-        <button type="button" className="popup-primary-action" onClick={onClose}>
-          Close
-        </button>
-      </footer>
     </PopupDialog>
   );
 }

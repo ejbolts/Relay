@@ -36,7 +36,27 @@ export function RestAlertReminder({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <PopupDialog title="Turn on rest alerts?" className="rest-alert-reminder" onClose={close}>
+    <PopupDialog
+      title="Turn on rest alerts?"
+      className="rest-alert-reminder"
+      busy={enabling}
+      onClose={close}
+      actions={
+        <>
+          <button type="button" disabled={enabling} onClick={close}>
+            Not now
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action"
+            disabled={enabling}
+            onClick={() => void turnOn()}
+          >
+            {enabling ? 'Turning on…' : 'Turn on'}
+          </button>
+        </>
+      }
+    >
       <div className="rest-alert-reminder-body">
         <p>Get a notification when your rest is over, even with your phone locked.</p>
         <label className="rest-alert-reminder-dismiss" htmlFor={checkboxId}>
@@ -54,19 +74,6 @@ export function RestAlertReminder({ onClose }: { onClose: () => void }) {
             {error}
           </p>
         )}
-        <footer className="popup-dialog-actions">
-          <button type="button" disabled={enabling} onClick={close}>
-            Not now
-          </button>
-          <button
-            type="button"
-            className="popup-primary-action"
-            disabled={enabling}
-            onClick={() => void turnOn()}
-          >
-            {enabling ? 'Turning on…' : 'Turn on'}
-          </button>
-        </footer>
       </div>
     </PopupDialog>
   );

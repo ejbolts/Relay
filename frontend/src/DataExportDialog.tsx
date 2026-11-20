@@ -25,10 +25,6 @@ export function DataExportDialog({
   const dates = [...(workouts ? workoutDates : []), ...(bodyweight ? bodyweightDates : [])];
   const range = dateRangeForDates(dates, timeFrame);
 
-  function close() {
-    if (!busy) onClose();
-  }
-
   async function save() {
     if (busy || (!workouts && !bodyweight)) return;
     setBusy(true);
@@ -56,7 +52,26 @@ export function DataExportDialog({
   }
 
   return (
-    <PopupDialog title="Export Relay data" kicker="CSV EXPORT" onClose={close}>
+    <PopupDialog
+      title="Export Relay data"
+      busy={busy}
+      onClose={onClose}
+      actions={
+        <>
+          <button type="button" disabled={busy} onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action"
+            disabled={busy || (!workouts && !bodyweight)}
+            onClick={() => void save()}
+          >
+            {busy ? 'Preparing…' : 'Download CSV'}
+          </button>
+        </>
+      }
+    >
       <div className="data-export-dialog">
         <p>Choose what to export.</p>
         <fieldset disabled={busy} className="data-export-choices">
@@ -127,19 +142,6 @@ export function DataExportDialog({
             {error}
           </p>
         )}
-        <div className="popup-dialog-actions">
-          <button type="button" disabled={busy} onClick={close}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="popup-primary-action"
-            disabled={busy || (!workouts && !bodyweight)}
-            onClick={() => void save()}
-          >
-            {busy ? 'Preparing…' : 'Download CSV'}
-          </button>
-        </div>
       </div>
     </PopupDialog>
   );
