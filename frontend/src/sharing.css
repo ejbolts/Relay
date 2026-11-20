@@ -170,30 +170,8 @@
   position: relative;
 }
 
-.profile-follow-button {
-  min-height: 2.25rem;
-  display: inline-flex;
-  align-items: center;
+.pulse-button.profile-follow-button {
   gap: 0.35rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 999px;
-  padding: 0.35rem 0.85rem;
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-  font-size: 0.8125rem;
-  font-weight: 700;
-  touch-action: manipulation;
-}
-
-.profile-follow-button.is-follow {
-  border-color: transparent;
-  padding-inline: 1.1rem;
-  background: var(--p-accent);
-  color: #fff;
-}
-
-.profile-follow-button.is-follow:hover:not(:disabled) {
-  background: var(--p-accent-hover);
 }
 
 .profile-summary-copy .profile-follow-button span {
@@ -1014,12 +992,6 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 0.4rem;
-}
-
-.profile-follow-button.is-more {
-  width: 2.25rem;
-  justify-content: center;
-  padding: 0;
 }
 
 .profile-follow-button.is-more .pulse-icon {

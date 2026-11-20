@@ -134,6 +134,10 @@
   color: var(--p-ink-2);
 }
 
+.popup-dialog-actions button.popup-tertiary-action {
+  padding: 0.65rem 1rem;
+}
+
 .popup-tertiary-action.is-danger,
 .popup-dialog-actions button.popup-tertiary-action.is-danger {
   color: var(--p-danger);

@@ -103,10 +103,20 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
         </div>
       </header>
       <div className="settings-actions data-transfer-actions">
-        <button type="button" disabled={downloading} onClick={() => void download()}>
+        <button
+          type="button"
+          className="pulse-button secondary"
+          disabled={downloading}
+          onClick={() => void download()}
+        >
           {downloading ? 'Preparing…' : '↓ Download backup'}
         </button>
-        <button type="button" disabled={checking} onClick={() => fileInput.current?.click()}>
+        <button
+          type="button"
+          className="pulse-button secondary"
+          disabled={checking}
+          onClick={() => fileInput.current?.click()}
+        >
           {checking ? 'Checking…' : 'Restore backup'}
         </button>
         <input

@@ -250,35 +250,6 @@ textarea {
   align-items: center;
   gap: 0.25rem;
 }
-.primary,
-.secondary {
-  width: 100%;
-  border-radius: 11px;
-  margin-top: 1.25rem;
-  padding: 0.9rem 1rem;
-  font-weight: 800;
-  text-align: center;
-}
-.primary {
-  border: 1px solid #087f6b;
-  background: #087f6b;
-  color: #fff;
-}
-.secondary {
-  border: 1px solid #b9c9d8;
-  background: #fff;
-  color: #183f5c;
-}
-.danger-button {
-  width: 100%;
-  border: 1px solid #b42318;
-  border-radius: 11px;
-  margin-top: 0.75rem;
-  padding: 0.9rem 1rem;
-  background: #fff;
-  color: #b42318;
-  font-weight: 800;
-}
 .privacy-note {
   text-align: center;
   color: #68798c;
@@ -964,27 +935,11 @@ button.metric-card:focus-visible {
 }
 
 .calendar-edit-workout {
-  width: 100%;
-  margin: 0.75rem 0 0;
-  border: 1px solid var(--accent);
-  border-radius: 10px;
-  padding: 0.7rem;
-  background: var(--accent);
-  color: white;
-  font-size: 0.68rem;
-  font-weight: 850;
+  margin-top: 0.75rem;
 }
 
 .calendar-add-workout {
-  width: 100%;
   margin-top: 0.85rem;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.65rem;
-  background: transparent;
-  color: var(--ink);
-  font-size: 0.68rem;
-  font-weight: 850;
 }
 
 .heatmap-legend {
@@ -2294,166 +2249,6 @@ button.metric-card:focus-visible {
   font-weight: 750;
 }
 
-.photo-modal-backdrop {
-  z-index: 180;
-  place-items: center;
-  padding: 1rem;
-}
-
-.photo-caption-dialog {
-  position: relative;
-  width: min(100%, 620px);
-  max-height: 90dvh;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  overflow: hidden auto;
-  border: 1px solid var(--line);
-  border-radius: 20px;
-  background: var(--card);
-  color: var(--ink);
-  box-shadow: 0 24px 80px rgb(0 0 0 / 55%);
-}
-
-.photo-dialog-close {
-  position: absolute;
-  z-index: 2;
-  top: 0.65rem;
-  right: 0.65rem;
-  background: rgb(11 15 14 / 82%);
-  color: #fff;
-  backdrop-filter: blur(8px);
-}
-
-.photo-caption-dialog > img {
-  width: 100%;
-  height: 100%;
-  min-height: 17rem;
-  object-fit: cover;
-  background: #080b0a;
-}
-
-.photo-caption-dialog > div {
-  padding: 1rem;
-}
-
-.photo-caption-dialog h2 {
-  margin: 0;
-  font-size: 1.3rem;
-  letter-spacing: -0.04em;
-}
-
-.photo-caption-dialog p:not(.section-kicker) {
-  color: var(--muted-ink);
-  font-size: 0.67rem;
-  line-height: 1.45;
-}
-
-.photo-caption-dialog input,
-.photo-lightbox-caption input {
-  width: 100%;
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.72rem;
-  background: var(--page);
-  color: var(--ink);
-  font-size: 1rem;
-}
-
-.photo-dialog-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.5rem;
-  margin-top: 0.7rem;
-}
-
-.photo-dialog-actions button,
-.photo-lightbox-caption button {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.7rem;
-  background: transparent;
-  color: var(--ink);
-  font-size: 0.66rem;
-  font-weight: 850;
-}
-
-.photo-dialog-actions button:last-child,
-.photo-lightbox-caption button:first-of-type {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: white;
-}
-
-.photo-lightbox {
-  position: fixed;
-  z-index: 200;
-  inset: 0;
-  display: grid;
-  place-items: center;
-  padding: 1rem;
-  background: rgb(0 0 0 / 88%);
-  backdrop-filter: blur(8px);
-}
-
-.photo-lightbox > section {
-  position: relative;
-  width: min(100%, 900px);
-  max-height: 94dvh;
-  display: grid;
-  grid-template-rows: minmax(0, 1fr) auto;
-  overflow: hidden;
-  border: 1px solid #323a37;
-  border-radius: 18px;
-  background: #101412;
-  box-shadow: 0 30px 90px rgb(0 0 0 / 65%);
-}
-
-.photo-lightbox > section > img {
-  width: 100%;
-  height: 100%;
-  max-height: 72dvh;
-  object-fit: contain;
-  background: #050706;
-}
-
-.photo-lightbox-close {
-  position: absolute;
-  z-index: 1;
-  top: 0.65rem;
-  right: 0.65rem;
-  width: 2.2rem;
-  height: 2.2rem;
-  border: 1px solid rgb(255 255 255 / 22%);
-  border-radius: 50%;
-  background: rgb(0 0 0 / 58%);
-  color: white;
-  font-size: 1.25rem;
-}
-
-.photo-lightbox-caption {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: 0.5rem;
-  padding: 0.75rem;
-}
-
-.photo-lightbox-caption strong {
-  align-self: center;
-  padding: 0.35rem;
-}
-
-.photo-lightbox-caption .photo-delete {
-  border-color: #623d39;
-  color: #f09a92;
-}
-
-.photo-lightbox-caption > p {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: #f09a92;
-  font-size: 0.62rem;
-}
-
 .history-machine-photos {
   margin-top: 0.55rem;
   padding-bottom: 0.25rem;
@@ -2766,19 +2561,6 @@ button.metric-card:focus-visible {
   font-size: 0.68rem;
   font-weight: 800;
   cursor: pointer;
-}
-
-.add-set-button {
-  color: var(--accent-dark);
-}
-
-.add-exercise-button {
-  width: 100%;
-  margin: 0.8rem 0;
-  border: 1.5px dashed #d2a6a0;
-  padding: 1rem;
-  color: var(--accent-dark);
-  font-weight: 900;
 }
 
 .finish-workout-bottom {
@@ -3509,44 +3291,6 @@ button.metric-card:focus-visible {
   line-height: 1.5;
 }
 
-.delete-workout {
-  border: 0;
-  padding: 0.7rem 0;
-  background: transparent;
-  color: #b73529;
-  font-size: 0.72rem;
-  font-weight: 800;
-}
-
-.workout-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.55rem;
-  margin: 0.75rem 0 0;
-}
-
-.workout-actions button {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.7rem;
-  background: transparent;
-  color: var(--ink);
-  font-size: 0.7rem;
-  font-weight: 850;
-}
-
-.workout-actions .resume-workout-button {
-  grid-column: 1 / -1;
-  border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, var(--card));
-  color: var(--ink);
-}
-
-.workout-actions .delete-workout {
-  border-color: #583a36;
-  color: #d87970;
-}
-
 .empty-state {
   display: grid;
   justify-items: center;
@@ -3661,38 +3405,6 @@ button.metric-card:focus-visible {
 
   .metric-tabs {
     overflow-x: auto;
-  }
-
-  .photo-caption-dialog {
-    max-width: 420px;
-    grid-template-columns: 1fr;
-  }
-
-  .photo-caption-dialog > img {
-    height: min(42dvh, 22rem);
-    min-height: 12rem;
-  }
-
-  .photo-lightbox {
-    padding: 0;
-  }
-
-  .photo-lightbox > section {
-    width: 100%;
-    height: 100dvh;
-    max-height: none;
-    border: 0;
-    border-radius: 0;
-  }
-
-  .photo-lightbox-caption {
-    grid-template-columns: 1fr 1fr;
-    padding-bottom: calc(0.75rem + env(safe-area-inset-bottom));
-  }
-
-  .photo-lightbox-caption input,
-  .photo-lightbox-caption strong {
-    grid-column: 1 / -1;
   }
 }
 
@@ -3917,24 +3629,14 @@ button.metric-card:focus-visible {
   }
 }
 
-/* Shared focused popup used by bodyweight check-ins and goals. */
+/* PopupDialog's size and header layout; the surface is in pulse.css, variants in popupDialog.css. */
 .popup-dialog {
   width: min(calc(100% - 2rem), 520px);
   max-height: calc(100dvh - 2rem);
   margin: auto;
   overflow: auto;
   overscroll-behavior: contain;
-  border: 1px solid #42484b;
-  border-radius: 14px;
   padding: 0;
-  background: #1b1f20;
-  color: var(--ink);
-  box-shadow: 0 24px 80px rgb(0 0 0 / 55%);
-}
-
-.popup-dialog::backdrop {
-  background: rgb(4 7 7 / 76%);
-  backdrop-filter: blur(3px);
 }
 
 body:has(.popup-dialog[open]) {
@@ -3949,9 +3651,7 @@ body:has(.popup-dialog[open]) {
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  border-bottom: 1px solid #353b3d;
   padding: 1rem;
-  background: rgb(27 31 32 / 97%);
 }
 
 .popup-dialog > header .section-kicker {
@@ -3961,9 +3661,6 @@ body:has(.popup-dialog[open]) {
 .popup-dialog > header h2 {
   margin: 0;
   color: #e2dfdb;
-}
-
-.popup-dialog > header h2 {
   font-size: 1.12rem;
 }
 
@@ -3971,17 +3668,6 @@ body:has(.popup-dialog[open]) {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-}
-
-.popup-dialog-close {
-  width: 2.6rem;
-  height: 2.6rem;
-  flex: 0 0 auto;
-  border: 1px solid #444b4d;
-  border-radius: 7px;
-  background: #24292a;
-  color: #dedbd7;
-  font-size: 1.35rem;
 }
 
 .body-entry-form,
@@ -4019,6 +3705,7 @@ body:has(.popup-dialog[open]) {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+/* A footer a dialog builds itself; PopupDialog's own footer is .popup-dialog-footer. */
 .popup-dialog-actions {
   display: flex;
   justify-content: flex-end;
@@ -4026,31 +3713,10 @@ body:has(.popup-dialog[open]) {
   margin-top: 1rem;
 }
 
-.popup-dialog-actions button {
-  min-height: 2.75rem;
-  border: 1px solid #454c4f;
-  border-radius: 7px;
-  padding: 0.65rem 1rem;
-  background: #24292a;
-  color: #dedbd7;
-  font-weight: 800;
-}
-
-.popup-dialog-actions .popup-primary-action {
-  border-color: transparent;
-  background: var(--accent);
-  color: white;
-}
-
 .machine-assignment-dialog > p {
   margin: 0;
   padding: 1rem;
   line-height: 1.5;
-}
-
-.machine-assignment-dialog > .popup-dialog-actions {
-  margin: 0;
-  padding: 1rem;
 }
 
 .workout-import-review {
@@ -5109,23 +4775,6 @@ html.edge-swipe-active .edge-swipe-indicator {
   display: none;
 }
 
-.history-intro .data-actions {
-  width: 100%;
-  gap: 0.45rem;
-}
-
-.history-intro .data-actions button {
-  min-height: 2.55rem;
-  border-radius: 4px;
-  padding: 0.55rem 0.65rem;
-}
-
-.history-intro .data-actions .history-add-workout {
-  border-color: var(--accent);
-  background: var(--accent);
-  color: white;
-}
-
 .history-card {
   margin: 0;
   border: 0;
@@ -5262,10 +4911,6 @@ body,
   color: var(--accent-dark);
 }
 
-.add-exercise-button {
-  color: var(--accent-dark);
-}
-
 .filter-pills button,
 .metric-tabs button {
   border-color: var(--line);
@@ -5283,31 +4928,6 @@ body,
   border-color: #713831;
   background: #2a1715;
   color: #ffaaa1;
-}
-
-.data-actions {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.data-actions button {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 0.68rem 0.8rem;
-  background: var(--card);
-  color: var(--ink);
-  font-size: 0.72rem;
-  font-weight: 850;
-}
-
-.data-actions button:last-of-type {
-  border-color: var(--accent);
-  color: var(--accent-dark);
-}
-
-.data-actions .sample-clear {
-  border-color: #583a36;
-  color: #d79a93;
 }
 
 .history-intro {
@@ -5372,14 +4992,6 @@ body,
   .history-intro {
     align-items: flex-start;
     flex-direction: column;
-  }
-
-  .data-actions {
-    width: 100%;
-  }
-
-  .data-actions button {
-    flex: 1;
   }
 }
 
@@ -6526,17 +6138,6 @@ body,
   grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
 }
 
-.photo-inline-close {
-  grid-column: 1 / -1;
-  justify-self: end;
-  margin: 0.65rem 0.65rem 0;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.45rem 0.65rem;
-  background: transparent;
-  color: var(--muted-ink);
-}
-
 .photo-inline-editor > img {
   width: 100%;
   height: 100%;
@@ -6568,7 +6169,6 @@ body,
   color: var(--ink);
 }
 
-.photo-inline-actions,
 .photo-detail-caption {
   display: flex;
   flex-wrap: wrap;
@@ -6576,8 +6176,7 @@ body,
   margin-top: 0.7rem;
 }
 
-.photo-inline-actions button,
-.photo-detail-caption button {
+.photo-detail-caption button:where(:not(.pulse-button)) {
   border: 1px solid var(--line);
   border-radius: 9px;
   padding: 0.6rem 0.75rem;
@@ -6596,11 +6195,6 @@ body,
 
 .photo-detail-close {
   justify-self: end;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 0.45rem 0.65rem;
-  background: transparent;
-  color: var(--muted-ink);
 }
 
 .photo-detail img {
@@ -6632,11 +6226,6 @@ body,
   font-size: 0.7rem;
 }
 
-.photo-detail-caption > .photo-choose-other {
-  border-color: var(--accent);
-  color: var(--accent);
-}
-
 .body-edit-form {
   margin-top: 0.75rem;
   border: 1px solid var(--line);
@@ -6661,9 +6250,7 @@ body,
   gap: 0.35rem;
 }
 
-.body-history-actions,
-.workout-actions,
-.data-actions {
+.body-history-actions {
   flex-wrap: wrap;
 }
 
@@ -7054,31 +6641,11 @@ body,
   color: var(--accent-dark);
 }
 
-.add-set-button {
-  width: 100%;
-  min-height: 3.1rem;
-  margin: 0.75rem 0;
-  border: 0;
-  border-radius: 5px;
-  padding: 0.75rem;
-  background: #202526;
-  color: #d3d0cd;
-  font-size: 0.92rem;
-  font-weight: 500;
-}
-
-.add-set-button:hover,
-.add-set-button:focus-visible {
-  background: #272d2f;
-  outline: 1px solid #41494c;
-}
-
 .movement-note {
   width: 100%;
   margin: 0 0 1rem;
 }
 
-.add-exercise-button,
 .primary-action,
 .add-selected-button,
 .body-entry-panel > button,
@@ -7087,10 +6654,6 @@ body,
   border-radius: 5px;
   background: var(--accent);
   color: #f2fbff;
-}
-
-.add-exercise-button {
-  border-style: solid;
 }
 
 .workout-notes {
@@ -7873,25 +7436,14 @@ body,
   line-height: 1.5;
 }
 
-.settings-actions > button:where(:not(.pulse-button)) {
-  min-height: 2.6rem;
-  border: 1px solid #41484b;
-  border-radius: 4px;
-  padding: 0.55rem 0.65rem;
-  background: #202526;
-  color: #dedbd8;
-  font-size: 0.7rem;
-  font-weight: 750;
+/* Two buttons share a phone-width row; trimmed so "Download backup" stays on one line. */
+.settings-actions > .pulse-button {
+  padding-inline: 0.5rem;
+  font-size: 0.875rem;
 }
 
 .settings-actions .inline-confirmation {
   grid-column: 1 / -1;
-}
-
-.settings-actions .sample-clear {
-  width: 100%;
-  border-color: #68423d;
-  color: #f09c93;
 }
 
 .history-calendar-panel .panel-heading {
@@ -9045,34 +8597,6 @@ body.chart-fullscreen-open {
 .completed-set-level-control.completed-set-rpe {
   flex: 0 0 auto;
   text-align: center;
-}
-
-/* Keep both set editors compact and usable above mobile keyboards. */
-
-.set-dialog-keyboard-action {
-  position: absolute;
-  z-index: 15;
-  right: max(0.85rem, env(safe-area-inset-right));
-  bottom: max(0.7rem, env(safe-area-inset-bottom));
-  min-width: 6.2rem;
-  min-height: 3rem;
-  border: 1px solid rgb(84 195 244 / 70%);
-  border-radius: 0.7rem;
-  padding: 0.65rem 1.25rem;
-  background: linear-gradient(145deg, #5598e7, #256abf);
-  box-shadow: 0 10px 28px rgb(0 0 0 / 50%);
-  color: white;
-  font-size: 0.85rem;
-  font-weight: 850;
-  letter-spacing: 0.01em;
-  touch-action: manipulation;
-}
-
-.set-dialog-keyboard-action:hover,
-.set-dialog-keyboard-action:focus-visible {
-  outline: 2px solid rgb(116 199 237 / 48%);
-  outline-offset: 2px;
-  filter: brightness(1.08);
 }
 
 .pending-workout-save {

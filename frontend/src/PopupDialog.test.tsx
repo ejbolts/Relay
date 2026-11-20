@@ -136,13 +136,16 @@ describe('popup dialog variants', () => {
     expect(dialog.querySelector('.popup-dialog-back')!.hasAttribute('disabled')).toBe(true);
   });
 
-  it('still shows a legacy close label until callers move to the standard header', () => {
+  it('always closes with the × icon, and only a sheet has the grabber', () => {
     const dialog = render(
-      <PopupDialog title="Muscle" closeLabel="Done" swipeToDismiss onClose={vi.fn()}>
+      <PopupDialog title="Muscle" onClose={vi.fn()}>
         <p>Sets</p>
       </PopupDialog>,
     );
-    expect(dialog.querySelector('.popup-dialog-close')!.textContent).toBe('Done');
+    const close = dialog.querySelector('.popup-dialog-close')!;
+    expect(close.getAttribute('aria-label')).toBe('Close Muscle');
+    expect(close.textContent).toBe('');
+    expect(close.querySelector('svg')).not.toBeNull();
     expect(dialog.querySelector('.sheet-grabber')).toBeNull();
   });
 });

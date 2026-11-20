@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from './api';
 import { MachineSettingsSummary } from './MachineSettingsEditor';
 import { PopupDialog } from './PopupDialog';
@@ -23,7 +23,6 @@ export function ExerciseSessionSheet({
   const [workout, setWorkout] = useState<TrackedWorkout | null>(null);
   const [error, setError] = useState(false);
   const [attempt, setAttempt] = useState(0);
-  const previousFocus = useRef(document.activeElement as HTMLElement | null);
   useEffect(() => {
     let cancelled = false;
     setError(false);
@@ -40,13 +39,6 @@ export function ExerciseSessionSheet({
       cancelled = true;
     };
   }, [workoutId, attempt, dataRevision]);
-  useEffect(
-    () => () => {
-      const element = previousFocus.current;
-      requestAnimationFrame(() => element?.focus());
-    },
-    [],
-  );
   const movements =
     workout?.movements.filter((movement) => movement.exercise.id === exercise.id) ?? [];
   let workingSetNumber = 0;
@@ -70,7 +62,7 @@ export function ExerciseSessionSheet({
           <p>Could not load this session.</p>
           <button
             type="button"
-            className="text-link"
+            className="pulse-button link small"
             onClick={() => setAttempt((value) => value + 1)}
           >
             Retry

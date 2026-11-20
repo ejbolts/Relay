@@ -217,7 +217,7 @@ export function MuscleSetsCard({
       {(expanded || allMuscles.length > visibleMuscles.length) && (
         <button
           type="button"
-          className="show-more-button muscle-sets-expand"
+          className="pulse-button link small muscle-sets-expand"
           aria-expanded={expanded}
           aria-controls={listId}
           onClick={() => setExpanded((value) => !value)}
@@ -384,7 +384,7 @@ function MuscleContributionSheet({
           {onChangeGoal && !editing && (
             <button
               type="button"
-              className="muscle-goal-edit-button"
+              className="pulse-button link small muscle-goal-edit-button"
               aria-label={`Edit goal for ${muscle.muscle_group}`}
               onClick={startEditing}
             >

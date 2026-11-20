@@ -657,6 +657,8 @@ it('keeps the counting explanation in a help popup next to Time trained', async 
   const card = container.querySelector('.profile-training-time')!;
   expect(card.textContent).not.toContain('Totals use each');
   const help = card.querySelector<HTMLButtonElement>('[aria-label="About time trained"]')!;
+  // PopupDialog returns focus to the control it opened from, as a browser focuses it.
+  help.focus();
   await act(async () => help.click());
   const dialog = document.querySelector('dialog[open]')!;
   expect(dialog.textContent).toContain(

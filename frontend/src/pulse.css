@@ -549,17 +549,6 @@ button.pulse-card:hover {
   margin: 0;
 }
 
-.calendar-month-older button {
-  min-height: 2.5rem;
-  padding: 0 1rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--p-accent-text);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
 .calendar-older-spinner {
   width: 1.25rem;
   height: 1.25rem;
@@ -1615,6 +1604,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 /* An edited workout's Save, beside Delete in its header. */
 .overlay-header-save {
+  position: relative;
   min-width: 4.25rem;
   height: 2.5rem;
   border: 1px solid transparent;
@@ -1629,6 +1619,13 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 .overlay-header-save:disabled {
   opacity: 0.7;
+}
+
+/* 40px to match the header icons, with a 44px touch target (placed from inside the border). */
+.overlay-header-save::before {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
 }
 
 .overlay-header-back svg,
@@ -2275,15 +2272,8 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-weight: 600;
 }
 
-.history-screen .workout-actions .resume-workout-button,
-.history-screen .workout-actions .edit-workout-button.is-main {
-  border-color: transparent;
-  background: var(--p-accent);
-  color: #fff;
-}
-
-.history-screen .workout-actions .delete-workout {
-  color: var(--p-danger);
+.history-screen .workout-actions > .pulse-button {
+  flex: 1;
 }
 
 /* Confirm delete and Cancel share their own row, each on one line. */
@@ -3265,14 +3255,6 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .logger-screen .movement-card header h2 .movement-history-link:focus-visible,
 .logger-screen .movement-card header h2 .movement-history-link:active {
   color: #9cc4f3;
-}
-
-.logger-screen .add-exercise-button {
-  border: 2px dotted color-mix(in srgb, var(--p-accent) 60%, transparent);
-  border-radius: 16px;
-  background: transparent;
-  color: var(--p-accent-text);
-  font-weight: 600;
 }
 
 .logger-screen .finish-workout-bottom {
@@ -4455,11 +4437,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 .logger-screen .add-set-button {
   margin: 0.5rem 0.875rem 0.375rem;
-  border: 0;
-  border-radius: 12px;
-  background: var(--p-surface-2);
-  color: var(--p-accent-text);
-  font-weight: 600;
 }
 
 .logger-screen .movement-note {
@@ -4815,7 +4792,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   }
 }
 
-/* ───────── Popups: one sheet style everywhere ───────── */
+/* ───────── Popups: the PopupDialog surface ───────── */
 
 .popup-dialog::backdrop {
   background: rgb(4 6 8 / 72%);
@@ -4823,8 +4800,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
   -webkit-backdrop-filter: blur(6px);
 }
 
-.popup-dialog,
-.pr-summary {
+.popup-dialog {
   border: 1px solid var(--p-line-strong);
   border-radius: 24px;
   background: var(--p-surface);
@@ -4833,8 +4809,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 /* Dark mode: overlays sit one step above cards, and the tiles inside them step up too. */
-:root:not([data-colour-mode='light'])
-  :is(.popup-dialog, .pr-summary, .relay-tip-popover, .relay-tip-nudge) {
+:root:not([data-colour-mode='light']) :is(.popup-dialog, .relay-tip-popover, .relay-tip-nudge) {
   --p-surface: var(--p-surface-raised);
   --p-surface-2: var(--p-raised-2);
   --p-surface-3: var(--p-raised-3);
@@ -4844,37 +4819,14 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 .popup-dialog > header {
   border-bottom: 1px solid var(--p-line);
-}
-
-.popup-dialog > header {
   background: color-mix(in srgb, var(--p-surface) 97%, transparent);
 }
 
-.popup-dialog h2,
-.pr-summary h2 {
+.popup-dialog h2 {
   color: var(--p-ink);
   font-size: 1.1875rem;
   font-weight: 650;
   letter-spacing: -0.01em;
-}
-
-.popup-dialog-close {
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-  background: var(--p-surface-2);
-  color: var(--p-ink-2);
-}
-
-.popup-primary-action {
-  min-height: 3rem;
-  border: 0;
-  border-radius: 14px;
-  background: var(--p-accent);
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 650;
 }
 
 .popup-dialog-actions {
@@ -5790,14 +5742,6 @@ html[data-reduce-motion] ::backdrop {
   color: var(--p-accent-text);
   font-size: 0.8125rem;
   font-weight: 650;
-}
-
-.photo-detail-caption > .photo-machine-history {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border-color: var(--p-accent);
-  color: var(--p-accent-text);
 }
 
 .machine-photo-rail > article > .machine-last-used {

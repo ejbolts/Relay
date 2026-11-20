@@ -108,13 +108,10 @@
 
 /*
  * Back and Next are the standard secondary and primary buttons (buttons.css). This keeps their
- * standard size where a page's own button rules (such as the splits page's) would shrink them,
- * and where the legacy .primary and .secondary rules in styles.css would stretch them.
+ * standard size where a page's own button rules (such as the splits page's) would shrink them.
  */
 .guide-card button.pulse-button {
-  width: auto;
   min-height: var(--p-button-h);
-  margin: 0;
   border-radius: var(--p-button-r);
   gap: 0.25rem;
   font-size: 0.9375rem;

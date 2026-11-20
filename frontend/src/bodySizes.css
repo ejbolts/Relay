@@ -10,15 +10,11 @@
 .body-sizes-title h2 {
   margin: 0;
 }
-.body-sizes-add {
+/* Compact in the card header, so it stays beside the title. */
+.body-sizes-card .pulse-button.body-sizes-add {
   flex-shrink: 0;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 10px;
-  padding: 8px 10px;
-  background: transparent;
-  color: var(--p-accent-text);
-  font-size: 12px;
-  font-weight: 600;
+  padding-inline: 0.625rem;
+  font-size: 0.75rem;
 }
 .body-sizes-empty {
   color: var(--p-muted);
@@ -239,18 +235,8 @@
   gap: 8px;
   margin: 16px 0 18px;
 }
-.body-sizes-entry-actions button:where(:not(.pulse-button)) {
+.body-sizes-entry-actions .pulse-button {
   flex: 1;
-  min-height: 40px;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 10px;
-  background: transparent;
-  color: var(--p-accent-text);
-  font-size: 13px;
-  font-weight: 600;
-}
-.body-sizes-entry-actions button.danger {
-  color: var(--p-danger);
 }
 .body-sizes-history {
   border-top: 1px solid var(--p-line);
@@ -310,12 +296,9 @@
   gap: 8px;
   font-size: 13px;
 }
-.body-sizes-history button {
-  color: var(--p-accent-text);
-  border: 0;
-  background: transparent;
-  padding: 8px;
-  font-size: 12px;
+.body-sizes-history-heading > div {
+  display: flex;
+  gap: 8px;
 }
 .body-sizes-history p {
   margin: 2px 0 0;

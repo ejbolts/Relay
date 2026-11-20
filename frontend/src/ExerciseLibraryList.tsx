@@ -245,13 +245,7 @@ export function ExerciseLibraryList({
         </div>
       </div>
       {optionsOpen && (
-        <PopupDialog
-          title="Exercise list"
-          onClose={() => {
-            setOptionsOpen(false);
-            requestAnimationFrame(() => optionsButton.current?.focus());
-          }}
-        >
+        <PopupDialog title="Exercise list" onClose={() => setOptionsOpen(false)}>
           {blocks.config.blocks.length > 0 && (
             <label className="exercise-page-size">
               Training block

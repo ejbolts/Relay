@@ -43,7 +43,6 @@ export function PopupDialog({
   titleBadge,
   kicker,
   className = '',
-  closeLabel,
   headerActions,
   onBack,
   actions,
@@ -53,7 +52,6 @@ export function PopupDialog({
   describedBy,
   dismissOnBackdrop,
   style,
-  swipeToDismiss = false,
   onClose,
   children,
 }: {
@@ -64,8 +62,6 @@ export function PopupDialog({
   titleBadge?: ReactNode;
   kicker?: string;
   className?: string;
-  /** @deprecated Replaces the × icon; the close control is always × in the standard header. */
-  closeLabel?: ReactNode;
   /** Controls beside the close button, such as a screen's Save action. */
   headerActions?: ReactNode;
   /** A nested view: shows a back chevron before the title, and Escape or phone Back call it. */
@@ -82,8 +78,6 @@ export function PopupDialog({
   /** Whether a tap on the backdrop closes it. Defaults to true, and to false for screens. */
   dismissOnBackdrop?: boolean;
   style?: CSSProperties;
-  /** @deprecated Use `variant="sheet"`, which can always be swiped away. */
-  swipeToDismiss?: boolean;
   onClose: () => void;
   children: ReactNode;
 }) {
@@ -112,7 +106,7 @@ export function PopupDialog({
     setClosing(true);
   }, [isSheet]);
 
-  useSheetDismiss(dialogRef, (isSheet || swipeToDismiss) && !busy && !closing, dismiss);
+  useSheetDismiss(dialogRef, isSheet && !busy && !closing, dismiss);
 
   useEffect(() => {
     if (!closing) return;
@@ -206,7 +200,7 @@ export function PopupDialog({
             disabled={busy}
             onClick={dismiss}
           >
-            {closeLabel ?? <Icon name="close" />}
+            <Icon name="close" />
           </button>
         )}
       </header>
