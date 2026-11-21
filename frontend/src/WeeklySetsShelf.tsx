@@ -7,7 +7,7 @@ import type { WeeklySetGain } from './weeklySetsUpdate';
 import './weeklySetsShelf.css';
 
 /** How long the shelf stays up after a set unless it is touched: the standard pop-up time. */
-export const WEEKLY_SETS_SHELF_MS = POPUP_MS;
+const WEEKLY_SETS_SHELF_MS = POPUP_MS.standard;
 const LEAVE_MS = 200;
 
 const credits = (value: number) => Number(value.toFixed(3)).toLocaleString();

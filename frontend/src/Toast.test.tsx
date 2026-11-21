@@ -49,38 +49,49 @@ function base(props: Partial<ToastProps> = {}): ToastProps {
 }
 
 describe('variants and timing', () => {
-  it('stays the standard three seconds', () => {
-    expect(TOAST_MS).toBe(3000);
-  });
+  const undo = { label: 'Undo', run: (): void => undefined };
 
   it.each([
-    ['status', undefined, 'status', 'Saved'],
-    ['action', { label: 'Undo', run: () => undefined }, 'status', 'Saved'],
-    ['warning', undefined, 'alert', 'Saved'],
-    ['error', undefined, 'alert', 'Saved'],
-    ['celebrate', undefined, 'status', 'Saved'],
-    ['error', undefined, 'alert', 'x'.repeat(200)],
+    ['status', undefined, 'status', undefined, TOAST_MS.standard],
+    ['action', undo, 'status', undefined, TOAST_MS.standard],
+    ['action', undo, 'status', 'quick', TOAST_MS.quick],
+    ['action', undo, 'status', 'important', TOAST_MS.important],
+    ['warning', undefined, 'alert', undefined, TOAST_MS.important],
+    ['celebrate', undefined, 'status', undefined, TOAST_MS.important],
+    ['error', undefined, 'alert', undefined, TOAST_MS.critical],
   ] as const)(
-    'a %s toast has its role and the standard duration (%#)',
-    async (variant, action, role, message) => {
+    'a %s toast (%s) has its role and time',
+    async (variant, action, role, duration, ms) => {
       const onDismiss = vi.fn();
       await render(
         <Toast
-          message={message}
+          message="Saved"
           variant={variant === 'action' ? undefined : variant}
           action={action}
+          duration={duration}
           onDismiss={onDismiss}
         />,
       );
       expect(toast()!.dataset.variant).toBe(variant);
       expect(toast()!.getAttribute('role')).toBe(role);
-      expect(toast()!.style.getPropertyValue('--toast-ms')).toBe('3000ms');
-      await advance(2999);
+      expect(toast()!.style.getPropertyValue('--toast-ms')).toBe(`${ms}ms`);
+      await advance(ms - 1);
       expect(onDismiss).not.toHaveBeenCalled();
       await advance(1);
       expect(onDismiss).toHaveBeenCalledOnce();
     },
   );
+
+  it('uses the app pop-up times: quick, standard, important and critical', () => {
+    expect(TOAST_MS).toEqual({ quick: 2500, standard: 3000, important: 5000, critical: 7000 });
+  });
+
+  it('gives a long message time to read, but never shortens a longer time', async () => {
+    await render(<Toast {...base({ message: 'x'.repeat(91), duration: 'quick' })} />);
+    expect(toast()!.style.getPropertyValue('--toast-ms')).toBe(`${TOAST_MS.important}ms`);
+    await render(<Toast {...base({ message: 'x'.repeat(91), variant: 'error' })} />);
+    expect(toast()!.style.getPropertyValue('--toast-ms')).toBe(`${TOAST_MS.critical}ms`);
+  });
 
   it('gives the close button a 44px target label', async () => {
     await render(<Toast {...base({ message: 'x'.repeat(91) })} />);
@@ -142,7 +153,7 @@ describe('one slot', () => {
     expect(toasts().map((item) => item.textContent)).toEqual([
       expect.stringContaining('Swapped to Row'),
     ]);
-    await advance(TOAST_MS * 2);
+    await advance(TOAST_MS.standard * 2);
     expect(first.onTimeout).toHaveBeenCalledOnce();
   });
 
@@ -198,7 +209,7 @@ describe('one slot', () => {
     expect(toast()).toBeNull();
     expect(api.active).toBe(false);
     await act(async () => api.show('Copied'));
-    await advance(TOAST_MS);
+    await advance(TOAST_MS.standard);
     expect(toast()).toBeNull();
   });
 });
@@ -221,10 +232,10 @@ describe('countdown', () => {
     const draw = () => render(<Toast {...base({ onDismiss: () => onDismiss() })} />);
     await draw();
     const bar = document.querySelector('.toast-timer');
-    await advance(TOAST_MS / 2);
+    await advance(TOAST_MS.standard / 2);
     await draw();
     expect(document.querySelector('.toast-timer')).toBe(bar);
-    await advance(TOAST_MS / 2 - 1);
+    await advance(TOAST_MS.standard / 2 - 1);
     expect(onDismiss).not.toHaveBeenCalled();
     await advance(1);
     expect(onDismiss).toHaveBeenCalledOnce();
@@ -237,7 +248,7 @@ describe('countdown', () => {
         <Toast {...base({ onDismiss, action: { label: 'Undo', run: vi.fn() } })} />
       </ToastProvider>,
     );
-    await advance(TOAST_MS - 1000);
+    await advance(TOAST_MS.standard - 1000);
     pointer(toast()!, 'pointerdown', 'touch');
     await advance(0);
     expect(toast()!.hasAttribute('data-paused')).toBe(true);
@@ -263,10 +274,10 @@ describe('countdown', () => {
     await render(<Toast {...base({ onDismiss, action, busy: true })} />);
     expect(button('Undo').disabled).toBe(true);
     expect(button('Dismiss notification').disabled).toBe(true);
-    await advance(TOAST_MS * 2);
+    await advance(TOAST_MS.standard * 2);
     expect(onDismiss).not.toHaveBeenCalled();
     await render(<Toast {...base({ onDismiss, action })} />);
-    await advance(TOAST_MS);
+    await advance(TOAST_MS.standard);
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
@@ -274,10 +285,10 @@ describe('countdown', () => {
     const onDismiss = vi.fn();
     await render(<Toast {...base({ id: 1, onDismiss })} />);
     const bar = document.querySelector('.toast-timer');
-    await advance(TOAST_MS - 500);
+    await advance(TOAST_MS.standard - 500);
     await render(<Toast {...base({ id: 2, onDismiss })} />);
     expect(document.querySelector('.toast-timer')).not.toBe(bar);
-    await advance(TOAST_MS - 1);
+    await advance(TOAST_MS.standard - 1);
     expect(onDismiss).not.toHaveBeenCalled();
     await advance(1);
     expect(onDismiss).toHaveBeenCalledOnce();
@@ -289,7 +300,7 @@ describe('countdown', () => {
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     await act(async () => document.dispatchEvent(new Event('visibilitychange')));
     await act(async () => window.dispatchEvent(new Event('pagehide')));
-    await advance(TOAST_MS);
+    await advance(TOAST_MS.standard);
     expect(onTimeout).toHaveBeenCalledOnce();
   });
 });

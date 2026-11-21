@@ -2303,6 +2303,7 @@ function AppContent() {
           <Toast
             id={workoutDeletion.pending.id}
             message="Workout deleted"
+            duration="important"
             action={{ label: 'Undo', run: workoutDeletion.undo }}
             dismissLabel="Dismiss workout deleted notification"
             onDismiss={workoutDeletion.flush}
@@ -5570,6 +5571,7 @@ function WorkoutLogger({
         <Toast
           id={swapUndo.id}
           message={`Swapped to ${swapUndo.exerciseName}`}
+          duration="quick"
           action={{ label: 'Undo', run: undoSwap }}
           dismissLabel="Dismiss swap notification"
           onDismiss={() => setSwapUndo(null)}
@@ -5579,6 +5581,7 @@ function WorkoutLogger({
         <Toast
           id={`${undoDeletion.kind}:${undoDeletion.set.key}`}
           message={undoDeletion.kind === 'rest' ? 'Rest time removed' : 'Set deleted'}
+          duration="quick"
           action={{ label: 'Undo', run: undoLastDeletion }}
           dismissLabel="Dismiss deletion notification"
           onDismiss={() => setUndoDeletion(null)}

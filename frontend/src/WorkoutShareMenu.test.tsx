@@ -112,7 +112,7 @@ describe('workout share menu', () => {
     expect(toastText()).toBe('Workout exported');
     expect(container.querySelector('[role="alert"]')).toBeNull();
 
-    act(() => vi.advanceTimersByTime(TOAST_MS));
+    act(() => vi.advanceTimersByTime(TOAST_MS.standard));
     expect(toastElement()).toBeNull();
   });
 

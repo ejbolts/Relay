@@ -433,10 +433,10 @@ describe('saving and pinning a machine photo while logging', () => {
     );
     expect(document.activeElement).toBe(input);
 
-    await act(async () => vi.advanceTimersByTime(TOAST_MS - 1000));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
     await type(input, 'Hammer leg press 2');
     await click(button('Save name'));
-    await act(async () => vi.advanceTimersByTime(TOAST_MS - 1));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1));
     expect(notice()).not.toBeNull();
     await act(async () => vi.advanceTimersByTime(1));
     expect(notice()).toBeNull();

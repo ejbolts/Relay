@@ -1724,7 +1724,7 @@ describe('rest time controls', () => {
     );
     expect(container.querySelector('.logger-screen .inline-error')).toBeNull();
     expect(readActiveWorkoutDraft()?.movements[0].sets).toHaveLength(1);
-    await act(async () => vi.advanceTimersByTimeAsync(TOAST_MS));
+    await act(async () => vi.advanceTimersByTimeAsync(TOAST_MS.important));
     expect(toastElement()).toBeNull();
   });
 
@@ -1742,7 +1742,7 @@ describe('rest time controls', () => {
     expect(restControl()?.value).toBe('180');
     await choose('Rest after set 1', '0');
     expect(restControl()).toBeNull();
-    await act(async () => vi.advanceTimersByTimeAsync(TOAST_MS));
+    await act(async () => vi.advanceTimersByTimeAsync(TOAST_MS.quick));
     expect(toastElement()).toBeNull();
     expect(readActiveWorkoutDraft()?.movements[0].sets[0].rest_seconds).toBeNull();
     // Reload the app to prove no default rest row is recreated from the saved draft.

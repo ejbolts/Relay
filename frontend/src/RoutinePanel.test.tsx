@@ -206,13 +206,13 @@ it('shows save feedback in a dismissible popup that clears automatically after r
 
     await click('Edit split');
     await save();
-    await act(async () => vi.advanceTimersByTime(TOAST_MS - 1000));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
     expect(document.querySelector('.toast')).not.toBeNull();
     await click('Edit split');
     await save();
     await act(async () => vi.advanceTimersByTime(1000));
     expect(document.querySelector('.toast')).not.toBeNull();
-    await act(async () => vi.advanceTimersByTime(TOAST_MS));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard));
     expect(document.querySelector('.toast')).toBeNull();
   } finally {
     vi.useRealTimers();

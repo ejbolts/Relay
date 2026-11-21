@@ -454,6 +454,7 @@ function LiftPicker({
         <Toast
           id={cleared.serial}
           message="Lifts cleared"
+          duration="quick"
           action={{
             label: 'Undo',
             run: () => {

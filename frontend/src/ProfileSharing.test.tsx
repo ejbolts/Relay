@@ -129,7 +129,7 @@ describe('profile sharing visibility', () => {
     await act(async () => button('Make my profile public')!.click());
 
     expect(toastText()).toContain('Your profile is public to every member who shares.');
-    await act(async () => vi.advanceTimersByTime(TOAST_MS));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard));
     expect(toastElement()).toBeNull();
   });
 });

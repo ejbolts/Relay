@@ -33,7 +33,7 @@ it('shows and copies the full account UUID', async () => {
   expect(writeText).toHaveBeenCalledWith(id);
   expect(container.textContent).not.toContain('UUID copied.');
   expect(toastText()).toBe('UUID copied.');
-  await act(async () => vi.advanceTimersByTime(TOAST_MS));
+  await act(async () => vi.advanceTimersByTime(TOAST_MS.standard));
   expect(toastElement()).toBeNull();
 });
 it('selects the UUID for manual copying when clipboard access fails', async () => {
@@ -45,9 +45,9 @@ it('selects the UUID for manual copying when clipboard access fails', async () =
 
 it('restarts the timeout when copied again and can be dismissed early', async () => {
   await act(async () => container.querySelector('button')!.click());
-  await act(async () => vi.advanceTimersByTime(TOAST_MS - 1000));
+  await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
   await act(async () => container.querySelector('button')!.click());
-  await act(async () => vi.advanceTimersByTime(TOAST_MS - 1000));
+  await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
   expect(toastElement()).not.toBeNull();
   await act(async () => toastButton('Dismiss notification')!.click());
   expect(toastElement()).toBeNull();
