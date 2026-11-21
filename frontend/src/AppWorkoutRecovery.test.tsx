@@ -1314,7 +1314,34 @@ describe('rest time controls', () => {
     expect(readActiveWorkoutDraft()?.notes).toBe(before.notes);
   });
 
-  it('keeps Add exercise after the last movement and in the header, with Discard in the menu', async () => {
+  it('starts a rest of a chosen length from the header and ends it there', async () => {
+    vi.useFakeTimers();
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    const restButton = () =>
+      container.querySelector<HTMLButtonElement>('.live-workout-header [aria-label="Rest timer"]')!;
+    expect(container.querySelector('.rest-pill')).toBeNull();
+    expect(restButton().classList.contains('is-running')).toBe(false);
+    await click('Rest timer');
+    expect(restButton().getAttribute('aria-expanded')).toBe('true');
+    expect(
+      [...container.querySelectorAll('.live-workout-rest-menu [role="menuitem"]')].map(
+        (item) => item.textContent,
+      ),
+    ).toEqual(['0:30', '1:00', '1:30', '2:00', '3:00', '5:00']);
+    await click('Start a 1:30 rest');
+    expect(container.querySelector('[role="menu"]')).toBeNull();
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('1:30');
+    expect(restButton().classList.contains('is-running')).toBe(true);
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('1:20');
+    await click('Rest timer');
+    await click('End rest');
+    expect(container.querySelector('.rest-pill')).toBeNull();
+    expect(restButton().classList.contains('is-running')).toBe(false);
+  });
+
+  it('keeps Add exercise after the last movement, with Discard in the header menu', async () => {
     writeActiveWorkoutDraft(storedDraft());
     await mount();
     const actions = container.querySelector('.live-workout-actions')!;
@@ -1325,8 +1352,10 @@ describe('rest time controls', () => {
     expect([...actions.querySelectorAll('button')].map((item) => item.textContent?.trim())).toEqual(
       ['＋ Add exercise'],
     );
+    // The header's spot beside the menu holds the rest timer instead.
+    expect(container.querySelector('.live-workout-header [aria-label="Add exercise"]')).toBeNull();
     expect(
-      container.querySelector('.live-workout-header [aria-label="Add exercise"]'),
+      container.querySelector('.live-workout-header [aria-label="Rest timer"]'),
     ).not.toBeNull();
     expect(
       container.querySelector('.live-workout-header [aria-label="Finish workout"]'),

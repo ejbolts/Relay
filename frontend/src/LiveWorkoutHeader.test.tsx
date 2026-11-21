@@ -12,7 +12,8 @@ const actions = {
   onAdjustTime: vi.fn(),
   onAddNote: vi.fn(),
   onTogglePause: vi.fn(),
-  onAddExercise: vi.fn(),
+  onStartRest: vi.fn(),
+  onEndRest: vi.fn(),
   onDiscard: vi.fn(),
   onFinish: vi.fn(),
 };
@@ -148,15 +149,67 @@ it('supports keyboard menu navigation, Escape and outside dismissal', async () =
   expect(container.querySelector('[role="menu"]')).toBeNull();
 });
 
-it('finishes from a labelled button, adds an exercise and minimises from the handle', async () => {
+it('finishes from a labelled button and minimises from the handle', async () => {
   expect(container.querySelector('.live-workout-minimise')).toBeNull();
   // A word, so it cannot be mistaken for the ticks on sets and exercises.
   expect(button('Finish workout').querySelector('svg')).toBeNull();
   expect(button('Finish workout').firstChild?.textContent).toBe('Finish');
   await click('Finish workout');
   expect(actions.onFinish).toHaveBeenCalledOnce();
-  await click('Add exercise');
-  expect(actions.onAddExercise).toHaveBeenCalledOnce();
   await click('Minimise workout');
   expect(actions.onMinimise).toHaveBeenCalledOnce();
+});
+
+it('starts a rest from the timer button, one menu at a time, and ends a running rest', async () => {
+  expect(button('Add exercise')).toBeNull();
+  await click('Workout options');
+  await click('Rest timer');
+  expect(container.querySelectorAll('[role="menu"]')).toHaveLength(1);
+  expect(container.querySelector('[role="menu"]')?.getAttribute('aria-label')).toBe('Rest timer');
+  expect(button('End rest')).toBeNull();
+  expect(document.activeElement).toBe(button('Start a 0:30 rest'));
+  await key(button('Start a 0:30 rest'), 'ArrowRight');
+  expect(document.activeElement).toBe(button('Start a 1:00 rest'));
+  await key(button('Start a 1:00 rest'), 'Escape');
+  expect(container.querySelector('[role="menu"]')).toBeNull();
+  expect(document.activeElement).toBe(button('Rest timer'));
+  await click('Rest timer');
+  await click('Start a 2:00 rest');
+  expect(actions.onStartRest).toHaveBeenCalledWith(120);
+  expect(document.activeElement).toBe(button('Rest timer'));
+  await act(async () =>
+    root.render(
+      <LiveWorkoutHeader
+        name="Lower body workout"
+        durationLabel="Live 12:48"
+        loggedSets={2}
+        paused={false}
+        menuButtonRef={menuButtonRef}
+        restRunning
+        {...actions}
+      />,
+    ),
+  );
+  expect(button('Rest timer').classList.contains('is-running')).toBe(true);
+  await click('Rest timer');
+  await click('End rest');
+  expect(actions.onEndRest).toHaveBeenCalledOnce();
+});
+
+it('leaves out the timer button when rest timers are turned off', async () => {
+  await act(async () =>
+    root.render(
+      <LiveWorkoutHeader
+        name="Lower body workout"
+        durationLabel="Live 12:48"
+        loggedSets={2}
+        paused={false}
+        menuButtonRef={menuButtonRef}
+        {...actions}
+        onStartRest={undefined}
+      />,
+    ),
+  );
+  expect(button('Rest timer')).toBeNull();
+  expect(button('Workout options')).not.toBeNull();
 });

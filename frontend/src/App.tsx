@@ -5116,7 +5116,9 @@ function WorkoutLogger({
           onAdjustTime={() => setTimeEditorOpen(true)}
           onAddNote={() => revealDetails('.workout-notes textarea')}
           onTogglePause={toggleWorkoutPause}
-          onAddExercise={openExercisePicker}
+          onStartRest={restTimerEnabled ? startRestTimer : undefined}
+          restRunning={restActive}
+          onEndRest={cancelRestTimer}
           onDiscard={() => setDeleteConfirmationOpen(true)}
           discardLabel={resumedWorkoutId ? 'Discard session' : 'Discard workout'}
           saving={saving}
