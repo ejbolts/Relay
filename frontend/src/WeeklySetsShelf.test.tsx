@@ -2,7 +2,8 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { WEEKLY_SETS_SHELF_MS, WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
+import { POPUP_MS } from './popupTiming';
+import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -182,7 +183,7 @@ describe('weekly sets shelf', () => {
     await act(async () => shelf()!.click());
     expect(shelf()?.getAttribute('aria-label')).toBe('Close weekly sets');
     expect(host.querySelector('.weekly-shelf-countdown')).toBeNull();
-    await act(async () => vi.advanceTimersByTimeAsync(WEEKLY_SETS_SHELF_MS * 2));
+    await act(async () => vi.advanceTimersByTimeAsync(POPUP_MS.standard * 2));
     expect(onDismiss).not.toHaveBeenCalled();
     await act(async () => shelf()!.click());
     await act(async () => vi.advanceTimersByTimeAsync(300));
@@ -201,7 +202,7 @@ describe('weekly sets shelf', () => {
       ),
     );
     expect(shelf()?.classList.contains('is-leaving')).toBe(false);
-    await act(async () => vi.advanceTimersByTimeAsync(WEEKLY_SETS_SHELF_MS - 100));
+    await act(async () => vi.advanceTimersByTimeAsync(POPUP_MS.standard - 100));
     expect(onDismiss).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTimeAsync(200));
     expect(shelf()?.classList.contains('is-leaving')).toBe(true);

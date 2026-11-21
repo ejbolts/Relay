@@ -452,6 +452,7 @@ function ProfileFriendControl({
         <Toast
           id={removal.pending.goal.id}
           message={`Removed ${profile.display_name}`}
+          duration="important"
           action={{ label: 'Undo', run: removal.undo }}
           dismissLabel="Dismiss friend removal notification"
           onDismiss={removal.dismiss}

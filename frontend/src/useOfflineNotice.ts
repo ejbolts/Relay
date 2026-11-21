@@ -1,8 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useConnectionState } from './connectionStatus';
+import { POPUP_MS } from './popupTiming';
 
-/** The notice says what happened once, then shrinks to an icon, so it never needs closing. */
-export const MINIMISE_AFTER_MS = 4000;
+/**
+ * The notice says what happened for the standard pop-up time, then shrinks to an icon, so it
+ * never needs closing.
+ */
+export const MINIMISE_AFTER_MS = POPUP_MS.standard;
 
 /** What the app-wide connection notice shows, and whether its details are open. */
 export function useOfflineNotice() {

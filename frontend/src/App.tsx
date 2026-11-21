@@ -390,7 +390,7 @@ import { LiveWorkoutSheet } from './LiveWorkoutSheet';
 import { FinishedWorkoutCard } from './FinishedWorkoutCard';
 import { hasLikelyDuplicateMachines, multiMachineExerciseId } from './machineUsage';
 import { onTipTarget, type TipAction } from './tipActions';
-import { TOAST_MS, Toast, useToast, useToastPlacement } from './Toast';
+import { Toast, useToast, useToastPlacement } from './Toast';
 import { TrainingBlockDialog } from './TrainingBlockDialog';
 import {
   buildFinishSummary,
@@ -2319,6 +2319,7 @@ function AppContent() {
           <Toast
             id={workoutDeletion.pending.id}
             message="Workout deleted"
+            duration="important"
             action={{ label: 'Undo', run: workoutDeletion.undo }}
             dismissLabel="Dismiss workout deleted notification"
             onDismiss={workoutDeletion.flush}
@@ -5593,6 +5594,7 @@ function WorkoutLogger({
         <Toast
           id={swapUndo.id}
           message={`Swapped to ${swapUndo.exerciseName}`}
+          duration="quick"
           action={{ label: 'Undo', run: undoSwap }}
           dismissLabel="Dismiss swap notification"
           onDismiss={() => setSwapUndo(null)}
@@ -5602,8 +5604,8 @@ function WorkoutLogger({
         <Toast
           id={`${undoDeletion.kind}:${undoDeletion.set.key}`}
           message={undoDeletion.kind === 'rest' ? 'Rest time removed' : 'Set deleted'}
+          duration="quick"
           action={{ label: 'Undo', run: undoLastDeletion }}
-          durationMs={undoDeletion.kind === 'set' ? TOAST_MS.quickAction : undefined}
           dismissLabel="Dismiss deletion notification"
           onDismiss={() => setUndoDeletion(null)}
         />
