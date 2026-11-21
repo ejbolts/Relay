@@ -1400,7 +1400,27 @@ describe('rest time controls', () => {
     expect(readActiveWorkoutDraft()?.notes).toBe(before.notes);
   });
 
-  it('keeps Add exercise after the last movement and in the header, with Discard in the menu', async () => {
+  it('starts a rest of a chosen length from the header timer', async () => {
+    vi.useFakeTimers();
+    writeActiveWorkoutDraft(storedDraft());
+    await mount();
+    const restButton = () => container.querySelector('.live-workout-header .live-workout-rest')!;
+    expect(container.querySelector('.rest-pill')).toBeNull();
+    expect(restButton().classList.contains('is-running')).toBe(false);
+    await choose('Rest timer', '90');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('1:30');
+    expect(restButton().classList.contains('is-running')).toBe(true);
+    await act(async () => vi.advanceTimersByTimeAsync(10_000));
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('1:20');
+    // Choosing again restarts the rest at the new length.
+    await choose('Rest timer', '180');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('3:00');
+    await click('End rest timer');
+    expect(container.querySelector('.rest-pill')).toBeNull();
+    expect(restButton().classList.contains('is-running')).toBe(false);
+  });
+
+  it('keeps Add exercise after the last movement, with Discard in the header menu', async () => {
     writeActiveWorkoutDraft(storedDraft());
     await mount();
     const actions = container.querySelector('.live-workout-actions')!;
@@ -1411,8 +1431,10 @@ describe('rest time controls', () => {
     expect([...actions.querySelectorAll('button')].map((item) => item.textContent?.trim())).toEqual(
       ['＋ Add exercise'],
     );
+    // The header's spot beside the menu holds the rest timer instead.
+    expect(container.querySelector('.live-workout-header [aria-label="Add exercise"]')).toBeNull();
     expect(
-      container.querySelector('.live-workout-header [aria-label="Add exercise"]'),
+      container.querySelector('.live-workout-header [aria-label="Rest timer"]'),
     ).not.toBeNull();
     expect(
       container.querySelector('.live-workout-header [aria-label="Finish workout"]'),
@@ -1946,8 +1968,10 @@ describe('inserting sets', () => {
     let sets = readActiveWorkoutDraft()!.movements[0].sets;
     expect(sets.map((set) => set.key).slice(1)).toEqual(['first', 'second']);
     expect(sets[0]).toMatchObject({ weight_kg: 60, reps: 10, completed: false });
+    // The inserted set adds no rest divider: its gap is a plain insert line until it is ticked.
+    expect(container.querySelector('.movement-card [aria-label="Rest after set 1"]')).toBeNull();
+    expect(insertButton('Add set before set 2')?.closest('.set-insert-row')).not.toBeNull();
 
-    // The new set 1 is unticked with a revealed rest, so the next gap is a divider too.
     await act(async () => insertButton('Add set before set 3')!.click());
     sets = readActiveWorkoutDraft()!.movements[0].sets;
     expect(sets).toHaveLength(4);
@@ -1977,6 +2001,15 @@ describe('inserting sets', () => {
     const sets = readActiveWorkoutDraft()!.movements[0].sets;
     expect(sets.map((set) => set.weight_kg)).toEqual([40, 40, 80]);
     expect(sets[1].key).not.toMatch(/^suggested-/);
+    expect(container.querySelector('.movement-card [aria-label="Rest after set 2"]')).toBeNull();
+
+    // Ticking the inserted set reveals the rest it copied and starts the timer.
+    await act(async () => insertButton('Complete set 2')!.click());
+    expect(
+      container.querySelector<HTMLSelectElement>('.movement-card [aria-label="Rest after set 2"]')
+        ?.value,
+    ).toBe(String(sets[0].rest_seconds));
+    expect(container.querySelector('[role="timer"]')).not.toBeNull();
   });
 
   it('adds the rest chosen from the menu in the gap below a set', async () => {
@@ -3278,8 +3311,6 @@ describe('exercise completion stays consistent with its sets', () => {
   const setTicks = () => [...container.querySelectorAll<HTMLButtonElement>('.row-complete-button')];
   const savedMovement = () => readActiveWorkoutDraft()!.movements[0];
   const click = async (button: HTMLButtonElement) => act(async () => button.click());
-  const expand = () =>
-    click(container.querySelector<HTMLButtonElement>('.movement-expand-toggle')!);
 
   it.each([
     ['strength', false],
@@ -3293,7 +3324,8 @@ describe('exercise completion stays consistent with its sets', () => {
       await click(exerciseTick());
       expect(exerciseTick().getAttribute('aria-pressed')).toBe('true');
       expect(savedMovement().sets.map((set) => set.completed)).toEqual([true, true, true]);
-      await expand();
+      // Finishing keeps the card open, so its sets stay in reach.
+      expect(container.querySelector('.movement-card')!.classList).not.toContain('is-collapsed');
       await click(setTicks()[0]);
       expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
       expect(savedMovement().isComplete).toBe(false);
@@ -3310,7 +3342,6 @@ describe('exercise completion stays consistent with its sets', () => {
         'Keep set 1',
         'Keep set 2',
       ]);
-      await expand();
       await click(setTicks()[2]);
       expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
     },
@@ -3320,7 +3351,6 @@ describe('exercise completion stays consistent with its sets', () => {
     writeActiveWorkoutDraft(completionDraft());
     await mount();
     await click(exerciseTick());
-    await expand();
     await click(container.querySelector<HTMLButtonElement>('.add-set-button')!);
     expect(savedMovement().isComplete).toBe(false);
     expect(exerciseTick().getAttribute('aria-pressed')).toBe('false');
@@ -4701,6 +4731,9 @@ describe('no working sets warnings', () => {
     );
     expect(readActiveWorkoutDraft()?.movements[0].isComplete).toBe(true);
     expect(card().querySelector('.exercise-icon-warning')).not.toBeNull();
+    await act(async () =>
+      card().querySelector<HTMLButtonElement>('.movement-collapse-button')!.click(),
+    );
     expect(card().querySelector('.movement-completed-summary')?.textContent).toBe('2 warm-up sets');
     // The working-set exercise keeps its usual count and no flag.
     const other = container.querySelectorAll('.movement-card')[1];

@@ -788,3 +788,38 @@ it('averages a new member’s training days over the weeks since they started', 
   expect(stats.textContent).toContain('Training days4');
   expect(stats.textContent).toContain('Avg / week4.0');
 });
+
+it('outlines the member’s planned and missed split days on their calendar', async () => {
+  const today = localDate();
+  vi.mocked(api.sharing.profile).mockResolvedValue({
+    ...profile,
+    consistency: {
+      ...profile.consistency!,
+      training_split: {
+        name: 'Push / Rest',
+        enabled: true,
+        start_date: today,
+        progression: 'calendar',
+        steps: [{ workout_type_id: 'push' }, { workout_type_id: null }],
+        missed_days: [{ workout_date: addDays(today, -1), workout_type_id: 'push' }],
+      },
+    },
+  });
+  await renderProfile('split-member');
+  const day = (date: string) =>
+    container.querySelector<HTMLButtonElement>(`.calendar-panel [data-date="${date}"]`);
+  // Today's planned push and yesterday's missed one take its colour; the rest day stays plain.
+  for (const date of [today, addDays(today, -1)]) {
+    expect(day(date)?.className).toContain('scheduled');
+    expect(day(date)?.style.getPropertyValue('--day-ring')).toBe('#abcdef');
+  }
+  expect(day(addDays(today, -1))?.getAttribute('aria-label')).toContain('Push missed');
+  expect(day(addDays(today, 1))?.className ?? '').not.toContain('scheduled');
+  // A day the split plans is still not one to open: the member logged nothing there.
+  expect(day(today)?.disabled).toBe(true);
+});
+
+it('leaves the calendar unplanned when the member has no split on', async () => {
+  await renderProfile('no-split-member');
+  expect(container.querySelector('.calendar-panel .calendar-day.scheduled')).toBeNull();
+});

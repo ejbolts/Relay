@@ -69,12 +69,14 @@ from .tracker_schemas import (
     HeatmapDay,
     MachinePhotoRead,
     PersonalRecordRead,
+    TrainingSplitRead,
     TrainingTimeRead,
     TrainingWorkoutRead,
     WorkoutTypeRead,
     Zone2WeekRead,
 )
 from .training_metrics import start_of_week
+from .training_split import saved_training_split, split_read
 from .training_time import is_cardio_only_workout, past_year_start, training_time_totals
 from .workout_types import workout_type_catalog
 
@@ -221,6 +223,8 @@ class SharedConsistencyRead(BaseModel):
     current_streak: int
     training_days: int
     workout_types: list[WorkoutTypeRead]
+    # The member's split while it is on, so their calendar can show planned and missed days.
+    training_split: TrainingSplitRead | None = None
 
 
 class SharedProfileRead(SharedProfileSummary):
@@ -913,11 +917,17 @@ def shared_consistency(db: Session, user_id: str) -> SharedConsistencyRead:
     first_day = start_of_week(today, training_preferences(db, user_id).week_start) - timedelta(
         weeks=11
     )
+    split = saved_training_split(db, user_id)
+    shared_split = split_read(db, user_id, split, today) if split and split.enabled else None
+    if shared_split:
+        # The calendar needs the cycle only; which routine it came from stays with its owner.
+        shared_split.routine_id = None
     return SharedConsistencyRead(
         heatmap=heatmap,
         current_streak=streak,
         training_days=sum(first_day <= day <= today for day in dates),
         workout_types=catalog,
+        training_split=shared_split,
     )
 
 

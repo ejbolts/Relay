@@ -1324,6 +1324,8 @@ export interface SharedConsistency {
   current_streak: number;
   training_days: number;
   workout_types: WorkoutType[];
+  /** The member's split while it is on; absent from servers before it was shared. */
+  training_split?: TrainingSplit | null;
 }
 
 export interface SharedProfile extends SharedProfileSummary {
