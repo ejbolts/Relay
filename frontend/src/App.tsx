@@ -283,6 +283,7 @@ import {
   groupByYear,
   groupWorkoutsByWeek,
   mostTrainedExerciseId,
+  isCountedRecord,
   recordCountsByWorkout,
   setLabel,
   sessionTemplateFor,
@@ -462,6 +463,7 @@ import {
   weekGroupPage,
 } from './workoutHistory';
 import { calculateScopedDraftPrs, prToastLines, type PrToastEntry } from './workoutPr';
+import { cardioRecordLabel, cardioSetSummary } from './cardioRecords';
 import { bodyweightOn, bodyweightContext, relativeStrength } from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
@@ -598,22 +600,31 @@ function formatDuration(totalSeconds: number): string {
   return formatSeconds(totalSeconds);
 }
 
-function recordTypeLabel(type: PersonalRecord['record_type']): string {
+function recordTypeLabel(record: Pick<PersonalRecord, 'record_type' | 'normalized_weight'>) {
   return (
+    cardioRecordLabel(record) ??
     {
       weight: 'Weight PR',
       relative_strength: 'Relative strength PR',
       reps_at_weight: 'Volume PR for this weight',
       estimated_1rm: 'estimated 1RM PR',
-      duration: 'duration PR',
-      distance: 'distance PR',
-    }[type] ?? 'PR'
+    }[record.record_type as string] ??
+    'PR'
   );
+}
+
+/** Identifies a celebrated set's records, so the same ones never celebrate twice. */
+function prSignature(
+  exerciseId: string,
+  item: WorkoutSetInput & { key: string },
+  labels: string[],
+) {
+  return `${exerciseId}:${item.key}:${labels.join(',')}:${item.weight_kg}:${item.reps}:${item.duration_seconds}:${item.distance_km}`;
 }
 
 function completionRecordDetail(record: PersonalRecord, unit: WeightUnit): string {
   return [
-    `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)} · ${recordDisplayValue(record, unit)}`,
+    `${recordScopeLabel(record)} ${recordTypeLabel(record)} · ${recordDisplayValue(record, unit)}`,
     record.record_type === 'reps_at_weight' && record.weight_kg != null
       ? ` @ ${formatWeight(record.weight_kg, unit)}`
       : '',
@@ -4015,11 +4026,7 @@ function WorkoutLogger({
       movements.flatMap((movement) =>
         movement.sets.flatMap((item) => {
           const labels = prBadges.get(movement.key)?.get(item.key);
-          return item.completed && labels
-            ? [
-                `${movement.exercise.id}:${item.key}:${labels.join(',')}:${item.weight_kg}:${item.reps}`,
-              ]
-            : [];
+          return item.completed && labels ? [prSignature(movement.exercise.id, item, labels)] : [];
         }),
       ),
     ),
@@ -4038,16 +4045,24 @@ function WorkoutLogger({
           prBadges.get(movement.key)?.has(item.key)
         ) {
           const labels = prBadges.get(movement.key)!.get(item.key)!;
-          const signature = `${movement.exercise.id}:${item.key}:${labels.join(',')}:${item.weight_kg}:${item.reps}`;
+          const signature = prSignature(movement.exercise.id, item, labels);
           if (!celebratedPrsRef.current.has(signature)) {
             celebratedPrsRef.current.add(signature);
-            entries.push({
-              exercise: movement.exercise.name,
-              labels,
-              reps: item.reps!,
-              weightKg: item.weight_kg!,
-              bodyweightKg: bodyweightOn(measurements, workoutDate, item.bodyweight_kg),
-            });
+            entries.push(
+              movement.exercise.kind === 'cardio'
+                ? {
+                    exercise: movement.exercise.name,
+                    labels,
+                    summary: cardioSetSummary(item.duration_seconds, item.distance_km),
+                  }
+                : {
+                    exercise: movement.exercise.name,
+                    labels,
+                    reps: item.reps!,
+                    weightKg: item.weight_kg!,
+                    bodyweightKg: bodyweightOn(measurements, workoutDate, item.bodyweight_kg),
+                  },
+            );
           }
         }
       });
@@ -8146,11 +8161,7 @@ export function ProgressScreen({
     () =>
       new Set(
         recordsForBlock(personalRecords, block)
-          .filter(
-            (record) =>
-              record.exercise_id === exerciseId &&
-              ['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type),
-          )
+          .filter((record) => record.exercise_id === exerciseId && isCountedRecord(record))
           .map((record) => record.workout_id),
       ),
     [personalRecords, exerciseId, block],
@@ -10217,7 +10228,7 @@ function HistoryWorkoutCard({
                 machinePhotos={movement.machine_photos}
                 formatSet={(item) => setResult(item, weightUnit)}
                 describeRecord={(record) =>
-                  `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)}`
+                  `${recordScopeLabel(record)} ${recordTypeLabel(record)}`
                 }
               />
             ) : (
@@ -10396,10 +10407,7 @@ function HistorySetFlow({
                 className="pr-badge"
                 title={personalRecords
                   .filter((record) => record.set_id === item.id)
-                  .map(
-                    (record) =>
-                      `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)}`,
-                  )
+                  .map((record) => `${recordScopeLabel(record)} ${recordTypeLabel(record)}`)
                   .join(', ')}
               >
                 {recordBadgeLabel(personalRecords.filter((record) => record.set_id === item.id))}

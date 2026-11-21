@@ -230,7 +230,7 @@ def test_display_unit_change_does_not_change_pr_classification(client):
     assert [item["record_type"] for item in records(client, volume)] == ["reps_at_weight"]
 
 
-def test_bodyweight_volume_and_cardio_exclusion(client):
+def test_bodyweight_volume_and_cardio_records(client):
     bench = exercise(client)
     log(client, bench["id"], [{"weight_kg": 0, "reps": 8}])
     volume = log(client, bench["id"], [{"weight_kg": 0, "reps": 9}], "2026-01-15")
@@ -240,7 +240,12 @@ def test_bodyweight_volume_and_cardio_exclusion(client):
     workout = log(
         client, cardio["id"], [{"duration_seconds": 1200, "distance_km": 2}], "2026-01-15"
     )
-    assert records(client, workout) == []
+    # Cardio earns its own distance, time and pace records, never weight or volume ones.
+    assert {item["record_type"] for item in records(client, workout)} <= {
+        "distance",
+        "duration",
+        "pace",
+    }
 
 
 def test_a_set_with_weight_and_relative_prs_counts_once_in_totals(client):

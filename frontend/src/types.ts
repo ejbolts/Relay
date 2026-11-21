@@ -99,7 +99,14 @@ export type ExerciseKind = 'strength' | 'cardio';
 
 export type SetType = 'warmup' | 'normal' | 'drop';
 export type PersonalRecordType =
-  'weight' | 'reps_at_weight' | 'relative_strength' | 'estimated_1rm' | 'duration' | 'distance';
+  | 'weight'
+  | 'reps_at_weight'
+  | 'relative_strength'
+  | 'estimated_1rm'
+  | 'duration'
+  | 'distance'
+  /** The fastest time over a set distance, which `normalized_weight` holds in km. */
+  | 'pace';
 
 export interface MuscleContribution {
   muscle_name: string;
@@ -568,13 +575,21 @@ export interface TrainingBlocks {
 }
 
 /** An exercise's history before the loaded window, condensed by the server. */
-export interface HistoryBest {
+/** A cardio exercise's bests, for live distance, time and pace PRs; absent before they existed. */
+export interface CardioBests {
+  best_distance_km?: number | null;
+  best_duration_seconds?: number | null;
+  /** The fastest seconds over each set distance reached. */
+  best_times?: Array<{ distance_km: number; seconds: number }>;
+}
+
+export interface HistoryBest extends CardioBests {
   best_relative_strength?: number | null;
   best_weight_kg: number | null;
   reps_by_weight: Array<{ weight_kg: number; reps: number }>;
 }
 
-export interface ExerciseHistoryBaseline {
+export interface ExerciseHistoryBaseline extends CardioBests {
   best_relative_strength?: number | null;
   block_bests?: Array<HistoryBest & { block_id: string }>;
   /** Bests within each fresh start, until the next one. */
@@ -610,6 +625,7 @@ export interface PersonalRecord {
   record_type: PersonalRecordType;
   value: number;
   unit: string;
+  /** A strength record's weight in the display unit, or a pace record's set distance in km. */
   normalized_weight: number | null;
   weight_kg?: number | null;
   formula: string | null;

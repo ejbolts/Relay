@@ -36,6 +36,7 @@ from .accounts import no_store
 from .auth import AppSettings, CurrentUser, as_utc, get_current_user
 from .body_sizes import PREFIX as BODY_SIZES_PREFIX
 from .body_sizes import BodySizeLog
+from .cardio_records import CARDIO_RECORD_TYPES
 from .cardio_zones import CardioGoalWeek, cardio_goal_weeks, cardio_preferences, classify_session
 from .database import get_db
 from .errors import api_error
@@ -492,10 +493,11 @@ def viewable_member(db: Session, viewer: User, user_id: str) -> tuple[User, Prof
 
 
 # Records counted as PRs; a set that earns several of them counts once.
-STRENGTH_RECORD_TYPES = (
+COUNTED_RECORD_TYPES = (
     PersonalRecordType.WEIGHT,
     PersonalRecordType.REPS_AT_WEIGHT,
     PersonalRecordType.RELATIVE_STRENGTH,
+    *CARDIO_RECORD_TYPES,
 )
 
 
@@ -555,7 +557,7 @@ def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
             .where(
                 PersonalRecord.user_id.in_(user_ids),
                 PersonalRecord.value > 0,
-                PersonalRecord.record_type.in_(STRENGTH_RECORD_TYPES),
+                PersonalRecord.record_type.in_(COUNTED_RECORD_TYPES),
                 PersonalRecord.workout_id.not_in(sample_workout_ids()),
             )
             .group_by(PersonalRecord.user_id)
@@ -1055,7 +1057,7 @@ def list_shared_workouts(
                     "bodyweight_kg": bodyweights.on(
                         record.achieved_date, record.workout_set.bodyweight_kg
                     )
-                    if bodyweights
+                    if bodyweights and record.record_type not in CARDIO_RECORD_TYPES
                     else None
                 }
             )
@@ -1447,7 +1449,7 @@ def workout_timeline(
                 select(PersonalRecord.workout_id, func.count(func.distinct(PersonalRecord.set_id)))
                 .where(
                     PersonalRecord.workout_id.in_(workout_ids),
-                    PersonalRecord.record_type.in_(STRENGTH_RECORD_TYPES),
+                    PersonalRecord.record_type.in_(COUNTED_RECORD_TYPES),
                 )
                 .group_by(PersonalRecord.workout_id)
             ).all()
