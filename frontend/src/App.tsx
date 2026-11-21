@@ -36,7 +36,7 @@ import {
 } from 'react';
 import type { ContextType, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
-import { api, revisionAfterSave } from './api';
+import { api, revisionAfterSave, revisionAtSignIn } from './api';
 import { SetDragHandle } from './SetDragHandle';
 import { hasUnassignedMachineSets, withMachinePins } from './setMachines';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
@@ -802,11 +802,13 @@ function AppContent() {
     error: string | null;
   }>({ exercises: [], loaded: false, error: null });
   const { exercises } = exerciseCatalogue;
-  const setExercises = (update: Exercise[] | ((current: Exercise[]) => Exercise[])) =>
+  const setExercises = (update: Exercise[] | ((current: Exercise[]) => Exercise[])) => {
+    exerciseEditsRef.current += 1;
     setExerciseCatalogue((current) => ({
       ...current,
       exercises: typeof update === 'function' ? update(current.exercises) : update,
     }));
+  };
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>([]);
   // The workout on Home's finished card once it has saved, for View workout, Share and Undo.
   const finishedSaved = finishSummary?.sessionId
@@ -901,7 +903,36 @@ function AppContent() {
   const [workoutStartCategory, setWorkoutStartCategory] = useState<WorkoutCategory | null>(null);
   const [workoutStartType, setWorkoutStartType] = useState<WorkoutType | null>(null);
   const [loading, setLoading] = useState(true);
-  const exerciseLibrary = useExerciseLibrary(exercises, dataRevision, !loading);
+  // The revision the server reported when it confirmed who is signed in. With it, the first
+  // reads and the other tabs' background loads all start together instead of in turn.
+  const [startRevision] = useState(() => (user ? revisionAtSignIn(user) : null));
+  /** What the server has answered this visit; this device's saved copies never replace it. */
+  const answeredRef = useRef({
+    exercises: false,
+    workouts: false,
+    records: false,
+    checkIns: false,
+  });
+  /** Set once the first refresh has finished, so background loads for hidden screens can follow. */
+  const [startupRefreshed, setStartupRefreshed] = useState(false);
+  /**
+   * True once Home's figures are known to be current: the server has answered this visit, or it
+   * confirmed that nothing changed since this device saved them today. Until then Home can show
+   * an older copy, so nothing is started or recorded from it.
+   */
+  const [homeConfirmed, setHomeConfirmed] = useState(false);
+  const homeConfirmedRef = useRef(homeConfirmed);
+  homeConfirmedRef.current = homeConfirmed;
+  /** A start chosen before Home's figures were confirmed. It runs once they are. */
+  const waitingStartRef = useRef<{ run: () => void; finish: () => void } | null>(null);
+  /** Counts exercise changes made here, so a read that began before one cannot undo it. */
+  const exerciseEditsRef = useRef(0);
+  const exerciseLibrary = useExerciseLibrary(
+    exercises,
+    dataRevision ?? startRevision,
+    !loading || startRevision !== null,
+    exerciseCatalogue.loaded,
+  );
   const { show: showToast, active: toastActive } = useToast();
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [editingWorkoutSaving, setWorkoutSaving] = useState(false);
@@ -1280,6 +1311,9 @@ function AppContent() {
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();
       const savedAnswersBefore = savedDataAnswerCount();
+      const exerciseEditsBefore = exerciseEditsRef.current;
+      // Set when an answer was older than a change made here meanwhile, so it was not used.
+      let outpaced = false;
       let loadedWorkouts: TrackedWorkout[] = [];
       const results = await Promise.allSettled([
         api.dashboard(windowStart).then((nextDashboard) => {
@@ -1318,6 +1352,13 @@ function AppContent() {
           .listExercises()
           .then((nextExercises) => {
             if (!current()) return;
+            // An exercise was added or changed here after this read began. Its answer may not
+            // include that, so keep the list on screen and let the next check read it again.
+            if (exerciseEditsRef.current !== exerciseEditsBefore) {
+              outpaced = true;
+              return;
+            }
+            answeredRef.current.exercises = true;
             // Publish readiness with the actual catalogue, so an urgent loading update cannot
             // mount the logger against an empty or partial list and overwrite its stored draft.
             setExerciseCatalogue({ exercises: nextExercises, loaded: true, error: null });
@@ -1330,11 +1371,13 @@ function AppContent() {
             }));
             throw reason;
           }),
-        (revision && knownRevision
+        // The revision read above already precedes this read, so it is not asked for again.
+        (revision
           ? api.listWorkouts(windowStart, revision.revision)
           : api.listWorkouts(windowStart)
         ).then((nextWorkouts) => {
           if (!current()) return;
+          answeredRef.current.workouts = true;
           loadedWorkouts = nextWorkouts;
           startTransition(() =>
             setWorkouts((current) => [
@@ -1345,10 +1388,12 @@ function AppContent() {
         }),
         api.listBodyMeasurements().then((nextMeasurements) => {
           if (!current()) return;
+          answeredRef.current.checkIns = true;
           startTransition(() => setMeasurements(nextMeasurements));
         }),
         api.listPersonalRecords().then((nextRecords) => {
           if (!current()) return;
+          answeredRef.current.records = true;
           startTransition(() => setPersonalRecords(nextRecords));
         }),
       ]);
@@ -1357,10 +1402,17 @@ function AppContent() {
       // the revision, so quiet sync retries them instead of keeping older data until a reload.
       if (
         results.every((result) => result.status === 'fulfilled') &&
-        savedDataAnswerCount() === savedAnswersBefore
+        savedDataAnswerCount() === savedAnswersBefore &&
+        !outpaced
       ) {
         trainingRevisionRef.current = revision?.revision ?? null;
         setDataRevision(revision?.revision ?? null);
+        // Every read was just saved on this device at this revision, so the next opening can
+        // start from those copies while it reads again.
+        if (revision)
+          void api
+            .rememberStartupData(revision.revision, dashboardRequestDate)
+            .catch(() => undefined);
         window.dispatchEvent(new Event('training-data-refreshed'));
         forgetFinishIfGone(loadedWorkouts, windowStart);
       }
@@ -1475,10 +1527,43 @@ function AppContent() {
     initialRefreshStartedRef.current = true;
     let cancelled = false;
 
+    const refreshed = () => {
+      if (cancelled) return;
+      setStartupRefreshed(true);
+      // With the answers themselves, so nothing waiting on them runs a moment too early.
+      startTransition(() => setHomeConfirmed(true));
+    };
     void readDashboardCache().then((cachedDashboard) => {
-      if (!cancelled && cachedDashboard) setDashboard(cachedDashboard);
-      if (!cancelled) void refreshData();
+      // The server's dashboard can arrive first; this device's older copy never replaces it.
+      if (!cancelled && cachedDashboard) setDashboard((current) => current ?? cachedDashboard);
+      if (!cancelled && !startRevision) void refreshData().then(refreshed, refreshed);
     });
+    if (startRevision) {
+      // With the revision already known, the reads do not wait for the saved dashboard either.
+      void Promise.resolve().then(() => {
+        if (!cancelled)
+          void refreshData({ knownRevision: startRevision }).then(refreshed, refreshed);
+      });
+      // Nothing has changed since this device last saved its copies, so the app opens with them
+      // straight away. The reads above still replace them with the server's answers.
+      void api
+        .savedStartupData(startRevision, historyStartRef.current)
+        .then((saved) => {
+          if (cancelled || !saved) return;
+          const answered = answeredRef.current;
+          if (!answered.exercises)
+            setExerciseCatalogue({ exercises: saved.exercises, loaded: true, error: null });
+          if (!answered.workouts) setWorkouts(saved.workouts);
+          if (!answered.records) setPersonalRecords(saved.personalRecords);
+          if (!answered.checkIns) setMeasurements(saved.measurements);
+          setDataRevision((current) => current ?? startRevision);
+          setLoading(false);
+          // The saved dashboard was read for a particular day, so it is only current on that day.
+          if (saved.dashboardDate === localDate()) setHomeConfirmed(true);
+        })
+        // Unreadable copies only mean waiting for the server, as before.
+        .catch(() => undefined);
+    }
 
     return () => {
       cancelled = true;
@@ -1804,6 +1889,79 @@ function AppContent() {
     if (freshStart) remindAboutRestAlerts();
   }
 
+  const startWorkoutRef = useRef(startWorkout);
+  startWorkoutRef.current = startWorkout;
+  /** Starts cardio from the saved cardio exercises, or else from the most recent cardio workout. */
+  const startCardioRef = useRef(() => {});
+  startCardioRef.current = () => {
+    const cardio = workoutTypes.types.find((type) => type.id === 'cardio');
+    const saved = workoutTypes.savedExercises.cardio;
+    startWorkout(
+      localDate(),
+      false,
+      cardio && saved?.length
+        ? typeSessionTemplate(cardio, saved, 'Cardio workout', localDate(), weightUnit)
+        : sessionTemplateFor(workouts, 'cardio', localDate(), weightUnit),
+      'cardio',
+    );
+  };
+  const upNextRef = useRef(upNext);
+  upNextRef.current = upNext;
+  const startMenuUpNextRef = useRef(startMenuUpNext);
+  startMenuUpNextRef.current = startMenuUpNext;
+
+  /**
+   * Runs a start that follows Home's figures (the recommended day, a split day, recent cardio).
+   * Before those are confirmed current, Home may show an older copy, so the start waits and
+   * then uses the confirmed figures rather than what was on screen when it was chosen.
+   */
+  function startWhenHomeConfirmed(run: () => void) {
+    if (homeConfirmedRef.current) {
+      run();
+      return;
+    }
+    waitingStartRef.current?.finish();
+    waitingStartRef.current = {
+      run,
+      finish: beginBackgroundActivity('Getting your latest training…'),
+    };
+  }
+  useEffect(() => {
+    if (!homeConfirmed) return;
+    const waiting = waitingStartRef.current;
+    waitingStartRef.current = null;
+    waiting?.finish();
+    waiting?.run();
+  }, [homeConfirmed]);
+
+  /** Starts a workout on a calendar day. A day started with the split's plan follows Home. */
+  function startOnDay(workoutDate = localDate(), start?: PlannedStart) {
+    const run = () =>
+      startWorkoutRef.current(
+        workoutDate,
+        false,
+        start?.template ?? null,
+        start?.category ?? null,
+        start?.type ?? null,
+      );
+    if (start) startWhenHomeConfirmed(run);
+    else run();
+  }
+
+  /** Starts the recommended day as it stands once Home's figures are confirmed. */
+  function startUpNext(source: 'home' | 'menu') {
+    startWhenHomeConfirmed(() => {
+      const next = source === 'home' ? upNextRef.current : startMenuUpNextRef.current;
+      startWorkoutRef.current(
+        localDate(),
+        false,
+        next.template,
+        next.recommendation?.category ?? null,
+        next.type ?? null,
+      );
+    });
+  }
+
   function remindAboutRestAlerts() {
     void shouldShowRestAlertReminder().then((show) => {
       if (show) setRestAlertReminderOpen(true);
@@ -2033,6 +2191,7 @@ function AppContent() {
       page: tab,
       ready:
         !loading &&
+        homeConfirmed &&
         !signingIn &&
         announcement.checked &&
         !announcement.open &&
@@ -2058,6 +2217,7 @@ function AppContent() {
     configureTips,
     tab,
     loading,
+    homeConfirmed,
     signingIn,
     announcement.checked,
     announcement.open,
@@ -2246,6 +2406,8 @@ function AppContent() {
           <WeeklyReviewPrompt
             userId={user.id}
             enabled={
+              // The review is drawn from Home's figures and records that it was shown.
+              homeConfirmed &&
               canShowPrompts &&
               prompt === null &&
               !announcement.open &&
@@ -2500,17 +2662,13 @@ function AppContent() {
                       };
                     })
                   }
-                  onStartTemplate={(template) => startWorkout(localDate(), false, template)}
-                  onStartEmpty={() => startWorkout()}
-                  onStartRecommended={() =>
-                    startWorkout(
-                      localDate(),
-                      false,
-                      upNext.template,
-                      upNext.recommendation?.category ?? null,
-                      upNext.type ?? null,
+                  onStartTemplate={(template) =>
+                    startWhenHomeConfirmed(() =>
+                      startWorkoutRef.current(localDate(), false, template),
                     )
                   }
+                  onStartEmpty={() => startWorkout()}
+                  onStartRecommended={() => startUpNext('home')}
                   onEditSplit={openSplitSchedule}
                   onOpenHistory={() => openHistorySection('history')}
                   onOpenWorkout={openMuscleWorkout}
@@ -2556,15 +2714,7 @@ function AppContent() {
                       onResumeWorkout={() => setTab('log')}
                       onEditWorkout={editWorkout}
                       onOpenWorkout={(workout) => openSavedWorkout(workout.id, null)}
-                      onStartWorkout={(workoutDate, start) =>
-                        startWorkout(
-                          workoutDate,
-                          false,
-                          start?.template ?? null,
-                          start?.category ?? null,
-                          start?.type ?? null,
-                        )
-                      }
+                      onStartWorkout={startOnDay}
                       onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
                       onEditSplit={openSplitSchedule}
                     />
@@ -2584,15 +2734,7 @@ function AppContent() {
                       onResumeWorkout={() => setTab('log')}
                       onEditWorkout={editWorkout}
                       onOpenWorkout={(workout) => openSavedWorkout(workout.id, null)}
-                      onStartWorkout={(workoutDate, start) =>
-                        startWorkout(
-                          workoutDate,
-                          false,
-                          start?.template ?? null,
-                          start?.category ?? null,
-                          start?.type ?? null,
-                        )
-                      }
+                      onStartWorkout={startOnDay}
                       onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
                       onEditSplit={openSplitSchedule}
                     />
@@ -2775,15 +2917,7 @@ function AppContent() {
                 activeWorkout={activeWorkoutStartedAt !== null}
                 activeWorkoutDate={activeWorkoutDate}
                 onResumeWorkout={() => setTab('log')}
-                onStartWorkout={(workoutDate, start) =>
-                  startWorkout(
-                    workoutDate,
-                    false,
-                    start?.template ?? null,
-                    start?.category ?? null,
-                    start?.type ?? null,
-                  )
-                }
+                onStartWorkout={startOnDay}
                 onReplaceActiveWorkout={(workoutDate) => startWorkout(workoutDate, true)}
                 onEditSplit={openSplitSchedule}
               />
@@ -2846,8 +2980,8 @@ function AppContent() {
               />
             </CachedTabPanel>
           )}
-          {/* Like the exercise library, Social loads in the background once the app's data is in. */}
-          {user && (tab === 'social' || visitedTabs.has('social') || !loading) && (
+          {/* Like the exercise library, Social loads in the background alongside Home's data. */}
+          {user && (
             <CachedTabPanel active={tab === 'social'}>
               <SocialScreen
                 active={tab === 'social'}
@@ -2868,6 +3002,7 @@ function AppContent() {
                 onOpenSplits={openSplits}
                 dataRevision={dataRevision}
                 active={tab === 'profile'}
+                preloadReady={startupRefreshed}
                 onChooseSharing={openSharingSettings}
                 renderWorkouts={(props) => (
                   <SharedWorkoutHistory
@@ -2943,30 +3078,12 @@ function AppContent() {
                 !startMenuUpNext.needsSplitUpdate
                   ? `${startMenuUpNext.label} day`
                   : null,
-              onCardio: () => {
-                const cardio = workoutTypes.types.find((type) => type.id === 'cardio');
-                const saved = workoutTypes.savedExercises.cardio;
-                startWorkout(
-                  localDate(),
-                  false,
-                  cardio && saved?.length
-                    ? typeSessionTemplate(cardio, saved, 'Cardio workout', localDate(), weightUnit)
-                    : sessionTemplateFor(workouts, 'cardio', localDate(), weightUnit),
-                  'cardio',
-                );
-              },
+              onCardio: () => startWhenHomeConfirmed(() => startCardioRef.current()),
               // A rest day's own type is never started; without a next training day, no Up next.
               onUpNext:
                 upNext.isRestDay && !startMenuUpNext.recommendation
                   ? null
-                  : () =>
-                      startWorkout(
-                        localDate(),
-                        false,
-                        startMenuUpNext.template,
-                        startMenuUpNext.recommendation?.category ?? null,
-                        startMenuUpNext.type ?? null,
-                      ),
+                  : () => startUpNext('menu'),
               onEmpty: () => startWorkout(),
             }}
           />

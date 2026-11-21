@@ -7,12 +7,15 @@ export function ProfileScreen({
   onOpenSplits,
   dataRevision = null,
   active,
+  preloadReady = true,
   renderWorkouts,
   onChooseSharing,
 }: {
   onOpenSplits?: (routineId?: string) => void;
   dataRevision?: string | null;
   active: boolean;
+  /** False while Home's own data is still loading, so the hidden profile waits its turn. */
+  preloadReady?: boolean;
   renderWorkouts: (props: SharedWorkoutListProps) => ReactNode;
   onChooseSharing: () => void;
 }) {
@@ -26,6 +29,7 @@ export function ProfileScreen({
         onOpenSplits={onOpenSplits}
         dataRevision={dataRevision}
         active={active}
+        preloadReady={preloadReady}
         profileId={user.id}
         ownProfile={{ user, onSaved: updateUser }}
         onChooseSharing={onChooseSharing}

@@ -158,6 +158,31 @@ export function revisionAfterSave(workout: TrackedWorkout): string | null {
   return revisionsAfterSave.get(workout) ?? null;
 }
 
+/** The data revision the server reported when it answered who is signed in. */
+const revisionsAtSignIn = new WeakMap<User, string>();
+
+/**
+ * The data revision the account was at when the server confirmed this sign-in or session, or null
+ * when the server did not report one (an older server). Data read after that answer is at least
+ * this new, so the app's first reads can start without asking for the revision.
+ */
+export function revisionAtSignIn(user: User): string | null {
+  return revisionsAtSignIn.get(user) ?? null;
+}
+
+function signedInRequest(path: string, init?: RequestInit): Promise<User> {
+  let revision: string | null = null;
+  return request<User>(path, init, {
+    signalExpiredSession: false,
+    onHeaders: (headers) => {
+      revision = headers.get('X-Workout-Revision');
+    },
+  }).then((user) => {
+    if (revision && user && typeof user === 'object') revisionsAtSignIn.set(user, revision);
+    return user;
+  });
+}
+
 function saveWorkoutRequest(path: string, init: RequestInit): Promise<TrackedWorkout> {
   let revision: string | null = null;
   const options: RequestOptions = {
@@ -388,6 +413,71 @@ async function listCachedWorkouts(
   );
 }
 
+const EXERCISES_PATH = '/api/exercises';
+const PERSONAL_RECORDS_PATH = '/api/personal-records?include_blocks=true&include_fresh_start=true';
+/** Records which revision this device's saved copies of the opening data were all read at. */
+const STARTUP_STAMP_KEY = 'startup-data-v1';
+
+interface StartupStamp {
+  revision: string;
+  /** The release that saved the copies; a newer one reads them again from the server. */
+  version: string;
+  /** The day the saved dashboard was read for. Its figures follow the calendar. */
+  date?: string;
+}
+
+export interface SavedStartupData {
+  exercises: Exercise[];
+  workouts: TrackedWorkout[];
+  personalRecords: PersonalRecord[];
+  measurements: BodyMeasurement[];
+  /** The day the saved dashboard was read for, when known. It is current only on that day. */
+  dashboardDate: string | null;
+}
+
+/**
+ * Notes that every opening read has just been saved on this device at `revision`, with the
+ * dashboard read for `date`.
+ */
+async function rememberStartupData(revision: string, date: string): Promise<void> {
+  const scope = captureAccountCacheScope();
+  if (!scope.owner) return;
+  const stamp: StartupStamp = { revision, version: CLIENT_VERSION, date };
+  await writeOffline(STARTUP_STAMP_KEY, stamp, scope.owner, scope.isCurrent);
+}
+
+/**
+ * This device's saved copies of the data the app opens with, when they were all saved at
+ * `revision`, the one the server has just reported. The app can then show them at once while it
+ * reads the same data again. Null when a copy is missing or belongs to another revision.
+ */
+async function savedStartupData(revision: string, since: string): Promise<SavedStartupData | null> {
+  const scope = captureAccountCacheScope();
+  const owner = scope.owner;
+  if (!owner) return null;
+  try {
+    const stamp = await readOffline<StartupStamp>(STARTUP_STAMP_KEY, owner);
+    if (stamp?.value.revision !== revision || stamp.value.version !== CLIENT_VERSION) return null;
+    const [cached, exercises, personalRecords, measurements] = await Promise.all([
+      readWorkoutCache(),
+      readOffline<Exercise[]>(`response:${EXERCISES_PATH}`, owner),
+      readOffline<PersonalRecord[]>(`response:${PERSONAL_RECORDS_PATH}`, owner),
+      localBodyMeasurements(),
+    ]);
+    const workouts = cachedWorkoutsForRevision(cached, revision, since);
+    if (!workouts || !exercises || !personalRecords || !scope.isCurrent()) return null;
+    return {
+      exercises: exercises.value,
+      workouts,
+      personalRecords: personalRecords.value,
+      measurements,
+      dashboardDate: stamp.value.date ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
 /** Workouts and calendar days for an older window than the one loaded at startup. */
 async function listOlderHistory(
   start: string,
@@ -446,13 +536,13 @@ export const api = {
     friendInvite: () => request<{ invite_code: string | null }>('/api/auth/friend-invite'),
     config: () =>
       request<AuthConfig>('/api/auth/config', undefined, { signalExpiredSession: false }),
-    me: () => request<User>('/api/auth/me', undefined, { signalExpiredSession: false }),
+    me: () => signedInRequest('/api/auth/me'),
     login: (payload: LoginInput) =>
-      request<User>(
-        '/api/auth/login',
-        { method: 'POST', headers: jsonHeaders, body: JSON.stringify(payload) },
-        { signalExpiredSession: false },
-      ),
+      signedInRequest('/api/auth/login', {
+        method: 'POST',
+        headers: jsonHeaders,
+        body: JSON.stringify(payload),
+      }),
     register: (payload: RegisterInput) =>
       request<User>(
         '/api/auth/register',
@@ -760,7 +850,9 @@ export const api = {
       body: JSON.stringify(payload),
     }),
   listSessions: () => request<WorkoutSession[]>('/api/sessions'),
-  listExercises: () => accountRead<Exercise[]>('/api/exercises'),
+  listExercises: () => accountRead<Exercise[]>(EXERCISES_PATH),
+  savedStartupData,
+  rememberStartupData,
   createExercise: (payload: ExerciseCreateInput) =>
     request<Exercise>('/api/exercises', {
       method: 'POST',
@@ -1023,7 +1115,8 @@ export const api = {
     if (params?.workoutId) query.set('workout_id', params.workoutId);
     query.set('include_blocks', 'true');
     query.set('include_fresh_start', 'true');
-    const path = `/api/personal-records${query.size ? `?${query}` : ''}`;
+    // Without filters this is PERSONAL_RECORDS_PATH, whose saved copy the app can open with.
+    const path = `/api/personal-records?${query}`;
     // A just-saved workout's records only matter online; saving a copy per workout would pile up.
     return params?.workoutId
       ? request<PersonalRecord[]>(path)
