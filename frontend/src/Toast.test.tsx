@@ -49,48 +49,41 @@ function base(props: Partial<ToastProps> = {}): ToastProps {
 }
 
 describe('variants and timing', () => {
+  it('stays the standard three seconds', () => {
+    expect(TOAST_MS).toBe(3000);
+  });
+
   it.each([
-    ['status', undefined, 'status', TOAST_MS.status],
-    ['action', { label: 'Undo', run: () => undefined }, 'status', TOAST_MS.action],
-    ['error', undefined, 'alert', TOAST_MS.error],
-  ] as const)('a %s toast has its role and duration', async (variant, action, role, ms) => {
-    const onDismiss = vi.fn();
-    await render(
-      <Toast
-        message="Saved"
-        variant={variant === 'action' ? undefined : variant}
-        action={action}
-        onDismiss={onDismiss}
-      />,
-    );
-    expect(toast()!.dataset.variant).toBe(variant);
-    expect(toast()!.getAttribute('role')).toBe(role);
-    expect(toast()!.style.getPropertyValue('--toast-ms')).toBe(`${ms}ms`);
-    await advance(ms - 1);
-    expect(onDismiss).not.toHaveBeenCalled();
-    await advance(1);
-    expect(onDismiss).toHaveBeenCalledOnce();
-  });
+    ['status', undefined, 'status', 'Saved'],
+    ['action', { label: 'Undo', run: () => undefined }, 'status', 'Saved'],
+    ['warning', undefined, 'alert', 'Saved'],
+    ['error', undefined, 'alert', 'Saved'],
+    ['celebrate', undefined, 'status', 'Saved'],
+    ['error', undefined, 'alert', 'x'.repeat(200)],
+  ] as const)(
+    'a %s toast has its role and the standard duration (%#)',
+    async (variant, action, role, message) => {
+      const onDismiss = vi.fn();
+      await render(
+        <Toast
+          message={message}
+          variant={variant === 'action' ? undefined : variant}
+          action={action}
+          onDismiss={onDismiss}
+        />,
+      );
+      expect(toast()!.dataset.variant).toBe(variant);
+      expect(toast()!.getAttribute('role')).toBe(role);
+      expect(toast()!.style.getPropertyValue('--toast-ms')).toBe('3000ms');
+      await advance(2999);
+      expect(onDismiss).not.toHaveBeenCalled();
+      await advance(1);
+      expect(onDismiss).toHaveBeenCalledOnce();
+    },
+  );
 
-  it('uses a given duration instead of its variant time', async () => {
-    const onDismiss = vi.fn();
-    await render(
-      <Toast
-        {...base({ message: 'Set deleted', onDismiss })}
-        action={{ label: 'Undo', run: vi.fn() }}
-        durationMs={TOAST_MS.quickAction}
-      />,
-    );
-    expect(toast()!.style.getPropertyValue('--toast-ms')).toBe('2500ms');
-    await advance(2499);
-    expect(onDismiss).not.toHaveBeenCalled();
-    await advance(1);
-    expect(onDismiss).toHaveBeenCalledOnce();
-  });
-
-  it('gives a long message the error tier, and the close button a 44px target label', async () => {
+  it('gives the close button a 44px target label', async () => {
     await render(<Toast {...base({ message: 'x'.repeat(91) })} />);
-    expect(toast()!.style.getPropertyValue('--toast-ms')).toBe(`${TOAST_MS.error}ms`);
     expect(button('Dismiss notification')).toBeTruthy();
   });
 
@@ -149,7 +142,7 @@ describe('one slot', () => {
     expect(toasts().map((item) => item.textContent)).toEqual([
       expect.stringContaining('Swapped to Row'),
     ]);
-    await advance(TOAST_MS.action * 2);
+    await advance(TOAST_MS * 2);
     expect(first.onTimeout).toHaveBeenCalledOnce();
   });
 
@@ -205,7 +198,7 @@ describe('one slot', () => {
     expect(toast()).toBeNull();
     expect(api.active).toBe(false);
     await act(async () => api.show('Copied'));
-    await advance(TOAST_MS.status);
+    await advance(TOAST_MS);
     expect(toast()).toBeNull();
   });
 });
@@ -228,10 +221,10 @@ describe('countdown', () => {
     const draw = () => render(<Toast {...base({ onDismiss: () => onDismiss() })} />);
     await draw();
     const bar = document.querySelector('.toast-timer');
-    await advance(TOAST_MS.status / 2);
+    await advance(TOAST_MS / 2);
     await draw();
     expect(document.querySelector('.toast-timer')).toBe(bar);
-    await advance(TOAST_MS.status / 2 - 1);
+    await advance(TOAST_MS / 2 - 1);
     expect(onDismiss).not.toHaveBeenCalled();
     await advance(1);
     expect(onDismiss).toHaveBeenCalledOnce();
@@ -244,7 +237,7 @@ describe('countdown', () => {
         <Toast {...base({ onDismiss, action: { label: 'Undo', run: vi.fn() } })} />
       </ToastProvider>,
     );
-    await advance(TOAST_MS.action - 1000);
+    await advance(TOAST_MS - 1000);
     pointer(toast()!, 'pointerdown', 'touch');
     await advance(0);
     expect(toast()!.hasAttribute('data-paused')).toBe(true);
@@ -270,10 +263,10 @@ describe('countdown', () => {
     await render(<Toast {...base({ onDismiss, action, busy: true })} />);
     expect(button('Undo').disabled).toBe(true);
     expect(button('Dismiss notification').disabled).toBe(true);
-    await advance(TOAST_MS.action * 2);
+    await advance(TOAST_MS * 2);
     expect(onDismiss).not.toHaveBeenCalled();
     await render(<Toast {...base({ onDismiss, action })} />);
-    await advance(TOAST_MS.action);
+    await advance(TOAST_MS);
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
@@ -281,10 +274,10 @@ describe('countdown', () => {
     const onDismiss = vi.fn();
     await render(<Toast {...base({ id: 1, onDismiss })} />);
     const bar = document.querySelector('.toast-timer');
-    await advance(TOAST_MS.status - 500);
+    await advance(TOAST_MS - 500);
     await render(<Toast {...base({ id: 2, onDismiss })} />);
     expect(document.querySelector('.toast-timer')).not.toBe(bar);
-    await advance(TOAST_MS.status - 1);
+    await advance(TOAST_MS - 1);
     expect(onDismiss).not.toHaveBeenCalled();
     await advance(1);
     expect(onDismiss).toHaveBeenCalledOnce();
@@ -296,7 +289,7 @@ describe('countdown', () => {
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     await act(async () => document.dispatchEvent(new Event('visibilitychange')));
     await act(async () => window.dispatchEvent(new Event('pagehide')));
-    await advance(TOAST_MS.action);
+    await advance(TOAST_MS);
     expect(onTimeout).toHaveBeenCalledOnce();
   });
 });

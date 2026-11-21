@@ -299,7 +299,7 @@ describe('past workout actions', () => {
 
     await act(async () => button('Delete', container).click());
     await act(async () => button('Confirm delete', container).click());
-    await act(async () => vi.advanceTimersByTime(5_999));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS - 1));
     expect(api.deleteWorkout).not.toHaveBeenCalled();
     await act(async () => vi.advanceTimersByTime(1));
     expect(api.deleteWorkout).toHaveBeenCalledExactlyOnceWith('saved-workout');
@@ -317,7 +317,7 @@ describe('past workout actions', () => {
       );
     await act(async () => button('Delete', container).click());
     await act(async () => button('Confirm delete', container).click());
-    await act(async () => vi.advanceTimersByTime(TOAST_MS.action - 1000));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS - 1000));
     await act(async () => press(toastElement()!, 'pointerdown'));
     await act(async () => vi.advanceTimersByTime(10_000));
     expect(api.deleteWorkout).not.toHaveBeenCalled();

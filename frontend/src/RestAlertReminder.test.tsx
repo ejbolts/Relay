@@ -134,7 +134,7 @@ describe('rest alert reminder popup', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     await act(async () => root.render(null));
     expect(toastText()).toBe('Rest alerts on');
-    await act(async () => vi.advanceTimersByTime(TOAST_MS.status));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS));
     expect(toastElement()).toBeNull();
   });
 

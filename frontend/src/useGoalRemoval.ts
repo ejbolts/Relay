@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { TOAST_MS } from './Toast';
 
 /** How long a swiped-away goal can be brought back before it is deleted: the Undo toast's time. */
-export const GOAL_UNDO_MS = TOAST_MS.action;
+export const GOAL_UNDO_MS = TOAST_MS;
 
 export interface PendingGoalRemoval<G extends { id: string }> {
   goal: G;

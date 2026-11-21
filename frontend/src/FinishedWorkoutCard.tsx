@@ -59,9 +59,7 @@ export function FinishedWorkoutCard({
   const [shareReminder] = useWorkoutShareReminder();
   // A workout finished moments ago gets a brief "Workout saved" with Undo (and Share, when the
   // sharing reminder is on); returning to Home later shows the card alone.
-  const [savedToast, setSavedToast] = useState(
-    () => Date.now() - summary.finishedAt < TOAST_MS.action,
-  );
+  const [savedToast, setSavedToast] = useState(() => Date.now() - summary.finishedAt < TOAST_MS);
   const share: ToastAction | undefined =
     shareReminder && onShare
       ? {

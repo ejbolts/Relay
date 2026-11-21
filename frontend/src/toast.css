@@ -188,7 +188,7 @@
   height: 3px;
   background: var(--toast-bar);
   transform-origin: left;
-  animation: toast-timer var(--toast-ms, 4s) linear var(--toast-offset, 0ms) forwards;
+  animation: toast-timer var(--toast-ms, 3s) linear var(--toast-offset, 0ms) forwards;
   pointer-events: none;
 }
 
@@ -220,14 +220,14 @@
    how long Undo lasts. These selectors out-rank the global rules that end every animation. */
 @media (prefers-reduced-motion: reduce) {
   .toast .toast-timer {
-    animation-duration: var(--toast-ms, 4s) !important;
+    animation-duration: var(--toast-ms, 3s) !important;
     animation-delay: var(--toast-offset, 0ms) !important;
     animation-timing-function: steps(4, end) !important;
   }
 }
 
 html[data-reduce-motion] .toast .toast-timer {
-  animation-duration: var(--toast-ms, 4s) !important;
+  animation-duration: var(--toast-ms, 3s) !important;
   animation-delay: var(--toast-offset, 0ms) !important;
   animation-timing-function: steps(4, end) !important;
 }
