@@ -72,6 +72,29 @@ def jpeg() -> bytes:
     return buffer.getvalue()
 
 
+def test_shared_consistency_includes_an_enabled_split_without_its_routine(client, other_client):
+    share(other_client)
+    assert profile(client, other_client).json()["consistency"]["training_split"] is None
+    start = date.today() - timedelta(days=4)
+    split = {
+        "name": "Upper / Lower",
+        "start_date": start.isoformat(),
+        "progression": "calendar",
+        "steps": [{"workout_type_id": "upper"}, {"workout_type_id": "lower"}],
+    }
+    assert other_client.put("/api/training-split", json=split).is_success
+    shared = profile(client, other_client).json()["consistency"]["training_split"]
+    assert shared["name"] == "Upper / Lower"
+    assert shared["routine_id"] is None
+    assert [step["workout_type_id"] for step in shared["steps"]] == ["upper", "lower"]
+    # Nothing was logged, so every planned day before today was missed.
+    assert [day["workout_date"] for day in shared["missed_days"]] == [
+        (start + timedelta(days=offset)).isoformat() for offset in range(4)
+    ]
+    assert other_client.put("/api/training-split", json={**split, "enabled": False}).is_success
+    assert profile(client, other_client).json()["consistency"]["training_split"] is None
+
+
 @pytest.mark.parametrize("stored_choices", [True, False])
 def test_private_owner_can_preview_without_exposing_profile(client, other_client, stored_choices):
     share(other_client)
