@@ -484,72 +484,6 @@ it('orders all notification types newest first before paginating', async () => {
   );
 });
 
-it('replies to a comment notice from a thread opened at that comment', async () => {
-  const comment = (id: string, parent: string | null, name: string) => ({
-    id,
-    author: { id, display_name: name, profile_photo_url: null },
-    body: `${name} said hi`,
-    parent_id: parent,
-    reply_to: null,
-    created_at: person.since,
-    edited_at: null,
-    can_edit: false,
-    can_delete: false,
-    reactions: { counts: [], yours: null },
-  });
-  const notice = {
-    ...person,
-    notice_id: 'notice-reply',
-    comment_id: 'c-sam',
-    workout_id: 'w9',
-    workout_name: 'Upper body workout',
-    kind: 'comment' as const,
-    body: 'Sam Preview said hi',
-    reaction: null,
-  };
-  snapshot = {
-    requests: [],
-    accepted: [],
-    comments: [
-      notice,
-      { ...notice, notice_id: 'notice-react', kind: 'comment_reaction', reaction: 'love' },
-    ],
-  };
-  // The notified comment is on the second page, so the thread loads until it appears.
-  const comments = vi
-    .spyOn(api.sharing, 'comments')
-    .mockResolvedValueOnce({ items: [comment('c-other', null, 'Alex')], total: 2, next_offset: 1 })
-    .mockResolvedValueOnce({
-      items: [comment('c-sam', null, 'Sam Preview')],
-      total: 2,
-      next_offset: null,
-    });
-  const add = vi
-    .spyOn(api.sharing, 'addComment')
-    .mockResolvedValue(comment('c-new', 'c-sam', 'Me'));
-  await render();
-  await click('Notifications, 2 unread');
-  expect(document.querySelectorAll('button[aria-label="Reply to Sam Preview"]')).toHaveLength(1);
-  await click('Reply to Sam Preview');
-  const thread = document.querySelector('dialog.follow-notification-thread');
-  expect(thread?.textContent).toContain('Upper body workout');
-  expect(document.querySelector('dialog.follow-notifications')).toBeNull();
-  expect(comments).toHaveBeenCalledWith('w9', 1);
-  expect(thread?.querySelector('.comment-replying')?.textContent).toContain('@Sam Preview');
-  const textarea = thread!.querySelector('textarea')!;
-  expect(document.activeElement).toBe(textarea);
-  await act(async () => {
-    const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
-    setter.call(textarea, 'Thanks!');
-    textarea.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await click('Send');
-  expect(add).toHaveBeenCalledWith('w9', 'Thanks!', 'c-sam', null);
-  await click('Close Upper body workout');
-  expect(document.querySelector('dialog.follow-notification-thread')).toBeNull();
-  expect(document.activeElement).toBe(host.querySelector('.follow-notification-button'));
-});
-
 it("lists last week's review, counts it until it has been seen and opens it with View", async () => {
   const requested = vi.fn();
   const stop = onWeeklyReviewRequested(requested);
@@ -583,7 +517,7 @@ it('leaves the review out once no review is available', async () => {
   expect(document.querySelector('.weekly-review-notification-row')).toBeNull();
 });
 
-it('opens a reaction or comment notice at that workout in Social, keeping Reply separate', async () => {
+it('opens a reaction or comment notice at that workout in Social, and Reply does the same', async () => {
   let latest: WorkoutFocus | null = null;
   function Probe() {
     latest = useWorkoutFocus();
@@ -607,13 +541,24 @@ it('opens a reaction or comment notice at that workout in Social, keeping Reply 
         body: 'Nice one',
         reaction: null,
       },
+      {
+        ...person,
+        notice_id: 'n2',
+        comment_id: 'c-mine',
+        workout_id: 'w9',
+        workout_name: 'Upper body workout',
+        kind: 'comment_reaction',
+        body: 'My comment',
+        reaction: 'love',
+      },
     ],
   };
   try {
     await render();
-    await click('Notifications, 3 unread');
-    // A friend request row has nothing to open.
-    expect(document.querySelectorAll('.follow-notification-open')).toHaveLength(2);
+    await click('Notifications, 4 unread');
+    // A friend request row has nothing to open, and a reaction to your comment has no Reply.
+    expect(document.querySelectorAll('.follow-notification-open')).toHaveLength(3);
+    expect(document.querySelectorAll('.follow-notification-reply')).toHaveLength(1);
     await click('Open Alex Preview’s reaction on Leg day');
     expect(document.querySelector('dialog.follow-notifications')).toBeNull();
     expect(latest).toMatchObject({
@@ -627,6 +572,19 @@ it('opens a reaction or comment notice at that workout in Social, keeping Reply 
     await click('Notifications');
     await click('Open Sam Preview’s reply on Upper body workout');
     expect(latest).toMatchObject({ workoutId: 'w9', panel: 'comments', commentId: 'c-sam' });
+    clearWorkoutFocus(latest!.key);
+
+    // Reply opens the same place rather than a separate thread popup.
+    await click('Notifications');
+    await click('Reply to Sam Preview');
+    expect(document.querySelector('dialog.follow-notifications')).toBeNull();
+    expect(document.querySelector('dialog.follow-notification-thread')).toBeNull();
+    expect(latest).toMatchObject({
+      workoutId: 'w9',
+      workoutName: 'Upper body workout',
+      panel: 'comments',
+      commentId: 'c-sam',
+    });
     clearWorkoutFocus(latest!.key);
   } finally {
     await act(async () => probe.unmount());
