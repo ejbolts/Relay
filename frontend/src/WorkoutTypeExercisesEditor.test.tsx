@@ -139,6 +139,8 @@ it('saves exercises to a workout type without a split', async () => {
   const [typeId, movements] = vi.mocked(api.saveWorkoutTypeExercises).mock.calls[0];
   expect(typeId).toBe('custom-arms');
   expect(movements.map((item) => [item.exercise_id, item.sets.length])).toEqual([['curl', 4]]);
+  // A new planned set leaves its rest to last time or the default rest in Settings.
+  expect(movements[0].sets.map((item) => item.rest_seconds)).toEqual([null, null, null, null]);
   expect(document.querySelector('dialog')).toBeNull();
   expect(toastText()).toBe('Arms exercises saved');
   expect(count('Arms')).toBe('1');

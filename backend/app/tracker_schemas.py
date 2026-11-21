@@ -976,6 +976,9 @@ class TrainingPreferencesUpdate(BaseModel):
         ]
         | None
     ) = Field(default=None, max_length=200)
+    # The rest a new set gets when last time gives none. Unset by default; null clears it, and
+    # omission (an older app) keeps the saved value.
+    default_rest_seconds: int | None = Field(default=None, ge=1, le=7_200)
 
 
 class TrainingPreferencesRead(TrainingPreferencesUpdate):

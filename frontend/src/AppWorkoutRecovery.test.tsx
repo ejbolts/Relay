@@ -120,6 +120,7 @@ function storedDraft(overrides: Partial<ActiveWorkoutDraft> = {}): ActiveWorkout
           key: `set-${index}`,
           reps: 8,
           weight_kg: 80,
+          rest_seconds: 180,
           set_type: 'normal',
           warmup: false,
           notes: 'Set notes survive',
@@ -1116,6 +1117,46 @@ describe('saved training splits on Home', () => {
       { weight_kg: 100, reps: 5, rest_seconds: 120, fromPrevious: true, completed: false },
     ]);
   });
+
+  it.each([
+    [undefined, null],
+    [null, null],
+    [150, 150],
+  ])(
+    'gives a planned set with no rest and no last time the default rest (%s), not 3:00',
+    async (defaultRest, expected) => {
+      vi.mocked(api.listWorkouts).mockResolvedValue([]);
+      vi.spyOn(api, 'getTrainingPreferences').mockResolvedValue({
+        preferred_weight_unit: 'kg',
+        week_start: 'monday',
+        zone2_goal_minutes: 150,
+        weekly_muscle_set_goal: 10,
+        weekly_muscle_set_goals: {},
+        ...(defaultRest !== undefined && { default_rest_seconds: defaultRest }),
+      });
+      const blank = {
+        reps: 8,
+        weight_kg: null,
+        rest_seconds: null,
+        duration_seconds: null,
+        distance_km: null,
+        set_type: 'normal' as const,
+      };
+      vi.spyOn(api, 'getWorkoutTypeExercises').mockResolvedValue([
+        {
+          workout_type_id: custom.id,
+          movements: [{ exercise_id: bench.id, exercise: bench, sets: [blank, blank] }],
+        },
+      ]);
+      await mount();
+      const start = container.querySelector<HTMLButtonElement>('.next-session-actions button')!;
+      await act(async () => start.click());
+      expect(readActiveWorkoutDraft()!.movements[0].sets.map((item) => item.rest_seconds)).toEqual([
+        expected,
+        expected,
+      ]);
+    },
+  );
 
   it('fills an empty workout when its type changes, but never replaces exercises', async () => {
     const upper = { ...custom, id: 'upper', name: 'Upper body', is_custom: false };

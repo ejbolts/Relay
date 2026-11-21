@@ -54,6 +54,7 @@ import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
 import { useBodyMeasurementSync } from './useBodyMeasurementSync';
 import { TrainingPreferencesPanel } from './TrainingPreferencesPanel';
 import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
+import { DefaultRestSetting } from './DefaultRestSetting';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { WorkoutTypesSettings } from './WorkoutTypesSettings';
@@ -62,7 +63,11 @@ import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './
 import { entriesInMonths } from './calendarRange';
 import { splitCalendarDays } from './trainingSplit';
 import { PlannedDaySheet, type PlannedStart } from './PlannedDaySheet';
-import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
+import {
+  useDefaultRest,
+  useTrainingPreferences,
+  useWeightUnit,
+} from './trainingPreferencesContext';
 import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
 import {
@@ -424,7 +429,6 @@ import {
 import {
   completeRemainingSets,
   createSuggestedWorkoutSet,
-  DEFAULT_REST_SECONDS,
   createWorkoutSet,
   hasRecordedPerformance,
   isCompletedWorkingSet,
@@ -527,12 +531,12 @@ type HistoryBaselines = {
 
 function emptySet(
   kind: Exercise['kind'],
-  previous?: WorkoutSetInput,
-  isFirstSet = previous === undefined,
+  previous: WorkoutSetInput | undefined,
+  defaultRest: number | null,
 ): DraftSet {
   return {
     key: crypto.randomUUID(),
-    ...createWorkoutSet(kind, previous, isFirstSet),
+    ...createWorkoutSet(kind, previous, previous === undefined, defaultRest),
     restRevealed: true,
     ...(previous && { fromPrevious: true }),
   };
@@ -547,8 +551,9 @@ function suggestedSetsFromHistory(
   workouts: TrackedWorkout[],
   exercise: Exercise,
   onOrBeforeDate: string,
-  excludedWorkoutId?: string,
-  olderHistory?: Map<string, ExerciseHistoryBaseline> | null,
+  excludedWorkoutId: string | undefined,
+  olderHistory: Map<string, ExerciseHistoryBaseline> | null | undefined,
+  defaultRest: number | null,
 ): DraftSet[] {
   let previousSets = latestExerciseSets(workouts, exercise.id, onOrBeforeDate, excludedWorkoutId);
   // Not logged in the loaded window: fall back to its latest session from older history.
@@ -561,7 +566,7 @@ function suggestedSetsFromHistory(
   ) {
     previousSets = older.sets;
   }
-  if (!previousSets.length) return [emptySet(exercise.kind)];
+  if (!previousSets.length) return [emptySet(exercise.kind, undefined, defaultRest)];
   return previousSets.map((previous) => ({
     key: crypto.randomUUID(),
     ...createSuggestedWorkoutSet(exercise.kind, previous),
@@ -3370,6 +3375,7 @@ function WorkoutLogger({
 }) {
   const { config: trainingBlocks } = useTrainingBlocks();
   const weightUnit = useWeightUnit();
+  const defaultRest = useDefaultRest();
   const restoredDraft = useState(() => (initialWorkout ? null : readActiveWorkoutDraft()))[0];
   const [name, setName] = useState(
     initialWorkout?.name ?? restoredDraft?.name ?? resumingWorkout?.name ?? '',
@@ -3577,7 +3583,7 @@ function WorkoutLogger({
                 restRevealed: false,
               })),
               lastSession,
-              exercise.kind === 'strength' ? DEFAULT_REST_SECONDS : null,
+              exercise.kind === 'strength' ? defaultRest : null,
             ),
             lastSession,
           )
@@ -3589,6 +3595,7 @@ function WorkoutLogger({
             historyBaselines && initialDate >= historyBaselines.before
               ? historyBaselines.byExercise
               : null,
+            defaultRest,
           ),
     };
   }
@@ -4118,6 +4125,7 @@ function WorkoutLogger({
       workoutDate,
       initialWorkout?.id,
       olderHistory,
+      defaultRest,
     );
   }
 
@@ -4636,7 +4644,7 @@ function WorkoutLogger({
       current.map((item) => {
         if (item.key !== movement.key) return item;
         const at = Math.min(Math.max(position ?? item.sets.length, 0), item.sets.length);
-        const added = emptySet(item.exercise.kind, item.sets[at === 0 ? 0 : at - 1]);
+        const added = emptySet(item.exercise.kind, item.sets[at === 0 ? 0 : at - 1], defaultRest);
         // A set slotted in with "+" keeps its neighbour's rest hidden, like a suggested set,
         // until it is ticked; only Add set at the end shows its rest straight away.
         if (position !== undefined) added.restRevealed = false;
@@ -6016,6 +6024,7 @@ function MovementCard({
   const treadmill =
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
+  const defaultRest = useDefaultRest();
   const completedWorkingSetCount = movement.sets.filter(isCompletedWorkingSet).length;
   const onlyWarmupsLogged = !cardio && loggedOnlyWarmups(movement.sets);
   const loggedWarmupCount = onlyWarmupsLogged
@@ -7184,7 +7193,7 @@ function MovementCard({
                             onUpdateSet(item.key, { rest_seconds: seconds, restRevealed: true })
                         : undefined
                     }
-                    suggestedRest={restToAdd(movement.sets, index, restHistory)}
+                    suggestedRest={restToAdd(movement.sets, index, restHistory, defaultRest)}
                   />
                 )
               )}
@@ -8912,6 +8921,7 @@ function SettingsScreen({
                       {showRestTimes ? 'On' : 'Off'}
                     </button>
                   </div>
+                  <DefaultRestSetting />
                 </section>
                 {account && <WorkoutAutoSaveSetting userId={account.id} />}
                 {account && <FreshStartSetting />}
