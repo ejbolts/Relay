@@ -77,6 +77,7 @@ export function HeadToHeadCard({
   const { user } = useUserSession();
   const titleId = useId();
   const [lifts, setLifts] = useState<LiftComparison[] | null>(null);
+  const [failed, setFailed] = useState(false);
   const [selected, setSelected] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
   // While the sheet is open the card keeps the lifts it had, then takes the new choice as the
@@ -96,17 +97,24 @@ export function HeadToHeadCard({
     // server also returns a saved choice of lifts, which is ignored: each visit starts empty.
     api.sharing.lifts(member.id).then(
       (next) => {
-        if (!cancelled) setLifts(next.lifts);
+        if (!cancelled) {
+          setLifts(next.lifts);
+          setFailed(false);
+        }
       },
-      () => undefined,
+      () => {
+        if (!cancelled) setFailed(true);
+      },
     );
     return () => {
       cancelled = true;
     };
   }, [member.id, active, revision]);
 
-  if (!lifts) return null;
-  const byId = new Map(lifts.map((lift) => [lift.exercise_id, lift]));
+  // The empty card needs none of the lifts, so it shows at once rather than popping in once they
+  // arrive. Choose lifts tapped before then opens the picker as soon as they do.
+  if (failed && !lifts) return null;
+  const byId = new Map((lifts ?? []).map((lift) => [lift.exercise_id, lift]));
   const chosen = shownIds.flatMap((id) => byId.get(id) ?? []);
   const leaders = chosen.map(leaderOf);
   const yours = leaders.filter((leader) => leader === 'you').length;
@@ -245,7 +253,7 @@ export function HeadToHeadCard({
       >
         {chosen.length ? 'Edit lifts' : 'Choose lifts'}
       </button>
-      {picking && (
+      {picking && lifts && (
         <LiftPicker
           member={member}
           you={user}
