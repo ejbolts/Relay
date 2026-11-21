@@ -715,6 +715,45 @@ def test_shared_workout_filters_cover_full_history_and_filtered_pagination(clien
     )
 
 
+def test_shared_workouts_split_strength_from_cardio_only_sessions(client, other_client):
+    bench = named(client, "Barbell Bench Press")["id"]
+    running = named(client, "Running")["id"]
+    today = date.today()
+    sessions = {
+        "Push": [{"exercise_id": bench, "sets": [{"reps": 8, "weight_kg": 60}]}],
+        "Run": [{"exercise_id": running, "sets": [{"duration_seconds": 1500, "distance_km": 5}]}],
+        "Push and run": [
+            {"exercise_id": bench, "sets": [{"reps": 8, "weight_kg": 60}]},
+            {"exercise_id": running, "sets": [{"duration_seconds": 600}]},
+        ],
+    }
+    for days, (name, movements) in enumerate(sessions.items()):
+        response = client.post(
+            "/api/workouts",
+            json={
+                "name": name,
+                "workout_date": (today - timedelta(days=days)).isoformat(),
+                "category": "other",
+                "movements": movements,
+            },
+        )
+        assert response.status_code == 201, response.text
+    share(client, "public")
+    base = f"/api/sharing/profiles/{client.user['id']}/workouts"
+
+    def names(**params):
+        page = other_client.get(base, params=params).json()
+        assert page["total"] == len(page["workouts"])
+        return [workout["name"] for workout in page["workouts"]]
+
+    assert names() == ["Push", "Run", "Push and run"]
+    # A workout with any strength exercise stays under Workouts, as the profile counts it.
+    assert names(kind="strength") == ["Push", "Push and run"]
+    assert names(kind="cardio") == ["Run"]
+    assert names(kind="cardio", exercise_id=bench) == []
+    assert other_client.get(base, params={"kind": "yoga"}).status_code == 422
+
+
 def test_shared_filter_options_respect_profile_access_and_photo_sharing(client, other_client):
     history = add_training_history(client)
     share(client, "public")

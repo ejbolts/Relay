@@ -19,7 +19,6 @@ import { SexMark } from './SexMark';
 import { SharedBodySizesCard } from './SharedBodySizesCard';
 import { FriendInviteButton } from './FriendQrCode';
 import { useUserSession } from './userContext';
-import { ProfileCardioCard } from './ProfileCardioCard';
 import { PaginationControls } from './PaginationControls';
 import { SharedWorkoutFilterToggle, SharedWorkoutFilters } from './SharedWorkoutFilters';
 import { ConsistencyCard } from './ConsistencyCard';
@@ -67,6 +66,7 @@ import type {
   SharedConsistency,
   SharedWorkoutFilters as WorkoutFilters,
   SharedWorkoutFilterOptions,
+  SharedWorkoutKind,
   SharedWorkoutPage,
   SharingConnection,
   TrackedWorkout,
@@ -1285,6 +1285,20 @@ function ProfileSkeleton() {
   );
 }
 
+type HistoryTab = 'all' | 'workouts' | 'cardio';
+// One list in every tab; the server leaves out cardio-only workouts under Workouts and keeps
+// only those under Cardio.
+const HISTORY_KIND: Record<HistoryTab, SharedWorkoutKind | undefined> = {
+  all: undefined,
+  workouts: 'strength',
+  cardio: 'cardio',
+};
+const HISTORY_TABS: readonly (readonly [HistoryTab, string])[] = [
+  ['all', 'All sessions'],
+  ['workouts', 'Workouts'],
+  ['cardio', 'Cardio'],
+];
+
 export function SharedProfileScreen({
   onOpenSplits,
   dataRevision = null,
@@ -1345,9 +1359,13 @@ export function SharedProfileScreen({
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersId = useId();
+  const historyTabsId = useId();
+  const [historyTab, setHistoryTab] = useState<HistoryTab>('all');
   // Your own profile stays mounted beside a friend's, so the list is found by ref, not by id.
   const workoutList = useRef<HTMLElement>(null);
   function showWorkouts() {
+    // A calendar day or lift can be cardio or strength, so show everything that matches it.
+    setHistoryTab('all');
     setFiltersOpen(true);
     workoutList.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -1389,9 +1407,15 @@ export function SharedProfileScreen({
     }
   }
 
-  const filterKey = JSON.stringify(filters);
+  const cardioTab = Boolean(profile?.can_view && profile.cardio_sessions);
+  const listKind = cardioTab ? HISTORY_KIND[historyTab] : undefined;
+  const query = useMemo(
+    () => (listKind ? { ...filters, kind: listKind } : filters),
+    [filters, listKind],
+  );
+  const filterKey = JSON.stringify(query);
   const loadedFilters = useRef<string | null>(seed?.page ? filterKey : null);
-  const queryKey = JSON.stringify([profileId, attempt, filters, active, dataRevision]);
+  const queryKey = JSON.stringify([profileId, attempt, query, active, dataRevision]);
   const currentQuery = useRef(queryKey);
   currentQuery.current = queryKey;
 
@@ -1405,7 +1429,7 @@ export function SharedProfileScreen({
     setLoadingWorkouts(true);
     setLoadingMore(false);
     setMoreError(null);
-    const unfiltered = !Object.values(filters).some(Boolean);
+    const unfiltered = !Object.values(query).some(Boolean);
     /** The workouts a background copy holds for the current filters, when it can answer them. */
     function warmPage(data: SharedProfileData): SharedWorkoutPage | null {
       if (!data.profile.can_view || unfiltered) return data.page;
@@ -1415,7 +1439,7 @@ export function SharedProfileScreen({
       const initial = preload
         ? await Promise.all([
             api.sharing.profile(profileId),
-            api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, filters),
+            api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, query),
             api.sharing.workoutFilters(profileId),
           ])
         : null;
@@ -1445,7 +1469,7 @@ export function SharedProfileScreen({
             ? [initial[1], initial[2]]
             : nextProfile.can_view
               ? await Promise.all([
-                  api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, filters),
+                  api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, query),
                   api.sharing.workoutFilters(profileId),
                 ])
               : [
@@ -1467,7 +1491,7 @@ export function SharedProfileScreen({
             profileId,
             page.workouts.length,
             SHARED_WORKOUT_PAGE_SIZE,
-            filters,
+            query,
           );
           if (cancelled) return;
           if (!more.workouts.length) break;
@@ -1506,7 +1530,7 @@ export function SharedProfileScreen({
   }, [
     profileId,
     attempt,
-    filters,
+    query,
     filterKey,
     invalidDates,
     active,
@@ -1528,7 +1552,7 @@ export function SharedProfileScreen({
         profileId,
         workouts.length,
         SHARED_WORKOUT_PAGE_SIZE,
-        filters,
+        query,
       );
       if (currentQuery.current !== requestedQuery) return;
       const added = page.workouts.filter(
@@ -1547,6 +1571,8 @@ export function SharedProfileScreen({
       if (currentQuery.current === requestedQuery) setLoadingMore(false);
     }
   }
+
+  const filtered = Object.values(filters).some(Boolean);
 
   async function unblock() {
     if (unblocking) return;
@@ -1828,21 +1854,33 @@ export function SharedProfileScreen({
             />
           )}
           {profile.goals && <GoalsCard goals={profile.goals} latestWeight={latestWeight} />}
-          {profile.cardio_sessions && (
-            <ProfileCardioCard
-              profileId={profile.id}
-              sessions={profile.cardio_sessions}
-              total={profile.cardio_total ?? profile.cardio_sessions.length}
-              active={active}
-            />
-          )}
           <section
             ref={workoutList}
             className="history-screen shared-workouts"
-            aria-labelledby="shared-workouts-title"
+            aria-labelledby={cardioTab ? undefined : 'shared-workouts-title'}
+            aria-label={cardioTab ? 'Training history' : undefined}
           >
-            <header className="shared-workouts-header">
-              <h2 id="shared-workouts-title">Workouts</h2>
+            <header className={`shared-workouts-header${cardioTab ? ' has-tabs' : ''}`}>
+              {cardioTab ? (
+                <div className="shared-history-tabs" role="tablist" aria-label="Training history">
+                  {HISTORY_TABS.map(([tab, label]) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      role="tab"
+                      id={`${historyTabsId}-${tab}`}
+                      aria-selected={historyTab === tab}
+                      aria-controls={`${historyTabsId}-panel`}
+                      className={historyTab === tab ? 'active' : ''}
+                      onClick={() => setHistoryTab(tab)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <h2 id="shared-workouts-title">Workouts</h2>
+              )}
               <SharedWorkoutFilterToggle
                 filters={filters}
                 open={filtersOpen}
@@ -1850,66 +1888,76 @@ export function SharedProfileScreen({
                 onToggle={setFiltersOpen}
               />
             </header>
-            {linkedWorkoutId &&
-              !loadingWorkouts &&
-              !workouts.some((workout) => workout.id === linkedWorkoutId) && (
+            <div
+              role={cardioTab ? 'tabpanel' : undefined}
+              id={`${historyTabsId}-panel`}
+              aria-labelledby={cardioTab ? `${historyTabsId}-${historyTab}` : undefined}
+            >
+              {linkedWorkoutId &&
+                !loadingWorkouts &&
+                !workouts.some((workout) => workout.id === linkedWorkoutId) && (
+                  <p className="inline-error" role="alert">
+                    This workout is no longer available.
+                  </p>
+                )}
+              <SharedWorkoutFilters
+                id={filtersId}
+                filters={filters}
+                options={filterOptions}
+                open={filtersOpen}
+                onChange={setFilters}
+              />
+              {invalidDates ? (
                 <p className="inline-error" role="alert">
-                  This workout is no longer available.
+                  From date must not be after To date.
                 </p>
+              ) : loadingWorkouts &&
+                (workouts.length === 0 || loadedFilters.current !== filterKey) ? (
+                <p className="sharing-loading" role="status">
+                  Loading workouts…
+                </p>
+              ) : workouts.length === 0 ? (
+                <p className="shared-card-empty">
+                  {listKind === 'cardio'
+                    ? filtered
+                      ? 'No cardio sessions match these filters.'
+                      : 'No cardio sessions yet.'
+                    : filtered
+                      ? 'No workouts match these filters.'
+                      : 'No workouts logged yet.'}
+                </p>
+              ) : (
+                <Fragment key={filterKey}>
+                  {renderWorkouts({
+                    workouts,
+                    hasMore: workouts.length < total,
+                    loadingMore: loadingMore || loadingWorkouts,
+                    loadMoreFailed: Boolean(moreError),
+                    onLoadMore: () => void loadMore(),
+                    focusWorkoutId: linkedWorkoutId,
+                    personalRecords: records,
+                    workoutTypes: profile.consistency?.workout_types,
+                    onFilterMachine: (photo) => {
+                      setFilters((current) => ({ ...current, machine_photo_id: photo.id }));
+                      setFiltersOpen(true);
+                    },
+                  })}
+                </Fragment>
               )}
-            <SharedWorkoutFilters
-              id={filtersId}
-              filters={filters}
-              options={filterOptions}
-              open={filtersOpen}
-              onChange={setFilters}
-            />
-            {invalidDates ? (
-              <p className="inline-error" role="alert">
-                From date must not be after To date.
-              </p>
-            ) : loadingWorkouts &&
-              (workouts.length === 0 || loadedFilters.current !== filterKey) ? (
-              <p className="sharing-loading" role="status">
-                Loading workouts…
-              </p>
-            ) : workouts.length === 0 ? (
-              <p className="shared-card-empty">
-                {Object.values(filters).some(Boolean)
-                  ? 'No workouts match these filters.'
-                  : 'No workouts logged yet.'}
-              </p>
-            ) : (
-              <Fragment key={filterKey}>
-                {renderWorkouts({
-                  workouts,
-                  hasMore: workouts.length < total,
-                  loadingMore: loadingMore || loadingWorkouts,
-                  loadMoreFailed: Boolean(moreError),
-                  onLoadMore: () => void loadMore(),
-                  focusWorkoutId: linkedWorkoutId,
-                  personalRecords: records,
-                  workoutTypes: profile.consistency?.workout_types,
-                  onFilterMachine: (photo) => {
-                    setFilters((current) => ({ ...current, machine_photo_id: photo.id }));
-                    setFiltersOpen(true);
-                  },
-                })}
-              </Fragment>
-            )}
-            {moreError && (
-              <div className="history-page-status" role="alert">
-                <p>{moreError}</p>
-                <button
-                  type="button"
-                  className="show-more-button"
-                  disabled={loadingMore}
-                  onClick={() => void loadMore()}
-                >
-                  Retry loading older workouts
-                </button>
-              </div>
-            )}
+              {moreError && (
+                <div className="history-page-status" role="alert">
+                  <p>{moreError}</p>
+                  <button
+                    type="button"
+                    className="show-more-button"
+                    disabled={loadingMore}
+                    onClick={() => void loadMore()}
+                  >
+                    Retry loading older workouts
+                  </button>
+                </div>
+              )}
+            </div>
           </section>
         </>
       )}

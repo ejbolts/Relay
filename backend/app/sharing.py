@@ -999,6 +999,8 @@ def list_shared_workouts(
     machine_photo_id: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    # The profile's Workouts and Cardio tabs; a cardio-only workout is listed under Cardio.
+    kind: Literal["strength", "cardio"] | None = None,
 ) -> SharedWorkoutPage:
     member, sharing = viewable_member(db, user, user_id)
     if start_date and end_date and start_date > end_date:
@@ -1025,6 +1027,10 @@ def list_shared_workouts(
         owned.append(TrainingWorkout.workout_date >= start_date)
     if end_date:
         owned.append(TrainingWorkout.workout_date <= end_date)
+    if kind == "cardio":
+        owned.append(is_cardio_only_workout())
+    elif kind == "strength":
+        owned.append(~is_cardio_only_workout())
     total = db.scalar(select(func.count(TrainingWorkout.id)).where(*owned)) or 0
     workouts = list(
         db.scalars(
