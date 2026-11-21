@@ -243,7 +243,11 @@ import { MovementNoteDialog } from './MovementNoteDialog';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
 import { markSetAdded } from './setRowEntrance';
 import { selectInputValue } from './selectInputValue';
-import { matchingLastSessionSet, withLastSessionReps } from './lastSessionSet';
+import {
+  matchingLastSessionSet,
+  withLastSessionReps,
+  withLastSessionValues,
+} from './lastSessionSet';
 import { readStoredRestTimer, restoreRestTimer, writeStoredRestTimer } from './liveRestTimer';
 import { unusualSetEntryWarning, type SetEntryWarning } from './setEntryConfirmation';
 import {
@@ -419,6 +423,7 @@ import {
 import {
   completeRemainingSets,
   createSuggestedWorkoutSet,
+  DEFAULT_REST_SECONDS,
   createWorkoutSet,
   hasRecordedPerformance,
   isCompletedWorkingSet,
@@ -3511,15 +3516,21 @@ function WorkoutLogger({
   function templateMovements(items: SessionTemplate['exercises']): DraftMovement[] {
     return items.map(({ exercise, plannedSets, repRange }) => {
       const ranged = repRange && plannedSets && exercise.kind !== 'cardio';
-      const lastSession = ranged
-        ? latestExerciseSets(historicalWorkouts, exercise.id, initialDate)
-        : [];
+      const lastSession =
+        plannedSets && exercise.kind === 'strength' ? latestSessionOf(exercise.id) : [];
       // A planned range suggests its target weight for working sets the plan left blank.
       const targetWeight = ranged
         ? progressionWeightKg(progressionTarget(repRange, lastSession, weightUnit))
         : null;
       return templateMovement(exercise, plannedSets, repRange, targetWeight, lastSession);
     });
+  }
+  /** The exercise's latest session, from older history when the loaded window lacks it. */
+  function latestSessionOf(exerciseId: string): TrackedSet[] {
+    const loaded = latestExerciseSets(historicalWorkouts, exerciseId, initialDate);
+    if (loaded.length || !historyBaselines || initialDate < historyBaselines.before) return loaded;
+    const older = historyBaselines.byExercise.get(exerciseId)?.latest;
+    return older && older.workout_date <= initialDate ? older.sets : [];
   }
   function templateMovement(
     exercise: Exercise,
@@ -3540,18 +3551,23 @@ function WorkoutLogger({
       sets: plannedSets
         ? // At last time's weight, a row shows last time's reps: the range is the target.
           withLastSessionReps(
-            plannedSets.map((set) => ({
-              ...createWorkoutSet(exercise.kind),
-              ...set,
-              ...(targetWeight !== null &&
-                set.weight_kg == null &&
-                set.set_type !== 'warmup' && { weight_kg: targetWeight }),
-              key: crypto.randomUUID(),
-              warmup: set.set_type === 'warmup',
-              completed: false,
-              fromPrevious: true,
-              restRevealed: false,
-            })),
+            // What the plan leaves blank comes from last time, as for an exercise added by hand.
+            withLastSessionValues(
+              plannedSets.map((set) => ({
+                ...createWorkoutSet(exercise.kind),
+                ...set,
+                ...(targetWeight !== null &&
+                  set.weight_kg == null &&
+                  set.set_type !== 'warmup' && { weight_kg: targetWeight }),
+                key: crypto.randomUUID(),
+                warmup: set.set_type === 'warmup',
+                completed: false,
+                fromPrevious: true,
+                restRevealed: false,
+              })),
+              lastSession,
+              exercise.kind === 'strength' ? DEFAULT_REST_SECONDS : null,
+            ),
             lastSession,
           )
         : suggestedSetsFromHistory(

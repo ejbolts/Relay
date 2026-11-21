@@ -25,6 +25,7 @@ import { SharedWorkoutFilterToggle, SharedWorkoutFilters } from './SharedWorkout
 import { ConsistencyCard } from './ConsistencyCard';
 import { consistencyWeeks } from './consistencyWeeks';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
+import { splitCalendarDays } from './trainingSplit';
 import { builtinTypeColors, calendarLegendTypes } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
 import { TrainingTimeCard } from './TrainingTimeStats';
@@ -1160,6 +1161,12 @@ function SharedConsistencyCalendar({
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const [visibleMonths, setVisibleMonths] = useState<readonly string[] | null>(null);
   const colors = builtinTypeColors(data.workout_types);
+  const today = localDate();
+  // Like Home, the member's split outlines its coming days and the past days it missed.
+  const splitDays = useMemo(
+    () => splitCalendarDays(data.training_split, today, 42),
+    [data.training_split, today],
+  );
   // The heatmap holds every training day, so its earliest is the member's first workout.
   const firstWorkout = data.heatmap
     .filter((day) => day.workout_count > 0)
@@ -1171,7 +1178,7 @@ function SharedConsistencyCalendar({
     <ConsistencyCard
       streak={data.current_streak}
       trainingDays={data.training_days}
-      weeks={consistencyWeeks(firstWorkout, localDate())}
+      weeks={consistencyWeeks(firstWorkout, today)}
       onOpenSplits={onOpenSplits}
     >
       <WorkoutCalendar
@@ -1181,6 +1188,7 @@ function SharedConsistencyCalendar({
         hiddenCategories={hidden}
         selectedDate={selectedDate}
         readOnly
+        splitDays={splitDays}
         onDayClick={onDayClick}
         onVisibleMonthsChange={setVisibleMonths}
       />
