@@ -5118,7 +5118,6 @@ function WorkoutLogger({
           onTogglePause={toggleWorkoutPause}
           onStartRest={restTimerEnabled ? startRestTimer : undefined}
           restRunning={restActive}
-          onEndRest={cancelRestTimer}
           onDiscard={() => setDeleteConfirmationOpen(true)}
           discardLabel={resumedWorkoutId ? 'Discard session' : 'Discard workout'}
           saving={saving}

@@ -1314,29 +1314,22 @@ describe('rest time controls', () => {
     expect(readActiveWorkoutDraft()?.notes).toBe(before.notes);
   });
 
-  it('starts a rest of a chosen length from the header and ends it there', async () => {
+  it('starts a rest of a chosen length from the header timer', async () => {
     vi.useFakeTimers();
     writeActiveWorkoutDraft(storedDraft());
     await mount();
-    const restButton = () =>
-      container.querySelector<HTMLButtonElement>('.live-workout-header [aria-label="Rest timer"]')!;
+    const restButton = () => container.querySelector('.live-workout-header .live-workout-rest')!;
     expect(container.querySelector('.rest-pill')).toBeNull();
     expect(restButton().classList.contains('is-running')).toBe(false);
-    await click('Rest timer');
-    expect(restButton().getAttribute('aria-expanded')).toBe('true');
-    expect(
-      [...container.querySelectorAll('.live-workout-rest-menu [role="menuitem"]')].map(
-        (item) => item.textContent,
-      ),
-    ).toEqual(['0:30', '1:00', '1:30', '2:00', '3:00', '5:00']);
-    await click('Start a 1:30 rest');
-    expect(container.querySelector('[role="menu"]')).toBeNull();
+    await choose('Rest timer', '90');
     expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('1:30');
     expect(restButton().classList.contains('is-running')).toBe(true);
     await act(async () => vi.advanceTimersByTimeAsync(10_000));
     expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('1:20');
-    await click('Rest timer');
-    await click('End rest');
+    // Choosing again restarts the rest at the new length.
+    await choose('Rest timer', '180');
+    expect(container.querySelector('.rest-pill [role="timer"]')?.textContent).toBe('3:00');
+    await click('End rest timer');
     expect(container.querySelector('.rest-pill')).toBeNull();
     expect(restButton().classList.contains('is-running')).toBe(false);
   });
