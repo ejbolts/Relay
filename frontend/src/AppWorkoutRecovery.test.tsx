@@ -1072,6 +1072,51 @@ describe('saved training splits on Home', () => {
     ]);
   });
 
+  it("fills what saved exercises leave blank from last time's sets, as a hand-added exercise", async () => {
+    const last = remoteWorkout();
+    last.movements[0].sets = [
+      [100, 7, 150],
+      [100, 6, 120],
+    ].map(([weight_kg, reps, rest_seconds], index) => ({
+      ...last.movements[0].sets[0],
+      id: `last-set-${index}`,
+      order_index: index,
+      weight_kg,
+      reps,
+      rest_seconds,
+    }));
+    vi.mocked(api.listWorkouts).mockResolvedValue([last]);
+    const blank = {
+      reps: null,
+      weight_kg: null,
+      rest_seconds: null,
+      duration_seconds: null,
+      distance_km: null,
+      set_type: 'normal' as const,
+    };
+    vi.spyOn(api, 'getWorkoutTypeExercises').mockResolvedValue([
+      {
+        workout_type_id: custom.id,
+        movements: [
+          {
+            exercise_id: bench.id,
+            exercise: bench,
+            // The second keeps its planned rest; the third has no last-time match.
+            sets: [blank, { ...blank, rest_seconds: 90 }, { ...blank, reps: 5 }],
+          },
+        ],
+      },
+    ]);
+    await mount();
+    const start = container.querySelector<HTMLButtonElement>('.next-session-actions button')!;
+    await act(async () => start.click());
+    expect(readActiveWorkoutDraft()!.movements[0].sets).toMatchObject([
+      { weight_kg: 100, reps: 7, rest_seconds: 150, fromPrevious: true, completed: false },
+      { weight_kg: 100, reps: 6, rest_seconds: 90, fromPrevious: true, completed: false },
+      { weight_kg: 100, reps: 5, rest_seconds: 120, fromPrevious: true, completed: false },
+    ]);
+  });
+
   it('fills an empty workout when its type changes, but never replaces exercises', async () => {
     const upper = { ...custom, id: 'upper', name: 'Upper body', is_custom: false };
     vi.spyOn(api, 'getWorkoutTypes').mockResolvedValue([custom, upper]);
