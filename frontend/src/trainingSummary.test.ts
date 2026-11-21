@@ -9,7 +9,7 @@ import {
   mostTrainedExerciseId,
   niceTicks,
   prSetCount,
-  recentStrengthRecords,
+  recentRecords,
   recordCountsByWorkout,
   sessionTemplateFor,
   setLabel,
@@ -358,7 +358,7 @@ describe('training summary helpers', () => {
       record('c', '2026-10-05', 'weight'),
       record('d', '2026-10-05', 'estimated_1rm'),
     ];
-    expect(recentStrengthRecords(records, 2).map((item) => item.id)).toEqual(['c', 'b']);
+    expect(recentRecords(records, 2).map((item) => item.id)).toEqual(['c', 'b']);
   });
 });
 
@@ -477,7 +477,7 @@ describe('PR counts, workout counts and session list totals', () => {
     expect(prSetCount(records)).toBe(3);
     expect(Object.fromEntries(recordCountsByWorkout(records))).toEqual({ w1: 2, w2: 1 });
     // The set is listed by its weight PR; its ratio PR does not repeat it.
-    expect(recentStrengthRecords(records, 10).map((record) => record.id)).toEqual(['a', 'c', 'd']);
+    expect(recentRecords(records, 10).map((record) => record.id)).toEqual(['a', 'c', 'd']);
   });
 
   it('counts cardio-only workouts as cardio in week headers, without cardio sets', () => {

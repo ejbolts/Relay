@@ -2,7 +2,14 @@ import { useTips } from './Tips';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { useWeightUnit } from './trainingPreferencesContext';
-import type { CardioOverview, CardioSession, CardioSessionInput, Exercise } from './types';
+import type {
+  CardioOverview,
+  CardioSession,
+  CardioSessionInput,
+  Exercise,
+  PersonalRecord,
+} from './types';
+import { savedCardioRecordsToast } from './cardioRecords';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { CardioTrendCard } from './CardioTrendCard';
 import { groupCardioHistory, sessionElevation, sessionMets } from './cardioTrend';
@@ -220,19 +227,31 @@ export function CardioScreen({
       } else {
         const saved = await api.createCardio(payload);
         if (!scanStatus) tips.event('manual-cardio', 'cardio', 2);
+        const share = {
+          label: 'Share card',
+          run: () => {
+            toast.dismiss();
+            setCardioSharing(saved);
+          },
+        };
+        // A session logged with an exercise is saved as a workout, which can set cardio PRs.
+        const records = saved.source_workout_id
+          ? await api
+              .listPersonalRecords({ workoutId: saved.source_workout_id })
+              .catch(() => [] as PersonalRecord[])
+          : [];
+        const celebration = savedCardioRecordsToast(records);
         toast.show(
-          shareReminder
+          celebration
             ? {
-                message: 'Workout saved',
-                action: {
-                  label: 'Share card',
-                  run: () => {
-                    toast.dismiss();
-                    setCardioSharing(saved);
-                  },
-                },
+                ...celebration,
+                variant: 'celebrate',
+                dismissLabel: 'Dismiss personal record popup',
+                action: shareReminder ? share : undefined,
               }
-            : 'Cardio saved',
+            : shareReminder
+              ? { message: 'Workout saved', action: share }
+              : 'Cardio saved',
         );
       }
       setDraft(empty);

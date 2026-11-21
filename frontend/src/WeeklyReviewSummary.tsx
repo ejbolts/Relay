@@ -1,3 +1,4 @@
+import { cardioRecordLabel } from './cardioRecords';
 import { Icon } from './Icon';
 import type { PersonalRecord } from './types';
 import { dayMonth, formatVolume, shortDate } from './trainingSummary';
@@ -123,7 +124,7 @@ export function WeeklyReviewSummary({
                   <span>
                     <b>{record.exercise_name ?? 'Exercise'}</b>
                     <small>
-                      {RECORD_LABELS[record.record_type] ?? 'PR'}
+                      {cardioRecordLabel(record) ?? RECORD_LABELS[record.record_type] ?? 'PR'}
                       {record.record_type === 'reps_at_weight' && record.weight_kg != null
                         ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
                         : ''}{' '}
