@@ -1,4 +1,3 @@
-import { Icon } from './Icon';
 import { RestTimeSelect } from './RestTimeSelect';
 import './setInsertButton.css';
 
@@ -49,10 +48,7 @@ export function SetInsertRow({
         <>
           {/* The pill is drawn under a transparent select, so a tap opens the system's menu. */}
           <label className="set-add-rest">
-            <span aria-hidden="true">
-              <Icon name="bell" />
-              Rest
-            </span>
+            <span aria-hidden="true">Rest</span>
             <RestTimeSelect
               seconds={null}
               label={`Add rest after set ${beforeSet - 1}`}

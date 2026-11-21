@@ -164,11 +164,13 @@
     border-color 120ms ease;
 }
 
-/* A bell, so the pill reads as a rest timer rather than another "+" like Add set's. */
-.set-add-rest > span > .pulse-icon {
-  width: 0.75rem;
-  height: 0.75rem;
-  stroke-width: 2.4;
+.set-add-rest > span::before {
+  content: '';
+  width: 0.5rem;
+  height: 0.5rem;
+  background:
+    linear-gradient(currentColor 0 0) center / 100% 2px no-repeat,
+    linear-gradient(currentColor 0 0) center / 2px 100% no-repeat;
 }
 
 /* The menu: invisible and covering the whole pill, so a tap anywhere on it opens the menu. */
