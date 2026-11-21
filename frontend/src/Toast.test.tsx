@@ -72,6 +72,22 @@ describe('variants and timing', () => {
     expect(onDismiss).toHaveBeenCalledOnce();
   });
 
+  it('uses a given duration instead of its variant time', async () => {
+    const onDismiss = vi.fn();
+    await render(
+      <Toast
+        {...base({ message: 'Set deleted', onDismiss })}
+        action={{ label: 'Undo', run: vi.fn() }}
+        durationMs={TOAST_MS.quickAction}
+      />,
+    );
+    expect(toast()!.style.getPropertyValue('--toast-ms')).toBe('2500ms');
+    await advance(2499);
+    expect(onDismiss).not.toHaveBeenCalled();
+    await advance(1);
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
   it('gives a long message the error tier, and the close button a 44px target label', async () => {
     await render(<Toast {...base({ message: 'x'.repeat(91) })} />);
     expect(toast()!.style.getPropertyValue('--toast-ms')).toBe(`${TOAST_MS.error}ms`);

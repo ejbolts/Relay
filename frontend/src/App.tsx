@@ -384,7 +384,7 @@ import { LiveWorkoutSheet } from './LiveWorkoutSheet';
 import { FinishedWorkoutCard } from './FinishedWorkoutCard';
 import { hasLikelyDuplicateMachines, multiMachineExerciseId } from './machineUsage';
 import { onTipTarget, type TipAction } from './tipActions';
-import { Toast, useToast, useToastPlacement } from './Toast';
+import { TOAST_MS, Toast, useToast, useToastPlacement } from './Toast';
 import { TrainingBlockDialog } from './TrainingBlockDialog';
 import {
   buildFinishSummary,
@@ -5580,6 +5580,7 @@ function WorkoutLogger({
           id={`${undoDeletion.kind}:${undoDeletion.set.key}`}
           message={undoDeletion.kind === 'rest' ? 'Rest time removed' : 'Set deleted'}
           action={{ label: 'Undo', run: undoLastDeletion }}
+          durationMs={undoDeletion.kind === 'set' ? TOAST_MS.quickAction : undefined}
           dismissLabel="Dismiss deletion notification"
           onDismiss={() => setUndoDeletion(null)}
         />

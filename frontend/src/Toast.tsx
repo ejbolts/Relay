@@ -26,6 +26,8 @@ export const TOAST_MS = {
   warning: 6000,
   celebrate: 6000,
   error: 8000,
+  /** For an owner that passes `durationMs`: the Undo after deleting a workout set. */
+  quickAction: 2500,
 } as const;
 
 /** A message longer than this gets the error tier's time, so there is time to read it. */
@@ -45,6 +47,8 @@ export interface ToastProps {
   lines?: { title: string; detail?: string }[];
   /** Defaults to 'action' when there is an action, otherwise 'status'. */
   variant?: ToastVariant;
+  /** Replaces the variant's time on screen. Use a `TOAST_MS` value. */
+  durationMs?: number;
   action?: ToastAction;
   /** A second action before the main one. Only the finished-workout toast needs it. */
   secondaryAction?: ToastAction;
@@ -347,7 +351,7 @@ function ToastCard({
 function useToastCard(props: ToastProps, current: boolean): ReactElement {
   const { id, message, action, busy = false } = props;
   const variant = toastVariant(props);
-  const durationMs = toastDuration(variant, message);
+  const durationMs = props.durationMs ?? toastDuration(variant, message);
   const latest = useRef(props);
   latest.current = props;
   const [held, setHeld] = useState(false);
