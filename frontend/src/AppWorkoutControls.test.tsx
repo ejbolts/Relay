@@ -111,6 +111,7 @@ const labelled = (label: string) =>
 async function click(target: HTMLElement) {
   await act(async () => target.click());
 }
+const collapseButton = () => card().querySelector<HTMLButtonElement>('.movement-collapse-button')!;
 const tick = (set: number) => click(labelled(`Complete set ${set}`));
 const shelfGains = () =>
   [...container.querySelectorAll('.weekly-shelf-cell')].map(
@@ -188,7 +189,7 @@ afterEach(async () => {
 });
 
 describe('finishing an exercise by ticking its last set', () => {
-  it('updates weekly totals with each set, then folds the exercise away with its totals', async () => {
+  it('updates weekly totals with each set and keeps the finished exercise open', async () => {
     liveDraft([60, 60, 60]);
     await mount();
     await tick(1);
@@ -198,17 +199,33 @@ describe('finishing an exercise by ticking its last set', () => {
     await tick(2);
     expect(shelfGains()).toEqual(['Chest +1', 'Triceps +0.5']);
     expect(totals()).toEqual(['1→2', '0.5→1']);
-    // Nothing folds while sets remain.
     expect(card().classList.contains('is-collapsed')).toBe(false);
     expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(false);
+    expect(collapseButton().classList.contains('is-done')).toBe(false);
 
     await tick(3);
     expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(true);
+    expect(shelfGains()).toEqual(['Chest +3', 'Triceps +1.5']);
+    // Ticking the last set never folds the card; the button beside Add set does, once asked.
+    expect(card().classList.contains('is-collapsed')).toBe(false);
+    expect(collapseButton().classList.contains('is-done')).toBe(true);
+    expect(collapseButton().getAttribute('aria-label')).toBe('Collapse Bench press');
+    await click(collapseButton());
     expect(card().classList.contains('is-collapsed')).toBe(true);
     expect(card().querySelector('.movement-completed-summary')?.textContent).toBe(
       '3 completed sets',
     );
-    expect(shelfGains()).toEqual(['Chest +3', 'Triceps +1.5']);
+
+    await click(labelled('Expand Bench press'));
+    expect(card().classList.contains('is-collapsed')).toBe(false);
+  });
+
+  it('keeps the exercise open when it is finished from its header', async () => {
+    liveDraft([60, 60]);
+    await mount();
+    await click(labelled('Finish Bench press'));
+    expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(true);
+    expect(card().classList.contains('is-collapsed')).toBe(false);
   });
 
   it('keeps the exercise open after ticking a set that was added by hand', async () => {
@@ -216,9 +233,8 @@ describe('finishing an exercise by ticking its last set', () => {
     await mount();
     await tick(1);
     await tick(2);
-    expect(card().classList.contains('is-collapsed')).toBe(true);
+    expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(true);
 
-    await click(labelled('Expand Bench press'));
     await click(container.querySelector<HTMLButtonElement>('.add-set-button')!);
     await tick(3);
     expect(readActiveWorkoutDraft()!.movements[0].sets.map((set) => set.completed)).toEqual([
