@@ -1285,6 +1285,14 @@ function ProfileSkeleton() {
   );
 }
 
+type HistoryTab = 'all' | 'workouts' | 'cardio';
+// All sessions and Workouts share one list; Workouts leaves out the cardio-only workouts.
+const HISTORY_TABS: readonly (readonly [HistoryTab, string])[] = [
+  ['all', 'All sessions'],
+  ['workouts', 'Workouts'],
+  ['cardio', 'Cardio'],
+];
+
 export function SharedProfileScreen({
   onOpenSplits,
   dataRevision = null,
@@ -1346,11 +1354,12 @@ export function SharedProfileScreen({
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersId = useId();
   const historyTabsId = useId();
-  const [historyTab, setHistoryTab] = useState<'workouts' | 'cardio'>('workouts');
+  const [historyTab, setHistoryTab] = useState<HistoryTab>('all');
   // Your own profile stays mounted beside a friend's, so the list is found by ref, not by id.
   const workoutList = useRef<HTMLElement>(null);
   function showWorkouts() {
-    setHistoryTab('workouts');
+    // Filters list cardio-only workouts too, so a filtered list reads the same under either tab.
+    setHistoryTab((tab) => (tab === 'cardio' ? 'all' : tab));
     setFiltersOpen(true);
     workoutList.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -1556,8 +1565,11 @@ export function SharedProfileScreen({
   const filtered = Object.values(filters).some(Boolean);
   const cardioTab = Boolean(profile?.can_view && profile.cardio_sessions);
   const listedWorkouts = useMemo(
-    () => (cardioTab && !filtered ? workouts.filter(isStrengthWorkout) : workouts),
-    [cardioTab, filtered, workouts],
+    () =>
+      cardioTab && historyTab === 'workouts' && !filtered
+        ? workouts.filter(isStrengthWorkout)
+        : workouts,
+    [cardioTab, historyTab, filtered, workouts],
   );
   // Pages of only cardio leave nothing to page through, so keep reading until a workout appears.
   const readingPastCardio =
@@ -1855,25 +1867,25 @@ export function SharedProfileScreen({
             <header className={`shared-workouts-header${cardioTab ? ' has-tabs' : ''}`}>
               {cardioTab ? (
                 <div className="shared-history-tabs" role="tablist" aria-label="Training history">
-                  {(['workouts', 'cardio'] as const).map((tab) => (
+                  {HISTORY_TABS.map(([tab, label]) => (
                     <button
                       key={tab}
                       type="button"
                       role="tab"
                       id={`${historyTabsId}-${tab}`}
                       aria-selected={historyTab === tab}
-                      aria-controls={`${historyTabsId}-${tab}-panel`}
+                      aria-controls={`${historyTabsId}-${tab === 'cardio' ? 'cardio' : 'list'}-panel`}
                       className={historyTab === tab ? 'active' : ''}
                       onClick={() => setHistoryTab(tab)}
                     >
-                      {tab === 'workouts' ? 'Workouts' : 'Cardio'}
+                      {label}
                     </button>
                   ))}
                 </div>
               ) : (
                 <h2 id="shared-workouts-title">Workouts</h2>
               )}
-              {historyTab === 'workouts' && (
+              {historyTab !== 'cardio' && (
                 <SharedWorkoutFilterToggle
                   filters={filters}
                   open={filtersOpen}
@@ -1900,9 +1912,9 @@ export function SharedProfileScreen({
             )}
             <div
               role={cardioTab ? 'tabpanel' : undefined}
-              id={`${historyTabsId}-workouts-panel`}
-              aria-labelledby={cardioTab ? `${historyTabsId}-workouts` : undefined}
-              hidden={historyTab !== 'workouts'}
+              id={`${historyTabsId}-list-panel`}
+              aria-labelledby={cardioTab ? `${historyTabsId}-${historyTab}` : undefined}
+              hidden={historyTab === 'cardio'}
             >
               {linkedWorkoutId &&
                 !loadingWorkouts &&

@@ -542,7 +542,7 @@ describe('shared workouts and cardio tabs', () => {
     return document.getElementById(tab(name).getAttribute('aria-controls')!)!;
   }
 
-  it('shows Cardio as a tab beside Workouts and lists cardio-only workouts there', async () => {
+  it('opens on All sessions and splits strength and cardio into their own tabs', async () => {
     vi.mocked(api.sharing.profile).mockResolvedValue(withCardio);
     vi.mocked(api.sharing.workouts).mockImplementation(async (_id, _offset, _limit, filters) => ({
       total: 2,
@@ -553,26 +553,37 @@ describe('shared workouts and cardio tabs', () => {
     }));
     await reopen();
     expect(container.querySelector('.shared-workouts-header h2')).toBeNull();
+    expect([...container.querySelectorAll('[role="tab"]')].map((item) => item.textContent)).toEqual(
+      ['All sessions', 'Workouts', 'Cardio'],
+    );
+    expect(tab('All sessions').getAttribute('aria-selected')).toBe('true');
+    expect(panel('All sessions').hidden).toBe(false);
+    expect(panel('Cardio').hidden).toBe(true);
+    expect(panel('All sessions').textContent).toContain('First workout');
+    expect(panel('All sessions').textContent).toContain('Treadmill workout');
+    expect(container.querySelector('.shared-workout-filter-toggle')).not.toBeNull();
+
+    await act(async () => tab('Workouts').click());
     expect(tab('Workouts').getAttribute('aria-selected')).toBe('true');
     expect(panel('Workouts').hidden).toBe(false);
-    expect(panel('Cardio').hidden).toBe(true);
+    expect(panel('Workouts').getAttribute('aria-labelledby')).toBe(tab('Workouts').id);
     expect(panel('Workouts').textContent).toContain('First workout');
     expect(panel('Workouts').textContent).not.toContain('Treadmill workout');
 
     await act(async () => tab('Cardio').click());
     expect(tab('Cardio').getAttribute('aria-selected')).toBe('true');
     expect(panel('Cardio').hidden).toBe(false);
-    expect(panel('Workouts').hidden).toBe(true);
+    expect(panel('All sessions').hidden).toBe(true);
     expect(panel('Cardio').textContent).toContain('Incline Treadmill Walking');
     expect(container.querySelector('.shared-workout-filter-toggle')).toBeNull();
 
-    // Choosing a calendar day returns to Workouts, where a filter shows every workout that day.
+    // Choosing a calendar day returns to the full list, showing every workout that day.
     await act(async () =>
       container.querySelector<HTMLButtonElement>('.calendar-panel .calendar-day.trained')!.click(),
     );
-    expect(tab('Workouts').getAttribute('aria-selected')).toBe('true');
-    expect(panel('Workouts').textContent).toContain('First workout');
-    expect(panel('Workouts').textContent).toContain('Treadmill workout');
+    expect(tab('All sessions').getAttribute('aria-selected')).toBe('true');
+    expect(panel('All sessions').textContent).toContain('First workout');
+    expect(panel('All sessions').textContent).toContain('Treadmill workout');
   });
 
   it('keeps reading past pages holding only cardio-only workouts', async () => {
@@ -585,6 +596,7 @@ describe('shared workouts and cardio tabs', () => {
       personal_records: [],
     }));
     await reopen();
+    await act(async () => tab('Workouts').click());
     expect(panel('Workouts').textContent).toContain('Older lift');
     expect(panel('Workouts').textContent).not.toContain('Treadmill workout');
     expect(panel('Workouts').textContent).not.toContain('No workouts logged yet.');

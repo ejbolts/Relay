@@ -439,7 +439,7 @@
 
 .shared-history-tabs {
   display: flex;
-  gap: 1.25rem;
+  gap: clamp(0.75rem, 4vw, 1.25rem);
 }
 
 .shared-history-tabs button[role='tab'] {
@@ -456,6 +456,13 @@
   font-size: 1rem;
   font-weight: 650;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+@media (max-width: 359px) {
+  .shared-history-tabs button[role='tab'] {
+    font-size: 0.9375rem;
+  }
 }
 
 .shared-history-tabs button[role='tab'].active {
