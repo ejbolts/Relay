@@ -1682,12 +1682,19 @@ def training_preferences(db: Session, user_id: str) -> TrainingPreferencesRead:
         )
     except (ValueError, TypeError):
         muscle_set_goals = {}
+    try:
+        default_rest: int | None = int(get_setting(db, user_id, "default_rest_seconds", ""))
+        if not 1 <= default_rest <= 7_200:
+            default_rest = None
+    except ValueError:
+        default_rest = None
     return TrainingPreferencesRead(
         preferred_weight_unit=unit,
         week_start=week_start_value,
         zone2_goal_minutes=zone2_goal,
         weekly_muscle_set_goal=muscle_set_goal,
         weekly_muscle_set_goals=muscle_set_goals,
+        default_rest_seconds=default_rest,
     )
 
 
@@ -1884,6 +1891,9 @@ def update_training_preferences(
         set_setting(
             db, user.id, "weekly_muscle_set_goals", json.dumps(payload.weekly_muscle_set_goals)
         )
+    if "default_rest_seconds" in payload.model_fields_set:
+        rest = payload.default_rest_seconds
+        set_setting(db, user.id, "default_rest_seconds", "" if rest is None else str(rest))
     db.flush()
     rebuild_personal_records(db, user.id)
     db.commit()

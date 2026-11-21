@@ -623,6 +623,8 @@ export interface TrainingPreferences {
   weekly_muscle_set_goal: number;
   /** Absent on older servers and cached preferences. */
   weekly_muscle_set_goals?: Record<string, number>;
+  /** The rest a new set gets when last time gives none; unset by default. Absent on older servers. */
+  default_rest_seconds?: number | null;
 }
 
 export interface HeartRateZone {

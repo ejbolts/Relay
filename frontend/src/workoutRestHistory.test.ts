@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { previousSetRests, restToAdd } from './workoutRestHistory';
-import { createWorkoutSet, DEFAULT_REST_SECONDS } from './workoutSets';
+import { createWorkoutSet } from './workoutSets';
 import type { ExerciseHistoryEntry } from './exerciseHistory';
 
 const working = { ...createWorkoutSet('strength'), set_type: 'normal' as const, warmup: false };
@@ -65,9 +65,10 @@ describe('rest to add between sets', () => {
   it('uses what the same set rested last time', () => {
     expect(restToAdd([noRest, noRest], 1, [entry])).toBe(210);
   });
-  it('falls back to the nearest rest in the exercise, then the default', () => {
+  it('falls back to the nearest rest in the exercise, then the default rest if one is set', () => {
     const sets = [{ ...noRest, rest_seconds: 45 }, noRest, { ...noRest, rest_seconds: 120 }];
-    expect(restToAdd(sets, 1, [])).toBe(45);
-    expect(restToAdd([noRest, noRest], 0, [])).toBe(DEFAULT_REST_SECONDS);
+    expect(restToAdd(sets, 1, [], 150)).toBe(45);
+    expect(restToAdd([noRest, noRest], 0, [], 150)).toBe(150);
+    expect(restToAdd([noRest, noRest], 0, [])).toBeUndefined();
   });
 });
