@@ -109,9 +109,9 @@ export function formatRecordDistance(distanceKm: number): string {
     : `${Number(distanceKm.toFixed(1))} km`;
 }
 
-/** A record time: tenths of a second only under ten minutes, where they matter. */
+/** A record time: tenths of a second only under two minutes, such as a 500 m row. */
 export function formatRecordTime(seconds: number): string {
-  const tenths = seconds < 600 && Math.round(seconds * 10) % 10 !== 0;
+  const tenths = seconds < 120 && Math.round(seconds * 10) % 10 !== 0;
   if (!tenths) return formatSeconds(Math.round(seconds));
   const total = Math.round(seconds * 10);
   return `${formatSeconds(Math.floor(total / 10))}.${total % 10}`;

@@ -66,9 +66,9 @@ describe('cardio record rules', () => {
       '21.1 km',
       '42.2 km',
     ]);
-    expect([117.5, 300, 1500.3, 5040].map(formatRecordTime)).toEqual([
+    expect([117.5, 283.3, 1500.3, 5040].map(formatRecordTime)).toEqual([
       '1:57.5',
-      '5:00',
+      '4:43',
       '25:00',
       '1:24:00',
     ]);
