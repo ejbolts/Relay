@@ -542,65 +542,83 @@ describe('shared workouts and cardio tabs', () => {
     return document.getElementById(tab(name).getAttribute('aria-controls')!)!;
   }
 
-  it('opens on All sessions and splits strength and cardio into their own tabs', async () => {
+  it('opens on All sessions and lists Workouts and Cardio through the same list', async () => {
     vi.mocked(api.sharing.profile).mockResolvedValue(withCardio);
-    vi.mocked(api.sharing.workouts).mockImplementation(async (_id, _offset, _limit, filters) => ({
-      total: 2,
-      workouts: [workout, cardioOnly].filter(
-        (item) => !filters?.start_date || item.workout_date === filters.start_date,
-      ),
-      personal_records: [],
-    }));
+    vi.mocked(api.sharing.workouts).mockImplementation(async (_id, _offset, _limit, filters) => {
+      const listed = [workout, cardioOnly].filter(
+        (item) =>
+          (!filters?.start_date || item.workout_date === filters.start_date) &&
+          (!filters?.kind || (filters.kind === 'cardio') === (item === cardioOnly)),
+      );
+      return { total: listed.length, workouts: listed, personal_records: [] };
+    });
     await reopen();
+    const list = () => panel('All sessions');
+    const cards = () => [...list().querySelectorAll('ul > li')].map((item) => item.textContent);
     expect(container.querySelector('.shared-workouts-header h2')).toBeNull();
     expect([...container.querySelectorAll('[role="tab"]')].map((item) => item.textContent)).toEqual(
       ['All sessions', 'Workouts', 'Cardio'],
     );
     expect(tab('All sessions').getAttribute('aria-selected')).toBe('true');
-    expect(panel('All sessions').hidden).toBe(false);
-    expect(panel('Cardio').hidden).toBe(true);
-    expect(panel('All sessions').textContent).toContain('First workout');
-    expect(panel('All sessions').textContent).toContain('Treadmill workout');
-    expect(container.querySelector('.shared-workout-filter-toggle')).not.toBeNull();
+    expect(cards()).toEqual(['First workout', 'Treadmill workout']);
+    expect(api.sharing.workouts).toHaveBeenLastCalledWith(
+      'friend',
+      0,
+      10,
+      expect.not.objectContaining({ kind: expect.anything() }),
+    );
 
     await act(async () => tab('Workouts').click());
     expect(tab('Workouts').getAttribute('aria-selected')).toBe('true');
-    expect(panel('Workouts').hidden).toBe(false);
-    expect(panel('Workouts').getAttribute('aria-labelledby')).toBe(tab('Workouts').id);
-    expect(panel('Workouts').textContent).toContain('First workout');
-    expect(panel('Workouts').textContent).not.toContain('Treadmill workout');
+    expect(list().getAttribute('aria-labelledby')).toBe(tab('Workouts').id);
+    expect(api.sharing.workouts).toHaveBeenLastCalledWith(
+      'friend',
+      0,
+      10,
+      expect.objectContaining({ kind: 'strength' }),
+    );
+    expect(cards()).toEqual(['First workout']);
 
+    // Cardio lists the cardio-only workouts through the same list, and keeps the filters.
     await act(async () => tab('Cardio').click());
     expect(tab('Cardio').getAttribute('aria-selected')).toBe('true');
-    expect(panel('Cardio').hidden).toBe(false);
-    expect(panel('All sessions').hidden).toBe(true);
-    expect(panel('Cardio').textContent).toContain('Incline Treadmill Walking');
-    expect(container.querySelector('.shared-workout-filter-toggle')).toBeNull();
+    expect(api.sharing.workouts).toHaveBeenLastCalledWith(
+      'friend',
+      0,
+      10,
+      expect.objectContaining({ kind: 'cardio' }),
+    );
+    expect(cards()).toEqual(['Treadmill workout']);
+    expect(container.querySelector('.shared-workout-filter-toggle')).not.toBeNull();
 
     // Choosing a calendar day returns to the full list, showing every workout that day.
     await act(async () =>
       container.querySelector<HTMLButtonElement>('.calendar-panel .calendar-day.trained')!.click(),
     );
     expect(tab('All sessions').getAttribute('aria-selected')).toBe('true');
-    expect(panel('All sessions').textContent).toContain('First workout');
-    expect(panel('All sessions').textContent).toContain('Treadmill workout');
+    expect(cards()).toEqual(['First workout', 'Treadmill workout']);
   });
 
-  it('keeps reading past pages holding only cardio-only workouts', async () => {
+  it('says when a member has logged no cardio sessions', async () => {
     vi.mocked(api.sharing.profile).mockResolvedValue(withCardio);
-    const older = { ...workout, id: 'older', name: 'Older lift' };
-    const all = [cardioOnly, { ...cardioOnly, id: 'treadmill-2' }, older];
-    vi.mocked(api.sharing.workouts).mockImplementation(async (_id, offset, limit) => ({
-      total: all.length,
-      workouts: all.slice(offset, offset + Math.min(limit, 1)),
+    vi.mocked(api.sharing.workouts).mockImplementation(async (_id, _offset, _limit, filters) => ({
+      total: filters?.kind === 'cardio' ? 0 : 1,
+      workouts: filters?.kind === 'cardio' ? [] : [workout],
       personal_records: [],
     }));
     await reopen();
-    await act(async () => tab('Workouts').click());
-    expect(panel('Workouts').textContent).toContain('Older lift');
-    expect(panel('Workouts').textContent).not.toContain('Treadmill workout');
-    expect(panel('Workouts').textContent).not.toContain('No workouts logged yet.');
-    expect(api.sharing.workouts).toHaveBeenLastCalledWith('friend', 2, 10, expect.anything());
+    await act(async () => tab('Cardio').click());
+    expect(panel('Cardio').textContent).toContain('No cardio sessions yet.');
+  });
+
+  it('keeps the plain Workouts list when the member does not share cardio', async () => {
+    vi.mocked(api.sharing.workouts).mockClear();
+    await reopen();
+    expect(container.querySelector('[role="tab"]')).toBeNull();
+    expect(container.querySelector('.shared-workouts-header h2')?.textContent).toBe('Workouts');
+    for (const [, , , filters] of vi.mocked(api.sharing.workouts).mock.calls) {
+      expect(filters).not.toHaveProperty('kind');
+    }
   });
 });
 

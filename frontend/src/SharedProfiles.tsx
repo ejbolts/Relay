@@ -19,7 +19,6 @@ import { SexMark } from './SexMark';
 import { SharedBodySizesCard } from './SharedBodySizesCard';
 import { FriendInviteButton } from './FriendQrCode';
 import { useUserSession } from './userContext';
-import { ProfileCardioCard } from './ProfileCardioCard';
 import { PaginationControls } from './PaginationControls';
 import { SharedWorkoutFilterToggle, SharedWorkoutFilters } from './SharedWorkoutFilters';
 import { ConsistencyCard } from './ConsistencyCard';
@@ -42,7 +41,7 @@ import {
   sinceMonthLabel,
 } from './sharedProfileDisplay';
 import { byLiveActivity, presenceStatus, presenceText, useNow } from './presence';
-import { addDays, dayMonth, isStrengthWorkout, parseLocalDate } from './trainingSummary';
+import { addDays, dayMonth, parseLocalDate } from './trainingSummary';
 import { useGoalRemoval } from './useGoalRemoval';
 import { Toast } from './Toast';
 import { localDate, localDateOf } from './utils';
@@ -67,6 +66,7 @@ import type {
   SharedConsistency,
   SharedWorkoutFilters as WorkoutFilters,
   SharedWorkoutFilterOptions,
+  SharedWorkoutKind,
   SharedWorkoutPage,
   SharingConnection,
   TrackedWorkout,
@@ -1286,7 +1286,13 @@ function ProfileSkeleton() {
 }
 
 type HistoryTab = 'all' | 'workouts' | 'cardio';
-// All sessions and Workouts share one list; Workouts leaves out the cardio-only workouts.
+// One list in every tab; the server leaves out cardio-only workouts under Workouts and keeps
+// only those under Cardio.
+const HISTORY_KIND: Record<HistoryTab, SharedWorkoutKind | undefined> = {
+  all: undefined,
+  workouts: 'strength',
+  cardio: 'cardio',
+};
 const HISTORY_TABS: readonly (readonly [HistoryTab, string])[] = [
   ['all', 'All sessions'],
   ['workouts', 'Workouts'],
@@ -1358,8 +1364,8 @@ export function SharedProfileScreen({
   // Your own profile stays mounted beside a friend's, so the list is found by ref, not by id.
   const workoutList = useRef<HTMLElement>(null);
   function showWorkouts() {
-    // Filters list cardio-only workouts too, so a filtered list reads the same under either tab.
-    setHistoryTab((tab) => (tab === 'cardio' ? 'all' : tab));
+    // A calendar day or lift can be cardio or strength, so show everything that matches it.
+    setHistoryTab('all');
     setFiltersOpen(true);
     workoutList.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -1401,9 +1407,15 @@ export function SharedProfileScreen({
     }
   }
 
-  const filterKey = JSON.stringify(filters);
+  const cardioTab = Boolean(profile?.can_view && profile.cardio_sessions);
+  const listKind = cardioTab ? HISTORY_KIND[historyTab] : undefined;
+  const query = useMemo(
+    () => (listKind ? { ...filters, kind: listKind } : filters),
+    [filters, listKind],
+  );
+  const filterKey = JSON.stringify(query);
   const loadedFilters = useRef<string | null>(seed?.page ? filterKey : null);
-  const queryKey = JSON.stringify([profileId, attempt, filters, active, dataRevision]);
+  const queryKey = JSON.stringify([profileId, attempt, query, active, dataRevision]);
   const currentQuery = useRef(queryKey);
   currentQuery.current = queryKey;
 
@@ -1417,7 +1429,7 @@ export function SharedProfileScreen({
     setLoadingWorkouts(true);
     setLoadingMore(false);
     setMoreError(null);
-    const unfiltered = !Object.values(filters).some(Boolean);
+    const unfiltered = !Object.values(query).some(Boolean);
     /** The workouts a background copy holds for the current filters, when it can answer them. */
     function warmPage(data: SharedProfileData): SharedWorkoutPage | null {
       if (!data.profile.can_view || unfiltered) return data.page;
@@ -1427,7 +1439,7 @@ export function SharedProfileScreen({
       const initial = preload
         ? await Promise.all([
             api.sharing.profile(profileId),
-            api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, filters),
+            api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, query),
             api.sharing.workoutFilters(profileId),
           ])
         : null;
@@ -1457,7 +1469,7 @@ export function SharedProfileScreen({
             ? [initial[1], initial[2]]
             : nextProfile.can_view
               ? await Promise.all([
-                  api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, filters),
+                  api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, query),
                   api.sharing.workoutFilters(profileId),
                 ])
               : [
@@ -1479,7 +1491,7 @@ export function SharedProfileScreen({
             profileId,
             page.workouts.length,
             SHARED_WORKOUT_PAGE_SIZE,
-            filters,
+            query,
           );
           if (cancelled) return;
           if (!more.workouts.length) break;
@@ -1518,7 +1530,7 @@ export function SharedProfileScreen({
   }, [
     profileId,
     attempt,
-    filters,
+    query,
     filterKey,
     invalidDates,
     active,
@@ -1540,7 +1552,7 @@ export function SharedProfileScreen({
         profileId,
         workouts.length,
         SHARED_WORKOUT_PAGE_SIZE,
-        filters,
+        query,
       );
       if (currentQuery.current !== requestedQuery) return;
       const added = page.workouts.filter(
@@ -1560,23 +1572,7 @@ export function SharedProfileScreen({
     }
   }
 
-  // A cardio-only workout, such as one logged on the Cardio tab, is listed under Cardio, unless a
-  // filter asks for it (a calendar day, an exercise or a linked session).
   const filtered = Object.values(filters).some(Boolean);
-  const cardioTab = Boolean(profile?.can_view && profile.cardio_sessions);
-  const listedWorkouts = useMemo(
-    () =>
-      cardioTab && historyTab === 'workouts' && !filtered
-        ? workouts.filter(isStrengthWorkout)
-        : workouts,
-    [cardioTab, historyTab, filtered, workouts],
-  );
-  // Pages of only cardio leave nothing to page through, so keep reading until a workout appears.
-  const readingPastCardio =
-    listedWorkouts.length === 0 && workouts.length > 0 && workouts.length < total && !moreError;
-  useEffect(() => {
-    if (readingPastCardio && !loadingMore && !loadingWorkouts) void loadMore();
-  });
 
   async function unblock() {
     if (unblocking) return;
@@ -1874,7 +1870,7 @@ export function SharedProfileScreen({
                       role="tab"
                       id={`${historyTabsId}-${tab}`}
                       aria-selected={historyTab === tab}
-                      aria-controls={`${historyTabsId}-${tab === 'cardio' ? 'cardio' : 'list'}-panel`}
+                      aria-controls={`${historyTabsId}-panel`}
                       className={historyTab === tab ? 'active' : ''}
                       onClick={() => setHistoryTab(tab)}
                     >
@@ -1885,40 +1881,21 @@ export function SharedProfileScreen({
               ) : (
                 <h2 id="shared-workouts-title">Workouts</h2>
               )}
-              {historyTab !== 'cardio' && (
-                <SharedWorkoutFilterToggle
-                  filters={filters}
-                  open={filtersOpen}
-                  controls={filtersId}
-                  onToggle={setFiltersOpen}
-                />
-              )}
+              <SharedWorkoutFilterToggle
+                filters={filters}
+                open={filtersOpen}
+                controls={filtersId}
+                onToggle={setFiltersOpen}
+              />
             </header>
-            {cardioTab && profile.cardio_sessions && (
-              <div
-                role="tabpanel"
-                id={`${historyTabsId}-cardio-panel`}
-                aria-labelledby={`${historyTabsId}-cardio`}
-                hidden={historyTab !== 'cardio'}
-              >
-                <ProfileCardioCard
-                  profileId={profile.id}
-                  sessions={profile.cardio_sessions}
-                  total={profile.cardio_total ?? profile.cardio_sessions.length}
-                  active={active}
-                  scrollTarget={workoutList}
-                />
-              </div>
-            )}
             <div
               role={cardioTab ? 'tabpanel' : undefined}
-              id={`${historyTabsId}-list-panel`}
+              id={`${historyTabsId}-panel`}
               aria-labelledby={cardioTab ? `${historyTabsId}-${historyTab}` : undefined}
-              hidden={historyTab === 'cardio'}
             >
               {linkedWorkoutId &&
                 !loadingWorkouts &&
-                !listedWorkouts.some((workout) => workout.id === linkedWorkoutId) && (
+                !workouts.some((workout) => workout.id === linkedWorkoutId) && (
                   <p className="inline-error" role="alert">
                     This workout is no longer available.
                   </p>
@@ -1934,20 +1911,25 @@ export function SharedProfileScreen({
                 <p className="inline-error" role="alert">
                   From date must not be after To date.
                 </p>
-              ) : readingPastCardio ||
-                (loadingWorkouts &&
-                  (listedWorkouts.length === 0 || loadedFilters.current !== filterKey)) ? (
+              ) : loadingWorkouts &&
+                (workouts.length === 0 || loadedFilters.current !== filterKey) ? (
                 <p className="sharing-loading" role="status">
                   Loading workouts…
                 </p>
-              ) : listedWorkouts.length === 0 ? (
+              ) : workouts.length === 0 ? (
                 <p className="shared-card-empty">
-                  {filtered ? 'No workouts match these filters.' : 'No workouts logged yet.'}
+                  {listKind === 'cardio'
+                    ? filtered
+                      ? 'No cardio sessions match these filters.'
+                      : 'No cardio sessions yet.'
+                    : filtered
+                      ? 'No workouts match these filters.'
+                      : 'No workouts logged yet.'}
                 </p>
               ) : (
                 <Fragment key={filterKey}>
                   {renderWorkouts({
-                    workouts: listedWorkouts,
+                    workouts,
                     hasMore: workouts.length < total,
                     loadingMore: loadingMore || loadingWorkouts,
                     loadMoreFailed: Boolean(moreError),

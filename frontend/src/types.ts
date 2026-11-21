@@ -1339,11 +1339,6 @@ export interface SharedProfile extends SharedProfileSummary {
   training_time_past_year?: TrainingTime | null;
 }
 
-export interface SharedCardioPage {
-  total: number;
-  sessions: SharedCardioSession[];
-}
-
 export interface SharedWorkoutPage {
   total: number;
   workouts: TrackedWorkout[];
@@ -1359,6 +1354,9 @@ export interface SharedWorkoutFilters {
   start_date: string;
   end_date: string;
 }
+
+/** A profile history tab's server filter: no cardio-only workouts, or only those. */
+export type SharedWorkoutKind = 'strength' | 'cardio';
 
 export interface SharedWorkoutFilterOptions {
   workout_types?: WorkoutType[];

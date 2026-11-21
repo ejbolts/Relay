@@ -4,6 +4,7 @@ import type { ActiveWorkoutDraft } from './workoutDraft';
 import type { NotificationReadReference } from './types';
 import type {
   SharedWorkoutFilters,
+  SharedWorkoutKind,
   SharedWorkoutFilterOptions,
   AccountLimits,
   AppFeedback,
@@ -59,7 +60,6 @@ import type {
   Sex,
   SuggestedProfilePage,
   SharedWorkoutPage,
-  SharedCardioPage,
   SharingChoices,
   FriendConnections,
   SharingNotifications,
@@ -602,10 +602,6 @@ export const api = {
       request<SuggestedProfilePage>(`/api/sharing/suggestions?page=${page}`),
     profile: (userId: string) =>
       request<SharedProfile>(`/api/sharing/profiles/${encodeURIComponent(userId)}`),
-    cardio: (userId: string, offset: number, limit = 5) =>
-      request<SharedCardioPage>(
-        `/api/sharing/profiles/${encodeURIComponent(userId)}/cardio?${new URLSearchParams({ offset: String(offset), limit: String(limit) })}`,
-      ),
     /** Your exercises with your best and a member's. */
     lifts: (userId: string) =>
       request<import('./types').LiftComparisons>(
@@ -624,7 +620,7 @@ export const api = {
       userId: string,
       offset: number,
       limit: number,
-      filters: Partial<SharedWorkoutFilters> = {},
+      filters: Partial<SharedWorkoutFilters> & { kind?: SharedWorkoutKind } = {},
     ) =>
       request<SharedWorkoutPage>(
         `/api/sharing/profiles/${encodeURIComponent(userId)}/workouts?${new URLSearchParams({
