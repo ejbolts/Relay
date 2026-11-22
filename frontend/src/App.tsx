@@ -61,7 +61,8 @@ import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
-import { currentSplitStep, nextTrainingStep, splitCalendarDays } from './trainingSplit';
+import { splitCalendarDays } from './trainingSplit';
+import { splitSkipMessage, splitSkipMove } from './splitSkip';
 import { PlannedDaySheet, type PlannedStart } from './PlannedDaySheet';
 import {
   useDefaultRest,
@@ -869,17 +870,16 @@ function AppContent() {
   const startMenuUpNext = upNext.isRestDay ? nextTrainingDay : upNext;
   const [splitMoving, setSplitMoving] = useState(false);
   // Up next's split day and the workout day after it, while that day can be skipped.
-  const splitSkip = useMemo(() => {
-    const split = dashboard?.training_split;
-    const recommendation = upNext.recommendation;
-    if (!split?.enabled || !recommendation?.split_name || upNext.needsSplitUpdate) return null;
-    const today = localDate();
-    if (recommendation.scheduled_date && recommendation.scheduled_date > today) return null;
-    const from = currentSplitStep(split, today);
-    if (from === null) return null;
-    const to = nextTrainingStep(split, from);
-    return to === from ? null : { split, from, to };
-  }, [dashboard?.training_split, upNext.recommendation, upNext.needsSplitUpdate]);
+  const splitSkip = useMemo(
+    () =>
+      splitSkipMove(
+        dashboard?.training_split,
+        upNext.recommendation,
+        upNext.needsSplitUpdate,
+        localDate(),
+      ),
+    [dashboard?.training_split, upNext.recommendation, upNext.needsSplitUpdate],
+  );
   const workoutTypeColors = useMemo(
     () => builtinTypeColors(workoutTypes.types),
     [workoutTypes.types],
@@ -2134,12 +2134,6 @@ function AppContent() {
     setTab('split');
   }
 
-  function splitDayName(split: TrainingSplit, step: number) {
-    const typeId = split.steps[step]?.workout_type_id;
-    if (!typeId) return 'rest day';
-    return workoutTypes.types.find((type) => type.id === typeId)?.name ?? 'workout';
-  }
-
   /** Saves the split's new day and reloads Home; a refused move throws. */
   async function moveSplit(
     step: number,
@@ -2181,9 +2175,8 @@ function AppContent() {
       });
       return;
     }
-    const fromName = splitDayName(split, from);
     showToast({
-      message: `Skipped ${fromName} · ${splitDayName(split, to)} is up next`,
+      message: splitSkipMessage(splitSkip, workoutTypes.types),
       action: { label: 'Undo', run: () => undoSplitMove(from, restSaved) },
     });
   }
