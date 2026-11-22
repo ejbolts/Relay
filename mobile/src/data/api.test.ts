@@ -49,23 +49,27 @@ beforeEach(() => {
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 });
 
-test("reads what Home's Up next reads, with the web's three-month history window", async () => {
+test('sends the saved token on every read and write, and never cookies', async () => {
   const api = signedIn();
-  const routine = await api.loadRoutine(new AbortController().signal, new Date(2026, 0, 15));
+  await api.apiGet('/api/workout-types');
+  fetchMock.mockResolvedValueOnce(reply(200, { id: 'w1' }));
+  await expect(api.apiSend('/api/workouts', 'POST', { name: 'Legs' })).resolves.toEqual({
+    id: 'w1',
+  });
 
-  const requested = fetchMock.mock.calls.map(([url]) => url.replace('https://relay.test', ''));
-  expect(requested).toEqual([
-    '/api/dashboard?on_date=2026-01-15',
-    '/api/workout-types',
-    '/api/workout-type-exercises',
-    '/api/workouts/snapshot?start=2025-11-01&end=2026-01-15',
-    '/api/training-preferences',
+  expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+    'https://relay.test/api/workout-types',
+    'https://relay.test/api/workouts',
   ]);
   fetchMock.mock.calls.forEach(([, init], call) => {
     expect(init?.credentials).toBe('omit');
     expect(headers(call).Authorization).toBe('Bearer sample-token');
   });
-  expect(routine.empty).toBe('No workout planned.');
+  expect(fetchMock.mock.calls[1][1]).toMatchObject({
+    method: 'POST',
+    body: JSON.stringify({ name: 'Legs' }),
+  });
+  expect(headers(1)['Content-Type']).toBe('application/json');
 });
 
 test('signs in with a token kept in secure storage and signs out of this phone', async () => {

@@ -1,12 +1,4 @@
-import type {
-  DashboardData,
-  TrainingPreferences,
-  User,
-  WorkoutSnapshot,
-  WorkoutType,
-  WorkoutTypeExercises,
-} from '../../../../frontend/src/types';
-import { accountRoutine } from '../training/accountRoutine';
+import type { User } from '../../../frontend/src/types';
 import {
   finishSignOut,
   forgetSessionToken,
@@ -50,7 +42,11 @@ function serverOrigin() {
  * Sends the saved session as a bearer header. Cookies are never sent or kept, so the session is
  * exactly the token in secure storage. `token` overrides it: null for none, or a given token.
  */
-async function request<T>(path: string, init: RequestInit = {}, token?: string | null): Promise<T> {
+export async function request<T>(
+  path: string,
+  init: RequestInit = {},
+  token?: string | null,
+): Promise<T> {
   const origin = serverOrigin();
   const bearer = token === undefined ? await sessionToken(origin) : token;
   // React Native's fetch has no timeout of its own, so a dropped connection would wait forever.
@@ -146,36 +142,20 @@ export async function signOut() {
   if (await startSignOut(origin)) await endPendingSignOut(origin);
 }
 
-function isoDate(year: number, monthIndex: number, day: number) {
-  const date = new Date(year, monthIndex, day);
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, '0'),
-    String(date.getDate()).padStart(2, '0'),
-  ].join('-');
-}
+/** A signed-in GET, for queries. */
+export const apiGet = <T>(path: string, signal?: AbortSignal) => request<T>(path, { signal });
 
-/**
- * Loads what Home's Up next reads on the web: the recommendation, the account's workout types and
- * the exercises saved to them, and the history window the web opens with (this month and the two
- * before it, frontend/src/historyWindow.ts).
- */
-export async function loadRoutine(signal: AbortSignal, now = new Date()) {
-  const today = isoDate(now.getFullYear(), now.getMonth(), now.getDate());
-  const start = isoDate(now.getFullYear(), now.getMonth() - 2, 1);
-  const [dashboard, types, saved, history, prefs] = await Promise.all([
-    request<DashboardData>(`/api/dashboard?on_date=${today}`, { signal }),
-    request<WorkoutType[]>('/api/workout-types', { signal }),
-    request<WorkoutTypeExercises[]>('/api/workout-type-exercises', { signal }),
-    request<WorkoutSnapshot>(`/api/workouts/snapshot?start=${start}&end=${today}`, { signal }),
-    request<TrainingPreferences>('/api/training-preferences', { signal }),
-  ]);
-  return accountRoutine({
-    recommendation: dashboard.recommendation,
-    types,
-    saved,
-    workouts: history.workouts,
-    unit: prefs.preferred_weight_unit,
-    today,
+/** A signed-in JSON write. */
+export const apiSend = <T>(
+  path: string,
+  method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+  body?: unknown,
+  signal?: AbortSignal,
+) =>
+  request<T>(path, {
+    method,
+    signal,
+    ...(body === undefined
+      ? {}
+      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
   });
-}
