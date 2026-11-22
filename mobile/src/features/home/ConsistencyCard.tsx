@@ -26,7 +26,7 @@ import { Icon } from '../../ui/Icon';
 import { useTheme, type Palette } from '../../ui/theme';
 import { DayRing } from './DayRing';
 import { useTypeColors } from './homeData';
-import { prettyDate } from './prettyDate';
+import { prettyDate } from '../../../../frontend/src/appShared';
 
 const NO_ENTRIES: HeatmapDay[] = [];
 

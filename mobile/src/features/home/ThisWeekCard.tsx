@@ -16,7 +16,7 @@ import { useTheme } from '../../ui/theme';
 import { mixColor } from './color';
 import { DayRing } from './DayRing';
 import { useTypeColors } from './homeData';
-import { prettyDate } from './prettyDate';
+import { prettyDate } from '../../../../frontend/src/appShared';
 
 /**
  * This week's seven days as large tiles, each naming the workout types trained that day, as on

@@ -9,7 +9,7 @@ import { useWeightUnit } from '../../data/queries';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { useTypeColors } from './homeData';
-import { prettyDate } from './prettyDate';
+import { prettyDate } from '../../../../frontend/src/appShared';
 
 /**
  * A logged calendar day: its workouts and the sets of each exercise, as the web's day sheet shows
