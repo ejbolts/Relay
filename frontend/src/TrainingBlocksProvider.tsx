@@ -11,6 +11,8 @@ export function TrainingBlocksProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
+  /** Set once the server has answered or the blocks were changed here. */
+  const known = useRef(false);
   const retry = useCallback(() => {
     const request = ++generation.current;
     setLoading(true);
@@ -18,6 +20,7 @@ export function TrainingBlocksProvider({ children }: { children: ReactNode }) {
       .get()
       .then((next) => {
         if (request === generation.current) {
+          known.current = true;
           setConfig(next);
           setError(null);
         }
@@ -28,6 +31,20 @@ export function TrainingBlocksProvider({ children }: { children: ReactNode }) {
       .finally(() => {
         if (request === generation.current) setLoading(false);
       });
+  }, []);
+  useEffect(() => {
+    let active = true;
+    // This device's copy shows first, so Home's block card is there from the start instead of
+    // pushing the cards below it down when the answer arrives. It stays "loading" until then.
+    void api.saved
+      .trainingBlocks()
+      .then((copy) => {
+        if (active && copy && !known.current) setConfig(copy);
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, []);
   useEffect(() => {
     retry();
@@ -54,6 +71,7 @@ export function TrainingBlocksProvider({ children }: { children: ReactNode }) {
         retry,
         changed: (next) => {
           ++generation.current;
+          known.current = true;
           setConfig(next);
           setError(null);
           setLoading(false);

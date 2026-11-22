@@ -91,6 +91,7 @@ from .session_events import session_events
 from .storage import remove_session_files
 from .tracker import (
     bump_workout_cache_revision,
+    report_workout_revision,
     seed_default_exercises,
     sync_all_workout_cardio_sessions,
 )
@@ -544,6 +545,7 @@ def login(
     user.username_reminder_requested_at = None
     token = create_user_session(db, user, settings, request.headers.get("user-agent"))
     set_session_cookie(response, token, settings)
+    report_workout_revision(response, db, user.id)
     return user_to_read(db, user, settings)
 
 
@@ -602,8 +604,12 @@ def logout_session(
 
 
 @auth_router.get("/me", response_model=UserRead)
-def me(context: AuthContextDependency, db: DbDependency, settings: AppSettings) -> UserRead:
+def me(
+    context: AuthContextDependency, response: Response, db: DbDependency, settings: AppSettings
+) -> UserRead:
     # Uses the auth context directly so it still answers while a new password is required.
+    # The app loads its data as soon as it knows who is signed in, so the revision comes with it.
+    report_workout_revision(response, db, context.user.id)
     return user_to_read(db, context.user, settings)
 
 

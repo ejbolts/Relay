@@ -413,12 +413,21 @@ export async function applyUpdateOnSignIn({
   return reloading;
 }
 
-export function registerAppUpdates() {
+/**
+ * Watches for updates and registers the worker that keeps the app available offline. The worker's
+ * first job is to download every file, so it waits for `pageFiles`, the page's own downloads:
+ * started sooner it would compete with them for the connection and fetch them a second time.
+ */
+export function registerAppUpdates(pageFiles: Promise<unknown> = Promise.resolve()) {
   if (!supportsWorkers() || started) return;
   started = true;
   watchOpening();
   const register = () => {
-    void ensureRegistration()
+    void pageFiles
+      .then(
+        () => ensureRegistration(),
+        () => ensureRegistration(),
+      )
       .then(() => {
         if (document.visibilityState === 'visible' && navigator.onLine) {
           return checkForAppUpdate();
