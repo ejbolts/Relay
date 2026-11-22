@@ -13,10 +13,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
-import { formatSeconds } from '../../../../frontend/src/utils';
 import { newId } from '../../data/deviceStorage';
 import { Button } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
+import { MenuButton } from '../../ui/MenuButton';
 import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
@@ -42,10 +42,9 @@ import {
 } from './loggerState';
 import { MovementCard, type MovementActions } from './MovementCard';
 import { RestBar } from './RestBar';
+import { restMenuItems } from './restChoices';
 import { useElapsed } from './useElapsed';
 import { useLogger, useWorkout, type LoggerApi } from './WorkoutProvider';
-
-const REST_STARTS = [30, 60, 90, 120, 150, 180, 210, 240];
 
 /**
  * The logger: a page sheet over the app. Dragging it down (or Minimise) only minimises the
@@ -106,7 +105,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const paused = state.pause.pausedAt !== null;
   const { ticked } = setCounts(state);
   const restShown = !!(logger.rest.timer || logger.rest.done);
-  const top = Platform.OS === 'ios' ? 12 : insets.top + 8;
+  const top = Platform.OS === 'ios' ? 6 : insets.top + 8;
 
   const recentIds = useMemo(() => {
     const seen = new Set<string>();
@@ -300,16 +299,6 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     ]);
   }
 
-  function startRestMenu() {
-    showMenu(
-      'Rest timer',
-      REST_STARTS.map((seconds) => ({
-        label: formatSeconds(seconds),
-        onPress: () => logger.startRest(seconds),
-      })),
-    );
-  }
-
   function finish() {
     const { blocker, ticked: done, unticked } = logger.checkFinish();
     const run = () => {
@@ -340,6 +329,15 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   return (
     <>
       <View style={[styles.header, { paddingTop: top, borderColor: colors.line }]}>
+        {/* The page sheet drags down to minimise on iOS; the grabber says so. Android minimises
+            with Back or the chevron instead. */}
+        {Platform.OS === 'ios' && (
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={[styles.grabber, { backgroundColor: colors.lineStrong }]}
+          />
+        )}
         <View style={styles.headerRow}>
           <Pressable
             accessibilityRole="button"
@@ -351,15 +349,18 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
             <Icon name="chevronDown" size={18} color={colors.secondary} />
           </Pressable>
           <View style={{ flex: 1 }} />
-          <Pressable
-            accessibilityRole="button"
+          <MenuButton
             accessibilityLabel="Rest timer"
-            hitSlop={6}
-            onPress={startRestMenu}
-            style={[styles.iconButton, { backgroundColor: colors.surface2 }]}
+            title="Start a rest"
+            items={restMenuItems({ current: null, onPick: logger.startRest })}
+            trigger={{ sf: 'timer', color: colors.secondary, size: 16 }}
+            width={36}
+            height={36}
+            fill={colors.surface2}
+            style={styles.iconButton}
           >
             <Icon name="timer" size={18} color={colors.secondary} />
-          </Pressable>
+          </MenuButton>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={paused ? 'Resume workout' : 'Pause workout'}
@@ -534,6 +535,7 @@ const styles = StyleSheet.create({
     gap: 8,
     marginBottom: 6,
   },
+  grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, marginBottom: 8 },
   iconButton: {
     width: 36,
     height: 36,
