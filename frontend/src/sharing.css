@@ -344,72 +344,6 @@
   background: var(--p-accent);
 }
 
-.shared-cardio-list {
-  display: grid;
-  gap: 0.65rem;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.profile-cardio-error {
-  margin-top: 0.75rem;
-}
-.profile-cardio-error .inline-error {
-  margin: 0 0 0.5rem;
-}
-
-.shared-cardio-list li {
-  display: flex;
-  align-items: baseline;
-  gap: 0.75rem;
-}
-
-.shared-cardio-list li + li {
-  border-top: 1px solid var(--p-line);
-  padding-top: 0.65rem;
-}
-
-.shared-cardio-date {
-  width: 3.2rem;
-  flex-shrink: 0;
-  color: var(--p-muted);
-  font-size: 0.75rem;
-}
-
-.shared-cardio-list li > span:last-child {
-  min-width: 0;
-  display: grid;
-  gap: 0.15rem;
-}
-
-.shared-cardio-list strong {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.875rem;
-}
-
-.shared-cardio-list strong em {
-  border-radius: 999px;
-  padding: 0.05rem 0.4rem;
-  background: rgb(47 184 74 / 14%);
-  color: var(--p-good);
-  font-size: 0.625rem;
-  font-style: normal;
-  font-weight: 700;
-}
-
-.shared-cardio-list small {
-  color: var(--p-muted);
-  font-size: 0.75rem;
-}
-
-.shared-cardio-list .shared-cardio-notes {
-  color: var(--p-ink-2);
-}
-
 .history-screen.shared-workouts {
   width: auto;
   padding-top: 0;
@@ -429,6 +363,49 @@
   font-size: 1rem;
   font-weight: 650;
   letter-spacing: -0.01em;
+}
+
+.shared-workouts-header.has-tabs {
+  align-items: flex-end;
+  border-bottom: 1px solid var(--p-line-strong);
+  padding-bottom: 0;
+}
+
+.shared-history-tabs {
+  display: flex;
+  gap: clamp(0.75rem, 4vw, 1.25rem);
+}
+
+.shared-history-tabs button[role='tab'] {
+  min-height: 2.5rem;
+  margin-bottom: -1px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 0.25rem 0.125rem 0.5rem;
+  background: transparent;
+  box-shadow: none;
+  color: var(--p-muted);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+@media (max-width: 359px) {
+  .shared-history-tabs button[role='tab'] {
+    font-size: 0.9375rem;
+  }
+}
+
+.shared-history-tabs button[role='tab'].active {
+  border-bottom-color: var(--p-accent);
+  color: var(--p-ink);
+}
+
+.shared-workouts-header.has-tabs .shared-workout-filter-toggle {
+  margin: 0 0 0.375rem auto;
 }
 
 .shared-workout-filter-toggle {

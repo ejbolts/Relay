@@ -2,11 +2,12 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
+import { POPUP_MS } from './popupTiming';
 import type { WeeklySetGain } from './weeklySetsUpdate';
 import './weeklySetsShelf.css';
 
-/** How long the shelf stays up after a set unless it is touched. */
-export const WEEKLY_SETS_SHELF_MS = 3000;
+/** How long the shelf stays up after a set unless it is touched: the standard pop-up time. */
+const WEEKLY_SETS_SHELF_MS = POPUP_MS.standard;
 const LEAVE_MS = 200;
 
 const credits = (value: number) => Number(value.toFixed(3)).toLocaleString();

@@ -36,6 +36,12 @@ from .body_sizes import BodySizeLog
 from .cardio_energy import cardio_energy_periods
 from .cardio_estimates import attach_body_weights
 from .cardio_ocr import CardioScreenshotError, scan_cardio_screenshot
+from .cardio_records import (
+    CARDIO_RECORD_TYPES,
+    CardioBests,
+    is_cardio_record_eligible,
+    pace_distances,
+)
 from .cardio_zones import (
     CardioPreferences,
     cardio_goal_weeks,
@@ -108,6 +114,7 @@ from .tracker_schemas import (
     BodyWeightGoalRead,
     CalendarExerciseRead,
     CalendarWorkoutRead,
+    CardioBestsRead,
     CardioCaloriesUpdate,
     CardioMetricsUpdate,
     CardioOverviewRead,
@@ -119,6 +126,7 @@ from .tracker_schemas import (
     CsvImportRead,
     CsvImportSessionRead,
     DashboardRead,
+    DistanceTimeRead,
     ExerciseCreate,
     ExerciseFavoriteUpdate,
     ExerciseHistoryBaselineRead,
@@ -178,10 +186,10 @@ from .training_metrics import (
     is_working_set,
     muscle_credits,
     muscle_volume,
-    normalized_weight,
     personal_record_events,
     preferred_weight_unit,
     rebuild_personal_records,
+    record_reading,
     seed_muscle_mappings,
     set_setting,
     start_of_week,
@@ -1683,12 +1691,19 @@ def training_preferences(db: Session, user_id: str) -> TrainingPreferencesRead:
         )
     except (ValueError, TypeError):
         muscle_set_goals = {}
+    try:
+        default_rest: int | None = int(get_setting(db, user_id, "default_rest_seconds", ""))
+        if not 1 <= default_rest <= 7_200:
+            default_rest = None
+    except ValueError:
+        default_rest = None
     return TrainingPreferencesRead(
         preferred_weight_unit=unit,
         week_start=week_start_value,
         zone2_goal_minutes=zone2_goal,
         weekly_muscle_set_goal=muscle_set_goal,
         weekly_muscle_set_goals=muscle_set_goals,
+        default_rest_seconds=default_rest,
     )
 
 
@@ -1885,6 +1900,9 @@ def update_training_preferences(
         set_setting(
             db, user.id, "weekly_muscle_set_goals", json.dumps(payload.weekly_muscle_set_goals)
         )
+    if "default_rest_seconds" in payload.model_fields_set:
+        rest = payload.default_rest_seconds
+        set_setting(db, user.id, "default_rest_seconds", "" if rest is None else str(rest))
     db.flush()
     rebuild_personal_records(db, user.id)
     db.commit()
@@ -2300,9 +2318,9 @@ def list_personal_records(
     records = [
         PersonalRecordRead.model_validate(record).model_copy(
             update={
-                "bodyweight_kg": bodyweights.on(
-                    record.achieved_date, record.workout_set.bodyweight_kg
-                )
+                "bodyweight_kg": None
+                if record.record_type in CARDIO_RECORD_TYPES
+                else bodyweights.on(record.achieved_date, record.workout_set.bodyweight_kg)
             }
         )
         for record in db.scalars(
@@ -2319,18 +2337,21 @@ def list_personal_records(
     ) -> Iterator[PersonalRecordRead]:
         """Records against one block's or fresh start's own baseline: the workouts given."""
         prefix = f"block:{block.id}" if block else f"fresh:{fresh_start}"
-        for workout, movement, item, record_type in personal_record_events(
-            workouts, bodyweights, factors
-        ):
+        for event in personal_record_events(workouts, bodyweights, factors):
+            workout, movement, item, record_type, pace_km = event
             if (workout_id and workout.id != workout_id) or (
                 exercise_id and movement.exercise_id != exercise_id
             ):
                 continue
-            weight = normalized_weight(item.weight_kg, unit)
-            bodyweight = bodyweights.on(workout.workout_date, item.bodyweight_kg)
-            relative = record_type == PersonalRecordType.RELATIVE_STRENGTH
+            cardio = record_type in CARDIO_RECORD_TYPES
+            bodyweight = (
+                None if cardio else bodyweights.on(workout.workout_date, item.bodyweight_kg)
+            )
+            reading = record_reading(event, unit, bodyweight)
+            # A set can set pace records at several distances; each keeps its own id.
+            suffix = f":{pace_km:g}" if pace_km is not None else ""
             yield PersonalRecordRead(
-                id=f"{prefix}:{item.id}:{record_type.value}",
+                id=f"{prefix}:{item.id}:{record_type.value}{suffix}",
                 scope="block" if block else "fresh_start",
                 block_id=block.id if block else None,
                 block_name=block.name if block else None,
@@ -2340,20 +2361,12 @@ def list_personal_records(
                 set_id=item.id,
                 achieved_date=workout.workout_date,
                 record_type=record_type,
-                value=relative_strength(item.weight_kg, bodyweight)
-                if relative
-                else weight
-                if record_type == PersonalRecordType.WEIGHT
-                else float(item.reps),
-                unit="× BW"
-                if relative
-                else unit
-                if record_type == PersonalRecordType.WEIGHT
-                else "reps",
-                normalized_weight=weight,
+                value=reading.value,
+                unit=reading.unit,
+                normalized_weight=reading.normalized_weight,
                 weight_kg=item.weight_kg,
                 bodyweight_kg=bodyweight,
-                formula="weight / bodyweight" if relative else None,
+                formula=reading.formula,
                 exercise_name=movement.exercise.name,
             )
 
@@ -2380,17 +2393,24 @@ def list_personal_records(
             records.extend(scoped_records(by_block[block.id], block=block))
         for fresh_start in config.fresh_starts if use_fresh else []:
             records.extend(scoped_records(by_fresh_start[fresh_start], fresh_start=fresh_start))
+
     # One achievement per metric/set, from the broadest scope: all-time, then a fresh start,
     # then the block. Fresh-start records are only listed when asked for, because older apps
     # read any scope other than "block" as all-time.
-    broadest: dict[tuple[str, PersonalRecordType], PersonalRecordRead] = {}
+    def achievement(record: PersonalRecordRead) -> tuple[str, PersonalRecordType, float | None]:
+        pace_km = (
+            record.normalized_weight if record.record_type == PersonalRecordType.PACE else None
+        )
+        return (record.set_id, record.record_type, pace_km)
+
+    broadest: dict[tuple[str, PersonalRecordType, float | None], PersonalRecordRead] = {}
     for record in records:
-        key = (record.set_id, record.record_type)
+        key = achievement(record)
         kept = broadest.get(key)
         if kept is None or RECORD_SCOPE_RANK[record.scope] < RECORD_SCOPE_RANK[kept.scope]:
             broadest[key] = record
     return sorted(
-        [record for record in records if broadest[(record.set_id, record.record_type)] is record],
+        [record for record in records if broadest[achievement(record)] is record],
         key=lambda record: record.achieved_date,
         reverse=True,
     )
@@ -2570,9 +2590,12 @@ def exercise_history_baselines(
             TrainingWorkout.workout_date,
             TrainingWorkout.name.label("workout_name"),
             Exercise.kind,
+            Exercise.name.label("exercise_name"),
             WorkoutSet.weight_kg,
             WorkoutSet.bodyweight_kg,
             WorkoutSet.reps,
+            WorkoutSet.duration_seconds,
+            WorkoutSet.distance_km,
             WorkoutSet.completed,
             WorkoutSet.warmup,
             WorkoutSet.set_type,
@@ -2598,6 +2621,9 @@ def exercise_history_baselines(
     fresh_weights: dict[str, dict[date, dict[float, int]]] = defaultdict(lambda: defaultdict(dict))
     fresh_relative_bests: dict[str, dict[date, float]] = defaultdict(dict)
     reps_by_weight: dict[str, dict[float, int]] = {}
+    cardio_bests: dict[str, CardioBests] = defaultdict(CardioBests)
+    block_cardio: dict[str, dict[str, CardioBests]] = defaultdict(lambda: defaultdict(CardioBests))
+    fresh_cardio: dict[str, dict[date, CardioBests]] = defaultdict(lambda: defaultdict(CardioBests))
     latest: dict[str, ExerciseLatestSessionRead] = {}
     latest_movement_ids: dict[str, str] = {}
     for row in rows:
@@ -2611,6 +2637,20 @@ def exercise_history_baselines(
                 sets=[],
             )
             latest_movement_ids[row.movement_id] = row.exercise_id
+        # Mirrors the client's cardio record checks: time, distance and pace bests.
+        if row.kind == ExerciseKind.CARDIO:
+            if is_cardio_record_eligible(row):
+                distances = pace_distances(row.exercise_name)
+                scoped = [cardio_bests[row.exercise_id]]
+                fresh_start = fresh_start_on(config, row.workout_date)
+                if fresh_start:
+                    scoped.append(fresh_cardio[row.exercise_id][fresh_start])
+                block = block_on(config, row.workout_date)
+                if block:
+                    scoped.append(block_cardio[row.exercise_id][block.id])
+                for bests in scoped:
+                    bests.add(row.duration_seconds, row.distance_km, distances)
+            continue
         # Mirrors the client's PR-eligibility check for strength sets.
         if (
             row.kind != ExerciseKind.STRENGTH
@@ -2656,8 +2696,21 @@ def exercise_history_baselines(
                 WorkoutSetRead.model_validate(item)
             )
 
+    def cardio_fields(bests: CardioBests | None) -> dict:
+        if bests is None:
+            return {}
+        return CardioBestsRead(
+            best_distance_km=bests.distance_km if bests.distance_km >= 0 else None,
+            best_duration_seconds=bests.duration_seconds if bests.duration_seconds >= 0 else None,
+            best_times=[
+                DistanceTimeRead(distance_km=distance, seconds=seconds)
+                for distance, seconds in sorted(bests.times.items())
+            ],
+        ).model_dump()
+
     return [
         ExerciseHistoryBaselineRead(
+            **cardio_fields(cardio_bests.get(exercise_id)),
             exercise_id=exercise_id,
             best_relative_strength=relative_bests.get(exercise_id),
             best_weight_kg=max(weights) if weights else None,
@@ -2668,6 +2721,7 @@ def exercise_history_baselines(
             latest=latest.get(exercise_id),
             block_bests=[
                 BlockHistoryBaselineRead(
+                    **cardio_fields(block_cardio[exercise_id].get(block_id)),
                     block_id=block_id,
                     best_relative_strength=block_relative_bests[exercise_id].get(block_id),
                     best_weight_kg=max(values) if values else None,
@@ -2676,19 +2730,22 @@ def exercise_history_baselines(
                         for weight, reps in sorted(values.items())
                     ],
                 )
-                for block_id, values in block_weights[exercise_id].items()
+                for block_id in {**block_weights[exercise_id], **block_cardio[exercise_id]}
+                for values in [block_weights[exercise_id].get(block_id, {})]
             ],
             fresh_start_bests=[
                 FreshStartBaselineRead(
+                    **cardio_fields(fresh_cardio[exercise_id].get(start)),
                     start_date=start,
                     best_relative_strength=fresh_relative_bests[exercise_id].get(start),
-                    best_weight_kg=max(values),
+                    best_weight_kg=max(values) if values else None,
                     reps_by_weight=[
                         WeightRepsRead(weight_kg=weight, reps=reps)
                         for weight, reps in sorted(values.items())
                     ],
                 )
-                for start, values in fresh_weights[exercise_id].items()
+                for start in {**fresh_weights[exercise_id], **fresh_cardio[exercise_id]}
+                for values in [fresh_weights[exercise_id].get(start, {})]
             ],
         )
         for exercise_id, weights in reps_by_weight.items()

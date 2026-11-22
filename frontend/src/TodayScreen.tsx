@@ -9,6 +9,7 @@ import { Toast } from './Toast';
 import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 import { ConsistencyCard } from './ConsistencyCard';
 import { consistencyWeeks } from './consistencyWeeks';
+import { cardioRecordLabel } from './cardioRecords';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { MuscleSetsCard } from './MuscleSetsCard';
@@ -34,7 +35,7 @@ import {
   latestTopSets,
   parseLocalDate,
   prSetCount,
-  recentStrengthRecords,
+  recentRecords,
   shortDate,
   trainingDayGrid,
   weekStartDayFrom,
@@ -355,7 +356,7 @@ export function TodayScreen({
       ),
     [measurements, today, weekStartDay],
   );
-  const records = recentStrengthRecords(personalRecords, 3);
+  const records = recentRecords(personalRecords, 3);
   const exerciseNames = useMemo(() => {
     const names = new Map<string, string>();
     for (const workout of workouts)
@@ -733,7 +734,7 @@ export function TodayScreen({
                   <span className="record-copy">
                     <b>{record.exercise_name ?? 'Exercise'}</b>
                     <small>
-                      {RECORD_LABELS[record.record_type] ?? 'PR'}
+                      {cardioRecordLabel(record) ?? RECORD_LABELS[record.record_type] ?? 'PR'}
                       {record.record_type === 'reps_at_weight' && record.weight_kg != null
                         ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
                         : ''}{' '}

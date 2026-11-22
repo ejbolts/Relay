@@ -54,6 +54,7 @@ import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
 import { useBodyMeasurementSync } from './useBodyMeasurementSync';
 import { TrainingPreferencesPanel } from './TrainingPreferencesPanel';
 import { TrainingPreferencesProvider } from './TrainingPreferencesProvider';
+import { DefaultRestSetting } from './DefaultRestSetting';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { WorkoutTypesSettings } from './WorkoutTypesSettings';
@@ -62,7 +63,11 @@ import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './
 import { entriesInMonths } from './calendarRange';
 import { splitCalendarDays } from './trainingSplit';
 import { PlannedDaySheet, type PlannedStart } from './PlannedDaySheet';
-import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
+import {
+  useDefaultRest,
+  useTrainingPreferences,
+  useWeightUnit,
+} from './trainingPreferencesContext';
 import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
 import {
@@ -243,7 +248,11 @@ import { MovementNoteDialog } from './MovementNoteDialog';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
 import { markSetAdded } from './setRowEntrance';
 import { selectInputValue } from './selectInputValue';
-import { matchingLastSessionSet, withLastSessionReps } from './lastSessionSet';
+import {
+  matchingLastSessionSet,
+  withLastSessionReps,
+  withLastSessionValues,
+} from './lastSessionSet';
 import { readStoredRestTimer, restoreRestTimer, writeStoredRestTimer } from './liveRestTimer';
 import { unusualSetEntryWarning, type SetEntryWarning } from './setEntryConfirmation';
 import {
@@ -279,6 +288,7 @@ import {
   groupByYear,
   groupWorkoutsByWeek,
   mostTrainedExerciseId,
+  isCountedRecord,
   recordCountsByWorkout,
   setLabel,
   sessionTemplateFor,
@@ -457,6 +467,7 @@ import {
   weekGroupPage,
 } from './workoutHistory';
 import { calculateScopedDraftPrs, prToastLines, type PrToastEntry } from './workoutPr';
+import { cardioRecordLabel, cardioSetSummary } from './cardioRecords';
 import { bodyweightOn, bodyweightContext, relativeStrength } from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
@@ -520,12 +531,12 @@ type HistoryBaselines = {
 
 function emptySet(
   kind: Exercise['kind'],
-  previous?: WorkoutSetInput,
-  isFirstSet = previous === undefined,
+  previous: WorkoutSetInput | undefined,
+  defaultRest: number | null,
 ): DraftSet {
   return {
     key: crypto.randomUUID(),
-    ...createWorkoutSet(kind, previous, isFirstSet),
+    ...createWorkoutSet(kind, previous, previous === undefined, defaultRest),
     restRevealed: true,
     ...(previous && { fromPrevious: true }),
   };
@@ -540,8 +551,9 @@ function suggestedSetsFromHistory(
   workouts: TrackedWorkout[],
   exercise: Exercise,
   onOrBeforeDate: string,
-  excludedWorkoutId?: string,
-  olderHistory?: Map<string, ExerciseHistoryBaseline> | null,
+  excludedWorkoutId: string | undefined,
+  olderHistory: Map<string, ExerciseHistoryBaseline> | null | undefined,
+  defaultRest: number | null,
 ): DraftSet[] {
   let previousSets = latestExerciseSets(workouts, exercise.id, onOrBeforeDate, excludedWorkoutId);
   // Not logged in the loaded window: fall back to its latest session from older history.
@@ -554,7 +566,7 @@ function suggestedSetsFromHistory(
   ) {
     previousSets = older.sets;
   }
-  if (!previousSets.length) return [emptySet(exercise.kind)];
+  if (!previousSets.length) return [emptySet(exercise.kind, undefined, defaultRest)];
   return previousSets.map((previous) => ({
     key: crypto.randomUUID(),
     ...createSuggestedWorkoutSet(exercise.kind, previous),
@@ -593,22 +605,31 @@ function formatDuration(totalSeconds: number): string {
   return formatSeconds(totalSeconds);
 }
 
-function recordTypeLabel(type: PersonalRecord['record_type']): string {
+function recordTypeLabel(record: Pick<PersonalRecord, 'record_type' | 'normalized_weight'>) {
   return (
+    cardioRecordLabel(record) ??
     {
       weight: 'Weight PR',
       relative_strength: 'Relative strength PR',
       reps_at_weight: 'Volume PR for this weight',
       estimated_1rm: 'estimated 1RM PR',
-      duration: 'duration PR',
-      distance: 'distance PR',
-    }[type] ?? 'PR'
+    }[record.record_type as string] ??
+    'PR'
   );
+}
+
+/** Identifies a celebrated set's records, so the same ones never celebrate twice. */
+function prSignature(
+  exerciseId: string,
+  item: WorkoutSetInput & { key: string },
+  labels: string[],
+) {
+  return `${exerciseId}:${item.key}:${labels.join(',')}:${item.weight_kg}:${item.reps}:${item.duration_seconds}:${item.distance_km}`;
 }
 
 function completionRecordDetail(record: PersonalRecord, unit: WeightUnit): string {
   return [
-    `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)} · ${recordDisplayValue(record, unit)}`,
+    `${recordScopeLabel(record)} ${recordTypeLabel(record)} · ${recordDisplayValue(record, unit)}`,
     record.record_type === 'reps_at_weight' && record.weight_kg != null
       ? ` @ ${formatWeight(record.weight_kg, unit)}`
       : '',
@@ -2498,6 +2519,7 @@ function AppContent() {
           <Toast
             id={workoutDeletion.pending.id}
             message="Workout deleted"
+            duration="important"
             action={{ label: 'Undo', run: workoutDeletion.undo }}
             dismissLabel="Dismiss workout deleted notification"
             onDismiss={workoutDeletion.flush}
@@ -3509,6 +3531,7 @@ function WorkoutLogger({
 }) {
   const { config: trainingBlocks } = useTrainingBlocks();
   const weightUnit = useWeightUnit();
+  const defaultRest = useDefaultRest();
   const restoredDraft = useState(() => (initialWorkout ? null : readActiveWorkoutDraft()))[0];
   const [name, setName] = useState(
     initialWorkout?.name ?? restoredDraft?.name ?? resumingWorkout?.name ?? '',
@@ -3666,15 +3689,21 @@ function WorkoutLogger({
   function templateMovements(items: SessionTemplate['exercises']): DraftMovement[] {
     return items.map(({ exercise, plannedSets, repRange }) => {
       const ranged = repRange && plannedSets && exercise.kind !== 'cardio';
-      const lastSession = ranged
-        ? latestExerciseSets(historicalWorkouts, exercise.id, initialDate)
-        : [];
+      const lastSession =
+        plannedSets && exercise.kind === 'strength' ? latestSessionOf(exercise.id) : [];
       // A planned range suggests its target weight for working sets the plan left blank.
       const targetWeight = ranged
         ? progressionWeightKg(progressionTarget(repRange, lastSession, weightUnit))
         : null;
       return templateMovement(exercise, plannedSets, repRange, targetWeight, lastSession);
     });
+  }
+  /** The exercise's latest session, from older history when the loaded window lacks it. */
+  function latestSessionOf(exerciseId: string): TrackedSet[] {
+    const loaded = latestExerciseSets(historicalWorkouts, exerciseId, initialDate);
+    if (loaded.length || !historyBaselines || initialDate < historyBaselines.before) return loaded;
+    const older = historyBaselines.byExercise.get(exerciseId)?.latest;
+    return older && older.workout_date <= initialDate ? older.sets : [];
   }
   function templateMovement(
     exercise: Exercise,
@@ -3695,18 +3724,23 @@ function WorkoutLogger({
       sets: plannedSets
         ? // At last time's weight, a row shows last time's reps: the range is the target.
           withLastSessionReps(
-            plannedSets.map((set) => ({
-              ...createWorkoutSet(exercise.kind),
-              ...set,
-              ...(targetWeight !== null &&
-                set.weight_kg == null &&
-                set.set_type !== 'warmup' && { weight_kg: targetWeight }),
-              key: crypto.randomUUID(),
-              warmup: set.set_type === 'warmup',
-              completed: false,
-              fromPrevious: true,
-              restRevealed: false,
-            })),
+            // What the plan leaves blank comes from last time, as for an exercise added by hand.
+            withLastSessionValues(
+              plannedSets.map((set) => ({
+                ...createWorkoutSet(exercise.kind),
+                ...set,
+                ...(targetWeight !== null &&
+                  set.weight_kg == null &&
+                  set.set_type !== 'warmup' && { weight_kg: targetWeight }),
+                key: crypto.randomUUID(),
+                warmup: set.set_type === 'warmup',
+                completed: false,
+                fromPrevious: true,
+                restRevealed: false,
+              })),
+              lastSession,
+              exercise.kind === 'strength' ? defaultRest : null,
+            ),
             lastSession,
           )
         : suggestedSetsFromHistory(
@@ -3717,6 +3751,7 @@ function WorkoutLogger({
             historyBaselines && initialDate >= historyBaselines.before
               ? historyBaselines.byExercise
               : null,
+            defaultRest,
           ),
     };
   }
@@ -4154,11 +4189,7 @@ function WorkoutLogger({
       movements.flatMap((movement) =>
         movement.sets.flatMap((item) => {
           const labels = prBadges.get(movement.key)?.get(item.key);
-          return item.completed && labels
-            ? [
-                `${movement.exercise.id}:${item.key}:${labels.join(',')}:${item.weight_kg}:${item.reps}`,
-              ]
-            : [];
+          return item.completed && labels ? [prSignature(movement.exercise.id, item, labels)] : [];
         }),
       ),
     ),
@@ -4177,16 +4208,24 @@ function WorkoutLogger({
           prBadges.get(movement.key)?.has(item.key)
         ) {
           const labels = prBadges.get(movement.key)!.get(item.key)!;
-          const signature = `${movement.exercise.id}:${item.key}:${labels.join(',')}:${item.weight_kg}:${item.reps}`;
+          const signature = prSignature(movement.exercise.id, item, labels);
           if (!celebratedPrsRef.current.has(signature)) {
             celebratedPrsRef.current.add(signature);
-            entries.push({
-              exercise: movement.exercise.name,
-              labels,
-              reps: item.reps!,
-              weightKg: item.weight_kg!,
-              bodyweightKg: bodyweightOn(measurements, workoutDate, item.bodyweight_kg),
-            });
+            entries.push(
+              movement.exercise.kind === 'cardio'
+                ? {
+                    exercise: movement.exercise.name,
+                    labels,
+                    summary: cardioSetSummary(item.duration_seconds, item.distance_km),
+                  }
+                : {
+                    exercise: movement.exercise.name,
+                    labels,
+                    reps: item.reps!,
+                    weightKg: item.weight_kg!,
+                    bodyweightKg: bodyweightOn(measurements, workoutDate, item.bodyweight_kg),
+                  },
+            );
           }
         }
       });
@@ -4242,6 +4281,7 @@ function WorkoutLogger({
       workoutDate,
       initialWorkout?.id,
       olderHistory,
+      defaultRest,
     );
   }
 
@@ -4760,7 +4800,10 @@ function WorkoutLogger({
       current.map((item) => {
         if (item.key !== movement.key) return item;
         const at = Math.min(Math.max(position ?? item.sets.length, 0), item.sets.length);
-        const added = emptySet(item.exercise.kind, item.sets[at === 0 ? 0 : at - 1]);
+        const added = emptySet(item.exercise.kind, item.sets[at === 0 ? 0 : at - 1], defaultRest);
+        // A set slotted in with "+" keeps its neighbour's rest hidden, like a suggested set,
+        // until it is ticked; only Add set at the end shows its rest straight away.
+        if (position !== undefined) added.restRevealed = false;
         markSetAdded(added.key);
         addedSetKeys.current.add(added.key);
         return {
@@ -5268,7 +5311,8 @@ function WorkoutLogger({
           onAdjustTime={() => setTimeEditorOpen(true)}
           onAddNote={() => revealDetails('.workout-notes textarea')}
           onTogglePause={toggleWorkoutPause}
-          onAddExercise={openExercisePicker}
+          onStartRest={restTimerEnabled ? startRestTimer : undefined}
+          restRunning={restActive}
           onDiscard={() => setDeleteConfirmationOpen(true)}
           discardLabel={resumedWorkoutId ? 'Discard session' : 'Discard workout'}
           saving={saving}
@@ -5705,6 +5749,7 @@ function WorkoutLogger({
         <Toast
           id={swapUndo.id}
           message={`Swapped to ${swapUndo.exerciseName}`}
+          duration="quick"
           action={{ label: 'Undo', run: undoSwap }}
           dismissLabel="Dismiss swap notification"
           onDismiss={() => setSwapUndo(null)}
@@ -5714,6 +5759,7 @@ function WorkoutLogger({
         <Toast
           id={`${undoDeletion.kind}:${undoDeletion.set.key}`}
           message={undoDeletion.kind === 'rest' ? 'Rest time removed' : 'Set deleted'}
+          duration="quick"
           action={{ label: 'Undo', run: undoLastDeletion }}
           dismissLabel="Dismiss deletion notification"
           onDismiss={() => setUndoDeletion(null)}
@@ -6135,11 +6181,16 @@ function MovementCard({
   const treadmill =
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
+  const defaultRest = useDefaultRest();
   const completedWorkingSetCount = movement.sets.filter(isCompletedWorkingSet).length;
   const onlyWarmupsLogged = !cardio && loggedOnlyWarmups(movement.sets);
   const loggedWarmupCount = onlyWarmupsLogged
     ? movement.sets.filter((item) => item.completed).length
     : 0;
+  const workingSets = movement.sets.filter((item) => item.set_type !== 'warmup' && !item.warmup);
+  const workingSetsDone = workingSets.length > 0 && workingSets.every((item) => item.completed);
+  // Finished exercises open folded, but ticking sets never folds a card: only the collapse
+  // controls do, so the next set stays in reach.
   const [expanded, setExpanded] = useState(!movement.isComplete);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [noteOpen, setNoteOpen] = useState(false);
@@ -6221,8 +6272,18 @@ function MovementCard({
       )?.key ?? null);
 
   useEffect(() => {
-    setExpanded(!movement.isComplete);
+    if (!movement.isComplete) setExpanded(true);
   }, [movement.isComplete]);
+
+  /** Folds the card from its bottom edge, bringing its header back into view if it scrolled away. */
+  function collapseFromFooter() {
+    setExpanded(false);
+    window.requestAnimationFrame(() =>
+      cardRef.current
+        ?.querySelector('header')
+        ?.scrollIntoView?.({ block: 'nearest', behavior: motionReduced() ? 'auto' : 'smooth' }),
+    );
+  }
 
   useEffect(() => {
     if (supersetUpNext) setExpanded(true);
@@ -7289,7 +7350,7 @@ function MovementCard({
                             onUpdateSet(item.key, { rest_seconds: seconds, restRevealed: true })
                         : undefined
                     }
-                    suggestedRest={restToAdd(movement.sets, index, restHistory)}
+                    suggestedRest={restToAdd(movement.sets, index, restHistory, defaultRest)}
                   />
                 )
               )}
@@ -7309,9 +7370,21 @@ function MovementCard({
           }}
         />
       )}
-      <button type="button" className="add-set-button pulse-button tonal" onClick={onAddSet}>
-        ＋ Add set
-      </button>
+      <div className="movement-card-footer">
+        <button type="button" className="add-set-button pulse-button tonal" onClick={onAddSet}>
+          ＋ Add set
+        </button>
+        <button
+          type="button"
+          className={`movement-collapse-button pulse-button${workingSetsDone ? ' is-done' : ''}`}
+          aria-label={`Collapse ${movement.exercise.name}`}
+          onClick={collapseFromFooter}
+        >
+          <svg viewBox="0 0 20 20" aria-hidden="true">
+            <path d="m4 13 6-6 6 6" />
+          </svg>
+        </button>
+      </div>
       {plateSet && barType && (
         <PlateCalculatorDialog
           exercise={movement.exercise}
@@ -8254,11 +8327,7 @@ export function ProgressScreen({
     () =>
       new Set(
         recordsForBlock(personalRecords, block)
-          .filter(
-            (record) =>
-              record.exercise_id === exerciseId &&
-              ['weight', 'reps_at_weight', 'relative_strength'].includes(record.record_type),
-          )
+          .filter((record) => record.exercise_id === exerciseId && isCountedRecord(record))
           .map((record) => record.workout_id),
       ),
     [personalRecords, exerciseId, block],
@@ -9009,6 +9078,7 @@ function SettingsScreen({
                       {showRestTimes ? 'On' : 'Off'}
                     </button>
                   </div>
+                  <DefaultRestSetting />
                 </section>
                 {account && <WorkoutAutoSaveSetting userId={account.id} />}
                 {account && <FreshStartSetting />}
@@ -10325,7 +10395,7 @@ function HistoryWorkoutCard({
                 machinePhotos={movement.machine_photos}
                 formatSet={(item) => setResult(item, weightUnit)}
                 describeRecord={(record) =>
-                  `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)}`
+                  `${recordScopeLabel(record)} ${recordTypeLabel(record)}`
                 }
               />
             ) : (
@@ -10504,10 +10574,7 @@ function HistorySetFlow({
                 className="pr-badge"
                 title={personalRecords
                   .filter((record) => record.set_id === item.id)
-                  .map(
-                    (record) =>
-                      `${recordScopeLabel(record)} ${recordTypeLabel(record.record_type)}`,
-                  )
+                  .map((record) => `${recordScopeLabel(record)} ${recordTypeLabel(record)}`)
                   .join(', ')}
               >
                 {recordBadgeLabel(personalRecords.filter((record) => record.set_id === item.id))}

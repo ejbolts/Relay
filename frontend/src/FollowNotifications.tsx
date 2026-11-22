@@ -15,7 +15,6 @@ import { onNotificationsChanged } from './notificationEvents';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { requestSharedProfile } from './sharedProfileRequest';
-import { WorkoutComments } from './WorkoutComments';
 import { formatReleaseDate, type Release } from './releaseMetadata';
 import { dayMonth } from './trainingSummary';
 import { useUserSession } from './userContext';
@@ -207,7 +206,6 @@ export function FollowNotifications({ active }: { active: boolean }) {
   const [items, setItems] = useState<SharingNotifications | null>(null);
   const [open, setOpen] = useState(false);
   const [releaseOpen, setReleaseOpen] = useState(false);
-  const [replying, setReplying] = useState<CommentNotice | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -229,10 +227,10 @@ export function FollowNotifications({ active }: { active: boolean }) {
 
   useEffect(() => {
     // Runs after the notes dialog has closed, so its own focus restoration cannot override this.
-    if (releaseOpen || replying || !restoreBellFocus.current) return;
+    if (releaseOpen || !restoreBellFocus.current) return;
     restoreBellFocus.current = false;
     bell.current?.focus();
-  }, [releaseOpen, replying]);
+  }, [releaseOpen]);
 
   useEffect(() => {
     if (!active) return;
@@ -340,6 +338,16 @@ export function FollowNotifications({ active }: { active: boolean }) {
   function openPerson(person: SharingConnection) {
     setOpen(false);
     requestSharedProfile(person);
+  }
+  /** Both the workout name and Reply open the comment in its workout on the Social feed. */
+  function openComment(notice: CommentNotice) {
+    setOpen(false);
+    requestWorkoutFocus({
+      workoutId: notice.workout_id,
+      workoutName: notice.workout_name,
+      panel: 'comments',
+      commentId: notice.comment_id,
+    });
   }
   function fresh(reference: NotificationReadReference): boolean {
     return freshKeys.has(rowKey(reference));
@@ -585,15 +593,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
                               ? 'reply'
                               : 'comment'
                         } on ${row.item.workout_name}`}
-                        onOpen={() => {
-                          setOpen(false);
-                          requestWorkoutFocus({
-                            workoutId: row.item.workout_id,
-                            workoutName: row.item.workout_name,
-                            panel: 'comments',
-                            commentId: row.item.comment_id,
-                          });
-                        }}
+                        onOpen={() => openComment(row.item)}
                       />
                       <NotificationDate since={row.item.since} />
                     </p>
@@ -610,10 +610,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
                       className="follow-notification-reply"
                       aria-label={`Reply to ${row.item.display_name}`}
                       title="Reply"
-                      onClick={() => {
-                        setOpen(false);
-                        setReplying(row.item);
-                      }}
+                      onClick={() => openComment(row.item)}
                     >
                       <Icon name="reply" />
                     </button>
@@ -734,22 +731,6 @@ export function FollowNotifications({ active }: { active: boolean }) {
             label="notifications"
             className="is-sheet-footer"
             scrollTarget={list}
-          />
-        </PopupDialog>
-      )}
-      {replying && (
-        <PopupDialog
-          title={replying.workout_name}
-          className="follow-notification-thread"
-          onClose={() => {
-            restoreBellFocus.current = true;
-            setReplying(null);
-          }}
-        >
-          <WorkoutComments
-            workoutId={replying.workout_id}
-            replyTo={replying.comment_id}
-            onCountChange={() => {}}
           />
         </PopupDialog>
       )}

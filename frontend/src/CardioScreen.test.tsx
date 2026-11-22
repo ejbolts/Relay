@@ -198,6 +198,49 @@ describe('cardio weekly trend screen', () => {
     expect(toastElement()!.querySelector('.toast-action')).toBeNull();
     window.localStorage.removeItem('relay-workout-share-reminder:device');
   });
+  it('celebrates the cardio PRs a logged session sets, one per line', async () => {
+    vi.spyOn(api, 'createCardio').mockResolvedValue(
+      session({ id: 'new-ride', source_workout_id: 'ride-workout' }),
+    );
+    const records = vi.spyOn(api, 'listPersonalRecords').mockResolvedValue([
+      {
+        id: 'ride-distance',
+        exercise_id: 'bike',
+        workout_id: 'ride-workout',
+        set_id: 'set',
+        achieved_date: '2026-10-24',
+        record_type: 'distance',
+        value: 42,
+        unit: 'km',
+        normalized_weight: null,
+        formula: null,
+        exercise_name: 'Cycling',
+      },
+      {
+        id: 'ride-40',
+        exercise_id: 'bike',
+        workout_id: 'ride-workout',
+        set_id: 'set',
+        achieved_date: '2026-10-24',
+        record_type: 'pace',
+        value: 4800,
+        unit: 'seconds',
+        normalized_weight: 40,
+        formula: null,
+        exercise_name: 'Cycling',
+      },
+    ]);
+    await click(named('Log session'));
+    await click(named('Add cardio session'));
+    expect(records).toHaveBeenCalledWith({ workoutId: 'ride-workout' });
+    const toast = toastElement()!;
+    expect(toast.dataset.variant).toBe('celebrate');
+    expect([...toast.querySelectorAll('.toast-line')].map((line) => line.textContent)).toEqual([
+      'All-time distance PRCycling · 42 km',
+      'All-time fastest 40 kmCycling · 1:20:00',
+    ]);
+    expect(toastButton('Share card')).toBeDefined();
+  });
   it('confirms an edited session in a toast', async () => {
     const update = vi.spyOn(api, 'updateCardio').mockResolvedValue(session());
     await click(named('Edit'));

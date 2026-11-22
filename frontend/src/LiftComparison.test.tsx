@@ -149,6 +149,27 @@ it('starts empty, with an outline of the card and the button that chooses lifts'
   expect(text('button', host)).toEqual(['Choose lifts']);
 });
 
+it('shows the empty card before the lifts arrive, and opens a picker tapped early once they do', async () => {
+  let answer: (value: LiftComparisons) => void = () => undefined;
+  vi.spyOn(api.sharing, 'lifts').mockReturnValue(
+    new Promise<LiftComparisons>((resolve) => {
+      answer = resolve;
+    }),
+  );
+  await render(<HeadToHeadCard member={sam} active />);
+
+  // Nothing pops in later: the outline and the button are there while the lifts load.
+  expect(host.querySelector('.head-to-head-template')).not.toBeNull();
+  expect(text('button', host)).toEqual(['Choose lifts']);
+  await click(host.querySelector('.show-more-button'));
+  expect(document.querySelector('dialog.lift-picker')).toBeNull();
+
+  await act(async () => answer(comparisons()));
+  const sheet = document.querySelector('dialog.lift-picker');
+  expect(sheet).not.toBeNull();
+  expect(sheet && option(sheet, 'Squat')).toBeTruthy();
+});
+
 it('compares the chosen lifts in the order they were added and scores who leads', async () => {
   vi.spyOn(api.sharing, 'lifts').mockResolvedValue(comparisons());
   await render(<HeadToHeadCard member={sam} active />);
@@ -429,7 +450,7 @@ it('slides the sheet down before it closes, unless motion is reduced', async () 
   expect(text('.head-to-head-values > span', host)).toEqual(['Bench']);
 });
 
-it('shows no head to head while inactive or when it cannot load', async () => {
+it('reads no lifts while inactive, and shows no head to head when they cannot load', async () => {
   const lifts = vi.spyOn(api.sharing, 'lifts').mockRejectedValue(new Error('offline'));
   await render(<HeadToHeadCard member={sam} active />);
   expect(host.innerHTML).toBe('');
@@ -437,7 +458,8 @@ it('shows no head to head while inactive or when it cannot load', async () => {
   lifts.mockClear();
   await render(<HeadToHeadCard key="inactive" member={sam} active={false} />);
   expect(lifts).not.toHaveBeenCalled();
-  expect(host.innerHTML).toBe('');
+  // The empty card is ready for when the profile comes back into view.
+  expect(host.querySelector('.head-to-head-template')).not.toBeNull();
 });
 
 it('ranks you among friends and opens a friend’s profile', async () => {

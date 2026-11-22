@@ -29,13 +29,10 @@ export function WorkoutComments({
   onOpenMember,
   onCountChange,
   active = true,
-  replyTo,
   focusComment,
   onLayoutChange,
 }: {
   workoutId: string;
-  /** A comment to reply to once it loads, such as one opened from a notification. */
-  replyTo?: string;
   /** A comment to find, scroll to and highlight, such as one opened from a notification. */
   focusComment?: string;
   onOpenMember?: (person: WorkoutComment['author']) => void;
@@ -57,7 +54,6 @@ export function WorkoutComments({
   const [deleting, setDeleting] = useState<WorkoutComment | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const focused = useRef<HTMLElement>(null);
-  const wanted = replyTo ?? focusComment;
   const section = useRef<HTMLElement>(null);
   const layoutKey = JSON.stringify([
     active,
@@ -80,8 +76,12 @@ export function WorkoutComments({
     (async () => {
       let page = await api.sharing.comments(workoutId);
       const rows = [...page.items];
-      // Load further pages only until the comment being replied to or opened appears.
-      while (wanted && page.next_offset !== null && !rows.some((row) => row.id === wanted)) {
+      // Load further pages only until the comment being opened appears.
+      while (
+        focusComment &&
+        page.next_offset !== null &&
+        !rows.some((row) => row.id === focusComment)
+      ) {
         page = await api.sharing.comments(workoutId, page.next_offset);
         rows.push(...page.items);
       }
@@ -92,8 +92,6 @@ export function WorkoutComments({
         setItems(rows);
         setNext(page.next_offset);
         countRef.current(page.total, page.reactions);
-        const target = replyTo ? rows.find((row) => row.id === replyTo) : undefined;
-        if (target) setReply(target);
       })
       .catch((reason) => {
         if (!cancelled) setError(authErrorMessage(reason));
@@ -104,11 +102,7 @@ export function WorkoutComments({
     return () => {
       cancelled = true;
     };
-  }, [workoutId, active, replyTo, wanted]);
-
-  useEffect(() => {
-    if (!loading && reply && reply.id === replyTo) input.current?.focus();
-  }, [loading, reply, replyTo]);
+  }, [workoutId, active, focusComment]);
 
   useEffect(() => {
     if (loading || !focusComment) return;
