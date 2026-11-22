@@ -91,7 +91,6 @@ import type {
   MachinePhotoUsage,
   MachineSetting,
   PersonalRecord,
-  RepRange,
   SharedProfileSummary,
   TrackedSet,
   TrackedWorkout,
@@ -248,11 +247,7 @@ import { MovementNoteDialog } from './MovementNoteDialog';
 import { SwipeToDeleteSetRow } from './SwipeToDeleteSetRow';
 import { markSetAdded } from './setRowEntrance';
 import { selectInputValue } from './selectInputValue';
-import {
-  matchingLastSessionSet,
-  withLastSessionReps,
-  withLastSessionValues,
-} from './lastSessionSet';
+import { matchingLastSessionSet } from './lastSessionSet';
 import { readStoredRestTimer, restoreRestTimer, writeStoredRestTimer } from './liveRestTimer';
 import { unusualSetEntryWarning, type SetEntryWarning } from './setEntryConfirmation';
 import {
@@ -314,7 +309,7 @@ import {
 import { exerciseLastDoneDates } from './exerciseLastDone';
 import { useUpNextSession } from './upNext';
 import { typeSessionTemplate } from './routines';
-import { progressionHint, progressionTarget, progressionWeightKg } from './repProgression';
+import { progressionHint, progressionTarget } from './repProgression';
 import { exerciseIconFor } from './exerciseIcons';
 import {
   formatMinutesDuration,
@@ -410,7 +405,6 @@ import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { exerciseSetGains, weeklySetGains } from './weeklySetsUpdate';
 import {
   activeElapsedSeconds,
-  clockOffsetMsAt,
   draftPause,
   pauseWorkout,
   resumeWorkout,
@@ -428,21 +422,25 @@ import {
 } from './workoutDraft';
 import {
   completeRemainingSets,
-  createSuggestedWorkoutSet,
-  createWorkoutSet,
   hasRecordedPerformance,
   isCompletedWorkingSet,
   isLoggedWorkingSet,
-  latestExerciseSets,
-  restTimerSecondsAfterSetUpdate,
-  suggestNextSetFromLoggedSet,
 } from './workoutSets';
 import { restToAdd } from './workoutRestHistory';
 import {
-  finalizeWorkoutIdentity,
-  isCardioTypeWithoutCardio,
-  workoutNameForCategory,
-} from './workoutCategory';
+  checkWorkoutFinish,
+  finishedWorkoutInput as finishedWorkoutInputRule,
+  liveWorkoutIdentity,
+  type WorkoutFinishCheck,
+  type WorkoutFinishState,
+} from './workoutFinish';
+import { movementAfterSetUpdate, setUpdateEffects } from './workoutSetUpdate';
+import {
+  emptyDraftSet,
+  suggestedSetsFromHistory as suggestedSetsFromHistoryRule,
+  templateDraftMovements,
+} from './workoutStartMovements';
+import { workoutNameForCategory } from './workoutCategory';
 import {
   machineSelection,
   restoreWorkoutDraftMovements,
@@ -474,18 +472,8 @@ import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { recordsForBlock } from './trainingBlocks';
 import { recordBadgeLabel, recordScopeLabel } from './recordScope';
-import {
-  canResumeWorkout,
-  cardioAdjustedEndTime,
-  completedCardioDurationSeconds,
-  completedWorkoutDurationMinutes,
-  liveWorkoutTimes,
-} from './workoutResume';
-import {
-  isWorkoutSetAutoSavable,
-  workoutSetAfterEdit,
-  workoutSetForAutoSave,
-} from './workoutAutoSave';
+import { canResumeWorkout } from './workoutResume';
+import { isWorkoutSetAutoSavable, workoutSetAfterEdit } from './workoutAutoSave';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
@@ -534,12 +522,7 @@ function emptySet(
   previous: WorkoutSetInput | undefined,
   defaultRest: number | null,
 ): DraftSet {
-  return {
-    key: crypto.randomUUID(),
-    ...createWorkoutSet(kind, previous, previous === undefined, defaultRest),
-    restRevealed: true,
-    ...(previous && { fromPrevious: true }),
-  };
+  return emptyDraftSet(kind, previous, defaultRest, crypto.randomUUID());
 }
 
 function setTypeTitle(item: Pick<DraftSet, 'set_type' | 'warmup' | 'failed'>): string {
@@ -555,24 +538,15 @@ function suggestedSetsFromHistory(
   olderHistory: Map<string, ExerciseHistoryBaseline> | null | undefined,
   defaultRest: number | null,
 ): DraftSet[] {
-  let previousSets = latestExerciseSets(workouts, exercise.id, onOrBeforeDate, excludedWorkoutId);
-  // Not logged in the loaded window: fall back to its latest session from older history.
-  const older = olderHistory?.get(exercise.id)?.latest;
-  if (
-    !previousSets.length &&
-    older &&
-    older.workout_id !== excludedWorkoutId &&
-    older.workout_date <= onOrBeforeDate
-  ) {
-    previousSets = older.sets;
-  }
-  if (!previousSets.length) return [emptySet(exercise.kind, undefined, defaultRest)];
-  return previousSets.map((previous) => ({
-    key: crypto.randomUUID(),
-    ...createSuggestedWorkoutSet(exercise.kind, previous),
-    fromPrevious: true,
-    restRevealed: false,
-  }));
+  return suggestedSetsFromHistoryRule(
+    workouts,
+    exercise,
+    onOrBeforeDate,
+    excludedWorkoutId,
+    olderHistory,
+    defaultRest,
+    () => crypto.randomUUID(),
+  );
 }
 
 function completedSetPerformance(
@@ -3756,73 +3730,14 @@ function WorkoutLogger({
   );
   /** Draft rows for planned or last-session exercises, with sets suggested from history. */
   function templateMovements(items: SessionTemplate['exercises']): DraftMovement[] {
-    return items.map(({ exercise, plannedSets, repRange }) => {
-      const ranged = repRange && plannedSets && exercise.kind !== 'cardio';
-      const lastSession =
-        plannedSets && exercise.kind === 'strength' ? latestSessionOf(exercise.id) : [];
-      // A planned range suggests its target weight for working sets the plan left blank.
-      const targetWeight = ranged
-        ? progressionWeightKg(progressionTarget(repRange, lastSession, weightUnit))
-        : null;
-      return templateMovement(exercise, plannedSets, repRange, targetWeight, lastSession);
+    return templateDraftMovements(items, {
+      workouts: historicalWorkouts,
+      historyBaselines,
+      date: initialDate,
+      weightUnit,
+      defaultRest,
+      newKey: () => crypto.randomUUID(),
     });
-  }
-  /** The exercise's latest session, from older history when the loaded window lacks it. */
-  function latestSessionOf(exerciseId: string): TrackedSet[] {
-    const loaded = latestExerciseSets(historicalWorkouts, exerciseId, initialDate);
-    if (loaded.length || !historyBaselines || initialDate < historyBaselines.before) return loaded;
-    const older = historyBaselines.byExercise.get(exerciseId)?.latest;
-    return older && older.workout_date <= initialDate ? older.sets : [];
-  }
-  function templateMovement(
-    exercise: Exercise,
-    plannedSets: SessionTemplate['exercises'][number]['plannedSets'],
-    repRange: RepRange | undefined,
-    targetWeight: number | null,
-    lastSession: TrackedSet[],
-  ): DraftMovement {
-    return {
-      key: crypto.randomUUID(),
-      exercise,
-      ...(repRange && { repRange }),
-      notes: '',
-      machinePhotoIds: [],
-      machinePhotosInitialized: false,
-      supersetKey: null,
-      isComplete: false,
-      sets: plannedSets
-        ? // At last time's weight, a row shows last time's reps: the range is the target.
-          withLastSessionReps(
-            // What the plan leaves blank comes from last time, as for an exercise added by hand.
-            withLastSessionValues(
-              plannedSets.map((set) => ({
-                ...createWorkoutSet(exercise.kind),
-                ...set,
-                ...(targetWeight !== null &&
-                  set.weight_kg == null &&
-                  set.set_type !== 'warmup' && { weight_kg: targetWeight }),
-                key: crypto.randomUUID(),
-                warmup: set.set_type === 'warmup',
-                completed: false,
-                fromPrevious: true,
-                restRevealed: false,
-              })),
-              lastSession,
-              exercise.kind === 'strength' ? defaultRest : null,
-            ),
-            lastSession,
-          )
-        : suggestedSetsFromHistory(
-            historicalWorkouts,
-            exercise,
-            initialDate,
-            undefined,
-            historyBaselines && initialDate >= historyBaselines.before
-              ? historyBaselines.byExercise
-              : null,
-            defaultRest,
-          ),
-    };
   }
   const [pickerOpen, setPickerOpen] = useState(false);
   const movementStackRef = useRef<HTMLDivElement>(null);
@@ -4706,11 +4621,12 @@ function WorkoutLogger({
         index: movement.sets.findIndex((item) => item.key === setKey),
       });
     }
-    const restSeconds =
-      movement && currentSet
-        ? restTimerSecondsAfterSetUpdate(movement.exercise.kind, currentSet, update)
-        : null;
-    const loggingSet = update.completed === true && currentSet?.completed === false;
+    const { restSeconds, loggingSet, finishesExercise, correctingLoggedSet } = setUpdateEffects(
+      movement,
+      setKey,
+      update,
+      Boolean(initialWorkout),
+    );
     // In a superset or tri-set, go straight to the next exercise and rest after the round.
     const nextInRound =
       loggingSet && movement?.supersetKey
@@ -4748,11 +4664,6 @@ function WorkoutLogger({
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
     // Ticking the last open set finishes the exercise: a planned exercise folds away and its
     // weekly totals show for all of its sets. A set added by hand keeps the card open.
-    const finishesExercise =
-      loggingSet &&
-      !!movement &&
-      !initialWorkout &&
-      movement.sets.every((item) => item.key === setKey || item.completed);
     const logsWorkingSet =
       !!currentSet && isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update));
     if (finishesExercise && movement && currentSet) {
@@ -4773,45 +4684,17 @@ function WorkoutLogger({
       setWeeklySetsUpdate(null);
     }
     // Correcting the weight or reps of a logged set also moves the untouched suggestion after it.
-    const correctingLoggedSet =
-      currentSet?.completed === true &&
-      (update.weight_kg !== undefined || update.reps !== undefined);
-
     setMovements((current) =>
-      current.map((movement) => {
-        if (movement.key !== movementKey) return movement;
-        const sets = movement.sets.map((item) =>
-          item.key === setKey
-            ? workoutSetAfterEdit(item, {
-                restRevealed: item.completed || (item.restRevealed ?? !item.fromPrevious),
-                ...update,
-                ...(update.completed === true && {
-                  restRevealed: true,
-                  ...(movement.exercise.kind === 'strength' && {
-                    bodyweight_kg: item.bodyweight_kg ?? workoutBodyweight,
-                  }),
-                }),
-                ...(update.rest_seconds !== undefined && { restConfirmed: true }),
-              })
-            : item,
-        );
-        return {
-          ...movement,
-          isComplete:
-            (movement.isComplete ||
-              (finishesExercise && sets.length > 1 && !addedSetKeys.current.has(setKey))) &&
-            sets.every((set) => set.completed) &&
-            !hasUnassignedMachineSets(movement.machinePhotoIds, sets),
-          sets:
-            loggingSet || correctingLoggedSet
-              ? suggestNextSetFromLoggedSet(
-                  movement.exercise.kind,
-                  sets,
-                  sets.findIndex((item) => item.key === setKey),
-                )
-              : sets,
-        };
-      }),
+      current.map((movement) =>
+        movement.key === movementKey
+          ? movementAfterSetUpdate(movement, setKey, update, {
+              finishesExercise,
+              suggestNext: loggingSet || correctingLoggedSet,
+              addedByHand: addedSetKeys.current.has(setKey),
+              workoutBodyweight,
+            })
+          : movement,
+      ),
     );
     if (loggingSet) setRestDone(null);
     if (restSeconds !== null && !nextInRound) {
@@ -4894,91 +4777,37 @@ function WorkoutLogger({
     setPickerOpen(true);
   }
 
-  // An explicit type keeps its identity in the live heading and the saved workout, except
-  // Cardio on a workout with no cardio, which would file a strength session as cardio.
-  const inferTypeFromExercises =
-    !initialWorkout &&
-    !resumedWorkoutId &&
-    !customTypeId &&
-    (!workoutTypeExplicit ||
-      isCardioTypeWithoutCardio(
-        category,
-        movements.map((movement) => movement.exercise),
-      ));
+  /** What the finish check and the saved workout are built from. */
+  function finishState(): WorkoutFinishState {
+    return {
+      movements,
+      name,
+      category,
+      customTypeId,
+      workoutTypeExplicit,
+      selectedType,
+      typeOptions,
+      types: workoutTypes.types,
+      typesLoading: workoutTypes.loading,
+      editing: Boolean(initialWorkout),
+      resumedWorkoutId,
+      startedAt,
+      previousDurationMinutes,
+      durationOverrideMinutes,
+      pause,
+      editedDurationMinutes,
+      startTime,
+      endTime,
+      clientSessionId,
+      baseRevision,
+      workoutDate,
+      notes,
+    };
+  }
 
   /** Checks whether the workout can be saved now, without saving it. */
   function checkFinish(inactiveEndAt?: number) {
-    const blocked = (message: string) => ({ kind: 'blocked' as const, message });
-    if (workoutTypes.loading) {
-      return blocked('Workout types are still loading. Please try saving again in a moment.');
-    }
-    if (customTypeId && selectedType.id !== customTypeId) {
-      return blocked(
-        'Your workout type could not load. Reload workout types or choose another type.',
-      );
-    }
-    if (!typeOptions.some((type) => type.id === selectedType.id)) {
-      return blocked(
-        'Choose an available workout type. Add or restore types in Settings if needed.',
-      );
-    }
-    if (selectedType.archived && !initialWorkout && !resumedWorkoutId) {
-      return blocked('This workout type was removed. Choose another type before saving.');
-    }
-    const finishedAt = inactiveEndAt ?? Date.now();
-    const movementsToSave = movements.map((movement) => ({
-      ...movement,
-      sets: movement.sets.map((item) => {
-        const set =
-          inactiveEndAt === undefined ? item : workoutSetForAutoSave(movement.exercise.kind, item);
-        // A live workout never records a ticked set with nothing in it (such as one ticked
-        // before this check existed); it is kept as an unticked set instead.
-        return !initialWorkout &&
-          set.completed &&
-          !hasRecordedPerformance(movement.exercise.kind, set)
-          ? { ...set, completed: false }
-          : set;
-      }),
-    }));
-    const cardioDurationSeconds = completedCardioDurationSeconds(movementsToSave);
-    const unassigned = movementsToSave.find((movement) =>
-      hasUnassignedMachineSets(movement.machinePhotoIds, movement.sets),
-    );
-    if (unassigned) return { kind: 'machines' as const, exercise: unassigned.exercise.name };
-    const durationMinutes = initialWorkout
-      ? Math.max(editedDurationMinutes, Math.ceil(cardioDurationSeconds / 60))
-      : completedWorkoutDurationMinutes(
-          previousDurationMinutes,
-          startedAt,
-          finishedAt,
-          durationOverrideMinutes,
-          clockOffsetMsAt(pause, finishedAt),
-          cardioDurationSeconds,
-        );
-    const completed = movementsToSave
-      .flatMap((movement) => movement.sets)
-      .filter((item) => item.completed);
-    if (!movements.length || !completed.length) {
-      return blocked(
-        !movements.length
-          ? 'Your workout has no exercises yet. Add an exercise, enter a set and tap its tick to mark it complete before saving your workout.'
-          : 'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise. You need at least one completed set to save your workout.',
-      );
-    }
-    if (initialWorkout && Boolean(startTime) !== Boolean(endTime)) {
-      return blocked('Enter both a workout start time and end time, or leave both blank.');
-    }
-    if (initialWorkout && startTime && endTime && durationMinutes === 1440) {
-      return blocked('Clear the start and end times to save a 24-hour workout.');
-    }
-    if (durationMinutes > 1440) {
-      return blocked(
-        cardioDurationSeconds > 1440 * 60
-          ? 'Logged cardio exceeds 24 hours. Correct the cardio durations before saving.'
-          : 'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
-      );
-    }
-    return { kind: 'ready' as const, movementsToSave, durationMinutes, cardioDurationSeconds };
+    return checkWorkoutFinish(finishState(), inactiveEndAt);
   }
 
   /** Opens the finish confirmation, explaining there what must change before it can save. */
@@ -5054,78 +4883,8 @@ function WorkoutLogger({
   }
 
   /** The workout a ready check saves, without the shared-draft fields added when finishing. */
-  function finishedWorkoutInput({
-    movementsToSave,
-    durationMinutes,
-    cardioDurationSeconds,
-  }: Extract<ReturnType<typeof checkFinish>, { kind: 'ready' }>): WorkoutInput {
-    let completedIdentity = finalizeWorkoutIdentity(
-      movements.map((movement) => movement.exercise),
-      category,
-      name,
-      inferTypeFromExercises,
-      customTypeId ? selectedType : null,
-    );
-    if (
-      !customTypeId &&
-      workoutTypes.types.find((type) => type.id === completedIdentity.category)?.archived
-    ) {
-      completedIdentity = finalizeWorkoutIdentity(
-        movements.map((movement) => movement.exercise),
-        category,
-        name,
-        false,
-      );
-    }
-    const liveTimes =
-      !initialWorkout && !resumedWorkoutId ? liveWorkoutTimes(startedAt, durationMinutes) : null;
-    return {
-      ...(!initialWorkout && !resumedWorkoutId && { client_session_id: clientSessionId }),
-      ...((initialWorkout || resumedWorkoutId) &&
-        baseRevision !== undefined && { base_revision: baseRevision }),
-      name: completedIdentity.name,
-      workout_date: workoutDate,
-      category: completedIdentity.category,
-      workout_type_id: customTypeId,
-      notes: notes.trim() || null,
-      duration_minutes: durationMinutes,
-      // A new live workout records when it started and ended; edits keep their own times.
-      start_time: initialWorkout && startTime && endTime ? startTime : (liveTimes?.start ?? null),
-      end_time:
-        initialWorkout && startTime && endTime
-          ? cardioAdjustedEndTime(startTime, endTime, cardioDurationSeconds)
-          : (liveTimes?.end ?? null),
-      movements: movementsToSave.map((movement) => ({
-        exercise_id: movement.exercise.id,
-        notes: movement.notes.trim() || null,
-        machine_photo_ids: movement.machinePhotoIds,
-        machine_settings: movement.machineSettings ?? [],
-        sets: movement.sets.map((item) => ({
-          reps: item.reps,
-          machine_photo_id:
-            item.machine_photo_id ??
-            (movement.machinePhotoIds.length === 1 ? movement.machinePhotoIds[0] : null),
-          weight_kg: item.weight_kg,
-          rpe: item.rpe,
-          rest_seconds: item.rest_seconds,
-          duration_seconds: item.duration_seconds,
-          distance_km: item.distance_km,
-          calories_kcal: item.calories_kcal,
-          average_heart_rate_bpm: item.average_heart_rate_bpm,
-          incline_percent: item.incline_percent ?? null,
-          speed_kph: item.speed_kph ?? null,
-          bodyweight_kg: item.bodyweight_kg,
-          percentile: item.percentile,
-          warmup: item.warmup,
-          set_type: item.set_type,
-          failed: item.failed,
-          target_reps: item.target_reps,
-          notes: item.notes,
-          completed: item.completed,
-        })),
-        superset_key: movement.supersetKey,
-      })),
-    };
+  function finishedWorkoutInput(check: Extract<WorkoutFinishCheck, { kind: 'ready' }>) {
+    return finishedWorkoutInputRule(finishState(), check);
   }
   /** A workout left running ends at its last activity, not at the cutoff that noticed it. */
   const inactiveEndAt = () =>
@@ -5221,24 +4980,7 @@ function WorkoutLogger({
     setNameEditorOpen(true);
   };
 
-  let liveIdentity = finalizeWorkoutIdentity(
-    movements.map((movement) => movement.exercise),
-    category,
-    name,
-    inferTypeFromExercises,
-    customTypeId ? selectedType : null,
-  );
-  if (
-    !customTypeId &&
-    workoutTypes.types.find((type) => type.id === liveIdentity.category)?.archived
-  ) {
-    liveIdentity = finalizeWorkoutIdentity(
-      movements.map((movement) => movement.exercise),
-      category,
-      name,
-      false,
-    );
-  }
+  const liveIdentity = liveWorkoutIdentity(finishState());
 
   const supersetLabel = (groupKey: string | null) => {
     if (!groupKey) return null;

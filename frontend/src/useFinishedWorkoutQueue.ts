@@ -3,6 +3,11 @@ import { api, ApiError, isWorkoutConflict } from './api';
 import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
 import { isClientOutdated } from './clientVersion';
 import {
+  finishedSaveFailure,
+  finishedSaveRetryDelayMs,
+  moveDraftToFinishedQueue,
+} from './finishedWorkoutSend';
+import {
   addFinishedWorkout,
   FINISHED_WORKOUTS_CHANGE_EVENT,
   FINISHED_WORKOUTS_KEY,
@@ -16,8 +21,6 @@ import {
 import type { TrackedWorkout, WorkoutInput } from './types';
 import {
   ACTIVE_WORKOUT_DRAFT_KEY,
-  clearActiveWorkoutDraft,
-  isActiveWorkoutDraft,
   readActiveWorkoutDraft,
   writeActiveWorkoutDraft,
   type ActiveWorkoutDraft,
@@ -141,25 +144,23 @@ export function useFinishedWorkoutQueue(
               reload();
               continue;
             }
-            if (reason instanceof ApiError && isClientOutdated(reason.status, reason.code)) {
+            const failure = finishedSaveFailure(
+              reason instanceof ApiError ? reason.status : undefined,
+              reason instanceof ApiError && isClientOutdated(reason.status, reason.code),
+            );
+            if (failure === 'outdated') {
               // Every waiting workout stays on this device; the updated app sends them.
               outdatedRef.current = true;
               setOutdated(true);
               return;
             }
-            // Validation and permission failures need a deliberate review, not endless replay.
-            if (
-              reason instanceof ApiError &&
-              reason.status >= 400 &&
-              reason.status < 500 &&
-              ![408, 429].includes(reason.status)
-            ) {
+            if (failure === 'refused' && reason instanceof ApiError) {
               setRefusal(key, reason.message, isWorkoutConflict(reason));
               continue;
             }
             retryTimer = window.setTimeout(
               () => void drain(),
-              Math.min(60_000, 5000 * 2 ** failures++),
+              finishedSaveRetryDelayMs(failures++),
             );
             return;
           } finally {
@@ -225,29 +226,7 @@ export function useFinishedWorkoutQueue(
 
   /** Moves the finished active workout into the queue before any network request. */
   function queue(payload: WorkoutInput): PendingWorkoutSave {
-    const draft = readActiveWorkoutDraft();
-    if (
-      !draft ||
-      draft.pendingSave ||
-      (!draft.resumingWorkoutId && draft.clientSessionId !== payload.client_session_id)
-    )
-      throw new Error(
-        'Your workout could not be stored on this device. Keep it open and try again.',
-      );
-    const completion: PendingWorkoutSave = {
-      userId,
-      finishedAt: Date.now(),
-      workoutId: draft.resumingWorkoutId ?? null,
-      payload,
-    };
-    const finished = { ...draft, pendingSave: completion };
-    // An entry the queue would not read back must never replace the open workout.
-    if (!isActiveWorkoutDraft(finished) || !addFinishedWorkout(finished)) {
-      throw new Error(
-        'Your workout could not be stored on this device. Keep it open and free some storage before trying again.',
-      );
-    }
-    clearActiveWorkoutDraft();
+    const completion = moveDraftToFinishedQueue(payload, userId, Date.now());
     reload();
     wakeRef.current();
     return completion;
