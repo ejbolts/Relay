@@ -339,6 +339,7 @@ DEFAULT_EXERCISES = (
     ("Single-Arm Cable Biceps Curl", WorkoutCategory.PULL, "Biceps", "Cable"),
     ("Cable Hammer Curl", WorkoutCategory.PULL, "Biceps", "Cable"),
     ("EZ Bar Curl", WorkoutCategory.PULL, "Biceps", "EZ bar"),
+    ("EZ Bar Preacher Curl", WorkoutCategory.PULL, "Biceps", "EZ bar"),
     ("Band Biceps Curl", WorkoutCategory.PULL, "Biceps", "Resistance band"),
     ("Trap Bar Deadlift", WorkoutCategory.PULL, "Posterior chain", "Trap bar"),
     ("Dumbbell Romanian Deadlift", WorkoutCategory.LOWER, "Hamstrings", "Dumbbell"),
@@ -627,8 +628,29 @@ def seed_default_exercises(db: Session, user_id: str) -> None:
         canonical_exercise_name(exercise.name).casefold(): exercise
         for exercise in existing.values()
     }
+    logged_exercise_ids = set(
+        db.scalars(
+            select(WorkoutMovement.exercise_id)
+            .join(Exercise, Exercise.id == WorkoutMovement.exercise_id)
+            .where(Exercise.user_id == user_id, Exercise.is_custom.is_(True))
+            .distinct()
+        )
+    )
+    promoted_custom = False
     for name, category, kind, muscle_group, equipment in defaults:
         exercise = existing.get(name.casefold()) or existing_aliases.get(name.casefold())
+        if (
+            exercise
+            and exercise.is_custom
+            and exercise.name.casefold() == name.casefold()
+            and exercise.id not in logged_exercise_ids
+        ):
+            # A custom exercise made before the catalogue gained the same exercise becomes the
+            # official one while it has no history to keep: same row, so favourites, routines
+            # and photos stay attached, and the default muscle credits replace the custom ones.
+            exercise.is_custom = False
+            exercise.name = name
+            promoted_custom = True
         if exercise and not exercise.is_custom:
             exercise.category = category
             exercise.kind = kind
@@ -651,7 +673,7 @@ def seed_default_exercises(db: Session, user_id: str) -> None:
                     equipment=equipment,
                 )
             )
-    if renamed_default or equipment_backfilled:
+    if renamed_default or equipment_backfilled or promoted_custom:
         bump_workout_cache_revision(db, user_id)
     db.commit()
     seed_muscle_mappings(db, user_id)

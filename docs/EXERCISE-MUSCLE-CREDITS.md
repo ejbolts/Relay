@@ -158,7 +158,7 @@ classification is the app's judgment, not an exercise-specific result claimed by
 
 ## Equipment variants
 
-The expanded catalogue uses the existing movement estimates for equivalent equipment variants; each variant retains its own exercise ID and progress. These remain bookkeeping estimates. Chest-supported dumbbell rows and band rows use the supported/cable row mapping, without spinal-erector credit. Straight-arm pulldowns and dumbbell pullovers give one direct lat credit without curl/biceps credit. Cable kickbacks and hip abduction give one direct glute credit. All 92 built-in strength exercises have explicit mappings.
+The expanded catalogue uses the existing movement estimates for equivalent equipment variants; each variant retains its own exercise ID and progress. These remain bookkeeping estimates. Chest-supported dumbbell rows and band rows use the supported/cable row mapping, without spinal-erector credit. Straight-arm pulldowns and dumbbell pullovers give one direct lat credit without curl/biceps credit. Cable kickbacks and hip abduction give one direct glute credit. The EZ bar preacher curl uses the preacher-curl mapping (Biceps 1; Forearms 0.5). All 93 built-in strength exercises have explicit mappings.
 
 ## Neck exercises
 

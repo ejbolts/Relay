@@ -51,3 +51,14 @@ export const equipmentSearchTerms: Record<string, string> = {
   band: 'Resistance band',
   bodyweight: 'Bodyweight',
 };
+
+/** The equipment a custom exercise can be set to: the standard kinds plus any already in use. */
+export function equipmentChoices(exercises: { equipment: string | null }[]): string[] {
+  const used = exercises
+    .map((exercise) => exercise.equipment?.trim())
+    .filter((equipment): equipment is string => Boolean(equipment))
+    .map(exerciseEquipment);
+  return [...new Set([...Object.values(equipmentSearchTerms), 'Weight plate', ...used])].sort(
+    (a, b) => a.localeCompare(b),
+  );
+}
