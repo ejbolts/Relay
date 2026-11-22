@@ -61,6 +61,7 @@ from .models import (
     MachinePhoto,
     PersonalRecord,
     ProfileBlock,
+    ProfileBorderUnlock,
     ProfileSharing,
     PushSubscription,
     SupersetGroup,
@@ -368,6 +369,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         delete(ActiveWorkoutSync).where(ActiveWorkoutSync.user_id == user_id),
         delete(PushSubscription).where(PushSubscription.user_id == user_id),
         delete(UserSetting).where(UserSetting.user_id == user_id),
+        delete(ProfileBorderUnlock).where(ProfileBorderUnlock.user_id == user_id),
         delete(ProfileSharing).where(ProfileSharing.user_id == user_id),
         delete(Friendship).where(
             (Friendship.member_a_id == user_id) | (Friendship.member_b_id == user_id)

@@ -49,6 +49,7 @@ from .models import (
     PersonalRecord,
     PersonalRecordType,
     ProfileBlock,
+    ProfileBorderUnlock,
     ProfileSharing,
     TrainingWorkout,
     User,
@@ -133,6 +134,7 @@ class SharedProfileSummary(BaseModel):
     # The earned border worn around the photo, and its name for the profile itself.
     profile_border: str | None = None
     profile_border_name: str | None = None
+    profile_border_unlocked_on: date | None = None
     # Shown only to those who can view the profile.
     sex: Sex | None = None
     member_since: datetime
@@ -579,12 +581,25 @@ def friends_since(friendship: Friendship) -> datetime:
     return as_utc(friendship.accepted_at or friendship.created_at)
 
 
+def worn_unlock_dates(db: Session, member_ids: list[str]) -> dict[str, date]:
+    if not member_ids:
+        return {}
+    return dict(
+        db.execute(
+            select(ProfileBorderUnlock.user_id, ProfileBorderUnlock.unlocked_on)
+            .join(User, User.id == ProfileBorderUnlock.user_id)
+            .where(User.id.in_(member_ids), User.profile_border == ProfileBorderUnlock.border_key)
+        ).all()
+    )
+
+
 def profile_summary(
     viewer: User,
     member: User,
     sharing: ProfileSharing,
     friendship: Friendship | None,
     stats: ActivityStats | None,
+    border_unlocked_on: date | None,
 ) -> SharedProfileSummary:
     viewable = can_view(viewer, member, sharing, friendship)
     stats = stats or ActivityStats()
@@ -595,6 +610,7 @@ def profile_summary(
         profile_photo_url=photo_url(member),
         profile_border=worn_border(member),
         profile_border_name=worn_border_name(member),
+        profile_border_unlocked_on=border_unlocked_on if viewable and worn_border(member) else None,
         sex=known_sex(member.sex) if viewable else None,
         member_since=as_utc(member.created_at),
         visibility=sharing.visibility,
@@ -820,10 +836,13 @@ def suggested_profiles(user: CurrentUser, db: Db, page: int = Query(default=1, g
         .limit(8)
     ).all()
     stats = workout_stats(db, [member.id for member, _ in rows])
+    dates = worn_unlock_dates(db, [member.id for member, _ in rows])
     return SuggestedProfilePage(
         profiles=[
             SuggestedProfileSummary(
-                **profile_summary(user, member, sharing, None, stats.get(member.id)).model_dump(),
+                **profile_summary(
+                    user, member, sharing, None, stats.get(member.id), dates.get(member.id)
+                ).model_dump(),
                 username=member.username,
             )
             for member, sharing in rows
@@ -873,8 +892,16 @@ def list_shared_profiles(
         if can_view(user, member, sharing, friendships.get(member.id))
     ]
     stats = workout_stats(db, viewable_ids)
+    dates = worn_unlock_dates(db, viewable_ids)
     profiles = [
-        profile_summary(user, member, sharing, friendships.get(member.id), stats.get(member.id))
+        profile_summary(
+            user,
+            member,
+            sharing,
+            friendships.get(member.id),
+            stats.get(member.id),
+            dates.get(member.id),
+        )
         for member, sharing in rows
     ]
 
@@ -935,6 +962,7 @@ def get_shared_profile(user_id: str, user: CurrentUser, db: Db) -> SharedProfile
         sharing,
         find_friendship(db, user.id, member.id),
         workout_stats(db, [member.id]).get(member.id),
+        worn_unlock_dates(db, [member.id]).get(member.id),
     )
     if not summary.can_view:
         return SharedProfileRead(**summary.model_dump())

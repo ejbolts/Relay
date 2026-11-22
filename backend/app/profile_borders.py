@@ -26,10 +26,12 @@ from collections import defaultdict
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
+from functools import cache
 from typing import Literal
 
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import delete, func, or_, select
+from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from .exercise_aliases import canonical_exercise_name
@@ -41,6 +43,7 @@ from .models import (
     ExerciseKind,
     PersonalRecord,
     PersonalRecordType,
+    ProfileBorderUnlock,
     SetType,
     TrainingWorkout,
     User,
@@ -484,6 +487,7 @@ class BorderRead(BaseModel):
     rarity: Rarity
     requirement: str
     unlocked: bool
+    unlocked_on: date | None = None
     # Missing only for a strength border while the account has not set its sex.
     progress: BorderProgress | None = None
     needs_sex: bool = False
@@ -597,6 +601,30 @@ def counted_entries(
 def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
     """The account's number for every border metric, from the history it logged in Relay."""
     today = today or date.today()
+    return load_border_history(db, user, today).stats_on(today)
+
+
+@dataclass
+class BorderHistory:
+    week_of: Callable[[date], date]
+    workouts: list[tuple[date, time | None, int | None, datetime]]
+    cardio: list[CardioSession]
+    weigh_in_days: list[date]
+    sets: list[tuple[date, str | None, float, int, int, float]]
+    records: list[tuple[date, int]]
+
+    def stats_on(self, day: date) -> Stats:
+        return compute_border_stats(self, day)
+
+    def dates(self) -> list[date]:
+        return sorted(
+            {day for day, *_ in self.workouts}
+            | {session.session_date for session in self.cardio}
+            | set(self.weigh_in_days)
+        )
+
+
+def load_border_history(db: Session, user: User, today: date) -> BorderHistory:
     imported_workouts, imported_measurements = imported_ids(db, user.id)
     week_start = get_setting(db, user.id, "week_start", "monday")
 
@@ -677,9 +705,6 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
         )
     ]
     weigh_in_days = [row.measurement_date for row in weigh_in_rows if f"m{row.id}" in counted]
-    training_days = {day for day, _, _, _ in workouts}
-    starts = [start for _, start, _, _ in workouts if start is not None]
-
     # Completed working sets of strength exercises: what counts as lifting.
     sets = db.execute(
         select(
@@ -705,51 +730,36 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
             WorkoutSet.reps >= 1,
         )
     ).all()
-    lifted_kg = 0.0
-    lifting_days: set[date] = set()
-    best_lift = {lift: 0.0 for lift in LIFT_NAMES}
-    lift_by_name: dict[str, str | None] = {}
-    bodyweight_by_name: dict[str, bool] = {}
-    bodyweight_reps = 0
-    added_sets: list[tuple[date, float, float | None]] = []
+    body_weights = None
+    prepared_sets = []
+    lift_for_name = cache(lift_of)
+
+    @cache
+    def is_bodyweight(name: str) -> bool:
+        return canonical_exercise_name(name).casefold() in BODYWEIGHT_MOVES
+
     for workout_id, day, name, weight, reps, set_body_weight in sets:
         if workout_id in skipped_workouts:
             continue
-        lifting_days.add(day)
-        if name not in bodyweight_by_name:
-            bodyweight_by_name[name] = canonical_exercise_name(name).casefold() in BODYWEIGHT_MOVES
-        if bodyweight_by_name[name]:
-            bodyweight_reps = max(bodyweight_reps, reps)
+        bodyweight_reps = 0
+        added_percent = 0.0
+        if is_bodyweight(name):
+            bodyweight_reps = reps
             if weight and weight > 0:
-                added_sets.append((day, weight, set_body_weight))
-        if not weight or weight <= 0:
-            continue
-        lifted_kg += weight * reps
-        if name not in lift_by_name:
-            lift_by_name[name] = lift_of(name)
-        lift = lift_by_name[name]
-        if lift is not None:
-            best_lift[lift] = max(best_lift[lift], weight)
-    # Weight added to a pull-up, chin-up or dip, as a percentage of the body weight on the day.
-    bodyweight_added = 0.0
-    if added_sets:
-        body_weights = BodyweightHistory(db, user.id)
-        for day, weight, set_body_weight in added_sets:
-            body_weight = body_weights.on(day, set_body_weight or None)
-            if body_weight:
-                bodyweight_added = max(bodyweight_added, weight / body_weight * 100)
-
-    cardio_week_minutes: dict[date, int] = defaultdict(int)
-    cardio_month_km: dict[tuple[int, int], float] = defaultdict(float)
-    climbed_m = 0.0
-    for session in cardio:
-        day = session.session_date
-        cardio_week_minutes[week_of(day)] += session.duration_minutes or 0
-        cardio_month_km[(day.year, day.month)] += session.distance_km or 0
-        climbed_m += session.effective_elevation_gain_m or 0
+                if body_weights is None:
+                    body_weights = BodyweightHistory(db, user.id)
+                body_weight = body_weights.on(day, set_body_weight or None)
+                if body_weight:
+                    added_percent = weight / body_weight * 100
+        weight = max(weight or 0, 0)
+        prepared_sets.append(
+            (day, lift_for_name(name), weight, reps, bodyweight_reps, added_percent)
+        )
 
     records = db.execute(
-        select(PersonalRecord.workout_id, func.count(PersonalRecord.id))
+        select(
+            PersonalRecord.workout_id, TrainingWorkout.workout_date, func.count(PersonalRecord.id)
+        )
         .join(TrainingWorkout, TrainingWorkout.id == PersonalRecord.workout_id)
         .where(
             PersonalRecord.user_id == user.id,
@@ -760,9 +770,50 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
             TrainingWorkout.is_sample.is_(False),
             TrainingWorkout.workout_date <= today,
         )
-        .group_by(PersonalRecord.workout_id)
+        .group_by(PersonalRecord.workout_id, TrainingWorkout.workout_date)
     ).all()
-    record_counts = [count for workout_id, count in records if workout_id not in skipped_workouts]
+    return BorderHistory(
+        week_of,
+        workouts,
+        cardio,
+        weigh_in_days,
+        prepared_sets,
+        [(day, count) for workout_id, day, count in records if workout_id not in skipped_workouts],
+    )
+
+
+def compute_border_stats(history: BorderHistory, through: date) -> Stats:
+    week_of = history.week_of
+    workouts = [row for row in history.workouts if row[0] <= through]
+    cardio = [session for session in history.cardio if session.session_date <= through]
+    weigh_in_days = [day for day in history.weigh_in_days if day <= through]
+    training_days = {day for day, _, _, _ in workouts}
+    starts = [start for _, start, _, _ in workouts if start is not None]
+    lifted_kg = 0.0
+    lifting_days: set[date] = set()
+    best_lift = {lift: 0.0 for lift in LIFT_NAMES}
+    bodyweight_reps = 0
+    bodyweight_added = 0.0
+    for day, lift, weight, reps, unassisted_reps, added_percent in history.sets:
+        if day > through:
+            continue
+        lifting_days.add(day)
+        lifted_kg += weight * reps
+        bodyweight_reps = max(bodyweight_reps, unassisted_reps)
+        bodyweight_added = max(bodyweight_added, added_percent)
+        if lift is not None:
+            best_lift[lift] = max(best_lift[lift], weight)
+
+    cardio_week_minutes: dict[date, int] = defaultdict(int)
+    cardio_month_km: dict[tuple[int, int], float] = defaultdict(float)
+    climbed_m = 0.0
+    for session in cardio:
+        day = session.session_date
+        cardio_week_minutes[week_of(day)] += session.duration_minutes or 0
+        cardio_month_km[(day.year, day.month)] += session.distance_km or 0
+        climbed_m += session.effective_elevation_gain_m or 0
+
+    record_counts = [count for day, count in history.records if day <= through]
 
     days_per_week: dict[date, int] = defaultdict(int)
     for day in training_days:
@@ -897,6 +948,70 @@ def _read(border: Border, stats: Stats, sex: str | None, unit: str, today: date)
     return read
 
 
+def sync_unlock_dates(
+    db: Session,
+    user: User,
+    history: BorderHistory,
+    unlocked: list[Border],
+    checked_keys: set[str] | None = None,
+) -> dict[str, date]:
+    stored = {
+        row.border_key: row.unlocked_on
+        for row in db.scalars(
+            select(ProfileBorderUnlock).where(ProfileBorderUnlock.user_id == user.id)
+        )
+    }
+    unlocked_keys = {border.key for border in unlocked}
+    stale = (
+        stored.keys() if checked_keys is None else stored.keys() & checked_keys
+    ) - unlocked_keys
+    missing = [border for border in unlocked if border.key not in stored]
+    if missing:
+        dates = history.dates()
+        stats_on = cache(history.stats_on)
+        for border in missing:
+            low, high = 0, len(dates) - 1
+            while low < high:
+                middle = (low + high) // 2
+                if is_unlocked(border, stats_on(dates[middle]), user.sex):
+                    high = middle
+                else:
+                    low = middle + 1
+            stored[border.key] = dates[low]
+        db.execute(
+            insert(ProfileBorderUnlock)
+            .values(
+                [
+                    {
+                        "user_id": user.id,
+                        "border_key": border.key,
+                        "unlocked_on": stored[border.key],
+                    }
+                    for border in missing
+                ]
+            )
+            .on_conflict_do_nothing(index_elements=["user_id", "border_key"])
+        )
+        # A simultaneous request may have recorded the unlock first.
+        stored.update(
+            db.execute(
+                select(ProfileBorderUnlock.border_key, ProfileBorderUnlock.unlocked_on).where(
+                    ProfileBorderUnlock.user_id == user.id,
+                    ProfileBorderUnlock.border_key.in_([border.key for border in missing]),
+                )
+            ).all()
+        )
+    if stale:
+        db.execute(
+            delete(ProfileBorderUnlock).where(
+                ProfileBorderUnlock.user_id == user.id, ProfileBorderUnlock.border_key.in_(stale)
+            )
+        )
+    if missing or stale:
+        db.commit()
+    return {key: stored[key] for key in unlocked_keys}
+
+
 def borders_for(db: Session, user: User, today: date | None = None) -> BordersRead:
     """Every border to show the account, in the order the app lists them.
 
@@ -904,12 +1019,21 @@ def borders_for(db: Session, user: User, today: date | None = None) -> BordersRe
     borders. Limited editions whose window has closed are listed only where they were earned.
     """
     today = today or date.today()
-    stats = border_stats(db, user, today)
+    history = load_border_history(db, user, today)
+    stats = history.stats_on(today)
     unit = preferred_weight_unit(db, user.id)
     season = season_of(today)
     current, events, permanent, past = [], [], [], []
-    for border in (*limited_borders(today), *BORDERS):
-        read = _read(border, stats, user.sex, unit, today)
+    catalogue = (*limited_borders(today), *BORDERS)
+    reads = [_read(border, stats, user.sex, unit, today) for border in catalogue]
+    dates = sync_unlock_dates(
+        db,
+        user,
+        history,
+        [border for border, read in zip(catalogue, reads, strict=True) if read.unlocked],
+    )
+    for border, read in zip(catalogue, reads, strict=True):
+        read.unlocked_on = dates.get(border.key)
         if border.window is None:
             permanent.append(read)
         elif read.status == "ended":
@@ -929,6 +1053,7 @@ def can_wear(db: Session, user: User, key: str, today: date | None = None) -> bo
     if border is None:
         return False
     today = today or date.today()
-    if border.window and border.window.status(today) == "upcoming":
-        return False
-    return is_unlocked(border, border_stats(db, user, today), user.sex)
+    history = load_border_history(db, user, today)
+    unlocked = is_unlocked(border, history.stats_on(today), user.sex)
+    sync_unlock_dates(db, user, history, [border] if unlocked else [], {key})
+    return unlocked

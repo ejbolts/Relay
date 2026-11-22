@@ -343,6 +343,17 @@ class ServerSetting(Base):
     )
 
 
+class ProfileBorderUnlock(Base):
+    __tablename__ = "profile_border_unlocks"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    border_key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    unlocked_on: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class UserSession(Base):
     __tablename__ = "user_sessions"
 
