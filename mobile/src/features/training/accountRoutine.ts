@@ -1,10 +1,17 @@
+import {
+  latestTopSets,
+  setLabel,
+  type SessionTemplateExercise,
+} from '../../../../frontend/src/trainingSummary';
 import type {
-  ExerciseHistoryBaseline,
-  TrackedSet,
   TrackedWorkout,
   WorkoutRecommendation,
+  WorkoutType,
   WorkoutTypeExercises,
 } from '../../../../frontend/src/types';
+import { upNextSession } from '../../../../frontend/src/upNextSession';
+import type { WeightUnit } from '../../../../frontend/src/weightUnits';
+import { isCompletedWorkingSet } from '../../../../frontend/src/workoutSets';
 import { sampleRoutine } from './sampleRoutine';
 
 export interface RoutineView {
@@ -19,103 +26,81 @@ export interface RoutineView {
   }[];
 }
 
-// The same factor as KG_TO_LB in frontend/src/weightUnits.ts. Stored weights stay in kg.
-const KG_TO_LB = 2.2046226218;
-
-function previousSet(set: TrackedSet, unit: 'kg' | 'lb') {
-  const parts: string[] = [];
-  if (set.weight_kg != null) {
-    const weight = unit === 'kg' ? set.weight_kg : set.weight_kg * KG_TO_LB;
-    parts.push(`${Number(weight.toFixed(1))} ${unit}`);
-  }
-  if (set.reps != null) parts.push(`${set.reps} reps`);
-  if (set.duration_seconds != null) parts.push(`${set.duration_seconds} s`);
-  if (set.distance_km != null) parts.push(`${set.distance_km} km`);
-  return parts.join(' × ') || 'Completed';
-}
-
-/** The last set that was actually performed: warm-ups and unticked rows are not history. */
-function lastWorkingSet(sets: TrackedSet[]) {
-  return [...sets]
-    .sort((left, right) => right.order_index - left.order_index)
-    .find((set) => set.completed && !set.warmup);
+function repRange(reps: (number | null)[]) {
+  const counts = reps.filter((value): value is number => value != null);
+  if (!counts.length) return undefined;
+  const min = Math.min(...counts);
+  const max = Math.max(...counts);
+  return min === max ? String(min) : `${min}–${max}`;
 }
 
 /**
- * The next workout as the read-only preview shows it. Like Up next on the web
- * (splitDayTemplate in frontend/src/upNext.ts), it prefers the split day's plan, then the
- * exercises saved to the workout type, then the last workout of that type.
- *
- * `recent` holds the loaded history window, newest first. `older` condenses everything before
- * it, so a lift last trained months ago still shows its previous set.
+ * The next workout as the read-only preview shows it. Which workout, its exercises and the empty
+ * states come from the web's own rule (`upNextSession` in frontend/src/upNextSession.ts), and
+ * each exercise's previous set is the top set Home's Up next shows (`latestTopSets`). Only the
+ * presentation below is the app's.
  */
-export function accountRoutine(
-  next: WorkoutRecommendation | null,
-  saved: WorkoutTypeExercises[],
-  recent: TrackedWorkout[],
-  older: ExerciseHistoryBaseline[],
-  unit: 'kg' | 'lb',
-): RoutineView {
-  if (!next || next.needs_split_update || next.workout_type?.archived) {
-    return {
-      name: 'Up next',
-      empty: next ? 'Update your training split in Relay.' : 'No workout planned.',
-      exercises: [],
-    };
-  }
-  if (next.is_rest_day)
+export function accountRoutine({
+  recommendation,
+  types,
+  saved,
+  workouts,
+  unit,
+  today,
+}: {
+  recommendation: WorkoutRecommendation | null;
+  types: WorkoutType[];
+  saved: WorkoutTypeExercises[];
+  workouts: TrackedWorkout[];
+  unit: WeightUnit;
+  today: string;
+}): RoutineView {
+  const next = upNextSession({
+    recommendation,
+    workouts,
+    types,
+    savedExercises: Object.fromEntries(saved.map((item) => [item.workout_type_id, item.movements])),
+    today,
+    weightUnit: unit,
+  });
+  if (!next.recommendation) return { name: 'Up next', empty: 'No workout planned.', exercises: [] };
+  if (next.needsSplitUpdate)
+    return { name: 'Up next', empty: 'Update your training split in Relay.', exercises: [] };
+  if (next.isRestDay)
     return { name: 'Rest day', empty: 'No exercises scheduled today.', exercises: [] };
 
-  const type = next.workout_type;
-  const planned = next.routine_day?.movements;
-  const savedPlan = saved.find((item) => item.workout_type_id === (type?.id ?? next.category));
-  const plan = planned?.length ? planned : savedPlan?.movements;
-  const latest = recent.find(
-    (workout) =>
-      workout.category === next.category &&
-      (workout.workout_type_id ?? null) === (type?.is_custom ? type.id : null) &&
-      workout.movements.length > 0 &&
-      (next.category !== 'cardio' ||
-        type?.is_custom ||
-        workout.movements.some((m) => m.exercise.kind === 'cardio')),
-  );
-  const rows = plan?.length
-    ? plan
-    : [...(latest?.movements ?? [])].sort((left, right) => left.order_index - right.order_index);
-
-  const lastSets = new Map<string, TrackedSet>();
-  for (const workout of recent) {
-    for (const movement of [...workout.movements].reverse()) {
-      if (lastSets.has(movement.exercise.id)) continue;
-      const set = lastWorkingSet(movement.sets);
-      if (set) lastSets.set(movement.exercise.id, set);
-    }
-  }
-  for (const baseline of older) {
-    if (lastSets.has(baseline.exercise_id)) continue;
-    const set = baseline.latest && lastWorkingSet(baseline.latest.sets);
-    if (set) lastSets.set(baseline.exercise_id, set);
-  }
-
+  const latest = latestTopSets(workouts, today);
+  const source = next.template?.sourceWorkout.movements ?? [];
+  const row = (item: SessionTemplateExercise) => {
+    // A plan has its own sets; a repeated workout shows what was done last time.
+    const done = source
+      .find((movement) => movement.exercise.id === item.exercise.id)
+      ?.sets.filter(isCompletedWorkingSet);
+    const sets = item.plannedSets ?? done ?? [];
+    const top = latest.get(item.exercise.id);
+    const name = item.exercise.name;
+    return {
+      name,
+      sets: sets.length,
+      reps: item.repRange
+        ? `${item.repRange.min}–${item.repRange.max}`
+        : repRange(sets.map((set) => set.reps)),
+      previous:
+        item.exercise.kind === 'cardio'
+          ? item.summary === '–'
+            ? null
+            : item.summary
+          : top
+            ? setLabel(top, unit)
+            : null,
+      image: sampleRoutine.exercises.find(
+        (sample) => sample.name.toLowerCase() === name.toLowerCase(),
+      )?.image,
+    };
+  };
   return {
-    name: next.session_name,
+    name: next.recommendation.session_name,
     empty: 'No exercises planned yet.',
-    exercises: rows.map((movement) => {
-      const range = 'rep_range' in movement ? movement.rep_range : undefined;
-      const repCounts = movement.sets.flatMap((s) => (s.reps == null ? [] : [s.reps]));
-      const min = range?.min ?? Math.min(...repCounts);
-      const max = range?.max ?? Math.max(...repCounts);
-      const previous = lastSets.get(movement.exercise.id);
-      const name = movement.exercise.name;
-      return {
-        name,
-        sets: movement.sets.length,
-        reps: Number.isFinite(min) ? (min === max ? String(min) : `${min}–${max}`) : undefined,
-        previous: previous ? previousSet(previous, unit) : null,
-        image: sampleRoutine.exercises.find(
-          (item) => item.name.toLowerCase() === name.toLowerCase(),
-        )?.image,
-      };
-    }),
+    exercises: (next.template?.exercises ?? []).map(row),
   };
 }
