@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { api } from './api';
 import { SharedWorkoutHistory } from './App';
 import type { SharedWorkoutListProps } from './SharedProfiles';
 import type { TrackedWorkout } from './types';
@@ -130,4 +131,62 @@ it("draws each workout in the member's own type colours, as their calendar does"
   // Without the member's types, the viewer's colours remain.
   await render({ workouts: memberWorkouts, categoryColors: viewerColors } as never);
   expect(stripes()).toEqual(['rgb(245, 158, 11)', 'rgb(18, 52, 86)']);
+});
+
+it('puts reaction and comment buttons on each profile workout, without opening it', async () => {
+  const counts = {
+    counts: [{ reaction: 'like' as const, count: 2 }],
+    yours: null,
+    comment_count: 3,
+  };
+  const react = vi
+    .spyOn(api.sharing, 'react')
+    .mockResolvedValue({
+      counts: [{ reaction: 'fire', count: 1 }],
+      yours: 'fire',
+      comment_count: 0,
+    });
+  const onReactionsChange = vi.fn();
+  const owner = { display_name: 'Riley', is_you: false };
+  const pair = workouts.slice(0, 2);
+  await render({ workouts: pair, owner, reactions: { [pair[0].id]: counts }, onReactionsChange });
+  const cards = [...host.querySelectorAll('.history-card')];
+  expect(cards.map((card) => card.querySelector('.history-card-social') !== null)).toEqual([
+    true,
+    true,
+  ]);
+  const first = cards[0];
+  const labelled = (card: Element, label: string) =>
+    card.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`);
+  expect(labelled(first, `3 comments on Riley’s ${pair[0].name}`)?.textContent).toBe('3');
+  expect(labelled(first, `View 2 reactions on Riley’s ${pair[0].name}`)).not.toBeNull();
+  // A workout with no reactions yet still offers both buttons.
+  expect(labelled(cards[1], `React to Riley’s ${pair[1].name}`)).not.toBeNull();
+  expect(labelled(cards[1], `0 comments on Riley’s ${pair[1].name}`)).not.toBeNull();
+
+  await act(async () => labelled(cards[1], `React to Riley’s ${pair[1].name}`)!.click());
+  await act(async () => labelled(cards[1], 'Fire')!.click());
+  expect(react).toHaveBeenCalledWith(pair[1].id, 'fire');
+  expect(onReactionsChange).toHaveBeenCalledWith(
+    pair[1].id,
+    expect.objectContaining({ yours: 'fire' }),
+  );
+  // Reacting leaves the workout folded.
+  expect(cards[1].classList.contains('open')).toBe(false);
+
+  // Your own workouts show their reactions and comments, but no button to react to yourself.
+  await render({
+    workouts: pair,
+    owner: { display_name: 'You', is_you: true },
+    reactions: { [pair[0].id]: counts },
+    onReactionsChange,
+  });
+  const own = host.querySelector('.history-card')!;
+  expect(labelled(own, `React to Your ${pair[0].name}`)).toBeNull();
+  expect(labelled(own, `3 comments on Your ${pair[0].name}`)).not.toBeNull();
+});
+
+it('leaves the reaction buttons off a list given no reactions', async () => {
+  await render({ workouts: workouts.slice(0, 2) });
+  expect(host.querySelector('.history-card-social')).toBeNull();
 });
