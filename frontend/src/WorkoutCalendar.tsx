@@ -9,7 +9,7 @@ import {
 } from 'react';
 import type { DashboardData, WorkoutType, WorkoutTypeColors } from './types';
 import { useWorkoutTypes } from './workoutTypesContext';
-import { calendarDayTypes } from './workoutTypes';
+import { calendarDayLook, weekStripLabels } from './calendarDayLook';
 import { calendarMonths, calendarWeekdays, monthCountFromOldestWorkout } from './calendarRange';
 import { useWeekStartDay } from './trainingPreferencesContext';
 import { Icon } from './Icon';
@@ -274,30 +274,24 @@ export function WorkoutCalendar({
                       const entry = map.get(key);
                       const planned = previewMap.get(key);
                       const inProgress = key === activeWorkoutDate;
-                      const dayTypes = entry ? calendarDayTypes(entry, types) : [];
-                      // The border takes the colours of the types still switched on in the legend.
-                      const ring = dayTypes
-                        .filter((type) => !hiddenCategories?.has(type.id))
-                        .map((type) => workoutTypeColor(type, categoryColors));
-                      const filteredOut = dayTypes.length > 0 && ring.length === 0;
-                      // A day with nothing logged keeps a faint outline for the split's workout.
-                      const scheduledId =
-                        entry || inProgress || previewMode ? undefined : splitDays?.get(key);
-                      const scheduled = scheduledId
-                        ? types.find((type) => type.id === scheduledId)
-                        : undefined;
-                      const scheduledColor =
-                        scheduled && !hiddenCategories?.has(scheduled.id)
-                          ? workoutTypeColor(scheduled, categoryColors)
-                          : null;
+                      // The border takes the colours of the types still switched on in the
+                      // legend; a day with nothing logged keeps a faint outline for the split's.
+                      const { dayTypes, ring, filteredOut, scheduledColor, scheduledNote } =
+                        calendarDayLook({
+                          date: key,
+                          today: todayKey,
+                          entry,
+                          inProgress,
+                          types,
+                          categoryColors,
+                          hiddenCategories,
+                          splitDays: previewMode ? undefined : splitDays,
+                        });
                       const dayRingStyle =
                         ring.length && !inProgress ? dayRing(ring) : scheduledColor;
                       // Today's outer ring and ripple repeat the day's workout colours, split into
                       // the same arcs as its outline on a mixed day.
                       const todayRing = key === todayKey && ring.length > 0 && !inProgress;
-                      const scheduledNote = scheduled
-                        ? `${scheduled.name} ${key < todayKey ? 'missed' : 'planned'}`
-                        : null;
                       return (
                         <button
                           type="button"
@@ -475,11 +469,14 @@ export function WeekStrip({
         const date = parseLocalDate(key);
         const entry = map.get(key);
         const inProgress = key === activeWorkoutDate;
-        const dayTypes = entry ? calendarDayTypes(entry, types) : [];
-        // A type switched off in the legend keeps its name but loses its colour.
-        const colorOf = (type: WorkoutType) =>
-          hiddenCategories?.has(type.id) ? null : workoutTypeColor(type, categoryColors);
-        const ring = dayTypes.map(colorOf).filter((color) => color !== null);
+        const { dayTypes, ring } = calendarDayLook({
+          date: key,
+          today: todayKey,
+          entry,
+          types,
+          categoryColors,
+          hiddenCategories,
+        });
         return (
           <button
             type="button"
@@ -515,20 +512,17 @@ export function WeekStrip({
                 <i className="calendar-live-dot" />
               ) : (
                 // Two names fit; a third or later type is counted on the second line instead.
-                dayTypes.slice(0, 2).map((type, index) => {
-                  const counted = index === 1 && dayTypes.length > 2;
-                  const color = counted ? null : colorOf(type);
-                  return (
-                    <span
-                      className={`week-strip-type${color ? '' : ' is-off'}`}
-                      key={type.id}
-                      style={color ? ({ '--type-color': color } as CSSProperties) : undefined}
-                    >
-                      {/* "Upper body" and friends lose the repeated word to fit the tile. */}
-                      {counted ? `+${dayTypes.length - 1}` : type.name.replace(/ body$/i, '')}
-                    </span>
-                  );
-                })
+                weekStripLabels(dayTypes, categoryColors, hiddenCategories).map((label) => (
+                  <span
+                    className={`week-strip-type${label.color ? '' : ' is-off'}`}
+                    key={label.id}
+                    style={
+                      label.color ? ({ '--type-color': label.color } as CSSProperties) : undefined
+                    }
+                  >
+                    {label.text}
+                  </span>
+                ))
               )}
             </span>
           </button>

@@ -1,24 +1,20 @@
 import { useId, useState, type CSSProperties, type FormEvent } from 'react';
 import { Icon } from './Icon';
 import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
+import {
+  muscleSetsView,
+  muscleWeekName,
+  setChangeLabel,
+  setChangeTone,
+  setCredits as credits,
+  signedSetChange,
+} from './muscleSetRows';
 import { PopupDialog } from './PopupDialog';
 import { useToast } from './Toast';
 import { shortDate } from './trainingSummary';
 import type { WeeklyMuscleContribution } from './types';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import './muscleSets.css';
-
-const credits = (value: number) => Number(value.toFixed(3)).toLocaleString();
-
-const weekName = (weeksAgo: number) =>
-  weeksAgo === 0 ? 'This week' : weeksAgo === 1 ? 'Last week' : `${weeksAgo} weeks ago`;
-
-/** "+2", "−1.5" or "±0" for the change on the week before. */
-function signedChange(change: number) {
-  if (change > 0) return `+${credits(change)}`;
-  if (change < 0) return `−${credits(-change)}`;
-  return '±0';
-}
 
 export function MuscleSetsCard({
   weeklySets,
@@ -42,46 +38,21 @@ export function MuscleSetsCard({
   const [requestedWeeksAgo, setWeeksAgo] = useState(0);
   const titleId = useId();
   const listId = useId();
-  const weeks = weeklySets ? [weeklySets, ...history] : [];
-  const weeksAgo = Math.min(requestedWeeksAgo, Math.max(0, weeks.length - 1));
-  const week = weeks[weeksAgo];
-  const previous = weeks[weeksAgo + 1];
-  const previousSets = new Map(
-    (previous?.muscle_groups ?? []).map((item) => [item.muscle_group, item.raw_sets]),
-  );
-  const before = (name: string) => (previous ? (previousSets.get(name) ?? 0) : null);
-  const groups = new Map((week?.muscle_groups ?? []).map((item) => [item.muscle_group, item]));
-  // A muscle trained only the week before still gets a row, so the drop is visible.
-  for (const item of previous?.muscle_groups ?? []) {
-    if (item.raw_sets > 0 && !groups.has(item.muscle_group)) {
-      groups.set(item.muscle_group, {
-        muscle_group: item.muscle_group,
-        raw_sets: 0,
-        contributions: [],
-      });
-    }
-  }
-  const allMuscles = [...groups.values()].sort(
-    (left, right) =>
-      right.raw_sets - left.raw_sets ||
-      (before(right.muscle_group) ?? 0) - (before(left.muscle_group) ?? 0) ||
-      left.muscle_group.localeCompare(right.muscle_group),
-  );
-  const muscles = allMuscles.filter(
-    (item) => item.raw_sets > 0 || (before(item.muscle_group) ?? 0) > 0,
-  );
-  const visibleMuscles = expanded ? allMuscles : muscles.slice(0, 8);
-  const untrained = allMuscles.filter((item) => item.raw_sets <= 0).length;
-  // A shared set scale keeps volumes comparable; each muscle's target gets its own tick.
-  // Include all weeks so neither bars nor target ticks jump while stepping through history.
-  const scale = Math.max(
-    goal * 1.15,
-    ...allMuscles.map((item) => muscleSetGoal(item.muscle_group, goal, goals) * 1.15),
-    ...weeks.flatMap((item) => item.muscle_groups.map((group) => group.raw_sets)),
-  );
+  const {
+    weeks,
+    weeksAgo,
+    week,
+    previous,
+    current,
+    name,
+    allMuscles,
+    trainedCount,
+    rows: visibleMuscles,
+    untrained,
+    scale,
+    canExpand,
+  } = muscleSetsView({ weeklySets, history, weeksAgo: requestedWeeksAgo, goal, goals, expanded });
   const muscle = allMuscles.find((item) => item.muscle_group === selected);
-  const name = weekName(weeksAgo);
-  const current = weeksAgo === 0;
 
   return (
     <section className="pulse-card muscle-sets-card" aria-labelledby={titleId}>
@@ -117,7 +88,7 @@ export function MuscleSetsCard({
         {previous && (
           <span className="muscle-key-item">
             <i className="muscle-key-swatch is-previous" aria-hidden="true" />
-            {weekName(weeksAgo + 1)}
+            {muscleWeekName(weeksAgo + 1)}
           </span>
         )}
         <span className="muscle-key-item">
@@ -132,9 +103,7 @@ export function MuscleSetsCard({
         aria-label={`Working sets per muscle, ${name.toLowerCase()}; individual weekly targets`}
       >
         {visibleMuscles.map((item, index) => {
-          const last = before(item.muscle_group);
-          const change = last === null ? null : item.raw_sets - last;
-          const target = muscleSetGoal(item.muscle_group, goal, goals);
+          const { previous: last, change, target } = item;
           return (
             <li key={item.muscle_group}>
               <button
@@ -178,25 +147,10 @@ export function MuscleSetsCard({
                 </span>
                 {change !== null && (
                   <small
-                    className={`muscle-set-change ${
-                      change > 0
-                        ? 'is-up'
-                        : change < 0
-                          ? // This week is still going, so a shortfall is not a drop yet.
-                            weeksAgo === 0
-                            ? 'is-pending'
-                            : 'is-down'
-                          : 'is-same'
-                    }`}
-                    aria-label={
-                      change === 0
-                        ? 'same as the week before'
-                        : change < 0 && weeksAgo === 0
-                          ? `${credits(-change)} to match the week before`
-                          : `${change > 0 ? 'up' : 'down'} ${credits(Math.abs(change))} on the week before`
-                    }
+                    className={`muscle-set-change is-${setChangeTone(change, current)}`}
+                    aria-label={setChangeLabel(change, current)}
                   >
-                    {signedChange(change)}
+                    {signedSetChange(change)}
                   </small>
                 )}
               </b>
@@ -204,17 +158,17 @@ export function MuscleSetsCard({
           );
         })}
       </ul>
-      {!muscles.length && (
+      {!trainedCount && (
         <p className="pulse-empty-line">
           {current ? 'No working sets logged yet this week.' : 'No working sets logged that week.'}
         </p>
       )}
-      {muscles.length > 0 && untrained > 0 && (
+      {trainedCount > 0 && untrained > 0 && (
         <p className="pulse-footnote">
           {untrained} muscles not trained{current ? ' yet' : ''}
         </p>
       )}
-      {(expanded || allMuscles.length > visibleMuscles.length) && (
+      {canExpand && (
         <button
           type="button"
           className="pulse-button link small muscle-sets-expand"
