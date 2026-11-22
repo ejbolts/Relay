@@ -22,6 +22,7 @@ import { useWorkoutTypes } from './workoutTypesContext';
 import { exitGuide, finishGuide, updateGuide, useActiveGuide } from './setupGuides';
 import { formatWeight } from './weightUnits';
 import { localDate } from './utils';
+import { SplitAutoShiftSetting } from './SplitAutoShiftSetting';
 import { SplitScheduleChoice } from './SplitScheduleChoice';
 import { SPLIT_TEMPLATES } from './trainingSplit';
 import type { Exercise, Routine, RoutineDay, SplitProgression, TrainingSplit } from './types';
@@ -714,25 +715,8 @@ export function RoutinePanel({
             </label>
             <SplitScheduleChoice value={progression} disabled={busy} onChange={setProgression} />
             {progression === 'calendar' && (
-              <div className="notification-setting-row routine-auto-shift">
-                <div>
-                  <strong>Shift after missed workouts</strong>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-label="Shift after missed workouts"
-                  aria-checked={autoShift}
-                  className={autoShift ? 'is-on' : ''}
-                  disabled={busy}
-                  onClick={() => setAutoShift(!autoShift)}
-                >
-                  <span />
-                  {autoShift ? 'On' : 'Off'}
-                </button>
-              </div>
+              <SplitAutoShiftSetting value={autoShift} disabled={busy} onChange={setAutoShift} />
             )}
-            <p className="routine-note">Replaces your active split. Saved splits stay available.</p>
             {error && (
               <p role="alert" className="inline-error">
                 {error}

@@ -516,12 +516,38 @@
   font-size: 12px;
 }
 /* The On/Off pill from Settings, sized like the dialog's other controls. */
+.routine-auto-shift-setting {
+  display: grid;
+  gap: 8px;
+}
+/* Beats the Settings row's grid for its label column, keeping the ? beside the label. */
+.routine-use .routine-auto-shift > .routine-auto-shift-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.routine-use .routine-auto-shift .routine-progression-help {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  height: 22px;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 50%;
+  padding: 0;
+  background: transparent;
+  color: var(--p-muted);
+  font-size: 11px;
+  line-height: 1;
+}
 .routine-use .routine-auto-shift strong {
   color: var(--p-ink-2);
   font-size: 12px;
   font-weight: 600;
 }
-.routine-use .routine-auto-shift > button {
+.routine-use .routine-auto-shift > button[role='switch'] {
   min-width: 4.25rem;
   display: inline-flex;
   align-items: center;
@@ -532,15 +558,9 @@
   font-size: 12px;
   font-weight: 800;
 }
-.routine-use .routine-auto-shift > button.is-on {
+.routine-use .routine-auto-shift > button[role='switch'].is-on {
   border-color: var(--p-accent-text);
   color: var(--p-accent-text);
-}
-.routine-use .routine-note {
-  margin: -6px 0 0;
-  color: var(--p-muted);
-  font-size: 12px;
-  line-height: 1.4;
 }
 
 /* Editor */

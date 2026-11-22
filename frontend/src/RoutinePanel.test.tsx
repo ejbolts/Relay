@@ -255,6 +255,22 @@ it('offers Shift after missed workouts only for a By date schedule', async () =>
   expect(api.routines.use).toHaveBeenCalledWith('source', expect.any(String), 'calendar', false);
 });
 
+it('explains Shift after missed workouts in place and keeps the dialog open on Escape', async () => {
+  await mount(true);
+  await click('Use split');
+  expect(document.querySelector('.routine-use')?.textContent).not.toContain('Saved splits');
+  await click('By date');
+  await click('What Shift after missed workouts does');
+  const help = () =>
+    document.querySelector('[role="region"][aria-label="Shift after missed workouts"]');
+  expect(help()?.textContent).toContain('Pull moves to today');
+  await act(async () =>
+    help()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
+  );
+  expect(help()).toBeNull();
+  expect(document.querySelector('.routine-use')).not.toBeNull();
+});
+
 it('creates private splits without a publishing switch and shares from split options', async () => {
   await mount(true);
   await click('New split');
