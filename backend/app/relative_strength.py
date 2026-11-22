@@ -1,6 +1,6 @@
 """Dated bodyweight lookup and unit-independent lift/bodyweight ratios."""
 
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 from datetime import date
 from math import floor, isfinite
 
@@ -27,6 +27,15 @@ class BodyweightHistory:
             return recorded if isfinite(recorded) and recorded > 0 else None
         index = bisect_right(self.dates, day)
         return self.weights[index - 1] if index else None
+
+    def nearest(self, day: date) -> float | None:
+        """Return the nearest weigh-in, preferring the earlier one on a tie."""
+        index = bisect_left(self.dates, day)
+        if index and (
+            index == len(self.dates) or day - self.dates[index - 1] <= self.dates[index] - day
+        ):
+            index -= 1
+        return self.weights[index] if index < len(self.weights) else None
 
 
 def relative_strength(weight: float | None, bodyweight: float | None) -> float | None:
