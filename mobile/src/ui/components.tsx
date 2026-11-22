@@ -39,7 +39,7 @@ export function Screen({
   // iOS insets the first scroll view in a native tab itself; Android needs the status bar room.
   const insets = useSafeAreaInsets();
   const top = Platform.OS === 'ios' ? 0 : insets.top;
-  return (
+  const page = (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.page }}
       contentInsetAdjustmentBehavior="automatic"
@@ -68,6 +68,18 @@ export function Screen({
       </View>
       {children}
     </ScrollView>
+  );
+  if (Platform.OS === 'ios') return page;
+  // Android draws edge to edge under a transparent status bar: keep a page-coloured band behind
+  // it so scrolled content doesn't run under the clock and icons.
+  return (
+    <View style={{ flex: 1, backgroundColor: colors.page }}>
+      {page}
+      <View
+        pointerEvents="none"
+        style={[styles.statusBand, { height: insets.top, backgroundColor: colors.page }]}
+      />
+    </View>
   );
 }
 
@@ -196,6 +208,7 @@ export function errorMessage(error: unknown) {
 }
 
 const styles = StyleSheet.create({
+  statusBand: { position: 'absolute', top: 0, left: 0, right: 0 },
   header: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   button: {
