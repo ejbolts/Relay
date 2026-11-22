@@ -90,8 +90,7 @@ async function request<T>(path: string, init: RequestInit = {}, token?: string |
   return response.status === 204 ? (undefined as T) : response.json();
 }
 
-/** Ends a sign-out the server has not confirmed yet. Never throws: it retries next launch. */
-async function endPendingSignOut(origin: string) {
+async function sendPendingSignOut(origin: string) {
   try {
     const token = await pendingSignOut(origin);
     if (!token) return;
@@ -105,6 +104,17 @@ async function endPendingSignOut(origin: string) {
   } catch {
     // Secure storage was unavailable; the next launch tries again.
   }
+}
+
+let ending: Promise<void> | undefined;
+
+/**
+ * Ends a sign-out the server has not confirmed yet. Never throws: it retries next launch. The
+ * screen checks the session on opening and on becoming active, so one attempt runs at a time.
+ */
+function endPendingSignOut(origin: string) {
+  ending ??= sendPendingSignOut(origin).finally(() => (ending = undefined));
+  return ending;
 }
 
 export async function currentUser(signal: AbortSignal) {

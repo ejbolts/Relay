@@ -117,6 +117,21 @@ test('signs out offline at once and ends the server session on the next launch',
   expect(mockKeychain.size).toBe(0);
 });
 
+test('opening and becoming active together retry the sign-out once', async () => {
+  const api = signedIn();
+  fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));
+  await api.signOut();
+  fetchMock.mockClear();
+
+  await Promise.allSettled([
+    api.currentUser(new AbortController().signal),
+    api.currentUser(new AbortController().signal),
+  ]);
+  await settle();
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(mockKeychain.size).toBe(0);
+});
+
 test('a sign-out the server rejects with an error stays queued for the next launch', async () => {
   const api = signedIn();
   fetchMock.mockResolvedValueOnce(reply(503, {}));
