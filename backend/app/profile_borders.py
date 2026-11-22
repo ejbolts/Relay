@@ -233,11 +233,10 @@ def five_tiers(
 # lift is elite, which is why it is the only route to mythic.
 # In the order the app lists them: by group, then roughly by how long each takes to earn.
 BORDERS: tuple[Border, ...] = (
-    Border("first-steps", "First Steps", "common", "workouts", 5),
-    Border("seven-straight", "Seven Straight", "common", "log_streak", 7),
     *tiers(
         "streak",
         "log_streak",
+        ("seven-straight", "Seven Straight", "common", 7),
         ("locked-in", "Locked In", "rare", 50),
         ("hundred-days", "Hundred Days", "epic", 100),
         ("unbreakable", "Unbreakable", "epic", 500),
@@ -245,6 +244,7 @@ BORDERS: tuple[Border, ...] = (
     *tiers(
         "workouts",
         "workouts",
+        ("first-steps", "First Steps", "common", 5),
         ("regular", "Regular", "common", 50),
         ("centurion", "Centurion", "epic", 100),
         ("iron-legion", "Iron Legion", "legendary", 500),
@@ -263,8 +263,8 @@ BORDERS: tuple[Border, ...] = (
     *tiers(
         "hours",
         "training_hours",
-        ("hundred-hours", "Hundred Hours", "rare", 100),
-        ("time-under-tension", "Time Under Tension", "epic", 500),
+        ("hundred-hours", "Hundred Hours", "common", 100),
+        ("time-under-tension", "Time Under Tension", "rare", 500),
         ("thousand-hours", "Thousand Hours", "epic", 1000),
     ),
     *five_tiers(

@@ -1121,22 +1121,22 @@ const BODYWEIGHT = { palette: P.void, glyph: 'pullup', detail: facets } as const
  * these keys and grades, so a new border needs an entry here.
  */
 const SPECS: Record<string, Spec> = {
-  'first-steps': { grade: 1, palette: P.sky, glyph: 'steps', detail: segments(5) },
-  'seven-straight': { grade: 1, palette: P.sprout, glyph: 'seven' },
-  'locked-in': { grade: 2, palette: P.bronze, glyph: 'lock', sides: 'laurel', tier: 1 },
-  'hundred-days': { grade: 3, palette: P.garnet, glyph: 'flame', sides: 'laurel', tier: 2 },
+  'first-steps': { grade: 1, palette: P.sky, glyph: 'steps', detail: segments(5), tier: 1 },
+  'seven-straight': { grade: 1, palette: P.sprout, glyph: 'seven', tier: 1 },
+  'locked-in': { grade: 2, palette: P.bronze, glyph: 'lock', sides: 'laurel', tier: 2 },
+  'hundred-days': { grade: 3, palette: P.garnet, glyph: 'flame', sides: 'laurel', tier: 3 },
   unbreakable: {
     grade: 3,
     palette: P.emerald,
     glyph: 'infinity',
     sides: 'laurel',
     detail: rivets,
-    tier: 3,
+    tier: 4,
   },
-  regular: { grade: 1, palette: P.violet, glyph: 'shield', detail: chain, tier: 1 },
+  regular: { grade: 1, palette: P.violet, glyph: 'shield', detail: chain, tier: 2 },
   // A hundred workouts is the first big jump, so Centurion wears a crest of bristles too.
-  centurion: { grade: 3, palette: P.ember, glyph: 'helmet', plume: true, tier: 2 },
-  'iron-legion': { grade: 4, palette: P.ice, glyph: 'swords', tier: 3 },
+  centurion: { grade: 3, palette: P.ember, glyph: 'helmet', plume: true, tier: 3 },
+  'iron-legion': { grade: 4, palette: P.ice, glyph: 'swords', tier: 4 },
   'monday-club': { grade: 2, palette: P.lime, glyph: 'calendar', detail: segments(8) },
   'dawn-patrol': { grade: 2, palette: P.dawn, glyph: 'sunrise', detail: sunrays },
   'night-shift': { grade: 2, palette: P.night, glyph: 'moon', detail: starlight },
@@ -1144,8 +1144,8 @@ const SPECS: Record<string, Spec> = {
   'four-seasons': { grade: 3, palette: P.seasons, glyph: 'seasons', detail: colourArcs(SEASONS) },
   'whale-lifter': { grade: 2, palette: P.ocean, glyph: 'whale', detail: waves, tier: 1 },
   'million-kilo': { grade: 3, palette: P.bullion, glyph: 'diamond', tier: 2 },
-  'hundred-hours': { grade: 2, palette: P.slate, glyph: 'hourglass', detail: clock, tier: 1 },
-  'time-under-tension': { grade: 3, palette: P.tempo, glyph: 'stopwatch', detail: clock, tier: 2 },
+  'hundred-hours': { grade: 1, palette: P.slate, glyph: 'hourglass', detail: clock, tier: 1 },
+  'time-under-tension': { grade: 2, palette: P.tempo, glyph: 'stopwatch', detail: clock, tier: 2 },
   'thousand-hours': {
     grade: 3,
     palette: P.aeon,

@@ -531,3 +531,17 @@ def test_only_two_backdated_entries_a_week_count(client, backdates_allowed):
         db.commit()
     # It now takes one of this week's two places, so one fewer workout counts.
     assert stats(client)["workouts"] == 5
+
+
+def test_log_borders_start_their_families_and_hours_climb_from_common(client):
+    listed = borders(client)
+    families = {
+        "workouts": ["first-steps", "regular", "centurion", "iron-legion"],
+        "streak": ["seven-straight", "locked-in", "hundred-days", "unbreakable"],
+        "hours": ["hundred-hours", "time-under-tension", "thousand-hours"],
+    }
+    for family, keys in families.items():
+        assert [(listed[key]["family"], listed[key]["tier"]) for key in keys] == [
+            (family, tier) for tier in range(1, len(keys) + 1)
+        ]
+    assert [listed[key]["rarity"] for key in families["hours"]] == ["common", "rare", "epic"]
