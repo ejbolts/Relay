@@ -12,11 +12,20 @@ import type {
 import { savedCardioRecordsToast } from './cardioRecords';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { CardioTrendCard } from './CardioTrendCard';
-import { groupCardioHistory, sessionElevation, sessionMets } from './cardioTrend';
+import { groupCardioHistory } from './cardioTrend';
+import {
+  CARDIO_HISTORY_FILTERS,
+  CARDIO_HISTORY_WEEKS_PER_PAGE,
+  cardioSessionContextLabel,
+  cardioSessionEnergy,
+  cardioSessionPerformance,
+  cardioWorkoutContext,
+  filterCardioHistory,
+  type CardioHistoryFilter,
+} from './cardioHistory';
 import { CardioMetricsEditor } from './CardioMetricsEditor';
 import { CardioZoneSettings } from './CardioZoneSettings';
 import { DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
-import { fatEnergyEquivalent } from './cardioEnergy';
 import { PaginationControls } from './PaginationControls';
 import { Icon } from './Icon';
 import { WorkoutShareCard } from './WorkoutShareCard';
@@ -27,17 +36,6 @@ import { weekStartDayFrom } from './trainingSummary';
 import { localDate } from './utils';
 import { numberOrNull, prettyDate } from './appShared';
 import { LoadingState } from './LoadingState';
-
-/** History pages hold whole weeks, so a week's sessions are never split across pages. */
-const CARDIO_HISTORY_WEEKS_PER_PAGE = 3;
-
-/** A history value, marked with ≈ when it was calculated rather than logged. */
-function estimatedMetric(value: number | null, estimated: boolean, unit: string) {
-  if (value === null) return null;
-  // Non-breaking spaces keep the sign, number and unit on one line.
-  const amount = value.toLocaleString(undefined, { maximumFractionDigits: 1 });
-  return `${estimated ? '≈\u00A0' : ''}${amount}\u00A0${unit}`;
-}
 
 function ScanningLabel() {
   return (
@@ -100,9 +98,7 @@ export function CardioScreen({
   const [scanning, setScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<{ message: string; warning: boolean } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [historyFilter, setHistoryFilter] = useState<'all' | 'pure_cardio' | 'workout_plus_cardio'>(
-    'all',
-  );
+  const [historyFilter, setHistoryFilter] = useState<CardioHistoryFilter>('all');
   const [historyPage, setHistoryPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -128,14 +124,7 @@ export function CardioScreen({
     window.addEventListener('training-preferences-updated', reloadPreferences);
     return () => window.removeEventListener('training-preferences-updated', reloadPreferences);
   }, [dataRevision]);
-  const filteredSessions =
-    overview?.sessions.filter(
-      (session) =>
-        historyFilter === 'all' ||
-        (session.workout_context === 'workout_plus_cardio'
-          ? 'workout_plus_cardio'
-          : 'pure_cardio') === historyFilter,
-    ) ?? [];
+  const filteredSessions = filterCardioHistory(overview?.sessions ?? [], historyFilter);
   const allHistoryGroups = groupCardioHistory(
     filteredSessions,
     weekStartDayFrom(overview?.current_week.week_start),
@@ -582,17 +571,13 @@ export function CardioScreen({
             role="group"
             aria-label="Filter cardio history"
           >
-            {[
-              ['all', 'All'],
-              ['pure_cardio', 'Cardio only'],
-              ['workout_plus_cardio', 'With workout'],
-            ].map(([value, label]) => (
+            {CARDIO_HISTORY_FILTERS.map(([value, label]) => (
               <button
                 key={value}
                 type="button"
                 aria-pressed={historyFilter === value}
                 onClick={() => {
-                  setHistoryFilter(value as 'all' | 'pure_cardio' | 'workout_plus_cardio');
+                  setHistoryFilter(value);
                   setHistoryPage(1);
                 }}
               >
@@ -613,11 +598,7 @@ export function CardioScreen({
               </span>
             </h3>
             {group.sessions.map((session, index) => {
-              const workoutContext =
-                session.workout_context === 'workout_plus_cardio'
-                  ? 'workout_plus_cardio'
-                  : 'pure_cardio';
-              const workoutName = session.source_workout_name?.replace(/\s+workout$/i, '');
+              const workoutContext = cardioWorkoutContext(session);
               const linked = session.source_workout_id;
               // A session inside a strength workout, or sharing one, is removed in that workout.
               const deletable =
@@ -635,10 +616,7 @@ export function CardioScreen({
                     <span className="cardio-history-row-title">
                       <strong>{session.activity_type}</strong>
                       <small>
-                        {prettyDate(session.session_date)} ·{' '}
-                        {workoutContext === 'workout_plus_cardio'
-                          ? `With ${workoutName ?? 'workout'}`
-                          : (session.zone ?? 'Cardio only')}
+                        {prettyDate(session.session_date)} · {cardioSessionContextLabel(session)}
                       </small>
                     </span>
                     <span className="cardio-history-row-minutes">
@@ -648,38 +626,10 @@ export function CardioScreen({
                   </summary>
                   <div className="cardio-history-row-content">
                     <small className="cardio-session-energy">
-                      {session.calories_kcal == null
-                        ? 'Calories not logged'
-                        : `${session.calories_kcal.toLocaleString()} kcal · ≈ ${fatEnergyEquivalent(session.calories_kcal, weightUnit)} fat burnt`}
+                      {cardioSessionEnergy(session, weightUnit)}
                     </small>
                     <small className="cardio-session-performance">
-                      {[
-                        session.average_heart_rate_bpm == null
-                          ? null
-                          : `${session.average_heart_rate_bpm} bpm avg`,
-                        session.distance_km == null ? null : `${session.distance_km} km`,
-                        session.average_speed_kph == null
-                          ? null
-                          : `${session.average_speed_kph} km/h avg`,
-                        session.incline_percent == null
-                          ? null
-                          : `${session.incline_percent}% incline`,
-                        session.average_power_watts == null
-                          ? null
-                          : `${session.average_power_watts} W avg`,
-                        estimatedMetric(
-                          sessionElevation(session),
-                          session.elevation_gain_m == null,
-                          'm elevation',
-                        ),
-                        estimatedMetric(
-                          sessionMets(session),
-                          session.average_mets == null,
-                          'MET avg',
-                        ),
-                      ]
-                        .filter((value): value is string => value !== null)
-                        .join(' · ') || 'Performance metrics not logged'}
+                      {cardioSessionPerformance(session)}
                     </small>
                   </div>
                   <div className="cardio-session-actions">

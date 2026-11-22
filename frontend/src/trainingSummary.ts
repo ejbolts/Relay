@@ -58,6 +58,11 @@ export function weekStartDayFrom(weekStart: string | null | undefined): number {
     : 1;
 }
 
+/** The weekday (0 Sunday to 6 Saturday) a week-start preference names; Monday until it loads. */
+export function weekStartDayOf(weekStart: string | null | undefined): number {
+  return weekStart === 'sunday' ? 0 : weekStart === 'saturday' ? 6 : 1;
+}
+
 export function workingSets(workout: TrackedWorkout): TrackedSet[] {
   return workout.movements.flatMap((movement) => movement.sets.filter(isCompletedWorkingSet));
 }
