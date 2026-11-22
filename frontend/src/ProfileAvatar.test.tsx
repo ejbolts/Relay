@@ -49,6 +49,30 @@ describe('ProfileAvatar', () => {
     expect(markup).toContain('profile-border-aura');
   });
 
+  it('draws every consistency border differently, with Centurion a clear step up from Regular', () => {
+    const draw = (key: string) =>
+      renderToStaticMarkup(
+        <ProfileAvatar
+          className="profile-avatar"
+          user={{ ...account, profile_photo_url: null, profile_border: key }}
+        />,
+      );
+    const keys = ['first-steps', 'regular', 'centurion', 'iron-legion'];
+    keys.push('seven-straight', 'locked-in', 'hundred-days', 'unbreakable');
+    const looks = keys.map((key) => draw(key).replace(/data-border="[^"]+"/, ''));
+    expect(new Set(looks).size).toBe(keys.length);
+
+    expect(draw('centurion')).toContain('profile-border-plume');
+    expect(draw('centurion')).toContain('profile-border-aura');
+    expect(draw('regular')).not.toContain('profile-border-plume');
+    expect(draw('regular')).not.toContain('profile-border-aura');
+    // Unbreakable is epic now: it glows, but without the legendary runes Iron Legion keeps.
+    expect(draw('unbreakable')).toContain('profile-border-aura');
+    expect(draw('unbreakable')).not.toContain('profile-border-runes');
+    expect(draw('iron-legion')).toContain('profile-border-runes');
+    expect(draw('seven-straight')).toContain('>7</text>');
+  });
+
   it('gives each drawing its own gradients, so two borders never share colours', () => {
     const markup = renderToStaticMarkup(
       <>
