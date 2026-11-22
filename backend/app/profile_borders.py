@@ -258,14 +258,14 @@ BORDERS: tuple[Border, ...] = (
         "tonnes",
         "tonnes",
         ("whale-lifter", "Whale Lifter", "rare", 150, "the weight of a blue whale"),
-        ("million-kilo", "Million Kilo Club", "legendary", 1000, "a million kilos"),
+        ("million-kilo", "Million Kilo Club", "epic", 1000, "a million kilos"),
     ),
     *tiers(
         "hours",
         "training_hours",
         ("hundred-hours", "Hundred Hours", "rare", 100),
         ("time-under-tension", "Time Under Tension", "epic", 500),
-        ("thousand-hours", "Thousand Hours", "legendary", 1000),
+        ("thousand-hours", "Thousand Hours", "epic", 1000),
     ),
     *five_tiers(
         "bench",
