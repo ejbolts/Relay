@@ -171,6 +171,7 @@ function TextDialog({ request, onClose }: { request: TextRequest; onClose: () =>
         </Text>
         <TextInput
           autoFocus
+          selectTextOnFocus
           value={value}
           onChangeText={setValue}
           placeholder={request.placeholder}
