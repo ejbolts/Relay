@@ -23,6 +23,7 @@ import { authErrorMessage } from './authForm';
 import { clipBodyWeightGoalPath } from './bodyTrend';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
+import { SharedBorderChip } from './SharedBorderChip';
 import { ProfileAccountId } from './ProfileAccountId';
 import { ProfileIdentity } from './ProfileIdentity';
 import { SexMark } from './SexMark';
@@ -1701,11 +1702,11 @@ export function SharedProfileScreen({
                 </span>
               )}
               {profile.profile_border && profile.profile_border_name && (
-                <span className="profile-border-chip is-static">
-                  <Icon name="border" />
-                  <span className="sr-only">Border: </span>
-                  {profile.profile_border_name}
-                </span>
+                <SharedBorderChip
+                  member={avatarUser(profile)}
+                  name={profile.profile_border_name}
+                  unlockedOn={profile.profile_border_unlocked_on}
+                />
               )}
               <ProfileFriendControl
                 profile={profile}

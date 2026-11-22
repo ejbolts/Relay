@@ -910,6 +910,8 @@ export interface ProfileBorder {
   rarity: BorderRarity;
   requirement: string;
   unlocked: boolean;
+  /** The day the account first met the requirement; null while locked or from older servers. */
+  unlocked_on?: string | null;
   /** Missing only for a strength border while the account has not set its sex. */
   progress: { current: number; target: number; unit: string } | null;
   needs_sex: boolean;
@@ -1092,6 +1094,8 @@ export interface SharedProfileSummary {
   /** The earned border around the photo, and its name for the profile itself. */
   profile_border?: string | null;
   profile_border_name?: string | null;
+  /** The day the member unlocked the border they wear; null when unknown. */
+  profile_border_unlocked_on?: string | null;
   /** Sent only to those who can view the profile. */
   sex?: Sex | null;
   member_since: string;

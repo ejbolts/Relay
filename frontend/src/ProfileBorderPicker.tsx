@@ -5,6 +5,7 @@ import { Icon } from './Icon';
 import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
+import { RARITY_LABELS, borderUnlockedLabel } from './profileBorderLabels';
 import {
   borderProgressLabel,
   borderProgressPercent,
@@ -13,15 +14,7 @@ import {
   borderTimeLabel,
   shownTier,
 } from './profileBorderProgress';
-import type { ProfileBorder, ProfileBorders, User } from './types';
-
-const RARITY_LABELS: Record<ProfileBorder['rarity'], string> = {
-  common: 'Common',
-  rare: 'Rare',
-  epic: 'Epic',
-  legendary: 'Legendary',
-  mythic: 'Mythic',
-};
+import type { ProfileBorders, User } from './types';
 
 const NUMERALS = ['I', 'II', 'III', 'IV', 'V'];
 const numeral = (tier: number) => NUMERALS[tier - 1] ?? String(tier);
@@ -167,6 +160,11 @@ export function ProfileBorderPicker({
                   <p className={`border-preview-timer ${preview.status ?? ''}`}>
                     <Icon name="timer" />
                     {borderTimeLabel(preview)}
+                  </p>
+                )}
+                {preview.unlocked && borderUnlockedLabel(preview.unlocked_on) && (
+                  <p className="border-preview-unlocked">
+                    {borderUnlockedLabel(preview.unlocked_on)}
                   </p>
                 )}
                 {preview.needs_sex ? (

@@ -1257,3 +1257,8 @@ export function profileBorderShapes(border: string, id: string): ReactNode {
   const spec = specFor(border);
   return spec ? frame(id, spec) : null;
 }
+
+/** The art's grade, 1 to 5, which follows the border's rarity; null when this build can't draw it. */
+export function profileBorderGrade(border: string | null | undefined): Grade | null {
+  return (typeof border === 'string' && specFor(border)?.grade) || null;
+}
