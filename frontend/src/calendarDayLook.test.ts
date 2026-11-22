@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { calendarDayLook, weekStripLabels } from './calendarDayLook';
 import type { HeatmapDay, WorkoutType } from './types';
 import { DEFAULT_WORKOUT_TYPES, builtinTypeColors } from './workoutTypes';
-import { weekStartDayFromPreference } from './weekStartDay';
 
 const types = DEFAULT_WORKOUT_TYPES;
 const colors = builtinTypeColors(types);
@@ -86,12 +85,5 @@ describe('calendar day look', () => {
       { id: 'lower', text: 'Lower', color: null },
       { id: 'cardio', text: '+2', color: null },
     ]);
-  });
-
-  it('reads the preferred first day of the week', () => {
-    expect(weekStartDayFromPreference('sunday')).toBe(0);
-    expect(weekStartDayFromPreference('saturday')).toBe(6);
-    expect(weekStartDayFromPreference('monday')).toBe(1);
-    expect(weekStartDayFromPreference(undefined)).toBe(1);
   });
 });

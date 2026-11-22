@@ -15,10 +15,10 @@ import {
   isoLocalDate,
   trainingDayGrid,
   weekStartDayFrom,
+  weekStartDayOf,
 } from '../../../../frontend/src/trainingSummary';
 import type { HeatmapDay, WorkoutType, WorkoutTypeColors } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
-import { weekStartDayFromPreference } from '../../../../frontend/src/weekStartDay';
 import { calendarLegendTypes } from '../../../../frontend/src/workoutTypes';
 import { useDashboard, useTrainingPreferences, useWorkoutHistory } from '../../data/queries';
 import { Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
@@ -86,7 +86,7 @@ export function ConsistencyCard({
           <TrainingCalendar
             entries={data.heatmap ?? NO_ENTRIES}
             split={data.training_split}
-            weekStartDay={weekStartDayFromPreference(preferences.data?.week_start)}
+            weekStartDay={weekStartDayOf(preferences.data?.week_start)}
             liveDate={liveDate}
             onOpenDay={onOpenDay}
             onOpenLive={onOpenLive}
