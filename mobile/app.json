@@ -1,0 +1,12 @@
+{
+  "expo": {
+    "name": "Relay",
+    "slug": "relay-mobile",
+    "version": "0.1.0",
+    "scheme": "relay-mobile",
+    "platforms": ["ios", "android"],
+    "userInterfaceStyle": "dark",
+    "icon": "./assets/icon.png",
+    "plugins": ["expo-router"]
+  }
+}
