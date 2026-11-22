@@ -25,7 +25,7 @@ import type {
   WorkoutType,
   WorkoutTypeColors,
 } from './types';
-import { splitDayTemplate } from './upNext';
+import { splitDayTemplate } from './upNextSession';
 import { useWorkoutTypes } from './workoutTypesContext';
 import './calendarDay.css';
 

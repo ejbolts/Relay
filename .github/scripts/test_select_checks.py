@@ -107,7 +107,12 @@ class PathSelectionTests(unittest.TestCase):
             if source in seen:
                 continue
             seen.add(source)
-            for specifier in pattern.findall(source.read_text(encoding="utf-8")):
+            text = source.read_text(encoding="utf-8")
+            if not source.is_relative_to(mobile):
+                # Metro would resolve a package here from the web's node_modules, not the app's.
+                packages = re.findall(r"""\bfrom\s*['"]([^./'"][^'"]*)['"]""", text)
+                self.assertEqual(packages, [], f"{source.name} imports packages")
+            for specifier in pattern.findall(text):
                 base = (source.parent / specifier).resolve()
                 if base.is_relative_to(mobile):
                     continue
