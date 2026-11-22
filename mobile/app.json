@@ -4,8 +4,11 @@
     "slug": "relay-mobile",
     "version": "0.1.0",
     "scheme": "relay-mobile",
-    "platforms": ["ios", "android"],
-    "userInterfaceStyle": "dark",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "userInterfaceStyle": "automatic",
     "icon": "./assets/icon.png",
     "plugins": [
       "expo-router",
@@ -14,7 +17,10 @@
         {
           "faceIDPermission": false
         }
-      ]
+      ],
+      "expo-sqlite",
+      "expo-font",
+      "expo-asset"
     ]
   }
 }

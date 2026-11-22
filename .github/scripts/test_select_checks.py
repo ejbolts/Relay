@@ -12,7 +12,14 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from select_checks import MOBILE_SHARED_FILES, ROOT, git, main, select_event, select_paths
+from select_checks import (
+    ROOT,
+    git,
+    main,
+    mobile_shared_files,
+    select_event,
+    select_paths,
+)
 
 
 class PathSelectionTests(unittest.TestCase):
@@ -82,46 +89,45 @@ class PathSelectionTests(unittest.TestCase):
                 )
 
     def test_frontend_files_the_mobile_app_imports_run_the_mobile_checks(self):
-        for path in MOBILE_SHARED_FILES:
+        shared = mobile_shared_files()
+        self.assertTrue({"frontend/src/types.ts", "frontend/src/upNextSession.ts"} <= shared)
+        for path in shared:
             with self.subTest(path=path):
                 self.assertTrue(select_paths([path]).mobile)
 
-    def test_mobile_shared_files_match_what_mobile_imports(self):
-        # Follow relative imports from mobile/ into the rest of the repository, so a
-        # new shared import cannot change outside mobile/ without the mobile checks.
-        pattern = re.compile(
-            r"""(?:\bfrom\s*|\bimport\s*|\brequire\(\s*)['"](\.{1,2}/[^'"]+)['"]"""
-        )
-        mobile = ROOT / "mobile"
-        pending = [
-            path
-            for path in mobile.rglob("*")
-            if path.suffix in {".ts", ".tsx", ".js", ".jsx"}
-            and "node_modules" not in path.parts
-            and path.is_file()
-        ]
-        seen: set[Path] = set()
-        shared: set[str] = set()
-        while pending:
-            source = pending.pop()
-            if source in seen:
-                continue
-            seen.add(source)
-            text = source.read_text(encoding="utf-8")
-            if not source.is_relative_to(mobile):
-                # Metro would resolve a package here from the web's node_modules, not the app's.
+    def test_shared_files_import_no_packages(self):
+        # Metro would resolve a package here from the web's node_modules, not the app's.
+        for path in mobile_shared_files():
+            with self.subTest(path=path):
+                text = (ROOT / path).read_text(encoding="utf-8")
                 packages = re.findall(r"""\bfrom\s*['"]([^./'"][^'"]*)['"]""", text)
-                self.assertEqual(packages, [], f"{source.name} imports packages")
-            for specifier in pattern.findall(text):
-                base = (source.parent / specifier).resolve()
-                if base.is_relative_to(mobile):
-                    continue
-                candidates = [base, *(base.with_name(base.name + ext) for ext in (".ts", ".tsx"))]
-                target = next((path for path in candidates if path.is_file()), None)
-                self.assertIsNotNone(target, f"{source}: cannot resolve {specifier}")
-                shared.add(target.relative_to(ROOT).as_posix())
-                pending.append(target)
-        self.assertEqual(shared, set(MOBILE_SHARED_FILES))
+                self.assertEqual(packages, [])
+
+    def test_mobile_shared_files_follow_imports_through_the_web(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {
+                "mobile/src/home.tsx": "import { a } from '../../frontend/src/rules';",
+                "mobile/src/local.ts": "export * from './home';",
+                "mobile/node_modules/pkg/index.js": "require('../../../frontend/src/never');",
+                "frontend/src/rules.ts": "import type { T } from './types'; export const a = 1;",
+                "frontend/src/types.ts": "export type T = number;",
+                "frontend/src/unrelated.ts": "export const b = 2;",
+            }
+            for path, text in files.items():
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(text, encoding="utf-8")
+            self.assertEqual(
+                mobile_shared_files(root), {"frontend/src/rules.ts", "frontend/src/types.ts"}
+            )
+            self.assertTrue(select_paths(["frontend/src/types.ts"], root).mobile)
+            self.assertFalse(select_paths(["frontend/src/unrelated.ts"], root).mobile)
+
+            (root / "mobile/src/broken.ts").write_text(
+                "import { x } from '../../frontend/src/gone';", encoding="utf-8"
+            )
+            with self.assertRaises(ValueError):
+                mobile_shared_files(root)
 
     def test_shared_contract_and_unknown_paths_run_both(self):
         for path in (

@@ -491,9 +491,9 @@ stacked PRs, from the changed files in the exact tested merge commit:
   `frontend/src/api.ts` and `frontend/src/types.ts`, run both suites. The detector's
   tests guard the route-module mapping when new API routers are added.
 - Changes under `mobile/` run only **Mobile checks**: the mobile typecheck, lint and
-  Jest tests. Frontend files the mobile app imports (`MOBILE_SHARED_FILES` in the
-  detector) also run them, and the detector's tests keep that list equal to what
-  `mobile/` imports from outside its folder.
+  Jest tests. Frontend files the mobile app imports, directly or through each other, also
+  run them: the detector follows `mobile/`'s relative imports in the tested checkout
+  (`mobile_shared_files`), and its tests check that those files import no packages.
 - CI, deployment, shared configuration and unknown paths run every suite.
 - Changes confined to `docs/`, the README, contributor/agent instructions or license
   files need no application suite on feature PRs.

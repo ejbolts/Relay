@@ -40,26 +40,43 @@ CONTRACT_MODULES = {
     "workout_type_exercises.py",
     "youtube_connections.py",
 }
-# Frontend files the mobile app imports: its API types and the Up next rule it shares with the
-# web. A change to one can break the mobile app, so it also runs the mobile checks. A repository
-# test keeps this set equal to what mobile/ imports from outside its folder, and checks that
-# these files import no packages.
-MOBILE_SHARED_FILES = frozenset(
-    {
-        "frontend/src/bodySizes.ts",
-        "frontend/src/cardioRecords.ts",
-        "frontend/src/recordScope.ts",
-        "frontend/src/routines.ts",
-        "frontend/src/setFieldValues.ts",
-        "frontend/src/trainingSummary.ts",
-        "frontend/src/types.ts",
-        "frontend/src/upNextSession.ts",
-        "frontend/src/utils.ts",
-        "frontend/src/weightUnits.ts",
-        "frontend/src/workoutCategory.ts",
-        "frontend/src/workoutSets.ts",
-    }
-)
+# Relative imports in the mobile app (import/export ... from, side-effect imports, require).
+MOBILE_IMPORT = re.compile(r"""(?:\bfrom\s*|\bimport\s*|\brequire\(\s*)['"](\.{1,2}/[^'"]+)['"]""")
+MOBILE_SOURCES = {".ts", ".tsx", ".js", ".jsx"}
+MOBILE_SKIPPED_DIRS = {"node_modules", ".expo", "dist", "coverage", "ios", "android"}
+
+
+def mobile_shared_files(root: Path = ROOT) -> frozenset[str]:
+    """Files outside mobile/ that the app imports, directly or through each other.
+
+    The app shares the web's plain TypeScript rules (frontend/src), so a change to one of them
+    can break it. Computed from the tested checkout, so a new shared import never needs a list
+    updated and can't skip the mobile checks. An import that can't be resolved fails detection.
+    """
+    root = root.resolve()
+    mobile = root / "mobile"
+    pending: list[Path] = []
+    for folder, dirs, files in os.walk(mobile):
+        dirs[:] = [name for name in dirs if name not in MOBILE_SKIPPED_DIRS]
+        pending += [Path(folder) / name for name in files if Path(name).suffix in MOBILE_SOURCES]
+    seen: set[Path] = set()
+    shared: set[str] = set()
+    while pending:
+        source = pending.pop()
+        if source in seen:
+            continue
+        seen.add(source)
+        for specifier in MOBILE_IMPORT.findall(source.read_text(encoding="utf-8")):
+            base = (source.parent / specifier).resolve()
+            if base.is_relative_to(mobile):
+                continue
+            candidates = [base, *(base.with_name(base.name + ext) for ext in (".ts", ".tsx"))]
+            target = next((path for path in candidates if path.is_file()), None)
+            if target is None or not target.is_relative_to(root):
+                raise ValueError(f"Cannot resolve {specifier} imported by {source}")
+            shared.add(target.relative_to(root).as_posix())
+            pending.append(target)
+    return frozenset(shared)
 
 
 FrontendScope = Literal["none", "styles", "related", "full"]
@@ -77,13 +94,17 @@ def select_paths(paths: list[str], root: Path = ROOT) -> Selection:
     frontend_paths = set()
     backend = mobile = False
     full_frontend = False
+    shared: frozenset[str] | None = None
     for path in paths:
         if not path or path.startswith("/") or ".." in path.split("/"):
             raise ValueError("Invalid changed-file path")
         if path in DOC_FILES or path.startswith("docs/"):
             continue
-        if path in MOBILE_SHARED_FILES:
-            mobile = True
+        if path.startswith("frontend/"):
+            if shared is None:
+                shared = mobile_shared_files(root)
+            if path in shared:
+                mobile = True
         if path.startswith("mobile/"):
             mobile = True
         elif path in {"frontend/src/api.ts", "frontend/src/types.ts"} or (
