@@ -83,6 +83,8 @@ class PersonalRecordType(enum.StrEnum):
     ESTIMATED_1RM = "estimated_1rm"
     DURATION = "duration"
     DISTANCE = "distance"
+    # The fastest time over a set distance, held in the record's normalized_weight (km).
+    PACE = "pace"
 
 
 def new_uuid() -> str:
@@ -111,6 +113,11 @@ class User(Base):
     # When the person asked the admins for a temporary password from the sign-in screen; cleared
     # once an admin resets or dismisses it, or the person signs in.
     password_reset_requested_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # When someone gave this account's display name on the sign-in screen's Forgot username form;
+    # cleared once an admin dismisses it or the person signs in.
+    username_reminder_requested_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")

@@ -134,11 +134,11 @@ async function correctTime(hours: string, minutes: string) {
 
 async function finish() {
   await act(async () => button('Finish workout', container).click());
-  await act(async () =>
-    document
-      .querySelector<HTMLButtonElement>('.workout-finish-dialog .popup-primary-action')!
-      .click(),
+  // With every entered set ticked, Finish saves straight away without asking.
+  const confirm = document.querySelector<HTMLButtonElement>(
+    '.workout-finish-dialog .popup-primary-action',
   );
+  if (confirm) await act(async () => confirm.click());
 }
 
 beforeEach(() => {

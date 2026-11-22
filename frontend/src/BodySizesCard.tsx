@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
+import { HISTORY_PAGE_SIZE } from './appShared';
 import { BodyFigure } from './BodyFigure';
 import { loadBodyFigure, saveBodyFigure } from './bodyFigurePreference';
 import type { BodyFigureKind } from './bodyFigureShapes';
 import { BODY_SIZE_FIELDS, type BodySizeField, type BodySizeLog } from './bodySizes';
 import { Icon } from './Icon';
+import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { HelpPopup } from './HelpPopup';
 import { SEX_LABELS } from './profileDisplay';
@@ -48,7 +50,8 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
-  const [visible, setVisible] = useState(5);
+  const [historyPage, setHistoryPage] = useState(1);
+  const historyRef = useRef<HTMLDetailsElement>(null);
   const [historyPart, setHistoryPart] = useState<BodySizeField | 'all'>('all');
   const [retry, setRetry] = useState(0);
   // The entry drawn on the figure: the latest one until another is stepped to or saved.
@@ -119,12 +122,16 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     return result;
   }
 
-  /** Saves one measurement typed on the figure into the entry being shown. */
+  /**
+   * Saves one measurement typed on the figure into today's entry, starting it if needed, so an
+   * earlier entry is only changed through Edit.
+   */
   function saveOnFigure(field: BodySizeField, typed: string): boolean {
-    const day = shown?.measurement_date ?? localDate();
+    const day = localDate();
     const entry = logs?.find((row) => row.measurement_date === day) ?? emptyLog(day);
     const text = typed.trim().replace(',', '.');
-    const original = entry[field];
+    // What the box started with, so confirming it unchanged saves nothing.
+    const original = figureValues[field];
     if (!text || (original != null && text === editText(original))) {
       setInlineField(null);
       setInlineError(null);
@@ -225,7 +232,24 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   const shownIndex = Math.max(0, logs?.findIndex((row) => row.measurement_date === shownDate) ?? 0);
   const shown = logs?.[shownIndex];
   const previous = logs?.[shownIndex + 1];
+  // The figure shows the shown entry's values, and for parts it lacks, the latest earlier value,
+  // muted, so it stays complete without copying old values into the entry.
+  const figureValues: Partial<Record<BodySizeField, number>> = {};
+  const carried = new Set<BodySizeField>();
+  for (const [key] of BODY_SIZE_FIELDS) {
+    if (shown?.[key] != null) figureValues[key] = shown[key]!;
+    else {
+      const earlier = logs?.slice(shownIndex + 1).find((row) => row[key] != null)?.[key];
+      if (earlier != null) {
+        figureValues[key] = earlier;
+        carried.add(key);
+      }
+    }
+  }
   const history = (logs ?? []).filter((row) => historyPart === 'all' || row[historyPart] !== null);
+  const historyPages = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
+  const currentHistoryPage = Math.min(historyPage, historyPages);
+  const firstRow = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
   const partLabel = BODY_SIZE_FIELDS.find(([key]) => key === historyPart)?.[1];
   const format = (cm: number) => `${Number((cm / factor).toFixed(1))} ${unit}`;
   function changeFromPrevious(index: number): string {
@@ -242,6 +266,11 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
     const change = Number((display(shown[key]) - display(previous[key])).toFixed(1));
     return change === 0 ? [] : [{ key, label, change }];
   });
+  /** The most recent measurement of a part before the dialog's date, as a hint to type over. */
+  const lastValue = (key: BodySizeField) => {
+    const cm = logs?.find((row) => row.measurement_date < date && row[key] != null)?.[key];
+    return cm == null ? undefined : String(display(cm));
+  };
   const open = (day: string, field: BodySizeField | null = null) => {
     chooseDate(day);
     setFocusField(field);
@@ -262,7 +291,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
         </div>
         <button
           type="button"
-          className="body-sizes-add"
+          className="body-sizes-add pulse-button tonal small"
           disabled={logs === null}
           onClick={() => open(localDate())}
         >
@@ -272,7 +301,11 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
       {error && !editing && !deleting && (
         <p role="alert" className="inline-error">
           {error}
-          <button type="button" onClick={() => setRetry((count) => count + 1)}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => setRetry((count) => count + 1)}
+          >
             Retry
           </button>
         </p>
@@ -315,7 +348,9 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
             }}
             editing={inlineField}
             editValue={
-              inlineField && shown?.[inlineField] != null ? editText(shown[inlineField]!) : ''
+              inlineField && figureValues[inlineField] != null
+                ? editText(figureValues[inlineField]!)
+                : ''
             }
             invalid={inlineError !== null && inlineField !== null}
             onCommit={saveOnFigure}
@@ -324,11 +359,9 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
               setInlineError(null);
             }}
             values={Object.fromEntries(
-              BODY_SIZE_FIELDS.filter(([key]) => shown?.[key] != null).map(([key]) => [
-                key,
-                String(display(shown![key]!)),
-              ]),
+              Object.entries(figureValues).map(([key, cm]) => [key, String(display(cm))]),
             )}
+            carried={carried}
           />
           {inlineError && (
             <p id="body-figure-error" role="alert" className="inline-error body-figure-error">
@@ -395,12 +428,16 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                 </div>
               )}
               <div className="body-sizes-entry-actions">
-                <button type="button" onClick={() => open(shown.measurement_date)}>
+                <button
+                  type="button"
+                  className="pulse-button secondary small"
+                  onClick={() => open(shown.measurement_date)}
+                >
                   Edit
                 </button>
                 <button
                   type="button"
-                  className="danger"
+                  className="pulse-button danger-soft small"
                   onClick={() => {
                     setError(null);
                     setDeleting(shown.measurement_date);
@@ -409,7 +446,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                   Delete
                 </button>
               </div>
-              <details className="body-sizes-history">
+              <details className="body-sizes-history" ref={historyRef}>
                 <summary>
                   Measurement history <span>{history.length}</span>
                 </summary>
@@ -419,7 +456,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                     value={historyPart}
                     onChange={(event) => {
                       setHistoryPart(event.target.value as BodySizeField | 'all');
-                      setVisible(5);
+                      setHistoryPage(1);
                     }}
                   >
                     <option value="all">All measurements</option>
@@ -431,13 +468,14 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                   </select>
                 </label>
                 {history.length === 0 && <p>No {partLabel?.toLowerCase()} measurements yet.</p>}
-                {history.slice(0, visible).map((row, index) => (
+                {history.slice(firstRow, firstRow + HISTORY_PAGE_SIZE).map((row, index) => (
                   <article key={row.measurement_date}>
                     <div className="body-sizes-history-heading">
                       <time dateTime={row.measurement_date}>{shortDate(row.measurement_date)}</time>
                       <div>
                         <button
                           type="button"
+                          className="pulse-button secondary small"
                           aria-label={`Edit measurements ${row.measurement_date}`}
                           onClick={() => open(row.measurement_date)}
                         >
@@ -446,6 +484,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                         {historyPart === 'all' && (
                           <button
                             type="button"
+                            className="pulse-button danger-soft small"
                             aria-label={`Delete measurements ${row.measurement_date}`}
                             onClick={() => {
                               setError(null);
@@ -461,9 +500,9 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                       <div className="body-sizes-part-value">
                         <strong>{format(row[historyPart]!)}</strong>
                         <span
-                          aria-label={`Change from previous measurement: ${changeFromPrevious(index)}`}
+                          aria-label={`Change from previous measurement: ${changeFromPrevious(firstRow + index)}`}
                         >
-                          {changeFromPrevious(index)}
+                          {changeFromPrevious(firstRow + index)}
                         </span>
                       </div>
                     ) : (
@@ -475,11 +514,13 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                     )}
                   </article>
                 ))}
-                {history.length > visible && (
-                  <button type="button" onClick={() => setVisible((count) => count + 5)}>
-                    Show more
-                  </button>
-                )}
+                <PaginationControls
+                  currentPage={currentHistoryPage}
+                  totalPages={historyPages}
+                  onPageChange={setHistoryPage}
+                  label="measurement history"
+                  scrollTarget={historyRef}
+                />
               </details>
             </>
           )}
@@ -489,15 +530,41 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
         <PopupDialog
           title="Log body measurements"
           className="body-sizes-popup"
+          busy={saving}
           onClose={() => {
-            if (!saving) {
-              setEditing(false);
-              setError(null);
-            }
+            setEditing(false);
+            setError(null);
           }}
+          actions={
+            <>
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => {
+                  setEditing(false);
+                  setError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="body-sizes-form"
+                className="popup-primary-action"
+                disabled={saving}
+              >
+                {saving
+                  ? 'Saving…'
+                  : logs?.some((row) => row.measurement_date === date)
+                    ? 'Update measurements'
+                    : 'Save measurements'}
+              </button>
+            </>
+          }
         >
           <form
             ref={form}
+            id="body-sizes-form"
             className="body-entry-form"
             onSubmit={(event) => {
               event.preventDefault();
@@ -524,6 +591,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                     disabled={saving}
                     step="any"
                     inputMode="decimal"
+                    placeholder={lastValue(key)}
                     value={draft[key] ?? ''}
                     onChange={(event) =>
                       setDraft((current) => ({ ...current, [key]: event.target.value }))
@@ -537,25 +605,6 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                 {error}
               </p>
             )}
-            <footer className="popup-dialog-actions">
-              <button
-                type="button"
-                disabled={saving}
-                onClick={() => {
-                  setEditing(false);
-                  setError(null);
-                }}
-              >
-                Cancel
-              </button>
-              <button type="submit" className="popup-primary-action" disabled={saving}>
-                {saving
-                  ? 'Saving…'
-                  : logs?.some((row) => row.measurement_date === date)
-                    ? 'Update measurements'
-                    : 'Save measurements'}
-              </button>
-            </footer>
           </form>
         </PopupDialog>
       )}
@@ -563,9 +612,24 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
         <PopupDialog
           title={`Save your sex as ${SEX_LABELS[offeredSex]}?`}
           className="profile-sex-confirm"
-          onClose={() => {
-            if (!savingSex) setOfferedSex(null);
-          }}
+          size="compact"
+          busy={savingSex}
+          onClose={() => setOfferedSex(null)}
+          actions={
+            <>
+              <button type="button" disabled={savingSex} onClick={() => setOfferedSex(null)}>
+                Not now
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action"
+                disabled={savingSex}
+                onClick={() => void saveSex()}
+              >
+                {savingSex ? 'Saving…' : 'Save'}
+              </button>
+            </>
+          }
         >
           <p>
             It sets your body measurement outline. After you save, only an administrator can change
@@ -576,31 +640,41 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
               {sexError}
             </p>
           )}
-          <div className="popup-dialog-actions">
-            <button type="button" disabled={savingSex} onClick={() => setOfferedSex(null)}>
-              Not now
-            </button>
-            <button
-              type="button"
-              className="popup-primary-action"
-              disabled={savingSex}
-              onClick={() => void saveSex()}
-            >
-              {savingSex ? 'Saving…' : 'Save'}
-            </button>
-          </div>
         </PopupDialog>
       )}
       {deleting && (
         <PopupDialog
           title="Delete body measurements?"
           className="body-sizes-delete"
+          size="compact"
+          busy={saving}
           onClose={() => {
-            if (!saving) {
-              setDeleting(null);
-              setError(null);
-            }
+            setDeleting(null);
+            setError(null);
           }}
+          actions={
+            <>
+              <button
+                type="button"
+                autoFocus
+                disabled={saving}
+                onClick={() => {
+                  setDeleting(null);
+                  setError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action is-danger"
+                disabled={saving}
+                onClick={() => void remove()}
+              >
+                {saving ? 'Deleting…' : 'Delete measurements'}
+              </button>
+            </>
+          }
         >
           <p>Delete the measurements for {shortDate(deleting)}?</p>
           {error && (
@@ -608,26 +682,6 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
               {error}
             </p>
           )}
-          <footer className="popup-dialog-actions">
-            <button
-              type="button"
-              disabled={saving}
-              onClick={() => {
-                setDeleting(null);
-                setError(null);
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="danger-button"
-              disabled={saving}
-              onClick={() => void remove()}
-            >
-              {saving ? 'Deleting…' : 'Delete measurements'}
-            </button>
-          </footer>
         </PopupDialog>
       )}
     </section>

@@ -45,6 +45,19 @@
   --p-gold-soft: rgb(201 133 0 / 15%);
   --p-on-gold: #1c1404;
   --p-danger: #e66767;
+  /* Filled buttons: text on the accent or danger fill, and a red that keeps white text readable. */
+  --p-on-accent: #fff;
+  --p-danger-fill: #c53b3b;
+  --p-on-danger: #fff;
+  --p-focus-ring: var(--p-accent-text);
+  /* Button sizes (buttons.css): small 36px with a 44px hit area, default 44px, large 48px. */
+  --p-button-h-sm: 2.25rem;
+  --p-button-h: 2.75rem;
+  --p-button-h-lg: 3rem;
+  --p-button-h-icon: 2.5rem;
+  --p-button-r-sm: 10px;
+  --p-button-r: 12px;
+  --p-button-r-lg: 14px;
   --p-grid: #22272b;
   --p-axis: #3a4046;
   --p-deemph: #353b41;
@@ -370,8 +383,9 @@ body {
   stroke-width: 2.4;
 }
 
-:where(.tracker-app) :focus-visible {
-  outline: 2px solid var(--p-accent-text);
+/* Dialogs are portalled to <body>, outside .tracker-app, so they are listed too. */
+:where(.tracker-app, .popup-dialog) :focus-visible {
+  outline: 2px solid var(--p-focus-ring);
   outline-offset: 2px;
 }
 
@@ -435,39 +449,7 @@ button.pulse-card:hover {
   font-weight: 600;
 }
 
-.pulse-button {
-  min-height: 2.875rem;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  border: 0;
-  border-radius: 14px;
-  padding: 0 1rem;
-  font-size: 0.9375rem;
-  font-weight: 600;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
-}
-
-.pulse-button .pulse-icon {
-  width: 1rem;
-  height: 1rem;
-}
-
-.pulse-button.primary {
-  background: var(--p-accent);
-  color: #fff;
-}
-
-.pulse-button.primary:hover {
-  background: var(--p-accent-hover);
-}
-
-.pulse-button.secondary {
-  background: var(--p-surface-3);
-  color: var(--p-ink);
-}
+/* .pulse-button and its variants live in buttons.css. */
 
 .segmented-control {
   display: flex;
@@ -550,11 +532,6 @@ button.pulse-card:hover {
   margin-top: 0.75rem;
 }
 
-.history-session-pages > .pagination-controls {
-  border-top: 0;
-  margin-top: 0.5rem;
-}
-
 /* The leading calendar column while older months load; it keeps the month width so a fast
    scroll lands on it rather than an edge. */
 .calendar-month.calendar-month-older {
@@ -570,17 +547,6 @@ button.pulse-card:hover {
 
 .calendar-month-older p {
   margin: 0;
-}
-
-.calendar-month-older button {
-  min-height: 2.5rem;
-  padding: 0 1rem;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--p-accent-text);
-  font-size: 0.8rem;
-  font-weight: 600;
 }
 
 .calendar-older-spinner {
@@ -654,7 +620,7 @@ button.pulse-card:hover {
   font-size: 0.8125rem;
 }
 
-/* Two columns of one-line rows: exercise name and last time's top set. */
+/* Two columns of rows: exercise name (up to two lines) and last time's top set. */
 .next-session-exercises {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -677,11 +643,14 @@ button.pulse-card:hover {
 }
 
 .next-session-exercises li span {
+  display: -webkit-box;
   overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   color: var(--p-ink);
   font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: break-word;
 }
 
 .next-session-exercises li b {
@@ -958,11 +927,8 @@ button.pulse-card:hover {
   color: var(--p-muted);
   font-size: 0.75rem;
 }
-.consistency-header-actions .text-link {
-  display: inline-flex;
-  align-items: center;
+.consistency-header-actions .pulse-button.link {
   gap: 3px;
-  min-height: 32px;
   white-space: nowrap;
 }
 .consistency-header-actions .pulse-icon {
@@ -1631,9 +1597,35 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .overlay-header-action.delete {
-  border-color: rgb(230 103 103 / 25%);
-  background: rgb(230 103 103 / 12%);
+  border-color: color-mix(in srgb, var(--p-danger) 25%, transparent);
+  background: color-mix(in srgb, var(--p-danger) 12%, transparent);
   color: var(--p-danger);
+}
+
+/* An edited workout's Save, beside Delete in its header. */
+.overlay-header-save {
+  position: relative;
+  min-width: 4.25rem;
+  height: 2.5rem;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 0 1rem;
+  background: var(--p-accent);
+  color: #fff;
+  font-size: 0.9375rem;
+  font-weight: 750;
+  white-space: nowrap;
+}
+
+.overlay-header-save:disabled {
+  opacity: 0.7;
+}
+
+/* 40px to match the header icons, with a 44px touch target (placed from inside the border). */
+.overlay-header-save::before {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
 }
 
 .overlay-header-back svg,
@@ -1828,8 +1820,76 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .calendar-panel .calendar-day.in-progress {
-  background: color-mix(in srgb, var(--p-accent) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--live-color, var(--p-accent)) 14%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--live-color, var(--p-accent)) 45%, transparent);
+}
+
+/* The live day's outline and ripple take the colour of the workout type being logged. */
+.calendar-panel .calendar-day.today.in-progress {
+  outline-color: var(--live-color, var(--accent));
+}
+
+/* Today with workouts logged swaps the flat outline and ripple for a ring in the day's own colours
+   (.calendar-today-ring), split into the same arcs as its outline on a mixed day. */
+.calendar-panel .calendar-day.today.trained:not(.in-progress) {
+  outline-color: transparent;
+}
+
+.calendar-panel .calendar-day.today.trained:not(.in-progress)::after {
+  content: none;
+}
+
+/* Sits where the outline would be (2px wide, 1px outside the day) and draws its ripple outward. */
+.calendar-today-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 13px;
+  pointer-events: none;
+}
+
+.calendar-today-ring::before,
+.calendar-today-ring::after {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  border-radius: inherit;
+  background: var(--day-ring);
+  background-origin: border-box;
+  background-repeat: no-repeat;
+  content: '';
+  /* Keep only the border area, so the conic arcs read as a ring. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) padding-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+/* The ripple is a band that grows from the ring's outer edge and fades, matching the flat ripple's
+   timing and reach while keeping every workout colour in its arc. */
+.calendar-today-ring::after {
+  border-width: 0;
+  animation: calendar-today-ring-ripple 2.4s ease-out infinite;
+}
+
+@keyframes calendar-today-ring-ripple {
+  0% {
+    inset: 0;
+    border-width: 0;
+    border-radius: 13px;
+    opacity: 0.9;
+  }
+  70%,
+  100% {
+    inset: -7px;
+    border-width: 7px;
+    border-radius: 20px;
+    opacity: 0;
+  }
 }
 
 /* The live dot already marks the day; drop the legacy corner dot that stacked under it. */
@@ -1854,16 +1914,17 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 @keyframes calendar-today-ripple {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 90%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--live-color, var(--accent)) 90%, transparent);
   }
   70%,
   100% {
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--live-color, var(--accent)) 0%, transparent);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .calendar-panel .calendar-day.today::after {
+  .calendar-panel .calendar-day.today::after,
+  .calendar-today-ring::after {
     content: none;
   }
 }
@@ -1894,7 +1955,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .calendar-day-dots .calendar-live-dot {
-  background: var(--p-accent);
+  background: var(--live-color, var(--p-accent));
 }
 
 /* ───────── This week ───────── */
@@ -1966,7 +2027,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   height: 0.375rem;
   margin-top: 0.1875rem;
   border-radius: 50%;
-  background: var(--p-accent);
+  background: var(--live-color, var(--p-accent));
 }
 
 .week-strip-day.future {
@@ -1980,8 +2041,9 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 .week-strip-day.in-progress {
-  background: color-mix(in srgb, var(--p-accent) 14%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--p-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--live-color, var(--p-accent)) 14%, transparent);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in srgb, var(--live-color, var(--p-accent)) 45%, transparent);
 }
 
 .week-strip-day.today {
@@ -2261,7 +2323,7 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   margin-top: 0.875rem;
 }
 
-.history-screen .workout-actions button {
+.history-screen .workout-actions button:where(:not(.pulse-button)) {
   min-height: 2.5rem;
   flex: 1;
   border: 1px solid var(--p-line-strong);
@@ -2273,14 +2335,19 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-weight: 600;
 }
 
-.history-screen .workout-actions .resume-workout-button {
-  border-color: transparent;
-  background: var(--p-accent);
-  color: #fff;
+.history-screen .workout-actions > .pulse-button {
+  flex: 1;
 }
 
-.history-screen .workout-actions .delete-workout {
-  color: var(--p-danger);
+/* Confirm delete and Cancel share their own row, each on one line. */
+.history-screen .workout-actions .inline-confirmation {
+  flex: 1 1 100%;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.history-screen .workout-actions .inline-confirmation > button {
+  white-space: nowrap;
 }
 
 .history-screen .workout-actions .workout-export-error {
@@ -2298,6 +2365,10 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
   .history-screen .workout-actions .resume-workout-button {
     grid-column: auto;
+  }
+
+  .history-screen .workout-actions .inline-confirmation {
+    grid-column: 1 / -1;
   }
 }
 
@@ -3247,14 +3318,6 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .logger-screen .movement-card header h2 .movement-history-link:focus-visible,
 .logger-screen .movement-card header h2 .movement-history-link:active {
   color: #9cc4f3;
-}
-
-.logger-screen .add-exercise-button {
-  border: 2px dotted color-mix(in srgb, var(--p-accent) 60%, transparent);
-  border-radius: 16px;
-  background: transparent;
-  color: var(--p-accent-text);
-  font-weight: 600;
 }
 
 .logger-screen .finish-workout-bottom {
@@ -4437,11 +4500,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 .logger-screen .add-set-button {
   margin: 0.5rem 0.875rem 0.375rem;
-  border: 0;
-  border-radius: 12px;
-  background: var(--p-surface-2);
-  color: var(--p-accent-text);
-  font-weight: 600;
 }
 
 .logger-screen .movement-note {
@@ -4477,79 +4535,10 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: #fff;
 }
 
-/* ───────── Undo toast: floats over the page without blocking it ───────── */
+/* ───────── Dismissible inline error ───────── */
 
-.undo-toast {
-  position: fixed;
-  z-index: 90;
-  bottom: calc(1rem + env(safe-area-inset-bottom));
-  left: 50%;
-  width: min(calc(100% - 2rem), 26rem);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  overflow: hidden;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 16px;
-  padding: 0.5rem 0.5rem 0.5rem 1rem;
-  background: rgb(30 34 38 / 94%);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 14px 36px rgb(0 0 0 / 45%);
-  color: var(--p-ink);
-  transform: translateX(-50%);
-  animation: undo-toast-in 220ms var(--ease-out) backwards;
-}
-
-.undo-toast > span {
-  flex: 1;
-  min-width: 0;
-  font-size: 0.9375rem;
-  font-weight: 650;
-}
-
-.bodyweight-undo-toast,
-.top-toast {
-  top: max(1rem, env(safe-area-inset-top));
-  bottom: auto;
-  z-index: 120;
-}
-
-.bodyweight-undo-toast.is-undoing::after {
-  animation-play-state: paused;
-}
-
-.undo-toast button {
-  min-height: 2.5rem;
-  border: 0;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--p-accent-text);
-}
-
-.undo-toast .undo-toast-action {
-  padding: 0 0.875rem;
-  font-size: 0.9375rem;
-  font-weight: 750;
-}
-
-.undo-toast .undo-toast-close,
-.inline-error-dismissible .undo-toast-close {
-  width: 2.5rem;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  color: var(--p-muted);
-}
-
-.undo-toast .undo-toast-close .pulse-icon,
-.inline-error-dismissible .undo-toast-close .pulse-icon {
-  width: 1.125rem;
-  height: 1.125rem;
-}
-
-/* An inline error with the toast's dismiss X on the right; the button's
-   negative margins keep the box the same height as a plain inline error. */
+/* An inline error with a dismiss X on the right; the button's negative margins keep the box
+   the same height as a plain inline error. */
 .inline-error-dismissible {
   display: flex;
   align-items: center;
@@ -4561,82 +4550,26 @@ html.edge-swipe-ready .edge-swipe-indicator {
   min-width: 0;
 }
 
-.inline-error-dismissible .undo-toast-close {
+.inline-error-dismissible .inline-error-dismiss {
+  width: 2.5rem;
   flex: none;
+  display: grid;
+  place-items: center;
   min-height: 2.5rem;
   margin: -0.65rem -0.45rem -0.65rem 0;
   border: 0;
   border-radius: 10px;
+  padding: 0;
   background: transparent;
   color: inherit;
 }
 
-/* Shrinks over the toast's lifetime to show when it will close. */
-.undo-toast::after {
-  content: '';
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 2px;
-  background: var(--p-accent);
-  transform-origin: left;
-  animation: undo-toast-timer var(--undo-toast-duration, 4s) linear forwards;
+.inline-error-dismissible .inline-error-dismiss .pulse-icon {
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
-/* A notice explaining why an action didn't happen; its countdown is the warning colour. */
-.logger-notice-toast > span {
-  font-size: 0.875rem;
-  font-weight: 600;
-  line-height: 1.35;
-}
-
-.logger-notice-toast::after {
-  background: var(--p-danger);
-}
-
-@keyframes undo-toast-in {
-  from {
-    opacity: 0;
-    transform: translate(-50%, 0.75rem);
-  }
-}
-
-@keyframes undo-toast-timer {
-  to {
-    transform: scaleX(0);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .undo-toast::after {
-    display: none;
-  }
-}
-
-/* ───────── Workout popups: the rest timer and set Undo stack at the bottom ───────── */
-
-.logger-bottom-toasts {
-  position: fixed;
-  z-index: 90;
-  bottom: calc(1rem + env(safe-area-inset-bottom));
-  left: 50%;
-  width: min(calc(100% - 2rem), 26rem);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-.logger-bottom-toasts > .undo-toast {
-  position: relative;
-  inset: auto;
-  width: 100%;
-  transform: none;
-  animation-name: rest-timer-toast-in;
-  pointer-events: auto;
-}
+/* ───────── Workout screen: room above the rest timer dock ───────── */
 
 /* Keep Finish workout reachable above the timer dock. */
 .logger-screen.has-rest-pill {
@@ -4645,14 +4578,6 @@ html.edge-swipe-ready .edge-swipe-indicator {
 
 .logger-screen.has-rest-notch {
   padding-bottom: calc(4.5rem + env(safe-area-inset-bottom));
-}
-
-.logger-bottom-toasts.has-rest-pill {
-  bottom: calc(5rem + env(safe-area-inset-bottom));
-}
-
-.logger-bottom-toasts.has-rest-notch {
-  bottom: calc(4rem + env(safe-area-inset-bottom));
 }
 
 /* ───────── Rest timer dock: the rest pill, or a notch on the bottom edge ───────── */
@@ -4930,36 +4855,15 @@ html.edge-swipe-ready .edge-swipe-indicator {
   }
 }
 
-@keyframes rest-timer-toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(0.75rem);
-  }
-}
+/* ───────── Popups: the PopupDialog surface ───────── */
 
-/* ───────── Popups: one sheet style everywhere ───────── */
-
-.modal-backdrop {
+.popup-dialog::backdrop {
   background: rgb(4 6 8 / 72%);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
 
-.popup-dialog::backdrop,
-.notification-dialog::backdrop {
-  background: rgb(4 6 8 / 72%);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-}
-
-.popup-dialog,
-.notification-dialog,
-.exercise-picker,
-.pr-summary,
-.calendar-create-dialog,
-.calendar-day-detail,
-.superset-picker,
-.set-entry-confirmation {
+.popup-dialog {
   border: 1px solid var(--p-line-strong);
   border-radius: 24px;
   background: var(--p-surface);
@@ -4968,19 +4872,7 @@ html.edge-swipe-ready .edge-swipe-indicator {
 }
 
 /* Dark mode: overlays sit one step above cards, and the tiles inside them step up too. */
-:root:not([data-colour-mode='light'])
-  :is(
-    .popup-dialog,
-    .notification-dialog,
-    .exercise-picker,
-    .pr-summary,
-    .calendar-create-dialog,
-    .calendar-day-detail,
-    .superset-picker,
-    .set-entry-confirmation,
-    .relay-tip-popover,
-    .relay-tip-nudge
-  ) {
+:root:not([data-colour-mode='light']) :is(.popup-dialog, .relay-tip-popover, .relay-tip-nudge) {
   --p-surface: var(--p-surface-raised);
   --p-surface-2: var(--p-raised-2);
   --p-surface-3: var(--p-raised-3);
@@ -4988,55 +4880,23 @@ html.edge-swipe-ready .edge-swipe-indicator {
   --p-line-strong: var(--p-raised-line-strong);
 }
 
-.popup-dialog > header,
-.notification-dialog > header {
-  border-bottom: 1px solid var(--p-line);
-}
-
 .popup-dialog > header {
+  border-bottom: 1px solid var(--p-line);
   background: color-mix(in srgb, var(--p-surface) 97%, transparent);
 }
 
-.popup-dialog h2,
-.notification-dialog h2,
-.calendar-create-dialog h2,
-.calendar-day-detail h2,
-.superset-picker h2,
-.pr-summary h2 {
+.popup-dialog h2 {
   color: var(--p-ink);
   font-size: 1.1875rem;
   font-weight: 650;
   letter-spacing: -0.01em;
 }
 
-.popup-dialog-close,
-.notification-close {
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-  background: var(--p-surface-2);
-  color: var(--p-ink-2);
-}
-
-.popup-primary-action,
-.notification-ok {
-  min-height: 3rem;
-  border: 0;
-  border-radius: 14px;
-  background: var(--p-accent);
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 650;
-}
-
-.popup-dialog-actions,
-.notification-dialog > footer {
+.popup-dialog-actions {
   border-top: 1px solid var(--p-line);
 }
 
-.popup-dialog-actions button:not(.popup-primary-action),
-.notification-dialog > footer button:not(.notification-ok) {
+.popup-dialog-actions button:not(.popup-primary-action) {
   min-height: 3rem;
   border: 1px solid var(--p-line-strong);
   border-radius: 14px;
@@ -5055,33 +4915,46 @@ html.edge-swipe-ready .edge-swipe-indicator {
   width: calc(100% - 1.75rem);
 }
 
-/* Exercise picker */
-.exercise-picker-backdrop .exercise-picker {
-  border-color: var(--p-line-strong);
-  border-radius: 24px;
-  background: var(--p-surface);
+/* Add set shares its row with a collapse button, so a finished card folds without scrolling up. */
+.logger-screen .movement-card-footer {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0.5rem 0.875rem 0.375rem;
 }
 
-.exercise-picker > header {
-  min-height: 0;
-  border-bottom: 1px solid var(--p-line);
+.logger-screen .movement-card-footer > .add-set-button {
+  flex: 1 1 auto;
+  width: auto;
+  margin: 0;
 }
 
-.exercise-picker h2 {
+.logger-screen .movement-card-footer > .movement-collapse-button {
+  flex: 0 0 3.25rem;
+  padding: 0;
   color: var(--p-ink);
-  font-size: 1.1875rem;
-  font-weight: 650;
-  letter-spacing: -0.01em;
 }
 
-.exercise-picker > header .icon-button {
-  width: 2.25rem;
-  height: 2.25rem;
-  border: 1px solid var(--p-line);
-  border-radius: 12px;
-  background: var(--p-surface-2);
-  color: var(--p-ink-2);
+.logger-screen .movement-card-footer > .movement-collapse-button.is-done {
+  border-color: color-mix(in srgb, var(--p-good) 45%, transparent);
+  background: color-mix(in srgb, var(--p-good) 15%, transparent);
+  color: var(--p-good);
 }
+
+.logger-screen .movement-card-footer > .movement-collapse-button svg {
+  width: 1.125rem;
+  height: 1.125rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.2;
+}
+
+.logger-screen .movement-card > header {
+  scroll-margin-top: var(--overlay-header-content-offset);
+}
+
+/* Exercise picker */
 
 .exercise-picker .exercise-search-wrap {
   border: 1px solid var(--p-line-strong);
@@ -5230,9 +5103,7 @@ small.custom-exercise-label,
 }
 
 /* Popup headings and actions */
-.popup-dialog .section-kicker,
-.modal-backdrop .section-kicker,
-.notification-dialog .section-kicker {
+.popup-dialog .section-kicker {
   color: var(--p-muted);
   font-size: 0.6875rem;
   font-weight: 600;
@@ -5258,31 +5129,17 @@ small.custom-exercise-label,
   padding-top: 0.875rem;
 }
 
-.workout-discard-dialog .popup-dialog-actions .discard-workout-button {
-  background: var(--p-danger);
-}
-
 .inactive-workout-dialog > p {
   display: grid;
   gap: 0.25rem;
   margin: 0;
-  padding: 1rem 1rem 0;
+  padding: 1rem;
   line-height: 1.5;
 }
 
 .inactive-workout-dialog > p > span {
   color: var(--p-ink-2);
   font-size: 0.8125rem;
-}
-
-.inactive-workout-actions {
-  margin-top: 1rem;
-  padding: 0.875rem 1rem 1rem;
-}
-
-.inactive-workout-actions button.inactive-workout-discard {
-  margin-right: auto;
-  color: var(--p-danger);
 }
 
 .exercise-picker .exercise-picker-actions:not(.single-action) {
@@ -5437,22 +5294,12 @@ html {
   }
 }
 
-.modal-backdrop,
-.popup-dialog[open]::backdrop,
-.notification-dialog[open]::backdrop {
+.popup-dialog[open]::backdrop {
   animation: fade-in 200ms ease backwards;
 }
 
-.popup-dialog[open],
-.notification-dialog[open],
-.modal-backdrop > [role='dialog'],
-.modal-backdrop > [role='alertdialog'],
-.modal-backdrop > section {
+.popup-dialog[open] {
   animation: pop-in 260ms var(--ease-out) backwards;
-}
-
-.exercise-picker-backdrop .exercise-picker {
-  animation: pop-in 280ms var(--ease-out) backwards;
 }
 
 @keyframes menu-pop {
@@ -5999,14 +5846,6 @@ html[data-reduce-motion] ::backdrop {
   font-weight: 650;
 }
 
-.photo-detail-caption > .photo-machine-history {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  border-color: var(--p-accent);
-  color: var(--p-accent-text);
-}
-
 .machine-photo-rail > article > .machine-last-used {
   display: block;
   margin: 0.15rem 0.12rem 0;
@@ -6300,53 +6139,9 @@ html[data-reduce-motion] ::backdrop {
   backdrop-filter: blur(var(--glass-blur)) saturate(150%);
 }
 
-/* The exercise picker fills the phone screen, so it drops its rounded corners there. */
-@media (max-width: 620px) {
-  .exercise-picker-backdrop .exercise-picker {
-    border: 0;
-    border-radius: 0;
-  }
-}
-
-/* On phones, Add exercise slides the full-screen picker up from the bottom, like the logger. */
-@media (max-width: 620px) {
-  .exercise-picker-backdrop .exercise-picker {
-    animation: exercise-picker-in 400ms cubic-bezier(0.22, 0.72, 0.1, 1) both;
-  }
-}
-
-@media (max-width: 620px) and (prefers-reduced-motion: reduce) {
-  .exercise-picker-backdrop .exercise-picker {
-    animation: none;
-  }
-}
-
-html[data-reduce-motion] .exercise-picker-backdrop .exercise-picker {
-  animation: none;
-}
-
-@keyframes exercise-picker-in {
-  from {
-    translate: 0 100%;
-  }
-
-  to {
-    translate: 0 0;
-  }
-}
-
-/* On phones the frosted picker covers the whole app, so the dimming behind it would only darken
-   the glass; the picker's own blur does the work instead. */
-@media (max-width: 620px) {
-  :where(:root:not([data-glass='off'])) .exercise-picker-backdrop {
-    background: transparent;
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-  }
-}
-
-/* The exercise picker is frosted over the app, with its search, filters and rows. */
-:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker {
+/* The exercise picker is frosted over the app, with its search, filters and rows. [open] keeps
+   it ahead of the light theme's solid popup surface. */
+:where(:root:not([data-glass='off'])) .popup-dialog.popup-dialog--sheet.exercise-picker[open] {
   background: color-mix(in srgb, var(--p-surface-solid) var(--glass-alpha), transparent);
   --p-page: color-mix(in srgb, var(--p-page-solid) var(--glass-control-alpha), transparent);
   --p-surface-2: color-mix(
@@ -6361,7 +6156,7 @@ html[data-reduce-motion] .exercise-picker-backdrop .exercise-picker {
   );
 }
 
-:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-picker::before {
+:where(:root:not([data-glass='off'])) .popup-dialog.popup-dialog--sheet.exercise-picker::before {
   position: absolute;
   z-index: -1;
   inset: 0;
@@ -6372,8 +6167,13 @@ html[data-reduce-motion] .exercise-picker-backdrop .exercise-picker {
   backdrop-filter: blur(var(--glass-blur)) saturate(150%);
 }
 
-/* The picker's exercise list drops its older solid backing so the rows are frosted too. */
-:where(:root:not([data-glass='off'])) .exercise-picker-backdrop .exercise-list {
+/* The picker's header and exercise list drop their solid backing so they are frosted too. */
+:where(:root:not([data-glass='off']))
+  .popup-dialog.popup-dialog--sheet.exercise-picker[open]
+  > header.popup-dialog-header,
+:where(:root:not([data-glass='off']))
+  .popup-dialog.popup-dialog--sheet.exercise-picker
+  .exercise-list {
   background: transparent;
 }
 

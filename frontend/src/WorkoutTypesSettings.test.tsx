@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastButton, toastText } from './toastTestUtils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { WorkoutTypesSettings } from './WorkoutTypesSettings';
@@ -85,7 +86,7 @@ beforeEach(() => {
   vi.spyOn(api, 'deleteWorkoutType').mockResolvedValue(undefined);
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
 });
 
 afterEach(async () => {
@@ -174,7 +175,8 @@ describe('Workout type settings', () => {
     await click('Add type');
     expect(api.createWorkoutType).toHaveBeenLastCalledWith({ name: 'Arms', color: '#ef4444' });
     expect(container.querySelector('[role="alert"]')).toBeNull();
-    expect(container.querySelector('[role="status"]')!.textContent).toBe('Arms added.');
+    expect(toastText()).toBe('Arms added');
+    expect(container.querySelector('[role="status"]')).toBeNull();
   });
 
   it('removes and restores a predefined type without discarding it', async () => {
@@ -188,13 +190,31 @@ describe('Workout type settings', () => {
       'Upper body',
     );
     expect(changed.mock.calls.at(-1)![0]).toEqual([{ ...upper, archived: true }, arms]);
-    expect(container.textContent).toContain('Saved workouts are unchanged');
+    expect(toastText()).toBe('Upper body removed');
+    // Removing a type is hard to redo, so its Undo stays longer than an everyday toast.
+    expect(
+      document.querySelector<HTMLElement>('.toast')?.style.getPropertyValue('--toast-ms'),
+    ).toBe('5000ms');
     await click('Restore Upper body workout type');
     expect(api.updateWorkoutType).toHaveBeenCalledWith('upper', { archived: false });
     expect(container.querySelector('[aria-label="Active workout types"]')!.textContent).toContain(
       'Upper body',
     );
     expect(container.querySelector('details')).toBeNull();
+    expect(toastText()).toBe('Upper body restored');
+  });
+
+  it('restores a removed type from the Undo in its toast', async () => {
+    await act(async () => root.render(<Harness initial={[upper, arms]} />));
+    await click('Remove Upper body workout type');
+    expect(container.querySelector('[aria-label="Removed workout types"]')).not.toBeNull();
+    await act(async () => toastButton('Undo')!.click());
+    expect(api.updateWorkoutType).toHaveBeenCalledWith('upper', { archived: false });
+    expect(container.querySelector('[aria-label="Active workout types"]')!.textContent).toContain(
+      'Upper body',
+    );
+    expect(container.querySelector('details')).toBeNull();
+    expect(toastText()).toBe('Upper body restored');
   });
 
   it('keeps a custom type in place after failed removal and preserves removed types after failed restore', async () => {

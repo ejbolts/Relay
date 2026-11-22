@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { api } from './api';
 import { ProfileBorderPicker } from './ProfileBorderPicker';
+import { createToastRoot, toastText } from './toastTestUtils';
 import {
   borderProgressLabel,
   borderProgressPercent,
@@ -104,7 +105,7 @@ beforeEach(() => {
   setSex = vi.fn<() => void>();
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
 });
 
 afterEach(async () => {
@@ -169,7 +170,7 @@ describe('ProfileBorderPicker', () => {
     expect(container.querySelector('[data-testid=worn]')?.textContent).toBe('first-steps');
     expect(preview().querySelector('.border-wearing')?.textContent).toBe('Wearing');
     expect(tile('First Steps').getAttribute('aria-label')).toBe('First Steps, wearing');
-    expect(dialog().querySelector('.app-notification-toast p')?.textContent).toBe('Border updated');
+    expect(toastText()).toBe('Border updated');
 
     await press(
       [...preview().querySelectorAll('button')].find((item) => item.textContent === 'Take off')!,

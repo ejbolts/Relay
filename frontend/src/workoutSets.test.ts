@@ -32,8 +32,16 @@ describe('new workout sets', () => {
     expect(nextSet.completed).toBe(false);
   });
 
-  it('use the standard rest time for the first set', () => {
-    expect(createWorkoutSet('strength').rest_seconds).toBe(180);
+  it('never copies an RPE into a new or suggested set; effort is logged only when picked', () => {
+    expect(createWorkoutSet('strength', previousSet).rpe).toBeNull();
+    expect(createSuggestedWorkoutSet('strength', previousSet).rpe).toBeNull();
+  });
+
+  it('give the first set no rest unless a default rest is set', () => {
+    expect(createWorkoutSet('strength').rest_seconds).toBeNull();
+    expect(createWorkoutSet('strength', undefined, true, 150).rest_seconds).toBe(150);
+    expect(createWorkoutSet('strength', previousSet, false, 150).rest_seconds).toBe(180);
+    expect(createWorkoutSet('cardio', undefined, true, 150).rest_seconds).toBeNull();
   });
 
   it('keeps the matching previous rest for a suggested set, including no rest', () => {
@@ -192,19 +200,74 @@ describe('previous exercise values', () => {
 
   it('ignores the workout being edited and workouts after the selected date', () => {
     const current = workout('current', '2026-07-08', '2026-07-08T09:00:00Z', [
-      trackedSet('current-set', 0, 60),
+      trackedSet('current-set', 1, 60),
     ]);
     const future = workout('future', '2026-07-10', '2026-07-10T09:00:00Z', [
-      trackedSet('future-set', 0, 70),
+      trackedSet('future-set', 1, 70),
     ]);
     const previous = workout('previous', '2026-07-01', '2026-07-01T09:00:00Z', [
-      trackedSet('previous-set', 0, 45),
+      trackedSet('previous-set', 1, 45),
     ]);
 
     expect(
       latestExerciseSet([current, future, previous], exercise.id, '2026-07-08', 'current')
         ?.weight_kg,
     ).toBe(45);
+  });
+
+  describe('a session cut short', () => {
+    const exerciseId = exercise.id;
+
+    it('skips a session that logged only warm-ups', () => {
+      const full = workout('full', '2026-07-01', '2026-07-01T09:00:00Z', [
+        trackedSet('full-warmup', 0, 60),
+        trackedSet('full-1', 1, 120),
+        trackedSet('full-2', 2, 120),
+      ]);
+      const warmupOnly = workout('short', '2026-07-08', '2026-07-08T09:00:00Z', [
+        trackedSet('short-warmup', 0, 60),
+      ]);
+
+      expect(
+        latestExerciseSets([full, warmupOnly], exerciseId, '2026-07-09').map((set) => set.id),
+      ).toEqual(['full-warmup', 'full-1', 'full-2']);
+    });
+
+    it("keeps the session before's set count by repeating the last working set", () => {
+      const full = workout('full', '2026-07-01', '2026-07-01T09:00:00Z', [
+        trackedSet('full-warmup', 0, 60),
+        trackedSet('full-1', 1, 120),
+        trackedSet('full-2', 2, 120),
+        trackedSet('full-3', 3, 115),
+      ]);
+      const short = workout('short', '2026-07-08', '2026-07-08T09:00:00Z', [
+        trackedSet('short-warmup', 0, 60),
+        trackedSet('short-1', 1, 122.5),
+      ]);
+
+      const sets = latestExerciseSets([full, short], exerciseId, '2026-07-09');
+      expect(sets.map((set) => [set.weight_kg, set.set_type])).toEqual([
+        [60, 'warmup'],
+        [122.5, 'normal'],
+        [122.5, 'normal'],
+        [122.5, 'normal'],
+      ]);
+      expect(new Set(sets.map((set) => set.id)).size).toBe(4);
+    });
+
+    it('keeps a session that logged as many working sets or more as it is', () => {
+      const before = workout('before', '2026-07-01', '2026-07-01T09:00:00Z', [
+        trackedSet('before-1', 1, 100),
+      ]);
+      const latest = workout('latest', '2026-07-08', '2026-07-08T09:00:00Z', [
+        trackedSet('latest-1', 1, 100),
+        trackedSet('latest-2', 2, 100),
+      ]);
+
+      expect(
+        latestExerciseSets([before, latest], exerciseId, '2026-07-09').map((set) => set.id),
+      ).toEqual(['latest-1', 'latest-2']);
+    });
   });
 });
 

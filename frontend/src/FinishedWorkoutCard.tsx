@@ -3,9 +3,11 @@ import { api } from './api';
 import { Icon, type IconName } from './Icon';
 import { RepRangeDialog } from './RepRangeDialog';
 import { activeRoutineWithout } from './routineRepRange';
+import { Toast, TOAST_MS, type ToastAction } from './Toast';
 import { formatVolume } from './trainingSummary';
 import { formatWeight } from './weightUnits';
 import { useWeightUnit } from './trainingPreferencesContext';
+import { useWorkoutShareReminder } from './useWorkoutShareReminder';
 import type { FinishSummary } from './finishSummary';
 import type { Routine } from './types';
 import './weeklyReview.css';
@@ -38,6 +40,8 @@ export function FinishedWorkoutCard({
   onOpenWorkout,
   onCompareMachines,
   onNotice,
+  onShare,
+  onUndo,
 }: {
   summary: FinishSummary;
   /** Records this workout set, known once it has synced. */
@@ -46,8 +50,35 @@ export function FinishedWorkoutCard({
   onOpenWorkout: () => void;
   onCompareMachines: (exerciseId: string) => void;
   onNotice: (message: string) => void;
+  /** Opens the share card; available once the workout has saved. */
+  onShare?: () => void;
+  /** Resumes the workout just finished; available once it has saved. */
+  onUndo?: () => void;
 }) {
   const unit = useWeightUnit();
+  const [shareReminder] = useWorkoutShareReminder();
+  // A workout finished moments ago gets a brief "Workout saved" with Undo (and Share, when the
+  // sharing reminder is on); returning to Home later shows the card alone.
+  const [savedToast, setSavedToast] = useState(
+    () => Date.now() - summary.finishedAt < TOAST_MS.important,
+  );
+  const share: ToastAction | undefined =
+    shareReminder && onShare
+      ? {
+          label: 'Share',
+          run: () => {
+            setSavedToast(false);
+            onShare();
+          },
+        }
+      : undefined;
+  const undo: ToastAction | undefined = onUndo && {
+    label: 'Undo',
+    run: () => {
+      setSavedToast(false);
+      onUndo();
+    },
+  };
   const [machineExerciseId, setMachineExerciseId] = useState<string | null>(null);
   const [routine, setRoutine] = useState<Routine | null>(null);
   const [rangeFor, setRangeFor] = useState<FinishSummary['plateaus'][number] | null>(null);
@@ -128,14 +159,25 @@ export function FinishedWorkoutCard({
           <p className="section-kicker">WORKOUT FINISHED</p>
           <h2 id="finished-workout-title">{summary.name}</h2>
         </div>
-        <button
-          type="button"
-          className="icon-button-pulse finished-workout-close"
-          aria-label="Dismiss workout summary"
-          onClick={onDismiss}
-        >
-          <Icon name="close" />
-        </button>
+        <div className="finished-workout-header-actions">
+          <button
+            type="button"
+            className="icon-button-pulse finished-workout-share"
+            aria-label="Share workout"
+            disabled={!onShare}
+            onClick={onShare}
+          >
+            <Icon name="share" />
+          </button>
+          <button
+            type="button"
+            className="icon-button-pulse finished-workout-close"
+            aria-label="Dismiss workout summary"
+            onClick={onDismiss}
+          >
+            <Icon name="close" />
+          </button>
+        </div>
       </header>
       <dl className="weekly-review-stats">
         <div>
@@ -145,7 +187,7 @@ export function FinishedWorkoutCard({
         <div>
           <dt>Sets</dt>
           <dd>
-            {summary.sets}
+            {summary.sets || '–'}
             <Delta value={setChange} label={String(Math.abs(setChange))} />
           </dd>
         </div>
@@ -189,9 +231,23 @@ export function FinishedWorkoutCard({
           ))}
         </ul>
       )}
-      <button type="button" className="text-button finished-workout-open" onClick={onOpenWorkout}>
+      <button
+        type="button"
+        className="pulse-button link small finished-workout-open"
+        onClick={onOpenWorkout}
+      >
         View workout
       </button>
+      {savedToast && (
+        <Toast
+          message="Workout saved"
+          duration="important"
+          secondaryAction={undo && share}
+          action={undo ?? share}
+          dismissLabel="Dismiss workout saved notification"
+          onDismiss={() => setSavedToast(false)}
+        />
+      )}
       {rangeFor && routine && (
         <RepRangeDialog
           exerciseId={rangeFor.exerciseId}

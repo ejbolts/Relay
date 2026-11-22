@@ -59,7 +59,12 @@ const preview: CsvImportPreview = {
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
   if (!isValidElement<Record<string, unknown>>(node)) return [];
-  return [node, ...elements(node.props.children as ReactNode)];
+  // A pop-up's footer buttons arrive through its actions prop.
+  return [
+    node,
+    ...elements(node.props.children as ReactNode),
+    ...elements(node.props.actions as ReactNode),
+  ];
 }
 
 function render(onImport: (file: File) => Promise<void>) {
@@ -83,7 +88,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('workout CSV review flow', () => {
-  it('requires an updated review after mapping and saves the reviewed mapping', async () => {
+  it('refreshes the review as soon as a mapping changes and saves the reviewed mapping', async () => {
     vi.mocked(api.previewWorkoutImport).mockResolvedValue(preview);
     const onImport = vi.fn().mockResolvedValue(undefined);
     const file = { name: 'mapping.csv' } as File;
@@ -98,7 +103,6 @@ describe('workout CSV review flow', () => {
     (current().props.onSave as () => void)();
     expect(onImport).not.toHaveBeenCalled();
     const mapped = { ...options, exercise_mappings: { 'Safety Test Press': 'existing' } };
-    (current().props.onUpdateReview as () => void)();
     await vi.waitFor(() => expect(api.previewWorkoutImport).toHaveBeenLastCalledWith(file, mapped));
     await vi.waitFor(() => expect(current().props.reviewStale).toBe(false));
     (current().props.onSave as () => void)();
@@ -117,7 +121,6 @@ describe('workout CSV review flow', () => {
       'Safety Test Press',
       'missing',
     );
-    (current().props.onUpdateReview as () => void)();
     await vi.waitFor(() => expect(current().props.error).toBe('Mapped exercise unavailable.'));
     expect(current().props.reviewStale).toBe(true);
     (current().props.onSave as () => void)();

@@ -107,6 +107,23 @@ export function PlateCalculatorDialog({
       kicker={`${setLabel} · ${exercise.name}`}
       className="plate-calculator"
       onClose={onClose}
+      actions={
+        <>
+          <button type="button" onClick={onClose}>
+            Close
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action"
+            onClick={() => {
+              onUse(weightInputKg(String(total), unit, weightKg) ?? total);
+              onClose();
+            }}
+          >
+            Use {formatNumber(total)} {unit}
+          </button>
+        </>
+      }
     >
       <div className="plate-calculator-body">
         <div className="plate-calculator-total">
@@ -201,21 +218,6 @@ export function PlateCalculatorDialog({
           Tap a plate to add a pair. Tap a plate on the bar to remove it.
         </p>
       </div>
-      <footer className="popup-dialog-actions">
-        <button type="button" onClick={onClose}>
-          Close
-        </button>
-        <button
-          type="button"
-          className="popup-primary-action"
-          onClick={() => {
-            onUse(weightInputKg(String(total), unit, weightKg) ?? total);
-            onClose();
-          }}
-        >
-          Use {formatNumber(total)} {unit}
-        </button>
-      </footer>
     </PopupDialog>
   );
 }

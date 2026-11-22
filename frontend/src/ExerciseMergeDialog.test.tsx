@@ -105,6 +105,8 @@ it('allows only custom sources, matching kinds, and reviews the chosen destinati
   expect(document.querySelector('[aria-label="Merge review"]')?.textContent).toContain(
     'cannot be undone',
   );
+  // The merge cannot be undone, so it is the red destructive primary.
+  expect(submit().classList).toContain('is-danger');
   expect(merge).not.toHaveBeenCalled();
   await click(submit());
   expect(merge).toHaveBeenCalledExactlyOnceWith('custom', 'official');
@@ -247,4 +249,43 @@ it('keeps the guidance and choices when the change fails', async () => {
   expect(document.querySelector('[role="alert"]')?.textContent).toBe('Please try again');
   expect(guide()).not.toBeNull();
   expect(submit().disabled).toBe(true);
+});
+
+it('lists likely standard exercises first under Suggested until a search is typed', async () => {
+  await source('custom');
+  const headings = () =>
+    [...document.querySelectorAll('.exercise-merge-group')].map((item) => item.textContent);
+  expect(headings()).toEqual(['Suggested', 'All exercises']);
+  const suggestion = document.querySelector('.exercise-merge-group + label')!;
+  expect(suggestion.querySelector('strong')?.textContent).toBe('Barbell Bench Press');
+  expect(suggestion.querySelector('.exercise-search-match')?.textContent).toBe('Bench');
+  // A suggestion is not listed twice.
+  expect(
+    [...document.querySelectorAll('.exercise-merge-targets strong')].filter(
+      (item) => item.textContent === 'Barbell Bench Press',
+    ),
+  ).toHaveLength(1);
+  await search('press');
+  expect(headings()).toEqual([]);
+});
+
+it('starts with the destination it was opened for', async () => {
+  await act(async () => root.unmount());
+  root = createRoot(host);
+  await act(async () =>
+    root.render(
+      <ExerciseMergeDialog
+        exercises={[official, custom]}
+        initialSourceId="custom"
+        initialTargetId="official"
+        onMerged={merged}
+        onClose={close}
+      />,
+    ),
+  );
+  expect(destination('Barbell Bench Press').querySelector('input')?.checked).toBe(true);
+  expect(document.querySelector('[aria-label="Merge review"]')?.textContent).toContain(
+    'Barbell Bench Press',
+  );
+  expect(submit().disabled).toBe(false);
 });

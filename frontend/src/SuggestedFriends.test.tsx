@@ -80,7 +80,8 @@ it('automatically lists eight suggestions and opens a name without sending a req
   expect(
     [...host.querySelectorAll('.shared-connection-copy small')].map((el) => el.textContent),
   ).toEqual(members.slice(0, 8).map((person) => `@${person.username}`));
-  expect(host.textContent).toContain('1–8 of 17');
+  // The highlighted page shows where you are; there is no "1–8 of 17" line.
+  expect(host.textContent).not.toContain('of 17');
   await click(button("Open Person 1's profile"));
   expect(open).toHaveBeenCalledWith(members[0]);
   expect(add).not.toHaveBeenCalled();
@@ -89,18 +90,41 @@ it('automatically lists eight suggestions and opens a name without sending a req
 it('supports next, previous and numbered pages with boundary states and focus', async () => {
   await render();
   expect(button('Previous suggested friends page').disabled).toBe(true);
+  button('Next suggested friends page').focus();
   await click(button('Next suggested friends page'));
   expect(api.sharing.suggestions).toHaveBeenLastCalledWith(2);
   expect(host.querySelectorAll('li')).toHaveLength(8);
-  expect(host.textContent).toContain('9–16 of 17');
+  expect(button('Page 2 of 3').getAttribute('aria-current')).toBe('page');
   expect(button("Open Person 9's profile")).not.toBeNull();
   expect(button("Open Person 9's profile").textContent).toContain('@person.9');
-  expect(document.activeElement).toBe(host.querySelector('h3'));
-  await click(button('Suggested friends page 3'));
+  // Focus stays on the button that was pressed.
+  expect(document.activeElement).toBe(button('Next suggested friends page'));
+  await click(button('Page 3 of 3'));
   expect(host.querySelectorAll('li')).toHaveLength(1);
   expect(button('Next suggested friends page').disabled).toBe(true);
   await click(button('Previous suggested friends page'));
-  expect(button('Suggested friends page 2').getAttribute('aria-current')).toBe('page');
+  expect(button('Page 2 of 3').getAttribute('aria-current')).toBe('page');
+});
+
+it('keeps the current suggestions and pager while the next page loads', async () => {
+  await render();
+  let finish!: (page: SuggestedProfilePage) => void;
+  vi.mocked(api.sharing.suggestions).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  await click(button('Next suggested friends page'));
+  expect(host.querySelector('.sharing-loading')).toBeNull();
+  expect(button("Open Person 1's profile")).not.toBeNull();
+  expect(host.querySelector('nav')?.getAttribute('aria-busy')).toBe('true');
+  // Taps while the page loads are ignored.
+  await click(button('Page 3 of 3'));
+  expect(api.sharing.suggestions).toHaveBeenCalledTimes(2);
+  await act(async () => finish(result(2)));
+  expect(button("Open Person 9's profile")).not.toBeNull();
+  expect(host.querySelector('nav')?.hasAttribute('aria-busy')).toBe(false);
 });
 
 it('adds separately, refreshes the list and corrects a removed last page', async () => {
@@ -109,12 +133,12 @@ it('adds separately, refreshes the list and corrects a removed last page', async
     return { status: 'outgoing' };
   });
   await render();
-  await click(button('Suggested friends page 3'));
+  await click(button('Page 3 of 3'));
   await click(button('Add friend: Person 17'));
   expect(add).toHaveBeenCalledWith('person-17');
   expect(changed).toHaveBeenCalledOnce();
   expect(open).not.toHaveBeenCalled();
-  expect(host.textContent).toContain('9–16 of 16');
+  expect(button('Page 2 of 2').getAttribute('aria-current')).toBe('page');
   expect(host.querySelectorAll('li')).toHaveLength(8);
 });
 

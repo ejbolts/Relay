@@ -12,8 +12,9 @@ choose.
 New accounts start public; existing accounts retain their choices, including private defaults.
 
 Private, disabled and missing profiles all answer "not found". A friends-only profile shows only
-its name and photo until the two members are friends. Public friend suggestions include usernames;
-other shared-profile responses omit them. Videos and sample data are never shared.
+its name and photo until the two members are friends. Public friend suggestions and people search
+results for public profiles include usernames; other shared-profile responses omit them. Videos and
+sample data are never shared.
 """
 
 from __future__ import annotations
@@ -35,6 +36,7 @@ from .accounts import no_store
 from .auth import AppSettings, CurrentUser, as_utc, get_current_user
 from .body_sizes import PREFIX as BODY_SIZES_PREFIX
 from .body_sizes import BodySizeLog
+from .cardio_records import CARDIO_RECORD_TYPES
 from .cardio_zones import CardioGoalWeek, cardio_goal_weeks, cardio_preferences, classify_session
 from .database import get_db
 from .errors import api_error
@@ -71,13 +73,15 @@ from .tracker_schemas import (
     HeatmapDay,
     MachinePhotoRead,
     PersonalRecordRead,
+    TrainingSplitRead,
     TrainingTimeRead,
     TrainingWorkoutRead,
     WorkoutTypeRead,
     Zone2WeekRead,
 )
 from .training_metrics import start_of_week
-from .training_time import past_year_start, training_time_totals
+from .training_split import saved_training_split, split_read
+from .training_time import is_cardio_only_workout, past_year_start, training_time_totals
 from .workout_types import workout_type_catalog
 
 Db = Annotated[Session, Depends(get_db)]
@@ -149,10 +153,12 @@ class SharedProfileSummary(BaseModel):
     workout_count: int | None = None
     recent_workout_count: int | None = None
     last_workout_date: date | None = None
-    # Shared cardio sessions and weight and volume PRs, as counted on the member's Today.
+    # Shared cardio sessions and PR sets, as counted on the member's Today.
     cardio_count: int | None = None
     record_count: int | None = None
-    # How many of ``workout_count`` and ``recent_workout_count`` came from a CSV import.
+    # Workouts other than cardio-only sessions, which add up with ``cardio_count``.
+    strength_workout_count: int | None = None
+    # How many of ``strength_workout_count`` and ``recent_workout_count`` came from a CSV import.
     imported_workout_count: int | None = None
     imported_recent_workout_count: int | None = None
     shares: SharedContent | None = None
@@ -160,6 +166,11 @@ class SharedProfileSummary(BaseModel):
 
 class SuggestedProfileSummary(SharedProfileSummary):
     username: str
+
+
+class SearchedProfileSummary(SharedProfileSummary):
+    # Public profiles only, as in friend suggestions, so same-named people can be told apart.
+    username: str | None = None
 
 
 class SuggestedProfilePage(BaseModel):
@@ -223,6 +234,8 @@ class SharedConsistencyRead(BaseModel):
     current_streak: int
     training_days: int
     workout_types: list[WorkoutTypeRead]
+    # The member's split while it is on, so their calendar can show planned and missed days.
+    training_split: TrainingSplitRead | None = None
 
 
 class SharedProfileRead(SharedProfileSummary):
@@ -320,7 +333,7 @@ class TimelineItem(BaseModel):
     member: TimelineMember
     workout: TrainingWorkoutRead
     reactions: WorkoutReactions
-    # Weight and reps records set in the workout, as counted on the member's history.
+    # Sets in the workout that earned a record, as counted on the member's history.
     record_count: int = 0
 
 
@@ -492,6 +505,15 @@ def viewable_member(db: Session, viewer: User, user_id: str) -> tuple[User, Prof
     return member, sharing
 
 
+# Records counted as PRs; a set that earns several of them counts once.
+COUNTED_RECORD_TYPES = (
+    PersonalRecordType.WEIGHT,
+    PersonalRecordType.REPS_AT_WEIGHT,
+    PersonalRecordType.RELATIVE_STRENGTH,
+    *CARDIO_RECORD_TYPES,
+)
+
+
 def photo_url(user: User) -> str | None:
     if not user.profile_photo_filename:
         return None
@@ -505,14 +527,15 @@ class ActivityStats(NamedTuple):
     last_workout_date: date | None = None
     cardio_sessions: int = 0
     records: int = 0
+    strength_workouts: int = 0
     imported_workouts: int = 0
     imported_recent_workouts: int = 0
 
 
 def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
     """Per account: shared workouts, those in the last 30 days, the latest workout date, and
-    totals of shared cardio sessions and weight and volume PRs, as counted on Today, and how
-    many of the workouts came from a CSV import."""
+    totals of shared cardio sessions, PR sets and strength workouts, as counted on Today, and
+    how many of the strength and recent workouts came from a CSV import."""
     if not user_ids:
         return {}
     cutoff = date.today() - timedelta(days=RECENT_DAYS)
@@ -522,11 +545,15 @@ def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
             func.count(TrainingWorkout.id),
             func.sum(case((TrainingWorkout.workout_date >= cutoff, 1), else_=0)),
             func.max(TrainingWorkout.workout_date),
+            func.sum(case((is_cardio_only_workout(), 0), else_=1)),
         )
         .where(TrainingWorkout.user_id.in_(user_ids), TrainingWorkout.is_sample.is_(False))
         .group_by(TrainingWorkout.user_id)
     )
-    workouts = {user_id: (count, recent or 0, latest) for user_id, count, recent, latest in rows}
+    workouts, strength = {}, {}
+    for user_id, count, recent, latest, strength_count in rows:
+        workouts[user_id] = (count, recent or 0, latest)
+        strength[user_id] = strength_count or 0
     cardio = dict(
         db.execute(
             select(CardioSession.user_id, func.count(CardioSession.id))
@@ -542,36 +569,41 @@ def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
     )
     records = dict(
         db.execute(
-            select(PersonalRecord.user_id, func.count(PersonalRecord.id))
+            select(PersonalRecord.user_id, func.count(func.distinct(PersonalRecord.set_id)))
             .where(
                 PersonalRecord.user_id.in_(user_ids),
                 PersonalRecord.value > 0,
-                PersonalRecord.record_type.in_(
-                    [PersonalRecordType.WEIGHT, PersonalRecordType.REPS_AT_WEIGHT]
-                ),
+                PersonalRecord.record_type.in_(COUNTED_RECORD_TYPES),
                 PersonalRecord.workout_id.not_in(sample_workout_ids()),
             )
             .group_by(PersonalRecord.user_id)
         ).all()
     )
     imported_ids = imported_workout_ids(db, user_ids)
-    imported: defaultdict[str, list[date]] = defaultdict(list)
+    # Each imported workout's day, and whether it counts as a strength workout as above.
+    imported: defaultdict[str, list[tuple[date, bool]]] = defaultdict(list)
     if imported_ids:
-        for user_id, workout_id, day in db.execute(
-            select(TrainingWorkout.user_id, TrainingWorkout.id, TrainingWorkout.workout_date).where(
+        for user_id, workout_id, day, cardio_only in db.execute(
+            select(
+                TrainingWorkout.user_id,
+                TrainingWorkout.id,
+                TrainingWorkout.workout_date,
+                is_cardio_only_workout(),
+            ).where(
                 TrainingWorkout.user_id.in_(list(imported_ids)),
                 TrainingWorkout.is_sample.is_(False),
             )
         ):
             if workout_id in imported_ids[user_id]:
-                imported[user_id].append(day)
+                imported[user_id].append((day, not cardio_only))
     return {
         user_id: ActivityStats(
             *workouts.get(user_id, (0, 0, None)),
             cardio_sessions=cardio.get(user_id, 0),
             records=records.get(user_id, 0),
-            imported_workouts=len(imported[user_id]),
-            imported_recent_workouts=sum(day >= cutoff for day in imported[user_id]),
+            strength_workouts=strength.get(user_id, 0),
+            imported_workouts=sum(strength for _, strength in imported[user_id]),
+            imported_recent_workouts=sum(day >= cutoff for day, _ in imported[user_id]),
         )
         for user_id in user_ids
     }
@@ -623,6 +655,7 @@ def profile_summary(
         last_workout_date=stats.last_workout_date if viewable else None,
         cardio_count=stats.cardio_sessions if viewable else None,
         record_count=stats.records if viewable else None,
+        strength_workout_count=stats.strength_workouts if viewable else None,
         imported_workout_count=stats.imported_workouts if viewable else None,
         imported_recent_workout_count=stats.imported_recent_workouts if viewable else None,
         shares=(
@@ -852,10 +885,10 @@ def suggested_profiles(user: CurrentUser, db: Db, page: int = Query(default=1, g
     )
 
 
-@sharing_router.get("/profiles", response_model=list[SharedProfileSummary])
+@sharing_router.get("/profiles", response_model=list[SearchedProfileSummary])
 def list_shared_profiles(
     user: CurrentUser, db: Db, q: str | None = Query(default=None, max_length=100)
-) -> list[SharedProfileSummary]:
+) -> list[SearchedProfileSummary]:
     require_sharing(db, user)
     query = (
         select(User, ProfileSharing)
@@ -894,13 +927,16 @@ def list_shared_profiles(
     stats = workout_stats(db, viewable_ids)
     dates = worn_unlock_dates(db, viewable_ids)
     profiles = [
-        profile_summary(
-            user,
-            member,
-            sharing,
-            friendships.get(member.id),
-            stats.get(member.id),
-            dates.get(member.id),
+        SearchedProfileSummary(
+            **profile_summary(
+                user,
+                member,
+                sharing,
+                friendships.get(member.id),
+                stats.get(member.id),
+                dates.get(member.id),
+            ).model_dump(),
+            username=member.username if q is not None and sharing.visibility == PUBLIC else None,
         )
         for member, sharing in rows
     ]
@@ -945,11 +981,17 @@ def shared_consistency(db: Session, user_id: str) -> SharedConsistencyRead:
     first_day = start_of_week(today, training_preferences(db, user_id).week_start) - timedelta(
         weeks=11
     )
+    split = saved_training_split(db, user_id)
+    shared_split = split_read(db, user_id, split, today) if split and split.enabled else None
+    if shared_split:
+        # The calendar needs the cycle only; which routine it came from stays with its owner.
+        shared_split.routine_id = None
     return SharedConsistencyRead(
         heatmap=heatmap,
         current_streak=streak,
         training_days=sum(first_day <= day <= today for day in dates),
         workout_types=catalog,
+        training_split=shared_split,
     )
 
 
@@ -1020,6 +1062,8 @@ def list_shared_workouts(
     machine_photo_id: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    # The profile's Workouts and Cardio tabs; a cardio-only workout is listed under Cardio.
+    kind: Literal["strength", "cardio"] | None = None,
 ) -> SharedWorkoutPage:
     member, sharing = viewable_member(db, user, user_id)
     if start_date and end_date and start_date > end_date:
@@ -1046,6 +1090,10 @@ def list_shared_workouts(
         owned.append(TrainingWorkout.workout_date >= start_date)
     if end_date:
         owned.append(TrainingWorkout.workout_date <= end_date)
+    if kind == "cardio":
+        owned.append(is_cardio_only_workout())
+    elif kind == "strength":
+        owned.append(~is_cardio_only_workout())
     total = db.scalar(select(func.count(TrainingWorkout.id)).where(*owned)) or 0
     workouts = list(
         db.scalars(
@@ -1078,7 +1126,7 @@ def list_shared_workouts(
                     "bodyweight_kg": bodyweights.on(
                         record.achieved_date, record.workout_set.bodyweight_kg
                     )
-                    if bodyweights
+                    if bodyweights and record.record_type not in CARDIO_RECORD_TYPES
                     else None
                 }
             )
@@ -1468,12 +1516,10 @@ def workout_timeline(
     records = (
         dict(
             db.execute(
-                select(PersonalRecord.workout_id, func.count())
+                select(PersonalRecord.workout_id, func.count(func.distinct(PersonalRecord.set_id)))
                 .where(
                     PersonalRecord.workout_id.in_(workout_ids),
-                    PersonalRecord.record_type.in_(
-                        (PersonalRecordType.WEIGHT, PersonalRecordType.REPS_AT_WEIGHT)
-                    ),
+                    PersonalRecord.record_type.in_(COUNTED_RECORD_TYPES),
                 )
                 .group_by(PersonalRecord.workout_id)
             ).all()

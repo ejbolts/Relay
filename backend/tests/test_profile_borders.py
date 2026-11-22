@@ -414,11 +414,11 @@ def test_friends_see_the_worn_border_and_sex(client, other_client):
 
 
 def test_profile_borders_migration_adds_and_removes_the_border_column():
-    path = Path(__file__).resolve().parents[1] / "migrations/versions/0064_profile_borders.py"
+    path = Path(__file__).resolve().parents[1] / "migrations/versions/0065_profile_borders.py"
     spec = importlib.util.spec_from_file_location("profile_borders_migration", path)
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
-    assert migration.down_revision == "0063_share_body_sizes"
+    assert migration.down_revision == "0064_username_reminder_requests"
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
         connection.execute(text("PRAGMA foreign_keys=ON"))

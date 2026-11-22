@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from .cardio_zones import CardioGoalWeek, CardioPreferences
+from .exercise_aliases import alternative_exercise_names
 from .machine_settings import MachineSetting, NumericMachineSetting
 from .models import (
     ExerciseKind,
@@ -111,6 +112,12 @@ class ExerciseRead(BaseModel):
     @property
     def partial_sets_enabled(self) -> bool:
         return partial_sets_enabled_on(self, date.today())
+
+    @computed_field
+    @property
+    def alternative_names(self) -> list[str]:
+        # Lets the app suggest a standard exercise for a custom one named differently.
+        return [] if self.is_custom else alternative_exercise_names(self.name)
 
     @computed_field
     @property
@@ -438,6 +445,8 @@ class WorkoutHistorySummaryRead(BaseModel):
     first_workout_date: date | None
     last_workout_date: date | None
     has_sample_workouts: bool
+    # Workouts other than cardio-only sessions, which are counted as cardio.
+    strength_workouts: int | None = None
 
 
 class WeightRepsRead(BaseModel):
@@ -472,7 +481,21 @@ class TrainingBlockSummaryRead(BaseModel):
     previous: BlockStatsRead | None = None
 
 
-class HistoryBestRead(BaseModel):
+class DistanceTimeRead(BaseModel):
+    distance_km: float
+    seconds: float
+
+
+class CardioBestsRead(BaseModel):
+    """A cardio exercise's bests, for live distance, time and pace PR checks."""
+
+    best_distance_km: float | None = None
+    best_duration_seconds: float | None = None
+    # The fastest time over each set distance reached, shortest distance first.
+    best_times: list[DistanceTimeRead] = Field(default_factory=list)
+
+
+class HistoryBestRead(CardioBestsRead):
     best_relative_strength: float | None = None
     best_weight_kg: float | None
     reps_by_weight: list[WeightRepsRead]
@@ -486,7 +509,7 @@ class FreshStartBaselineRead(HistoryBestRead):
     start_date: date
 
 
-class ExerciseHistoryBaselineRead(BaseModel):
+class ExerciseHistoryBaselineRead(CardioBestsRead):
     """An exercise's history before a date, condensed for PR checks and set suggestions."""
 
     block_bests: list[BlockHistoryBaselineRead] = Field(default_factory=list)
@@ -667,6 +690,8 @@ class WorkoutRecommendationRead(BaseModel):
     scheduled_date: date | None = None
     split_name: str | None = None
     routine_day: RoutineDayRead | None = None
+    # On a split's rest day: the next training day, which starting a workout then trains.
+    next_training_day: WorkoutRecommendationRead | None = None
 
 
 class WeeklyMuscleContributionRead(BaseModel):
@@ -928,6 +953,19 @@ class SplitMissedDay(BaseModel):
     workout_type_id: str
 
 
+class SplitShift(BaseModel):
+    # From this date the split stands at this step, after a skipped day. ``rest_saved`` carries
+    # a workout-following split's saved rest across it.
+    from_date: date
+    step: int = Field(ge=0, lt=28)
+    rest_saved: bool = False
+
+
+class SplitPositionUpdate(BaseModel):
+    step: int = Field(ge=0, lt=28)
+    rest_saved: bool = False
+
+
 class TrainingSplitRead(TrainingSplit):
     # Where a workout-following split currently stands; unset for calendar splits.
     next_step: int | None = None
@@ -936,6 +974,8 @@ class TrainingSplitRead(TrainingSplit):
     # Past days, within the last year, whose planned workout was not done. A workout-following
     # split leaves out the one day off it absorbs as a rest.
     missed_days: list[SplitMissedDay] = Field(default_factory=list)
+    # The latest skip, which calendar previews count from instead of the start.
+    shift: SplitShift | None = None
 
 
 class TrainingPreferencesUpdate(BaseModel):
@@ -951,6 +991,9 @@ class TrainingPreferencesUpdate(BaseModel):
         ]
         | None
     ) = Field(default=None, max_length=200)
+    # The rest a new set gets when last time gives none. Unset by default; null clears it, and
+    # omission (an older app) keeps the saved value.
+    default_rest_seconds: int | None = Field(default=None, ge=1, le=7_200)
 
 
 class TrainingPreferencesRead(TrainingPreferencesUpdate):

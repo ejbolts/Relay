@@ -186,12 +186,18 @@ export function recommendedReferenceId(
 }
 
 export interface FactorSuggestion {
+  /** In hundredths. It can fall outside FACTOR_RANGE; the slider clamps it. */
   factor: number;
-  /** Sessions on this machine compared with the reference machine's trend. */
+  /** This machine's sessions that informed the suggestion. */
   sessions: number;
-  /** The middle half of those sessions' conversions, so the slider can show a likely range. */
+  /** A likely range for the slider, with low <= factor <= high. */
   low: number;
   high: number;
+  /**
+   * 'trend': two or more sessions compared with the reference trend close by.
+   * 'rough': the fallback, from sessions further away or a single session.
+   */
+  basis: 'trend' | 'rough';
 }
 
 /** Interpolate the reference trend between sessions up to this far apart. */
@@ -199,7 +205,25 @@ const BRIDGE_DAYS = 56;
 /** Otherwise compare with the nearest reference session this close. */
 const NEAREST_DAYS = 14;
 const MIN_SESSIONS = 2;
+/** For rough suggestions, sessions this close together show about the same strength. */
+const WINDOW_DAYS = 28;
+/** A rough suggestion's likely range reaches at least this share of it either side. */
+const ROUGH_SPREAD = 0.05;
+const ROUGH_SINGLE_SPREAD = 0.1;
 const DAY_MS = 86_400_000;
+
+interface Session {
+  machine: string;
+  time: number;
+  value: number;
+}
+
+/** One machine session's conversion, and how far it is from the nearest reference session. */
+interface Comparison {
+  ratio: number;
+  gap: number;
+  close: boolean;
+}
 
 /** The value a fraction of the way through the sorted values, interpolating between them. */
 function quantile(values: number[], fraction: number): number {
@@ -212,12 +236,103 @@ function quantile(values: number[], fraction: number): number {
 
 const hundredths = (value: number) => Math.round(value * 100) / 100;
 
+/** The reference sessions either side of a time; one on the same day is both. */
+function neighbours(references: Session[], time: number) {
+  const next = references.findIndex((item) => item.time >= time);
+  const after = next === -1 ? undefined : references[next];
+  const before =
+    after?.time === time ? after : references[(next === -1 ? references.length : next) - 1];
+  return { before, after };
+}
+
 /**
- * Suggest each machine's conversion from its logged weights and reps: compare every session's
- * est. 1RM with the reference machine's trend on that date, interpolated between the reference
- * sessions either side, or the nearest one within two weeks. The median ratio puts the machine's
- * sessions on the reference trend without letting one odd session pull it away. Sessions
- * without a single machine count as the reference.
+ * The reference trend at a time: interpolated between the sessions either side up to eight weeks
+ * apart, or the nearest session within two weeks. Null when no reference session is that close.
+ */
+function closeLevel(before: Session | undefined, after: Session | undefined, time: number) {
+  if (before && after && after.time - before.time <= BRIDGE_DAYS * DAY_MS) {
+    const span = after.time - before.time;
+    return span
+      ? before.value + ((after.value - before.value) * (time - before.time)) / span
+      : (before.value + after.value) / 2;
+  }
+  const nearest = [before, after]
+    .filter((item) => item && Math.abs(item.time - time) <= NEAREST_DAYS * DAY_MS)
+    .sort((a, b) => Math.abs(a!.time - time) - Math.abs(b!.time - time))[0];
+  return nearest?.value ?? null;
+}
+
+/**
+ * The reference level at any time: interpolated between the sessions either side however far
+ * apart, or, before the first or after the last, held at the median of up to three sessions
+ * within four weeks of it rather than extending the trend.
+ */
+function roughLevel(
+  references: Session[],
+  before: Session | undefined,
+  after: Session | undefined,
+  time: number,
+): number {
+  if (before && after && after.time > before.time) {
+    return (
+      before.value +
+      ((after.value - before.value) * (time - before.time)) / (after.time - before.time)
+    );
+  }
+  const edge = (before ?? after)!;
+  const distance = (item: Session) => Math.abs(item.time - edge.time);
+  const nearby = references
+    .filter((item) => distance(item) <= WINDOW_DAYS * DAY_MS)
+    .sort((first, second) => distance(first) - distance(second))
+    .slice(0, 3)
+    .map((item) => item.value);
+  return quantile(nearby, 0.5);
+}
+
+/** The median conversion, with the middle half of the conversions as the likely range. */
+function trendSuggestion(ratios: number[]): FactorSuggestion {
+  return {
+    factor: hundredths(quantile(ratios, 0.5)),
+    sessions: ratios.length,
+    low: hundredths(quantile(ratios, 0.25)),
+    high: hundredths(quantile(ratios, 0.75)),
+    basis: 'trend',
+  };
+}
+
+/**
+ * The fallback for machines without two sessions close to the reference. Strength drifts over a
+ * long gap, so only the sessions nearest the reference in time count: those within four weeks of
+ * the closest one. After a gym switch, that is the old machine's last few weeks against the new
+ * one's first. The likely range is the middle half of their conversions, widened to at least 5%
+ * either side, or 10% from a single session.
+ */
+function roughSuggestion(comparisons: Comparison[]): FactorSuggestion {
+  const closest = Math.min(...comparisons.map((item) => item.gap));
+  const ratios = comparisons
+    .filter((item) => item.gap <= closest + WINDOW_DAYS * DAY_MS)
+    .map((item) => item.ratio);
+  const median = quantile(ratios, 0.5);
+  const spread = median * (ratios.length === 1 ? ROUGH_SINGLE_SPREAD : ROUGH_SPREAD);
+  const factor = Math.max(0.01, hundredths(median));
+  return {
+    factor,
+    sessions: ratios.length,
+    low: Math.max(0.01, hundredths(Math.min(quantile(ratios, 0.25), median - spread))),
+    high: Math.max(factor, hundredths(Math.max(quantile(ratios, 0.75), median + spread))),
+    basis: 'rough',
+  };
+}
+
+/**
+ * Suggest each machine's conversion from its logged weights and reps, comparing every session's
+ * est. 1RM with the reference machine's level on that date. The median conversion puts the
+ * machine's sessions on the reference trend without letting one odd session pull it away.
+ *
+ * A machine with two or more sessions close to a reference session gets a 'trend' suggestion
+ * from those alone (see `closeLevel`). Any other machine with a session gets a 'rough' one (see
+ * `roughSuggestion`), as long as the reference has a session. Sessions without a single machine
+ * count as the reference.
  */
 export function suggestFactors(
   progress: ExerciseProgress,
@@ -226,50 +341,38 @@ export function suggestFactors(
   const suggestions = new Map<string, FactorSuggestion>();
   if (!referenceId) return suggestions;
   const sessions = (progress.machine_points ?? [])
-    .filter((point) => point.estimated_1rm > 0)
     .map((point) => ({
       machine: point.machine_photo_id ?? referenceId,
       time: Date.parse(`${point.workout_date}T00:00:00Z`),
       value: point.estimated_1rm,
     }))
+    .filter(
+      (session) =>
+        session.value > 0 && Number.isFinite(session.value) && Number.isFinite(session.time),
+    )
     .sort((first, second) => first.time - second.time);
   const references = sessions.filter((session) => session.machine === referenceId);
-  const ratios = new Map<string, number[]>();
+  if (!references.length) return suggestions;
+  const comparisons = new Map<string, Comparison[]>();
   for (const session of sessions) {
     if (session.machine === referenceId) continue;
-    const next = references.findIndex((item) => item.time >= session.time);
-    const after = next === -1 ? undefined : references[next];
-    const before =
-      after?.time === session.time
-        ? after
-        : references[(next === -1 ? references.length : next) - 1];
-    let expected: number | null = null;
-    if (before && after && after.time - before.time <= BRIDGE_DAYS * DAY_MS) {
-      const span = after.time - before.time;
-      expected = span
-        ? before.value + ((after.value - before.value) * (session.time - before.time)) / span
-        : (before.value + after.value) / 2;
-    } else {
-      const nearest = [before, after]
-        .filter((item) => item && Math.abs(item.time - session.time) <= NEAREST_DAYS * DAY_MS)
-        .sort((a, b) => Math.abs(a!.time - session.time) - Math.abs(b!.time - session.time))[0];
-      expected = nearest?.value ?? null;
-    }
-    if (expected) {
-      ratios.set(session.machine, [
-        ...(ratios.get(session.machine) ?? []),
-        expected / session.value,
-      ]);
-    }
+    const { before, after } = neighbours(references, session.time);
+    const close = closeLevel(before, after, session.time);
+    const ratio = (close ?? roughLevel(references, before, after, session.time)) / session.value;
+    if (!(ratio > 0 && Number.isFinite(ratio))) continue;
+    const gap = Math.min(
+      ...[before, after].map((item) => (item ? Math.abs(item.time - session.time) : Infinity)),
+    );
+    const list = comparisons.get(session.machine) ?? [];
+    list.push({ ratio, gap, close: close !== null });
+    comparisons.set(session.machine, list);
   }
-  for (const [machine, values] of ratios) {
-    if (values.length < MIN_SESSIONS) continue;
-    suggestions.set(machine, {
-      factor: hundredths(quantile(values, 0.5)),
-      sessions: values.length,
-      low: hundredths(quantile(values, 0.25)),
-      high: hundredths(quantile(values, 0.75)),
-    });
+  for (const [machine, list] of comparisons) {
+    const close = list.filter((item) => item.close).map((item) => item.ratio);
+    suggestions.set(
+      machine,
+      close.length >= MIN_SESSIONS ? trendSuggestion(close) : roughSuggestion(list),
+    );
   }
   return suggestions;
 }

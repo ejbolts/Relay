@@ -32,6 +32,7 @@ export function SetDragHandle({
   function reset() {
     const press = pressRef.current;
     pressRef.current = null;
+    delete handleRef.current?.dataset.armed;
     cleanupRef.current?.();
     cleanupRef.current = null;
     if (press && handleRef.current?.hasPointerCapture(press.id)) {
@@ -76,6 +77,8 @@ export function SetDragHandle({
     const timer = window.setTimeout(() => {
       if (pressRef.current !== press) return;
       press.active = true;
+      // Tells the row's swipe-to-delete that this touch is now a reorder.
+      handle.dataset.armed = 'true';
       onStart(handle, press.id);
     }, HOLD_MS);
     const move = (e: PointerEvent) => {

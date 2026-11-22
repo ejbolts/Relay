@@ -62,6 +62,15 @@ function button(text: string) {
 async function click(text: string) {
   await act(async () => button(text).click());
 }
+/** The split editor is a full screen, closed with its back button. */
+async function closeEditor() {
+  const back = document.querySelector<HTMLButtonElement>(
+    'dialog.routine-editor-screen .popup-dialog-back',
+  );
+  expect(back?.getAttribute('aria-label')).toBe('Back');
+  await act(async () => back!.click());
+  expect(document.querySelector('dialog.routine-editor-screen')).toBeNull();
+}
 async function input(selector: string, value: string) {
   await act(async () => {
     const el = document.querySelector<HTMLInputElement | HTMLSelectElement>(selector)!;
@@ -163,7 +172,7 @@ it('blocks an unchanged saved template, including after renaming and reloading',
   await input('.routine-editor input', 'My full body plan');
   await submit();
   expect(button('Full body / Rest').disabled).toBe(true);
-  await click('Close notification');
+  await click('Dismiss notification');
   await click('Full body / Rest');
   expect(document.querySelector('.routine-editor')).toBeNull();
   expect(api.routines.create).toHaveBeenCalledTimes(1);
@@ -183,17 +192,17 @@ it('makes templates available only after a saved day change and blocks them agai
   await mount();
   await click('Full body / Rest');
   await submit();
-  await click('Close notification');
+  await click('Dismiss notification');
   await editCopy();
   await click('Add rest day');
   expect(button('Full body / Rest').disabled).toBe(true);
-  await click('Close Edit split');
+  await closeEditor();
   expect(button('Full body / Rest').disabled).toBe(true);
   await editCopy();
   await click('Add rest day');
   await submit();
   expect(button('Full body / Rest').disabled).toBe(false);
-  await click('Close notification');
+  await click('Dismiss notification');
   await editCopy();
   await act(async () =>
     document.querySelectorAll<HTMLButtonElement>('.routine-day-toggle')[2].click(),
@@ -206,16 +215,16 @@ it('does not reserve a template after cancelling or a failed save, and releases 
   vi.spyOn(api.routines, 'remove').mockResolvedValue(undefined);
   await mount();
   await click('Full body / Rest');
-  await click('Close New split');
+  await closeEditor();
   expect(button('Full body / Rest').disabled).toBe(false);
   await click('Full body / Rest');
   vi.mocked(api.routines.create).mockRejectedValueOnce(new Error('Offline'));
   await submit();
-  await click('Close New split');
+  await closeEditor();
   expect(button('Full body / Rest').disabled).toBe(false);
   await click('Full body / Rest');
   await submit();
-  await click('Close notification');
+  await click('Dismiss notification');
   expect(button('Full body / Rest').disabled).toBe(true);
   await click('Options for Full body / Rest');
   await click('Delete split');
@@ -240,7 +249,7 @@ it('activates a different split after date confirmation, expands it and refreshe
   await click('Use split');
   await input('.routine-use input[type="date"]', '2026-11-02');
   await submit('.routine-use');
-  expect(api.routines.use).toHaveBeenCalledWith('other', '2026-11-02', 'workouts');
+  expect(api.routines.use).toHaveBeenCalledWith('other', '2026-11-02');
   expect(host.querySelector('.routine-active')?.closest('.routine-card')?.textContent).toContain(
     'Another split',
   );
@@ -396,14 +405,12 @@ it('Enter adds the named custom workout type without submitting the split', asyn
   expect(api.routines.create).not.toHaveBeenCalled();
 });
 
-it('defaults to following logged workouts and can switch the active split to dates', async () => {
+it('changes the start date without a schedule choice, so splits follow logged workouts', async () => {
   await mount();
   await click('Change schedule');
-  expect(button('Follow my workouts').getAttribute('aria-checked')).toBe('true');
-  await click('By date');
-  expect(button('By date').getAttribute('aria-checked')).toBe('true');
+  expect(document.querySelector('.routine-use [role="radio"]')).toBeNull();
   await submit('.routine-use');
-  expect(api.routines.use).toHaveBeenCalledWith('plan', '2026-10-26', 'calendar');
+  expect(api.routines.use).toHaveBeenCalledWith('plan', '2026-10-26');
 });
 it('previews a workout-following split from where it stands', async () => {
   vi.mocked(api.getTrainingSplit).mockResolvedValue({

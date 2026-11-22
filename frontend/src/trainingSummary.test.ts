@@ -1,17 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import {
   compactSetSummary,
+  formatListVolume,
   groupByYear,
   groupWorkoutsByWeek,
+  isStrengthWorkout,
   latestTopSets,
   mostTrainedExerciseId,
   niceTicks,
-  recentStrengthRecords,
+  prSetCount,
+  recentRecords,
+  recordCountsByWorkout,
   sessionTemplateFor,
   setLabel,
+  topWorkingSet,
   trainingDayGrid,
   upNextSetLabel,
   weekGroupLabel,
+  weekGroupSummary,
   weekStartFor,
   weeklyBestPoints,
   weeklyBodyweightAverages,
@@ -184,7 +190,8 @@ describe('training summary helpers', () => {
     const weeks = weeklyTrainingTotals(sessions, '2026-10-06', 1, 2);
 
     expect(weeks.map((week) => week.cardioSessions)).toEqual([0, 2]);
-    expect(weeks.map((week) => week.workouts)).toEqual([1, 2]);
+    // The cardio-only workout is a cardio session, so Workouts and Cardio sessions add up.
+    expect(weeks.map((week) => week.workouts)).toEqual([1, 1]);
   });
 
   it('averages body weight per week and leaves empty weeks null', () => {
@@ -336,7 +343,7 @@ describe('training summary helpers', () => {
       id,
       exercise_id: 'squat',
       workout_id: 'w3',
-      set_id: 's',
+      set_id: `set-${id}`,
       achieved_date: date,
       record_type: type,
       value: 100,
@@ -351,7 +358,7 @@ describe('training summary helpers', () => {
       record('c', '2026-10-05', 'weight'),
       record('d', '2026-10-05', 'estimated_1rm'),
     ];
-    expect(recentStrengthRecords(records, 2).map((item) => item.id)).toEqual(['c', 'b']);
+    expect(recentRecords(records, 2).map((item) => item.id)).toEqual(['c', 'b']);
   });
 });
 
@@ -434,5 +441,97 @@ describe('Up next set labels', () => {
     const latest = latestTopSets(workouts, '2026-10-04');
     expect(latest.has('squat')).toBe(false);
     expect(latest.get('deadlift')?.weight_kg).toBe(157.5);
+  });
+});
+
+describe('PR counts, workout counts and session list totals', () => {
+  const pr = (
+    id: string,
+    setId: string,
+    type: PersonalRecord['record_type'],
+    workoutId = 'w1',
+    date = '2026-10-05',
+  ): PersonalRecord => ({
+    id,
+    exercise_id: 'squat',
+    workout_id: workoutId,
+    set_id: setId,
+    achieved_date: date,
+    record_type: type,
+    value: type === 'relative_strength' ? 1.5 : 120,
+    unit: type === 'relative_strength' ? '× BW' : 'kg',
+    normalized_weight: 120,
+    formula: null,
+    exercise_name: 'Back Squat',
+  });
+
+  it('counts a set with a weight and a relative-strength PR once', () => {
+    const records = [
+      pr('a', 'set-1', 'weight'),
+      pr('b', 'set-1', 'relative_strength'),
+      pr('c', 'set-2', 'reps_at_weight'),
+      pr('d', 'set-3', 'relative_strength', 'w2'),
+      pr('e', 'set-4', 'estimated_1rm'),
+    ];
+
+    expect(prSetCount(records)).toBe(3);
+    expect(Object.fromEntries(recordCountsByWorkout(records))).toEqual({ w1: 2, w2: 1 });
+    // The set is listed by its weight PR; its ratio PR does not repeat it.
+    expect(recentRecords(records, 10).map((record) => record.id)).toEqual(['a', 'c', 'd']);
+  });
+
+  it('counts cardio-only workouts as cardio in week headers, without cardio sets', () => {
+    const treadmill = exercise('treadmill', 'Treadmill', 'cardio');
+    const cardio = (id: string, date: string) =>
+      workout(id, date, 'cardio', [
+        {
+          exercise: treadmill,
+          sets: [trackedSet(0, 0, { weight_kg: null, reps: null, duration_seconds: 1800 })],
+        },
+      ]);
+    const [week] = groupWorkoutsByWeek(
+      [
+        cardio('c1', '2026-10-07'),
+        workout('s1', '2026-10-06', 'lower', [
+          { exercise: squat, sets: [trackedSet(100, 5), trackedSet(100, 5)] },
+          // A finisher keeps the workout a strength workout, but its entry is not a set.
+          {
+            exercise: treadmill,
+            sets: [trackedSet(0, 0, { weight_kg: null, reps: null, duration_seconds: 600 })],
+          },
+        ]),
+        cardio('c2', '2026-10-05'),
+      ],
+      1,
+    );
+
+    expect(week).toMatchObject({ strengthWorkouts: 1, cardioWorkouts: 2, sets: 2 });
+    expect(weekGroupSummary(week)).toBe('1 workout · 2 cardio · 2 sets · 1.0 t');
+    expect(weekGroupSummary({ ...week, strengthWorkouts: 0, sets: 0, volumeKg: 0 })).toBe(
+      '2 cardio',
+    );
+    expect(isStrengthWorkout(workout('empty', '2026-10-05', 'lower', []))).toBe(true);
+  });
+
+  it('formats every session volume in a list in one unit', () => {
+    expect([950, 4907, 13_512].map((kg) => formatListVolume(kg))).toEqual([
+      '1.0 t',
+      '4.9 t',
+      '13.5 t',
+    ]);
+    expect(formatListVolume(4907, 'lb')).toBe('10,818 lb');
+  });
+
+  it('does not make a set with a missed rep the top set', () => {
+    const missed = trackedSet(122.5, 3, { failed: true, target_reps: 4 });
+    const madeTarget = trackedSet(125, 4, { failed: true, target_reps: 4 });
+
+    expect(topWorkingSet([trackedSet(112.5, 6), trackedSet(112.5, 4), missed])?.weight_kg).toBe(
+      112.5,
+    );
+    // A set marked as attempted that still reached its target counts, as it does for PRs.
+    expect(topWorkingSet([trackedSet(112.5, 6), madeTarget])?.weight_kg).toBe(125);
+    // With nothing else logged, the attempted set still shows.
+    expect(topWorkingSet([missed])?.weight_kg).toBe(122.5);
   });
 });

@@ -112,7 +112,7 @@ export function BodyGoalCard({
     <section className="pulse-card insight-card body-goal-card" aria-labelledby={titleId}>
       <header className="pulse-card-header">
         <h2 id={titleId}>Body goal</h2>
-        <button type="button" className="text-link" onClick={onOpenBody}>
+        <button type="button" className="pulse-button link small" onClick={onOpenBody}>
           Body
         </button>
       </header>
@@ -226,7 +226,7 @@ export function ExerciseSpotlightCard({
         <h2 id={titleId}>{name}</h2>
         <button
           type="button"
-          className="text-link"
+          className="pulse-button link small"
           onClick={() => onOpenProgress(summary?.exercise_id)}
         >
           Progress
@@ -387,7 +387,7 @@ export function CardioDistanceCard({
     <section className="pulse-card insight-card distance-card" aria-labelledby={titleId}>
       <header className="pulse-card-header">
         <h2 id={titleId}>Cardio distance</h2>
-        <button type="button" className="text-link" onClick={onOpenCardio}>
+        <button type="button" className="pulse-button link small" onClick={onOpenCardio}>
           Cardio
         </button>
       </header>
@@ -545,7 +545,7 @@ export function FriendsWeekCard({
         <h2 id={titleId}>Friends this week</h2>
         <button
           type="button"
-          className="text-link"
+          className="pulse-button link small"
           onClick={locked ? (onChooseSharing ?? onOpenSocial) : onOpenSocial}
         >
           {locked ? 'Share' : 'Social'}

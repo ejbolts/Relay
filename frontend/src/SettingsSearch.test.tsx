@@ -11,7 +11,9 @@ import {
   SettingsNavigationContext,
   useSettingsPageJump,
   type SettingsJump,
+  type SettingsPage,
 } from './settingsNavigation';
+import { UserContext } from './userContext';
 
 let root: Root;
 let container: HTMLDivElement;
@@ -55,7 +57,7 @@ function Harness({ identityKey = 'initial' }: { identityKey?: string }) {
   );
 }
 
-function JumpObserver({ page }: { page: 'settings' | 'profile' }) {
+function JumpObserver({ page }: { page: SettingsPage }) {
   useSettingsPageJump('settings', page === 'settings');
   useSettingsPageJump('profile', page === 'profile');
   return null;
@@ -112,23 +114,83 @@ it('matches cross-page terms and synonyms and does not list anything for an empt
     SETTINGS_DESTINATIONS.length,
   );
 });
-it('opens profile editing and focuses Username, then jumps back to Rest timer without changing it', async () => {
+
+it('forgives typing mistakes, joined words and plurals, but keeps exact words precise', () => {
+  const ids = (query: string) => searchSettings(query, true, true).map((entry) => entry.id);
+  expect(ids('pasword')).toEqual(['password']);
+  expect(ids('notifcations')).toEqual(['alerts', 'workout-sharing']);
+  expect(ids('consle')).toEqual(['admin']);
+  expect(ids('delet acount')).toEqual(['delete']);
+  expect(ids('rest timr')).toEqual(['rest', 'rest-times']);
+  expect(ids('signout')).toEqual(['signout']);
+  expect(ids('darkmode')).toEqual(['appearance']);
+  expect(ids('timers')).toEqual(['rest']);
+  expect(ids('Animación')).toEqual(['motion']);
+  // A real word is matched as typed, so "timer" does not also find "times".
+  expect(ids('timer')).toEqual(['rest']);
+  // Words match from their start, so "plate" still does not find templates.
+  expect(ids('plate')).toEqual([]);
+  // Sections in the same group follow those that name the word.
+  expect(ids('appearance').slice(0, 2)).toEqual(['appearance', 'motion']);
+});
+
+it('opens the Admin console from a partial query only for administrators', async () => {
+  const navigate = vi.fn();
+  const renderSearch = (isAdmin: boolean) =>
+    act(async () =>
+      root.render(
+        <UserContext.Provider
+          value={{
+            user: { ...account, is_admin: isAdmin },
+            updateUser: vi.fn(),
+            signOut: vi.fn(),
+            accountDeleted: vi.fn(),
+          }}
+        >
+          <SettingsNavigationContext.Provider value={{ request: null, navigate }}>
+            <SettingsSearch includeProfile={false} />
+          </SettingsNavigationContext.Provider>
+        </UserContext.Provider>,
+      ),
+    );
+
+  await renderSearch(false);
+  const input = await type('console');
+  expect(container.textContent).toContain('No sections found');
+  await act(async () =>
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+  );
+  expect(navigate).not.toHaveBeenCalled();
+
+  await renderSearch(true);
+  expect(container.querySelector('.settings-search-results button')?.textContent).toContain(
+    'Admin console',
+  );
+  await act(async () =>
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+  );
+  expect(navigate).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ page: 'admin' }));
+  expect(input.value).toBe('');
+});
+
+it('opens profile editing at the locked Username, then jumps back to Rest timer without changing it', async () => {
   await act(async () => root.render(<Harness />));
   await jump('username');
   expect(container.querySelector('.profile-identity')?.classList.contains('is-editing')).toBe(true);
-  expect(document.activeElement?.getAttribute('autocomplete')).toBe('username');
-  expect((document.activeElement as HTMLInputElement).value).toBe('sample');
+  expect(document.activeElement?.classList.contains('profile-username-field')).toBe(true);
+  expect(document.activeElement?.textContent).toContain('sample');
+  expect(container.querySelector('.profile-identity input[autocomplete="username"]')).toBeNull();
   await jump('rest timer');
   expect(document.activeElement?.getAttribute('aria-label')).toBe('Rest timer');
   expect(restChanged).not.toHaveBeenCalled();
 });
 it('keeps the searched field focused when loaded profile data remounts the editor', async () => {
   await act(async () => root.render(<Harness />));
-  await jump('username');
+  await jump('display name');
   await act(async () => root.render(<Harness identityKey="loaded" />));
   await act(async () => vi.runAllTimers());
-  expect(document.activeElement?.getAttribute('autocomplete')).toBe('username');
-  expect((document.activeElement as HTMLInputElement).value).toBe('sample');
+  expect(document.activeElement?.getAttribute('autocomplete')).toBe('name');
+  expect((document.activeElement as HTMLInputElement).value).toBe('Sample Lifter');
 });
 it('reveals a folded password form and offers an empty-result message and Escape clear', async () => {
   await act(async () => root.render(<Harness />));
@@ -165,4 +227,26 @@ it('waits for a destination that arrives after loading and focuses it when ready
   });
   await act(async () => vi.advanceTimersByTime(10));
   expect(document.activeElement).toBe(target);
+});
+
+it('finds settings that live on other screens, and admin tools only for admins', () => {
+  const ids = (query: string, admin = false) =>
+    searchSettings(query, true, admin).map((entry) => entry.id);
+  expect(ids('zone')).toContain('cardio-zones');
+  expect(ids('heart rate')).toContain('cardio-zones');
+  expect(ids('check-in')).toContain('home-check-in');
+  expect(ids('body fat')).toContain('home-check-in');
+  expect(ids('sex')).toContain('profile-sex');
+  expect(ids('rest alert')).toContain('alerts');
+  expect(ids('routine')).toContain('training-split');
+  expect(ids('automatic')).toContain('appearance');
+  expect(ids('admin')).toEqual([]);
+  expect(ids('admin', true)).toEqual(['admin']);
+  expect(searchSettings('admin', false, true).map((entry) => entry.id)).toEqual(['admin']);
+});
+
+it('matches the start of words, so "plate" no longer finds templates', () => {
+  expect(searchSettings('plate')).toEqual([]);
+  expect(searchSettings('temp').map((entry) => entry.id)).toContain('training-split');
+  expect(searchSettings('time').map((entry) => entry.id)).toContain('rest');
 });

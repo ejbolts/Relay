@@ -43,7 +43,6 @@ export function SharedBorderChip({
             rarity && <span className={`border-rarity ${rarity}`}>{RARITY_LABELS[rarity]}</span>
           }
           className="border-info-dialog"
-          swipeToDismiss
           onClose={() => {
             setOpen(false);
             requestAnimationFrame(() => trigger.current?.focus());

@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastButton, toastElement, toastText } from './toastTestUtils';
+import { TOAST_MS } from './Toast';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { ProfileAccountId } from './ProfileAccountId';
 const id = 'd7131000-7937-40be-b8ee-8b02800f5a36';
@@ -14,7 +16,7 @@ beforeEach(async () => {
   writeText.mockResolvedValue(undefined);
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
   await act(async () => root.render(<ProfileAccountId accountId={id} />));
 });
 afterEach(async () => {
@@ -30,25 +32,23 @@ it('shows and copies the full account UUID', async () => {
   await act(async () => container.querySelector('button')!.click());
   expect(writeText).toHaveBeenCalledWith(id);
   expect(container.textContent).not.toContain('UUID copied.');
-  expect(document.querySelector('.top-toast')?.textContent).toContain('UUID copied.');
-  await act(async () => vi.advanceTimersByTime(5000));
-  expect(document.querySelector('.top-toast')).toBeNull();
+  expect(toastText()).toBe('UUID copied.');
+  await act(async () => vi.advanceTimersByTime(TOAST_MS.standard));
+  expect(toastElement()).toBeNull();
 });
 it('selects the UUID for manual copying when clipboard access fails', async () => {
   writeText.mockRejectedValueOnce(new Error('denied'));
   await act(async () => container.querySelector('button')!.click());
   expect(window.getSelection()?.toString()).toBe(id);
-  expect(document.querySelector('.top-toast')?.textContent).toContain('UUID selected.');
+  expect(toastText()).toContain('UUID selected.');
 });
 
 it('restarts the timeout when copied again and can be dismissed early', async () => {
   await act(async () => container.querySelector('button')!.click());
-  await act(async () => vi.advanceTimersByTime(4000));
+  await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
   await act(async () => container.querySelector('button')!.click());
-  await act(async () => vi.advanceTimersByTime(4000));
-  expect(document.querySelector('.top-toast')).not.toBeNull();
-  await act(async () =>
-    document.querySelector<HTMLButtonElement>('[aria-label="Dismiss UUID notification"]')!.click(),
-  );
-  expect(document.querySelector('.top-toast')).toBeNull();
+  await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
+  expect(toastElement()).not.toBeNull();
+  await act(async () => toastButton('Dismiss notification')!.click());
+  expect(toastElement()).toBeNull();
 });

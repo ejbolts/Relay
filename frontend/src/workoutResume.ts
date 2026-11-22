@@ -1,5 +1,5 @@
-import type { Exercise, WorkoutSetInput } from './types';
-import { workoutDurationMinutes } from './utils';
+import type { Exercise, TrackedWorkout, WorkoutSetInput } from './types';
+import { localDateOf, workoutDurationMinutes } from './utils';
 
 /** Only logged cardio contributes; suggested and unticked sets remain planned time. */
 export function completedCardioDurationSeconds(
@@ -28,6 +28,23 @@ export function cardioAdjustedEndTime(start: string, end: string, cardioSeconds:
   return `${String(Math.floor(endMinutes / 60)).padStart(2, '0')}:${String(endMinutes % 60).padStart(2, '0')}`;
 }
 
+/**
+ * A finished live workout's clock times: its real start, and the end its saved duration reaches.
+ * The server derives the duration from the two times, so this keeps it equal to the logged
+ * duration (paused time left out). None for a full day, whose times would read as zero.
+ */
+export function liveWorkoutTimes(
+  startedAt: number,
+  durationMinutes: number,
+): { start: string; end: string } | null {
+  if (durationMinutes <= 0 || durationMinutes >= 1440) return null;
+  const started = new Date(startedAt);
+  const startMinutes = started.getHours() * 60 + started.getMinutes();
+  const clock = (minutes: number) =>
+    `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  return { start: clock(startMinutes), end: clock((startMinutes + durationMinutes) % 1440) };
+}
+
 export function completedWorkoutDurationMinutes(
   previousDurationMinutes: number,
   startedAt: number,
@@ -41,5 +58,26 @@ export function completedWorkoutDurationMinutes(
     1,
     Math.ceil(cardioSeconds / 60),
     overrideMinutes ?? previousDurationMinutes + Math.round(elapsedSeconds / 60),
+  );
+}
+
+/** How long after midnight a late session can still be resumed. */
+export const RESUME_LATE_WORKOUT_MS = 6 * 60 * 60 * 1000;
+
+/**
+ * Resume continues a session, so it is offered for workouts from today, and for a few hours
+ * after a late one that ran past midnight. Older workouts are changed with Edit instead.
+ */
+export function canResumeWorkout(
+  workout: Pick<TrackedWorkout, 'workout_date' | 'created_at' | 'updated_at'>,
+  now = Date.now(),
+): boolean {
+  const today = localDateOf(new Date(now).toISOString());
+  if (workout.workout_date === today) return true;
+  const savedAt = Math.max(Date.parse(workout.created_at), Date.parse(workout.updated_at) || 0);
+  return (
+    workout.workout_date === localDateOf(new Date(now - RESUME_LATE_WORKOUT_MS).toISOString()) &&
+    Number.isFinite(savedAt) &&
+    now - savedAt <= RESUME_LATE_WORKOUT_MS
   );
 }

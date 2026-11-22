@@ -25,6 +25,16 @@
   -webkit-tap-highlight-color: transparent;
 }
 
+/*
+ * A 44px wide touch target around the 28px button. It stays inside the 30px line, because the set
+ * numbers directly above and below are buttons too.
+ */
+.set-insert-button::before {
+  content: '';
+  position: absolute;
+  inset: -1px -8px;
+}
+
 /* Specific enough to beat the rest divider's own `span` label styles. */
 .set-grid .set-insert-button > .set-insert-dot {
   position: relative;
@@ -70,13 +80,12 @@
   transform: scale(0.9);
 }
 
-.set-insert-button:focus-visible,
-.set-add-rest:focus-visible {
+.set-insert-button:focus-visible {
   outline: none;
 }
 
 .set-grid .set-insert-button:focus-visible > .set-insert-dot,
-.set-grid .set-add-rest:focus-visible > span {
+.set-grid .set-add-rest:has(select:focus-visible) > span {
   outline: 2px solid var(--p-accent-text, currentColor);
   outline-offset: 2px;
 }
@@ -121,6 +130,7 @@
 
 /* Adds the rest after the set above, where the rest time would sit. */
 .set-add-rest {
+  position: relative;
   flex: none;
   display: inline-grid;
   place-items: center;
@@ -163,8 +173,23 @@
     linear-gradient(currentColor 0 0) center / 2px 100% no-repeat;
 }
 
+/* The menu: invisible and covering the whole pill, so a tap anywhere on it opens the menu. */
+.set-grid .set-add-rest > select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
 .set-add-rest:hover > span,
-.set-add-rest:focus-visible > span {
+.set-add-rest:has(select:focus-visible) > span {
   border-color: currentColor;
   color: var(--p-accent-text, currentColor);
 }

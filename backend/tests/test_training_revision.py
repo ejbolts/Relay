@@ -54,6 +54,39 @@ def test_workout_changes_reach_another_session_without_affecting_other_accounts(
         desktop.close()
 
 
+def test_sign_in_and_the_session_check_report_the_revision_the_app_starts_from(client):
+    from conftest import TEST_PASSWORD
+
+    # The app reads its data straight after either answer, without asking for the revision first.
+    assert client.get("/api/auth/me").headers["X-Workout-Revision"] == revision(client)
+    weight = {"measurement_date": date.today().isoformat(), "weight_kg": 80}
+    assert client.post("/api/body-measurements", json=weight).status_code == 200
+    changed = revision(client)
+    assert client.get("/api/auth/me").headers["X-Workout-Revision"] == changed
+
+    browser = TestClient(client.app)
+    try:
+        signed_in = browser.post(
+            "/api/auth/login",
+            json={"username": client.user["username"], "password": TEST_PASSWORD},
+        )
+        assert signed_in.status_code == 200
+        assert signed_in.headers["X-Workout-Revision"] == changed
+        # A failed sign-in says nothing about any account's data.
+        refused = browser.post(
+            "/api/auth/login", json={"username": client.user["username"], "password": "wrong"}
+        )
+        assert refused.status_code == 401
+        assert "X-Workout-Revision" not in refused.headers
+    finally:
+        browser.close()
+    anonymous = TestClient(client.app)
+    try:
+        assert "X-Workout-Revision" not in anonymous.get("/api/auth/me").headers
+    finally:
+        anonymous.close()
+
+
 def test_bodyweight_and_goals_signal_remote_refresh(client, other_client):
     other_before = revision(other_client)
     before = revision(client)

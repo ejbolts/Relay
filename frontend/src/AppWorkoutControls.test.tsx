@@ -111,11 +111,17 @@ const labelled = (label: string) =>
 async function click(target: HTMLElement) {
   await act(async () => target.click());
 }
+const collapseButton = () => card().querySelector<HTMLButtonElement>('.movement-collapse-button')!;
 const tick = (set: number) => click(labelled(`Complete set ${set}`));
 const shelfGains = () =>
   [...container.querySelectorAll('.weekly-shelf-cell')].map(
     (cell) =>
       `${cell.querySelector('.weekly-shelf-name')?.textContent} ${cell.querySelector('.weekly-shelf-gain')?.textContent}`,
+  );
+/** Each shelf total as before→after. */
+const totals = () =>
+  [...container.querySelectorAll('.weekly-shelf-roll > span')].map((roll) =>
+    [...roll.children].map((value) => value.textContent).join('→'),
   );
 const menuItems = () =>
   [...card().querySelectorAll('.movement-overflow-menu button')].map((item) =>
@@ -183,23 +189,43 @@ afterEach(async () => {
 });
 
 describe('finishing an exercise by ticking its last set', () => {
-  it('folds a planned exercise away and shows its weekly totals once, for all of its sets', async () => {
+  it('updates weekly totals with each set and keeps the finished exercise open', async () => {
     liveDraft([60, 60, 60]);
     await mount();
     await tick(1);
+    // Each set moves its muscles' weekly totals as it is logged.
+    expect(shelfGains()).toEqual(['Chest +1', 'Triceps +0.5']);
+    expect(totals()).toEqual(['0→1', '0→0.5']);
     await tick(2);
-    // Nothing is announced or folded while sets remain.
-    expect(shelfGains()).toEqual([]);
+    expect(shelfGains()).toEqual(['Chest +1', 'Triceps +0.5']);
+    expect(totals()).toEqual(['1→2', '0.5→1']);
     expect(card().classList.contains('is-collapsed')).toBe(false);
     expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(false);
+    expect(collapseButton().classList.contains('is-done')).toBe(false);
 
     await tick(3);
     expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(true);
+    expect(shelfGains()).toEqual(['Chest +3', 'Triceps +1.5']);
+    // Ticking the last set never folds the card; the button beside Add set does, once asked.
+    expect(card().classList.contains('is-collapsed')).toBe(false);
+    expect(collapseButton().classList.contains('is-done')).toBe(true);
+    expect(collapseButton().getAttribute('aria-label')).toBe('Collapse Bench press');
+    await click(collapseButton());
     expect(card().classList.contains('is-collapsed')).toBe(true);
     expect(card().querySelector('.movement-completed-summary')?.textContent).toBe(
       '3 completed sets',
     );
-    expect(shelfGains()).toEqual(['Chest +3', 'Triceps +1.5']);
+
+    await click(labelled('Expand Bench press'));
+    expect(card().classList.contains('is-collapsed')).toBe(false);
+  });
+
+  it('keeps the exercise open when it is finished from its header', async () => {
+    liveDraft([60, 60]);
+    await mount();
+    await click(labelled('Finish Bench press'));
+    expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(true);
+    expect(card().classList.contains('is-collapsed')).toBe(false);
   });
 
   it('keeps the exercise open after ticking a set that was added by hand', async () => {
@@ -207,9 +233,8 @@ describe('finishing an exercise by ticking its last set', () => {
     await mount();
     await tick(1);
     await tick(2);
-    expect(card().classList.contains('is-collapsed')).toBe(true);
+    expect(readActiveWorkoutDraft()!.movements[0].isComplete).toBe(true);
 
-    await click(labelled('Expand Bench press'));
     await click(container.querySelector<HTMLButtonElement>('.add-set-button')!);
     await tick(3);
     expect(readActiveWorkoutDraft()!.movements[0].sets.map((set) => set.completed)).toEqual([
@@ -256,6 +281,9 @@ describe('quieter set rows', () => {
     await click(labelled('Edit weight for set 1'));
     await click(labelled('Delete set 1'));
     expect(readActiveWorkoutDraft()!.movements[0].sets.map((set) => set.key)).toEqual(['set-1']);
+    const undo = document.querySelector<HTMLElement>('.toast');
+    expect(undo?.textContent).toContain('Set deleted');
+    expect(undo?.style.getPropertyValue('--toast-ms')).toBe('2500ms');
   });
 });
 

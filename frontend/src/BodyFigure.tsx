@@ -58,6 +58,7 @@ const overlay = (x: number, y: number, width: number): CSSProperties => ({
 export function BodyFigure({
   kind,
   values,
+  carried,
   unit,
   onPick,
   editing = null,
@@ -69,6 +70,8 @@ export function BodyFigure({
   kind: BodyFigureKind;
   /** Display values by field; a field left out has an empty label. */
   values: Partial<Record<BodySizeField, string>>;
+  /** Values from an earlier entry than the one shown, drawn muted. */
+  carried?: ReadonlySet<BodySizeField>;
   unit: string;
   /** Makes each label a button. Without it the figure only shows what was measured. */
   onPick?: (field: BodySizeField) => void;
@@ -153,6 +156,7 @@ export function BodyFigure({
         {shape.hairline && <path className="body-figure-hairline" d={shape.hairline} />}
         {callouts.map((item) => {
           const value = values[item.field];
+          const earlier = Boolean(value && carried?.has(item.field));
           return (
             <g
               key={item.field}
@@ -160,13 +164,13 @@ export function BodyFigure({
                 if (node) labels.current.set(item.field, node);
                 else labels.current.delete(item.field);
               }}
-              className={value ? 'body-figure-label' : 'body-figure-label empty'}
+              className={`body-figure-label${value ? '' : ' empty'}${earlier ? ' carried' : ''}`}
               data-field={item.field}
               {...(onPick && {
                 role: 'button',
                 tabIndex: 0,
                 'aria-label': value
-                  ? `Update ${item.name.toLowerCase()}, ${value} ${unit}`
+                  ? `${earlier ? 'Add' : 'Update'} ${item.name.toLowerCase()}, ${earlier ? 'last ' : ''}${value} ${unit}`
                   : `Add ${item.name.toLowerCase()}`,
                 onClick: () => onPick(item.field),
                 onKeyDown: (event: KeyboardEvent) => {

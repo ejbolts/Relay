@@ -78,8 +78,3 @@
 .import-undo-confirm > p {
   margin: 0.85rem 0 0;
 }
-.popup-dialog-actions .popup-primary-action.import-undo-action {
-  border: 0;
-  background: var(--p-danger);
-  color: #fff;
-}

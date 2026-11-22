@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useId, useState } from 'react';
 import { api } from './api';
 import { InlineConfirmButton } from './InlineConfirmButton';
+import { Toast } from './Toast';
 import type { YouTubeConnection } from './types';
 import './YouTubeConnectionPanel.css';
 
+// After returning from Google; only these two are confirmations, the rest need action.
+const CALLBACK_CONFIRMATIONS = new Set(['connected', 'cancelled']);
 const callbackMessages: Record<string, string> = {
   connected: 'YouTube connected. Your next upload will go to the channel shown below.',
   cancelled: 'Connection cancelled. Your previous connection has not changed.',
@@ -26,15 +29,23 @@ export function YouTubeConnectionPanel({
   const titleId = useId();
   const [connection, setConnection] = useState<YouTubeConnection | null>(null);
   const [working, setWorking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState(() => {
+  const [callback] = useState(() => {
     const result = new URLSearchParams(window.location.search).get('youtube');
     if (!result) return null;
     const url = new URL(window.location.href);
     url.searchParams.delete('youtube');
     window.history.replaceState(window.history.state, '', url);
-    return callbackMessages[result] ?? callbackMessages.failed;
+    return {
+      message: callbackMessages[result] ?? callbackMessages.failed,
+      confirmation: CALLBACK_CONFIRMATIONS.has(result),
+    };
   });
+  const [error, setError] = useState<string | null>(null);
+  // A failed return from Google stays until the next attempt; connection checks don't clear it.
+  const [callbackError, setCallbackError] = useState(
+    callback && !callback.confirmation ? callback.message : null,
+  );
+  const [notice, setNotice] = useState(callback?.confirmation ? callback.message : null);
 
   const refresh = useCallback(async () => {
     try {
@@ -63,6 +74,7 @@ export function YouTubeConnectionPanel({
   async function connect() {
     setWorking(true);
     setError(null);
+    setCallbackError(null);
     try {
       const { url } = await api.youtube.connect();
       window.location.assign(url);
@@ -118,7 +130,7 @@ export function YouTubeConnectionPanel({
           </span>
         </div>
       </div>
-      {notice && <p role="status">{notice}</p>}
+      {notice && <Toast id={notice} message={notice} onDismiss={() => setNotice(null)} />}
       {connection?.channel_title && (
         <a
           className="youtube-channel-name"
@@ -151,15 +163,16 @@ export function YouTubeConnectionPanel({
           Your videos stay on your channel when you disconnect.
         </p>
       )}
-      {error && (
+      {(error ?? callbackError) && (
         <p className="error-box" role="alert">
-          {error}
+          {error ?? callbackError}
         </p>
       )}
       <div className="youtube-connection-actions">
         {available && canConnect && (
           <button
-            className={connected ? 'secondary' : 'primary'}
+            type="button"
+            className={`pulse-button ${connected ? 'secondary' : 'primary'} block`}
             disabled={disabled || working}
             onClick={() => void connect()}
           >
@@ -175,13 +188,14 @@ export function YouTubeConnectionPanel({
             label="Disconnect"
             confirmLabel="Disconnect YouTube"
             workingLabel="Disconnecting…"
-            className="danger-link"
+            className="pulse-button danger-soft"
+            size="default"
             disabled={disabled || working || !connection.can_disconnect}
             onConfirm={disconnect}
           />
         )}
         {!connection && (
-          <button className="secondary" onClick={() => void refresh()}>
+          <button type="button" className="pulse-button block" onClick={() => void refresh()}>
             Try again
           </button>
         )}

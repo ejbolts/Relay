@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
 import { Icon, type IconName } from './Icon';
+import { RestTimeSelect } from './RestTimeSelect';
 import { WorkoutHeaderMeta } from './WorkoutRestTimer';
 import { useLiveWorkoutSheet } from './liveWorkoutSheetContext';
 import { leavesMenu } from './menuDismiss';
@@ -7,6 +8,7 @@ import './liveWorkout.css';
 
 export function LiveWorkoutHeader({
   name,
+  dateLabel = null,
   durationLabel,
   loggedSets,
   paused,
@@ -16,13 +18,16 @@ export function LiveWorkoutHeader({
   onAdjustTime,
   onAddNote,
   onTogglePause,
-  onAddExercise,
+  onStartRest,
+  restRunning = false,
   onDiscard,
   discardLabel = 'Discard workout',
   onFinish,
   saving = false,
 }: {
   name: string;
+  /** The workout's day when it is not today, such as a resumed session from last night. */
+  dateLabel?: string | null;
   durationLabel: string;
   loggedSets: number;
   paused: boolean;
@@ -32,7 +37,9 @@ export function LiveWorkoutHeader({
   onAdjustTime?: () => void;
   onAddNote: () => void;
   onTogglePause: () => void;
-  onAddExercise: () => void;
+  /** Starts a rest of the chosen length; left out when rest timers are turned off. */
+  onStartRest?: (seconds: number) => void;
+  restRunning?: boolean;
   /** Throwing the workout away sits last in the menu, away from the everyday actions. */
   onDiscard: () => void;
   discardLabel?: string;
@@ -95,12 +102,18 @@ export function LiveWorkoutHeader({
           minimise();
         }}
       >
-        <span />
+        <span className="sheet-grabber" aria-hidden="true" />
       </button>
       <div className="live-workout-toolbar">
         <div className="overlay-header-copy">
           <strong title={name}>{name}</strong>
           <div className="live-workout-meta">
+            {dateLabel && (
+              <>
+                <span className="live-workout-date">{dateLabel}</span>
+                <span aria-hidden="true">·</span>
+              </>
+            )}
             <WorkoutHeaderMeta
               durationLabel={durationLabel}
               paused={paused}
@@ -112,15 +125,25 @@ export function LiveWorkoutHeader({
             </span>
           </div>
         </div>
-        <button
-          type="button"
-          className="live-workout-add"
-          aria-label="Add exercise"
-          title="Add exercise"
-          onClick={onAddExercise}
-        >
-          <Icon name="plus" />
-        </button>
+        {onStartRest && (
+          // The button is drawn under a transparent select, so a tap opens the same system menu of
+          // rest times as the rest pill between sets.
+          <label
+            className={`live-workout-rest${restRunning ? ' is-running' : ''}`}
+            title="Rest timer"
+          >
+            <Icon name="timer" />
+            <RestTimeSelect
+              seconds={null}
+              label="Rest timer"
+              placeholder="Rest"
+              customStart={120}
+              onChange={(seconds) => {
+                if (seconds > 0) onStartRest(seconds);
+              }}
+            />
+          </label>
+        )}
         <button
           ref={menuButtonRef}
           type="button"
@@ -141,7 +164,7 @@ export function LiveWorkoutHeader({
         </button>
         <button
           type="button"
-          className="live-workout-finish"
+          className="pulse-button small live-workout-finish"
           aria-label="Finish workout"
           title="Finish workout"
           disabled={saving}

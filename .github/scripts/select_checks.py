@@ -35,6 +35,7 @@ CONTRACT_MODULES = {
     "sharing.py",
     "tracker.py",
     "training_blocks.py",
+    "username_reminder_requests.py",
     "weight_mapping.py",
     "workout_type_exercises.py",
     "youtube_connections.py",

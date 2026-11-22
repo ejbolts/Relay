@@ -1,3 +1,4 @@
+import { cardioRecordLabel } from './cardioRecords';
 import { Icon } from './Icon';
 import type { PersonalRecord } from './types';
 import { dayMonth, formatVolume, shortDate } from './trainingSummary';
@@ -110,8 +111,8 @@ export function WeeklyReviewSummary({
         <h3>
           Records
           <span className="num">
-            {review.records.length}
-            <Delta change={review.records.length - review.previousRecordCount} />
+            {review.recordCount}
+            <Delta change={review.recordCount - review.previousRecordCount} />
           </span>
         </h3>
         {review.records.length > 0 ? (
@@ -123,7 +124,7 @@ export function WeeklyReviewSummary({
                   <span>
                     <b>{record.exercise_name ?? 'Exercise'}</b>
                     <small>
-                      {RECORD_LABELS[record.record_type] ?? 'PR'}
+                      {cardioRecordLabel(record) ?? RECORD_LABELS[record.record_type] ?? 'PR'}
                       {record.record_type === 'reps_at_weight' && record.weight_kg != null
                         ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
                         : ''}{' '}
@@ -144,8 +145,12 @@ export function WeeklyReviewSummary({
           <p className="pulse-empty-line">No new strength records.</p>
         )}
         {review.records.length > 3 && (
-          <button type="button" className="text-link" onClick={() => onOpenProgress()}>
-            All {review.records.length} in Progress
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => onOpenProgress()}
+          >
+            All {review.recordCount} in Progress
           </button>
         )}
       </div>
@@ -227,7 +232,7 @@ export function WeeklyReviewSummary({
         ) : (
           <p className="pulse-empty-line">No cardio data.</p>
         )}
-        <button type="button" className="text-link" onClick={onOpenCardio}>
+        <button type="button" className="pulse-button link small" onClick={onOpenCardio}>
           Cardio
         </button>
       </div>
@@ -248,7 +253,7 @@ export function WeeklyReviewSummary({
           )}
         </h3>
         {body.averageKg === null && <p className="pulse-empty-line">No check-ins logged.</p>}
-        <button type="button" className="text-link" onClick={onOpenBody}>
+        <button type="button" className="pulse-button link small" onClick={onOpenBody}>
           Body
         </button>
       </div>

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { TrackedWorkout } from './types';
 import { PopupDialog } from './PopupDialog';
-import { NotificationDialog } from './NotificationDialog';
+import { Toast } from './Toast';
 import { useWeightUnit } from './trainingPreferencesContext';
 import {
   downloadWorkoutCard,
@@ -15,7 +15,6 @@ import {
   type WorkoutCardLayout,
 } from './workoutCard';
 import './workoutShareCard.css';
-import { useWorkoutShareReminder } from './useWorkoutShareReminder';
 import { WorkoutShareReminderSetting } from './WorkoutShareReminderSetting';
 
 export function WorkoutShareCard({
@@ -118,7 +117,46 @@ export function WorkoutShareCard({
 
   return (
     <>
-      <PopupDialog title="Share workout" className="workout-share-dialog" onClose={onClose}>
+      <PopupDialog
+        title="Share workout"
+        className="workout-share-dialog"
+        onClose={onClose}
+        actions={
+          <>
+            <button
+              type="button"
+              disabled={!file || busy || !canCopy}
+              title={canCopy ? undefined : 'Image copying is unavailable in this browser'}
+              onClick={() => void copy()}
+            >
+              {action === 'copy' ? 'Copying…' : 'Copy image'}
+            </button>
+            <button
+              type="button"
+              className={canShare ? undefined : 'popup-primary-action'}
+              disabled={!file || busy}
+              onClick={() => {
+                if (file) {
+                  downloadWorkoutCard(file);
+                  setMessage('Card downloaded');
+                }
+              }}
+            >
+              {!file && !error ? 'Preparing…' : 'Download PNG'}
+            </button>
+            {canShare && (
+              <button
+                type="button"
+                className="popup-primary-action"
+                disabled={busy}
+                onClick={() => void share()}
+              >
+                {action === 'share' ? 'Sharing…' : 'Share image'}
+              </button>
+            )}
+          </>
+        }
+      >
         <div className="workout-share-layout">
           <div className="workout-share-preview">
             <img src={preview} alt="Workout card preview" width="1080" />
@@ -189,76 +227,18 @@ export function WorkoutShareCard({
           <p className="inline-error" role="alert">
             {error}{' '}
             {!file && (
-              <button type="button" onClick={() => setRetry((value) => value + 1)}>
+              <button
+                type="button"
+                className="pulse-button link small"
+                onClick={() => setRetry((value) => value + 1)}
+              >
                 Retry
               </button>
             )}
           </p>
         )}
-        <div className="popup-dialog-actions">
-          <button
-            type="button"
-            disabled={!file || busy || !canCopy}
-            title={canCopy ? undefined : 'Image copying is unavailable in this browser'}
-            onClick={() => void copy()}
-          >
-            {action === 'copy' ? 'Copying…' : 'Copy image'}
-          </button>
-          <button
-            type="button"
-            className={canShare ? undefined : 'popup-primary-action'}
-            disabled={!file || busy}
-            onClick={() => {
-              if (file) {
-                downloadWorkoutCard(file);
-                setMessage('Card downloaded');
-              }
-            }}
-          >
-            {!file && !error ? 'Preparing…' : 'Download PNG'}
-          </button>
-          {canShare && (
-            <button
-              type="button"
-              className="popup-primary-action"
-              disabled={busy}
-              onClick={() => void share()}
-            >
-              {action === 'share' ? 'Sharing…' : 'Share image'}
-            </button>
-          )}
-        </div>
-        {message && (
-          <NotificationDialog message={message} onClose={() => setMessage(null)} portal={false} />
-        )}
+        {message && <Toast id={message} message={message} onDismiss={() => setMessage(null)} />}
       </PopupDialog>
     </>
-  );
-}
-
-export function WorkoutSharePrompt({
-  workout,
-  records,
-  onClose,
-}: {
-  workout: TrackedWorkout;
-  records: number;
-  onClose: () => void;
-}) {
-  const [sharing, setSharing] = useState(false);
-  const [enabled] = useWorkoutShareReminder();
-  useEffect(() => {
-    if (!enabled && !sharing) onClose();
-  }, [enabled, sharing, onClose]);
-  if (sharing) return <WorkoutShareCard workout={workout} records={records} onClose={onClose} />;
-  if (!enabled) return null;
-  return (
-    <NotificationDialog
-      message="Workout saved"
-      durationMs={3000}
-      countdown
-      onClose={onClose}
-      action={{ label: 'Share card', onClick: () => setSharing(true) }}
-    />
   );
 }

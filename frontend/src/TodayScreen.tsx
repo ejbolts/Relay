@@ -1,15 +1,17 @@
+import { SexMark } from './SexMark';
 import { AppEditionBadge } from './AppEditionBadge';
 import { HomeTips } from './HomeTips';
 import { api } from './api';
 import { useEffect, useId, useMemo, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import './liveSession.css';
-import { createPortal } from 'react-dom';
+import { Toast } from './Toast';
 import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 import { ConsistencyCard } from './ConsistencyCard';
+import { consistencyWeeks } from './consistencyWeeks';
+import { cardioRecordLabel } from './cardioRecords';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
-import { SexMark } from './SexMark';
 import { MuscleSetsCard } from './MuscleSetsCard';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { formatMemberSince } from './profileDisplay';
@@ -32,7 +34,8 @@ import {
   daysBetween,
   latestTopSets,
   parseLocalDate,
-  recentStrengthRecords,
+  prSetCount,
+  recentRecords,
   shortDate,
   trainingDayGrid,
   weekStartDayFrom,
@@ -181,6 +184,9 @@ export interface TodayScreenProps {
   onStartEmpty: () => void;
   onStartRecommended?: () => void;
   onEditSplit?: () => void;
+  /** Moves the split past Up next's day; only given when that day can be skipped. */
+  onSkipSplitDay?: () => void;
+  skippingSplitDay?: boolean;
   onOpenHistory: () => void;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
   onOpenProgress: (exerciseId?: string) => void;
@@ -244,6 +250,8 @@ export function TodayScreen({
   onStartEmpty,
   onStartRecommended,
   onEditSplit,
+  onSkipSplitDay,
+  skippingSplitDay = false,
   onOpenHistory,
   onOpenWorkout,
   onOpenProgress,
@@ -356,7 +364,7 @@ export function TodayScreen({
       ),
     [measurements, today, weekStartDay],
   );
-  const records = recentStrengthRecords(personalRecords, 3);
+  const records = recentRecords(personalRecords, 3);
   const exerciseNames = useMemo(() => {
     const names = new Map<string, string>();
     for (const workout of workouts)
@@ -379,12 +387,7 @@ export function TodayScreen({
     () => muscleFreshness([thisWeekSets, ...(earlierWeekSets ?? [])], today),
     [thisWeekSets, earlierWeekSets, today],
   );
-  const strengthRecordCount = useMemo(
-    () =>
-      personalRecords.filter((record) => record.value > 0 && record.record_type in RECORD_LABELS)
-        .length,
-    [personalRecords],
-  );
+  const strengthRecordCount = useMemo(() => prSetCount(personalRecords), [personalRecords]);
   const memberSince = profile ? formatMemberSince(profile.created_at, 'short') : null;
 
   const checkIns = useDailyCheckIns(onSaveBodyweight, onSaveBodyFat);
@@ -424,7 +427,9 @@ export function TodayScreen({
                 </span>
                 Workouts
               </dt>
-              <dd className="num">{formatTotal(data?.history?.total_workouts)}</dd>
+              <dd className="num">
+                {formatTotal(data?.history?.strength_workouts ?? data?.history?.total_workouts)}
+              </dd>
             </div>
             <div>
               <dt>
@@ -464,10 +469,26 @@ export function TodayScreen({
               )}
               {recommendation ? 'Up next' : 'Ready when you are'}
             </p>
-            {onEditSplit && (
-              <button className="text-button" type="button" onClick={onEditSplit}>
-                {recommendation?.split_name ? 'Edit split' : 'Set up split'}
-              </button>
+            {(onSkipSplitDay || onEditSplit) && (
+              <div className="next-session-links">
+                {onSkipSplitDay && (
+                  <button
+                    className="pulse-button link small next-session-skip"
+                    type="button"
+                    onClick={onSkipSplitDay}
+                    disabled={skippingSplitDay}
+                    aria-label={`Skip ${recommendationLabel?.toLowerCase() ?? 'this'} day`}
+                  >
+                    <Icon name="skip" />
+                    Skip
+                  </button>
+                )}
+                {onEditSplit && (
+                  <button className="pulse-button link small" type="button" onClick={onEditSplit}>
+                    {recommendation?.split_name ? 'Edit split' : 'Set up split'}
+                  </button>
+                )}
+              </div>
             )}
           </div>
           <div className="next-session-head">
@@ -658,7 +679,11 @@ export function TodayScreen({
     ),
     'this-week': thisWeek ? <ThisWeekCard>{thisWeek}</ThisWeekCard> : null,
     consistency: (
-      <ConsistencyCard streak={data?.current_streak ?? 0} trainingDays={trainingDays}>
+      <ConsistencyCard
+        streak={data?.current_streak ?? 0}
+        trainingDays={trainingDays}
+        weeks={consistencyWeeks(data?.history?.first_workout_date, today)}
+      >
         {calendar}
       </ConsistencyCard>
     ),
@@ -718,7 +743,11 @@ export function TodayScreen({
       <section className="pulse-card" aria-labelledby="records-title">
         <header className="pulse-card-header">
           <h2 id="records-title">Recent records</h2>
-          <button type="button" className="text-link" onClick={() => onOpenProgress()}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => onOpenProgress()}
+          >
             Progress
           </button>
         </header>
@@ -733,7 +762,7 @@ export function TodayScreen({
                   <span className="record-copy">
                     <b>{record.exercise_name ?? 'Exercise'}</b>
                     <small>
-                      {RECORD_LABELS[record.record_type] ?? 'PR'}
+                      {cardioRecordLabel(record) ?? RECORD_LABELS[record.record_type] ?? 'PR'}
                       {record.record_type === 'reps_at_weight' && record.weight_kg != null
                         ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
                         : ''}{' '}
@@ -817,39 +846,9 @@ export function TodayScreen({
           />
         }
         title="Home"
-        onOpenSettings={onOpenSettings}
         accountActions={
-          accountActions ?? (
-            <div className="account-header-actions">
-              {notifications}
-              {onOpenProfile && (
-                <ProfileButton
-                  onClick={onOpenProfile}
-                  name={profileLabel}
-                  photoUrl={profilePhotoUrl}
-                  border={profile?.profile_border}
-                  friendRequests={friendRequests}
-                  openFeedback={openFeedback}
-                />
-              )}
-            </div>
-          )
-        }
-        actions={
-          <>
-            <button
-              ref={home.editButton}
-              className="icon-button-pulse"
-              type="button"
-              aria-label={home.editing ? 'Save Home layout' : 'Edit Home layout'}
-              title={home.editing ? 'Save Home layout' : 'Edit Home layout'}
-              aria-busy={home.saving}
-              aria-pressed={home.editing}
-              disabled={!home.loaded || (home.editing && (home.saving || home.dragging))}
-              onClick={home.toggleEditing}
-            >
-              <Icon name="edit" />
-            </button>
+          // Only the pencil works while the layout is being edited, so nothing leaves Home mid-edit.
+          <span className="home-header-locks" inert={home.editing}>
             {onOpenVideos && (
               <button
                 className="icon-button-pulse"
@@ -861,14 +860,45 @@ export function TodayScreen({
                 <Icon name="video" />
               </button>
             )}
-          </>
+            {accountActions ?? (
+              <div className="account-header-actions">
+                {notifications}
+                {onOpenProfile && (
+                  <ProfileButton
+                    onClick={onOpenProfile}
+                    name={profileLabel}
+                    photoUrl={profilePhotoUrl}
+                    border={profile?.profile_border}
+                    friendRequests={friendRequests}
+                    openFeedback={openFeedback}
+                  />
+                )}
+              </div>
+            )}
+            {onOpenSettings && <SettingsButton onClick={onOpenSettings} />}
+          </span>
+        }
+        actions={
+          <button
+            ref={home.editButton}
+            className="icon-button-pulse"
+            type="button"
+            aria-label={home.editing ? 'Save Home layout' : 'Edit Home layout'}
+            title={home.editing ? 'Save Home layout' : 'Edit Home layout'}
+            aria-busy={home.saving}
+            aria-pressed={home.editing}
+            disabled={!home.loaded || (home.editing && (home.saving || home.dragging))}
+            onClick={home.toggleEditing}
+          >
+            <Icon name="edit" />
+          </button>
         }
       />
 
       {home.loadError && (
         <p className="inline-error" role="alert">
           Could not load your saved layout.{' '}
-          <button type="button" className="text-link" onClick={home.retry}>
+          <button type="button" className="pulse-button link small" onClick={home.retry}>
             Retry
           </button>
         </p>
@@ -957,8 +987,6 @@ export function TodayScreen({
   );
 }
 
-const BODYWEIGHT_UNDO_MS = 5000;
-
 function CheckInStatus({
   prior,
   today,
@@ -1009,7 +1037,7 @@ function CheckInStatus({
 }
 
 export function DashboardQuickBodyweight({
-  mode = 'combined',
+  mode: configuredMode = 'combined',
   busy = false,
   undoVersion = 0,
   undoVersionRef,
@@ -1036,6 +1064,11 @@ export function DashboardQuickBodyweight({
   onSaveBodyFat?: (bodyFat: number) => Promise<UndoBodyweightCheckIn>;
 }) {
   const weightUnit = useWeightUnit();
+  // Body fat is stored on a weigh-in, so until today's weight is in, Body fat only asks for both.
+  const mode: BodyCheckInMode =
+    configuredMode === 'fat' && onSaveBodyFat && todayBodyweight === null
+      ? 'combined-single'
+      : configuredMode;
   const initialWeight = todayBodyweight ?? latestBodyweight;
   const titleId = useId();
   const weightFormId = useId();
@@ -1071,12 +1104,6 @@ export function DashboardQuickBodyweight({
     const nextWeight = todayBodyweight ?? latestBodyweight;
     setWeight(nextWeight);
   }, [latestBodyweight, todayBodyweight]);
-
-  useEffect(() => {
-    if (!undo || saving) return;
-    const timer = window.setTimeout(() => setUndo(null), BODYWEIGHT_UNDO_MS);
-    return () => window.clearTimeout(timer);
-  }, [undo, saving]);
 
   async function save() {
     if (saving || busy) return;
@@ -1359,49 +1386,28 @@ export function DashboardQuickBodyweight({
           )}
         </section>
       )}
-      {undo &&
-        undo.version === undoVersion &&
-        createPortal(
-          <div
-            key={undo.attempt}
-            className={`undo-toast bodyweight-undo-toast${saving ? ' is-undoing' : ''}`}
-            role="status"
-            aria-atomic="true"
-            style={{ '--undo-toast-duration': `${BODYWEIGHT_UNDO_MS}ms` } as CSSProperties}
-          >
-            <span>
-              {saving
-                ? 'Undoing check-in…'
-                : undo.kind === 'combined'
-                  ? 'Check-in saved'
-                  : undo.kind === 'fat'
-                    ? 'Body fat saved'
-                    : 'Body weight saved'}
-            </span>
-            <button
-              className="undo-toast-action"
-              type="button"
-              disabled={saving || busy}
-              onClick={() => void undoSave()}
-            >
-              Undo
-            </button>
-            <button
-              className="undo-toast-close"
-              type="button"
-              disabled={saving || busy}
-              aria-label={
-                undo.kind === 'fat'
-                  ? 'Dismiss body fat notification'
-                  : 'Dismiss body weight notification'
-              }
-              onClick={() => setUndo(null)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )}
+      {undo && undo.version === undoVersion && (
+        <Toast
+          id={undo.attempt}
+          message={
+            saving
+              ? 'Undoing check-in…'
+              : undo.kind === 'combined'
+                ? 'Check-in saved'
+                : undo.kind === 'fat'
+                  ? 'Body fat saved'
+                  : 'Body weight saved'
+          }
+          action={{ label: 'Undo', run: undoSave }}
+          busy={saving || busy}
+          dismissLabel={
+            undo.kind === 'fat'
+              ? 'Dismiss body fat notification'
+              : 'Dismiss body weight notification'
+          }
+          onDismiss={() => setUndo(null)}
+        />
+      )}
       {error && (
         <p className="inline-error" role="alert">
           {error}
@@ -1411,34 +1417,7 @@ export function DashboardQuickBodyweight({
   );
 }
 
-export function TodaySkeleton() {
-  return (
-    <section
-      className="today-screen content-page today-loading-skeleton"
-      role="status"
-      aria-live="polite"
-      aria-busy="true"
-    >
-      <p className="sr-only">Loading your training summary</p>
-      <div className="page-header" aria-hidden="true">
-        <div>
-          <span className="skeleton-block skeleton-eyebrow" />
-          <span className="skeleton-block skeleton-title" />
-        </div>
-      </div>
-      <div className="pulse-card skeleton-card skeleton-card-tall" aria-hidden="true" />
-      <div className="pulse-kpis" aria-hidden="true">
-        {[0, 1, 2].map((item) => (
-          <div className="pulse-kpi" key={item}>
-            <span className="skeleton-block skeleton-label" />
-            <span className="skeleton-block skeleton-value" />
-          </div>
-        ))}
-      </div>
-      <div className="pulse-card skeleton-card" aria-hidden="true" />
-    </section>
-  );
-}
+export { TodaySkeleton } from './TodaySkeleton';
 
 function ThisWeekCard({ children }: { children: ReactNode }) {
   const titleId = useId();

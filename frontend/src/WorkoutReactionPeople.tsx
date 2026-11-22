@@ -2,14 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { REACTIONS } from './friendFeedData';
-import { motionReduced } from './motion';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
+import { ShowMoreButton } from './ShowMoreButton';
 import type { WorkoutReactionPage } from './types';
 import './workoutReactionPeople.css';
-
-/** Matches the slide-down in workoutReactionPeople.css. */
-const CLOSE_MS = 240;
 
 export function WorkoutReactionPeople({
   workoutId,
@@ -25,24 +22,7 @@ export function WorkoutReactionPeople({
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [closing, setClosing] = useState(false);
-  const closeTimer = useRef<number | null>(null);
   const highlighted = useRef<HTMLLIElement>(null);
-
-  useEffect(
-    () => () => {
-      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
-    },
-    [],
-  );
-
-  /** Slides the sheet back down before it unmounts. */
-  function dismiss() {
-    if (closeTimer.current !== null) return;
-    if (motionReduced()) return onClose();
-    setClosing(true);
-    closeTimer.current = window.setTimeout(onClose, CLOSE_MS);
-  }
 
   useEffect(() => {
     let cancelled = false;
@@ -99,10 +79,10 @@ export function WorkoutReactionPeople({
 
   return (
     <PopupDialog
+      variant="sheet"
       title="Reactions"
-      className={`reaction-people-sheet${closing ? ' is-closing' : ''}`}
-      swipeToDismiss
-      onClose={dismiss}
+      className="reaction-people-sheet"
+      onClose={onClose}
     >
       <div className="reaction-people-body" aria-busy={!page && !error}>
         {!page && !error && <p role="status">Loading reactions…</p>}
@@ -133,7 +113,7 @@ export function WorkoutReactionPeople({
             {!page && (
               <button
                 type="button"
-                className="text-link"
+                className="pulse-button link small text-link"
                 onClick={() => setAttempt((value) => value + 1)}
               >
                 Retry
@@ -142,14 +122,7 @@ export function WorkoutReactionPeople({
           </div>
         )}
         {page?.next_offset != null && (
-          <button
-            type="button"
-            className="show-more-button"
-            disabled={loadingMore}
-            onClick={() => void loadMore()}
-          >
-            {loadingMore ? 'Loading…' : 'Show more'}
-          </button>
+          <ShowMoreButton loading={loadingMore} onClick={() => void loadMore()} />
         )}
       </div>
     </PopupDialog>

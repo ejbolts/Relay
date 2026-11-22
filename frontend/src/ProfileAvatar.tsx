@@ -63,6 +63,7 @@ export function ProfileAvatar({
       </button>
       {viewingUrl === url && (
         <PopupDialog
+          variant="screen"
           title="Profile photo"
           className="profile-photo-viewer"
           onClose={() => {

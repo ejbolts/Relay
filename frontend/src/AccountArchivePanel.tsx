@@ -103,10 +103,20 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
         </div>
       </header>
       <div className="settings-actions data-transfer-actions">
-        <button type="button" disabled={downloading} onClick={() => void download()}>
+        <button
+          type="button"
+          className="pulse-button secondary"
+          disabled={downloading}
+          onClick={() => void download()}
+        >
           {downloading ? 'Preparing…' : '↓ Download backup'}
         </button>
-        <button type="button" disabled={checking} onClick={() => fileInput.current?.click()}>
+        <button
+          type="button"
+          className="pulse-button secondary"
+          disabled={checking}
+          onClick={() => fileInput.current?.click()}
+        >
           {checking ? 'Checking…' : 'Restore backup'}
         </button>
         <input
@@ -132,9 +142,23 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
           title="Restore this backup?"
           kicker={created ? `SAVED ${created.toUpperCase()}` : 'RESTORE'}
           className="account-archive-dialog"
-          onClose={() => {
-            if (!restoring) setPending(null);
-          }}
+          busy={restoring}
+          onClose={() => setPending(null)}
+          actions={
+            <>
+              <button type="button" disabled={restoring} onClick={() => setPending(null)}>
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action"
+                disabled={restoring}
+                onClick={() => void restore()}
+              >
+                {restoring ? 'Restoring…' : 'Restore backup'}
+              </button>
+            </>
+          }
         >
           <table className="account-archive-counts">
             <thead>
@@ -176,19 +200,6 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
               {restoreError}
             </p>
           )}
-          <footer className="popup-dialog-actions">
-            <button type="button" disabled={restoring} onClick={() => setPending(null)}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="popup-primary-action"
-              disabled={restoring}
-              onClick={() => void restore()}
-            >
-              {restoring ? 'Restoring…' : 'Restore backup'}
-            </button>
-          </footer>
         </PopupDialog>
       )}
     </section>

@@ -72,11 +72,6 @@
   letter-spacing: -0.02em;
   margin: 0;
 }
-.split-section-heading .text-button {
-  color: var(--p-accent-text);
-  font-size: 0.75rem;
-  padding: 0;
-}
 .split-templates {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -263,14 +258,6 @@
   padding: 0.65rem;
   font-size: 0.8rem;
 }
-.split-new-type button {
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-  border: 1px solid var(--p-line-strong);
-  border-radius: 10px;
-  padding: 0.5rem 0.8rem;
-  font-size: 0.75rem;
-}
 .split-preview-controls {
   display: flex;
   margin-inline-start: auto;
@@ -407,10 +394,21 @@
 .next-session-top .next-session-tag {
   margin-bottom: 0;
 }
-.next-session-top .text-button {
-  color: var(--p-accent-text);
-  font-size: 0.75rem;
-  padding: 0;
+/* Skip and Edit split: far enough apart that their 44px tap areas don't overlap. */
+.next-session-links {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 1.125rem;
+}
+.next-session-links .next-session-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.next-session-skip .pulse-icon {
+  width: 0.875rem;
+  height: 0.875rem;
 }
 @media (max-width: 390px) {
   .split-cycle > li {

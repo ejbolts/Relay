@@ -30,13 +30,11 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
   const [busy, setBusy] = useState(false);
   const [selected, setSelected] = useState<ImportBatch | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
 
   async function show() {
     setOpen(true);
     setLoading(true);
     setError(null);
-    setNotice(null);
     try {
       setBatches(await api.importBatches());
     } catch (caught) {
@@ -54,7 +52,8 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
       await onUndo(selected.id);
       setBatches((batches ?? []).filter((batch) => batch.id !== selected.id));
       setSelected(null);
-      setNotice('Import undone.');
+      // The app confirms with a toast, which a modal would cover.
+      setOpen(false);
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Could not undo that import.');
     } finally {
@@ -64,19 +63,36 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
 
   return (
     <>
-      <button type="button" onClick={() => void show()}>
+      <button type="button" className="pulse-button secondary" onClick={() => void show()}>
         Import history
       </button>
       {open && (
         <PopupDialog
           title={selected ? 'Undo import?' : 'Import history'}
           className="import-history-dialog"
+          busy={busy}
+          onBack={selected ? () => setSelected(null) : undefined}
           onClose={() => {
-            if (!busy) {
-              setOpen(false);
-              setSelected(null);
-            }
+            setOpen(false);
+            setSelected(null);
           }}
+          actions={
+            selected && (
+              <>
+                <button type="button" autoFocus disabled={busy} onClick={() => setSelected(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="popup-primary-action is-danger import-undo-action"
+                  disabled={busy}
+                  onClick={() => void undo()}
+                >
+                  {busy ? 'Undoing…' : 'Undo import'}
+                </button>
+              </>
+            )
+          }
         >
           <div className="import-history">
             {loading ? (
@@ -95,19 +111,6 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
                     'Sessions are permanently deleted, including later edits. '}
                   {selected.body_measurements > 0 && 'Edited check-ins are kept.'}
                 </p>
-                <div className="popup-dialog-actions">
-                  <button type="button" disabled={busy} onClick={() => setSelected(null)}>
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="popup-primary-action import-undo-action"
-                    disabled={busy}
-                    onClick={() => void undo()}
-                  >
-                    {busy ? 'Undoing…' : 'Undo import'}
-                  </button>
-                </div>
               </div>
             ) : batches?.length === 0 ? (
               <p className="import-history-muted">
@@ -129,7 +132,6 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
                       onClick={() => {
                         setSelected(batch);
                         setError(null);
-                        setNotice(null);
                       }}
                     >
                       Undo
@@ -141,11 +143,6 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
             {error && (
               <p role="alert" className="inline-error">
                 {error}
-              </p>
-            )}
-            {notice && (
-              <p role="status" className="import-history-muted">
-                {notice}
               </p>
             )}
           </div>

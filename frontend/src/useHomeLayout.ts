@@ -17,34 +17,52 @@ export function useHomeLayout(active = true) {
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState('');
+  // Leaving Home mid-edit keeps the draft and picks the edit up again on return.
+  const [paused, setPaused] = useState(false);
   const editButton = useRef<HTMLButtonElement>(null);
   const focusAfterEdit = useRef(false);
 
   useEffect(() => {
     if (editing) focusAfterEdit.current = true;
-    else if (!saving && focusAfterEdit.current) {
+    else if (!saving && !paused && focusAfterEdit.current) {
       editButton.current?.focus();
       focusAfterEdit.current = false;
     }
-  }, [editing, saving]);
+  }, [editing, saving, paused]);
 
   useEffect(() => {
-    if (active) return;
-    setEditing(false);
-    setDragging(false);
-    setDraft(defaultHomeLayout());
-    setError(null);
-    setMessage('');
-  }, [active]);
+    // A save under way finishes the edit itself.
+    if (!active && editing && !saving) {
+      setEditing(false);
+      setDragging(false);
+      setPaused(true);
+    } else if (active && paused) {
+      setPaused(false);
+      setEditing(true);
+    }
+  }, [active, editing, paused, saving]);
 
+  // The account, not the object describing it: that is replaced when the server confirms a
+  // session the app had already opened, which is no reason to read the layout again.
+  const userId = user?.id ?? null;
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     let cancelled = false;
+    let answered = false;
     setLoaded(false);
     setLoadError(false);
+    // This device's copy shows first, so the cards do not rearrange once Home is up. Editing
+    // still waits for the server's answer, so an older layout is never saved over a newer one.
+    void api.saved
+      .homeLayout()
+      .then((copy) => {
+        if (!cancelled && !answered && copy) setLayout(copy);
+      })
+      .catch(() => undefined);
     void api
       .getHomeLayout()
       .then((saved) => {
+        answered = true;
         if (!cancelled) {
           const defaults = defaultHomeLayout();
           const order = saved.order.filter(isHomeSectionId);
@@ -65,7 +83,7 @@ export function useHomeLayout(active = true) {
     return () => {
       cancelled = true;
     };
-  }, [user, attempt, learn]);
+  }, [userId, attempt, learn]);
 
   function edit() {
     setDraft({

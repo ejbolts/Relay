@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import { type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { App } from './App';
 import { api } from './api';
 import { optimisePhoto } from './photoOptimise';
+import { TOAST_MS } from './Toast';
 import { localDate } from './utils';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { readActiveWorkoutDraft, writeActiveWorkoutDraft } from './workoutDraft';
@@ -16,6 +17,7 @@ import type {
   MachinePhotoUsage,
   TrackedWorkout,
 } from './types';
+import { createToastRoot, toastButton } from './toastTestUtils';
 
 vi.mock('./api', async (importOriginal) => {
   const original = await importOriginal<typeof import('./api')>();
@@ -235,7 +237,7 @@ beforeEach(() => {
   );
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
 });
 
 afterEach(async () => {
@@ -392,9 +394,7 @@ describe('saving and pinning a machine photo while logging', () => {
       homeGym.id,
     );
     expect(container.querySelector('.machine-settings')).toBeNull();
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Machine settings saved',
-    );
+    expect(document.querySelector('.toast')?.textContent).toContain('Machine settings saved');
   });
   it('shows when each saved machine was last used', async () => {
     await act(async () => root.render(<App />));
@@ -421,7 +421,7 @@ describe('saving and pinning a machine photo while logging', () => {
     await act(async () => root.render(<App />));
     await click(button(`Expand ${homeGym.caption}`));
     const input = container.querySelector<HTMLInputElement>('.photo-detail-caption input')!;
-    const notice = () => document.querySelector('.app-notification-toast');
+    const notice = () => document.querySelector('.toast');
 
     await type(input, '  Hammer leg press  ');
     input.focus();
@@ -433,10 +433,10 @@ describe('saving and pinning a machine photo while logging', () => {
     );
     expect(document.activeElement).toBe(input);
 
-    await act(async () => vi.advanceTimersByTime(4000));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
     await type(input, 'Hammer leg press 2');
     await click(button('Save name'));
-    await act(async () => vi.advanceTimersByTime(7999));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1));
     expect(notice()).not.toBeNull();
     await act(async () => vi.advanceTimersByTime(1));
     expect(notice()).toBeNull();
@@ -444,7 +444,7 @@ describe('saving and pinning a machine photo while logging', () => {
     await type(input, 'Hammer leg press 3');
     await click(button('Save name'));
     expect(notice()).not.toBeNull();
-    await click(button('Close notification'));
+    await click(toastButton('Dismiss notification')!);
     expect(notice()).toBeNull();
   });
 
@@ -461,10 +461,10 @@ describe('saving and pinning a machine photo while logging', () => {
     await type(input, 'Hammer leg press');
     await click(button('Save name'));
     expect(button('Save name').disabled).toBe(true);
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
 
     await act(async () => rejectSave(new Error('Could not save machine name.')));
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
     expect(container.querySelector('.photo-detail [role="alert"]')?.textContent).toContain(
       'Could not save machine name.',
     );
@@ -479,7 +479,7 @@ describe('saving and pinning a machine photo while logging', () => {
     await type(container.querySelector<HTMLInputElement>('.photo-detail-caption input')!, '   ');
     await click(button('Save name'));
     expect(api.updateMachinePhoto).not.toHaveBeenCalled();
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).toBeNull();
   });
 
   it('explains deletion from saved workouts and lets the user cancel', async () => {
@@ -672,7 +672,7 @@ describe('saving and pinning a machine photo while logging', () => {
       });
     }
     await act(async () => root.unmount());
-    root = createRoot(container);
+    root = createToastRoot(container);
     await act(async () => root.render(<App />));
     expect(
       [...container.querySelectorAll<HTMLSelectElement>('.set-machine-select')].map((s) => s.value),
@@ -684,8 +684,8 @@ describe('saving and pinning a machine photo while logging', () => {
       homeGym.id,
       travelGym.id,
     ]);
+    // Every set is ticked, so Finish saves without asking.
     await click(button('Finish workout'));
-    await click(button('Finish workout', document.querySelector('dialog[open]')!));
     expect(save).toHaveBeenCalled();
     expect(save.mock.calls[0][0].movements[0].sets.map((set) => set.machine_photo_id)).toEqual([
       homeGym.id,
@@ -1088,7 +1088,34 @@ describe('filtering History by machine', () => {
     expect(historyCardTitles()).toEqual(['Legs 2026-10-14']);
   });
 
-  it('pages through Sessions two calendar weeks at a time and jumps to a chosen page', async () => {
+  it('pages a long machine history ten workouts at a time', async () => {
+    const base = workouts.find((item) => item.name === 'Legs 2025-10-12')!;
+    const many = Array.from({ length: 13 }, (_, index) => ({
+      ...base,
+      id: `machine-${index}`,
+      name: `Machine ${index + 1}`,
+      workout_date: `2025-08-${String(28 - index).padStart(2, '0')}`,
+    }));
+    vi.mocked(api.machinePhotoWorkouts).mockResolvedValue(many);
+    await act(async () => root.render(<App />));
+    await click(button('Filter by machine'));
+    const dialog = document.querySelector<HTMLElement>('.machine-filter-dialog')!;
+    await click(
+      [...dialog.querySelectorAll<HTMLButtonElement>('.machine-filter-list button')].find((item) =>
+        item.textContent?.includes('Home gym Hammer press'),
+      )!,
+    );
+    const list = () =>
+      container.querySelector<HTMLElement>('[aria-label="Workouts on this machine"]')!;
+    expect(historyCardTitles()).toHaveLength(10);
+    expect(historyCardTitles()[0]).toBe('Machine 1');
+    expect(list().querySelector('.pagination-status')?.textContent).toBe('Page 1 of 2');
+    await click(button('Next machine workout page', list()));
+    expect(historyCardTitles()).toEqual(['Machine 11', 'Machine 12', 'Machine 13']);
+    expect(container.querySelector('.history-card.open')).toBeNull();
+  });
+
+  it('pages through Sessions two calendar weeks at a time and jumps to the last page', async () => {
     await act(async () => root.render(<App />));
     const pages = () => container.querySelector<HTMLElement>('.history-session-pages')!;
     const status = () => pages().querySelector('.pagination-status')?.textContent;
@@ -1107,12 +1134,18 @@ describe('filtering History by machine', () => {
       'No workouts from 21 Sep to 4 Oct 2026',
     );
 
-    await click(button('Choose a workout history page', pages()));
-    const menu = pages().querySelector<HTMLElement>('.pagination-page-menu')!;
-    expect(menu.querySelectorAll('button')).toHaveLength(30);
-    await click(button('Go to page 27', menu));
-    expect(pages().querySelector('.pagination-page-menu')).toBeNull();
+    // Numbered pages with plain gaps, and no page menu.
+    expect(
+      [...pages().querySelectorAll('.pagination-pages > *')].map((item) => item.textContent),
+    ).toEqual(['1', '2', '3', '…', '30']);
+    await click(button('Page 30 of 30', pages()));
+    expect(status()).toBe('Page 30 of 30');
+    for (let step = 0; step < 3; step += 1)
+      await click(button('Previous workout history page', pages()));
     expect(status()).toBe('Page 27 of 30');
+    expect(
+      [...pages().querySelectorAll('.pagination-pages > *')].map((item) => item.textContent),
+    ).toEqual(['1', '…', '27', '…', '30']);
     expect(historyCardTitles()).toEqual(['Legs 2025-10-12']);
     // Cards from an earlier year show it.
     expect(container.querySelector('.history-card-copy small')?.textContent).toMatch(/12 Oct 2025/);
@@ -1121,7 +1154,7 @@ describe('filtering History by machine', () => {
     expect(status()).toBe('Page 26 of 30');
   });
 
-  it('loads older months when jumping to a page before the loaded history', async () => {
+  it('loads older months when jumping to the last page, before the loaded history', async () => {
     // Startup loads whole months back from today, so fix today for the older windows.
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-10-16T12:00:00'));
@@ -1148,11 +1181,13 @@ describe('filtering History by machine', () => {
     // The summary's first workout sets the page count before older months load.
     expect(pages().querySelector('.pagination-status')?.textContent).toBe('Page 1 of 30');
 
-    await click(button('Choose a workout history page', pages()));
-    await click(button('Go to page 27', pages()));
-    // Each six-month read finishes before the next starts, until page 27's weeks are loaded.
-    await act(() => vi.waitFor(() => expect(historyCardTitles()).toEqual(['Legs 2025-10-12'])));
+    await click(button('Page 30 of 30', pages()));
+    // Each six-month read finishes before the next starts, until the last page's weeks are loaded.
+    await act(() => vi.waitFor(() => expect(historyCardTitles()).toEqual(['Legs 2025-09-01'])));
     expect(load.mock.calls.map(([start]) => start)).toEqual(['2026-01-01', '2025-07-01']);
+    for (let step = 0; step < 3; step += 1)
+      await click(button('Previous workout history page', pages()));
+    expect(historyCardTitles()).toEqual(['Legs 2025-10-12']);
   });
 
   it('filters from a pinned photo in a workout and explains an unused machine', async () => {

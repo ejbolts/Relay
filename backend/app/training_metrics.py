@@ -12,6 +12,7 @@ Rules:
   establish a baseline.
 * PRs compare canonical kilograms rounded to four decimals, independently of
   display units. Estimated 1RM remains a progress metric, not a PR trigger.
+* Cardio exercises earn distance, time and pace records instead; see cardio_records.
 """
 
 from __future__ import annotations
@@ -20,11 +21,19 @@ from collections import defaultdict
 from collections.abc import Iterator
 from datetime import date, timedelta
 from math import floor
+from typing import NamedTuple
 from uuid import uuid4
 
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
+from .cardio_records import (
+    CardioBests,
+    is_cardio_record_eligible,
+    pace_distances,
+    record_distance,
+    time_over,
+)
 from .models import (
     Exercise,
     ExerciseKind,
@@ -40,6 +49,7 @@ from .models import (
     WorkoutSet,
 )
 from .relative_strength import BodyweightHistory, relative_strength
+from .weight_factors import normalising_factors
 
 KG_TO_LB = 2.2046226218
 EPLEY_FORMULA = "Epley: weight × (1 + reps ÷ 30), reps 1–30"
@@ -329,6 +339,16 @@ def is_pr_eligible(item: WorkoutSet) -> bool:
     return True
 
 
+def top_set_candidates(sets: list[WorkoutSet]) -> list[WorkoutSet]:
+    """The sets a session's top set is chosen from: a missed rep does not make a set the top one.
+
+    Sets marked as attempted still count for volume, but the heaviest set comes from the
+    PR-eligible sets, unless the session has none.
+    """
+    eligible = [item for item in sets if is_pr_eligible(item)]
+    return eligible or sets
+
+
 def partial_sets_enabled_on(exercise: Exercise, on_date: date) -> bool:
     baseline = (
         exercise.partial_sets_default
@@ -446,48 +466,104 @@ def rebuild_personal_records(db: Session, user_id: str) -> None:
         )
     )
     bodyweights = BodyweightHistory(db, user_id)
-    for workout, movement, item, record_type in personal_record_events(workouts, bodyweights):
-        display_weight = normalized_weight(item.weight_kg, unit)
-        relative = record_type == PersonalRecordType.RELATIVE_STRENGTH
-        ratio = relative_strength(
-            item.weight_kg, bodyweights.on(workout.workout_date, item.bodyweight_kg)
+    factors = normalising_factors(db, user_id)
+    for event in personal_record_events(workouts, bodyweights, factors):
+        reading = record_reading(
+            event, unit, bodyweights.on(event.workout.workout_date, event.item.bodyweight_kg)
         )
         db.add(
             _pr(
-                workout,
-                movement,
-                item,
-                record_type,
-                ratio
-                if relative
-                else display_weight
-                if record_type == PersonalRecordType.WEIGHT
-                else float(item.reps),
-                "× BW"
-                if relative
-                else unit
-                if record_type == PersonalRecordType.WEIGHT
-                else "reps",
-                display_weight,
-                "weight / bodyweight" if relative else None,
+                event.workout,
+                event.movement,
+                event.item,
+                event.record_type,
+                reading.value,
+                reading.unit,
+                reading.normalized_weight,
+                reading.formula,
             )
         )
     db.flush()
 
 
+class RecordEvent(NamedTuple):
+    workout: TrainingWorkout
+    movement: WorkoutMovement
+    item: WorkoutSet
+    record_type: PersonalRecordType
+    # The set distance (km) a pace record covers; None for every other record.
+    pace_km: float | None = None
+
+
+class RecordReading(NamedTuple):
+    value: float
+    unit: str
+    # A strength record's weight in the display unit, or a pace record's set distance in km.
+    normalized_weight: float | None
+    formula: str | None = None
+
+
+def record_reading(event: RecordEvent, unit: str, bodyweight: float | None) -> RecordReading:
+    """What a record stores and shows: its value, unit and the weight or distance it is at."""
+    item = event.item
+    if event.record_type == PersonalRecordType.DISTANCE:
+        return RecordReading(record_distance(item.distance_km or 0), "km", None)
+    if event.record_type == PersonalRecordType.DURATION:
+        return RecordReading(float(item.duration_seconds or 0), "seconds", None)
+    if event.record_type == PersonalRecordType.PACE:
+        assert event.pace_km is not None and item.distance_km
+        seconds = time_over(item.duration_seconds or 0, item.distance_km, event.pace_km)
+        return RecordReading(seconds, "seconds", event.pace_km)
+    weight = normalized_weight(item.weight_kg, unit)
+    if event.record_type == PersonalRecordType.RELATIVE_STRENGTH:
+        ratio = relative_strength(item.weight_kg, bodyweight)
+        return RecordReading(ratio or 0, "× BW", weight, "weight / bodyweight")
+    if event.record_type == PersonalRecordType.WEIGHT:
+        return RecordReading(weight, unit, weight)
+    return RecordReading(float(item.reps or 0), "reps", weight)
+
+
+def machine_factor(
+    factors: dict[str, dict[str, float]] | None, exercise_id: str, item: WorkoutSet
+) -> float:
+    """Multiplier from a set's machine to its exercise's reference machine; 1 when not mapped."""
+    by_machine = (factors or {}).get(exercise_id)
+    if not by_machine or not item.machine_photo_id:
+        return 1.0
+    return by_machine.get(item.machine_photo_id, 1.0)
+
+
 def personal_record_events(
     workouts: list[TrainingWorkout],
     bodyweights: BodyweightHistory | None = None,
-) -> Iterator[tuple[TrainingWorkout, WorkoutMovement, WorkoutSet, PersonalRecordType]]:
-    """Chronological records, with first attempts establishing each scope's baseline."""
+    factors: dict[str, dict[str, float]] | None = None,
+) -> Iterator[RecordEvent]:
+    """Chronological records, with first attempts establishing each scope's baseline.
+
+    For exercises with machine weights normalised (``factors``, from ``normalising_factors``),
+    weights are compared in the reference machine's weights, as the progress chart shows them,
+    so a heavier-feeling machine does not set or block a record.
+    """
     state: dict[str, dict[str, object]] = defaultdict(
         lambda: {"weight": -1.0, "reps": {}, "relative": -1.0}
     )
+    cardio: dict[str, CardioBests] = defaultdict(CardioBests)
     # SQLite returns naive UTC timestamps; newly flushed rows can still carry UTC tzinfo.
     for workout in sorted(
         workouts, key=lambda row: (row.workout_date, row.created_at.replace(tzinfo=None))
     ):
         for movement in sorted(workout.movements, key=lambda row: row.order_index):
+            if movement.exercise.kind == ExerciseKind.CARDIO:
+                bests = cardio[movement.exercise_id]
+                distances = pace_distances(movement.exercise.name)
+                for item in sorted(movement.sets, key=lambda row: row.order_index):
+                    if not is_cardio_record_eligible(item):
+                        continue
+                    for record_type, pace_km in bests.add(
+                        item.duration_seconds, item.distance_km, distances
+                    ):
+                        yield RecordEvent(workout, movement, item, record_type, pace_km)
+                continue
             if movement.exercise.kind != ExerciseKind.STRENGTH:
                 continue
             current = state[movement.exercise_id]
@@ -500,25 +576,28 @@ def personal_record_events(
                     or item.reps <= 0
                 ):
                     continue
-                weight = floor(item.weight_kg * 10_000 + 0.5) / 10_000
+                factor = machine_factor(factors, movement.exercise_id, item)
+                weight = floor(item.weight_kg * factor * 10_000 + 0.5) / 10_000
                 if float(current["weight"]) >= 0 and weight > float(current["weight"]):
-                    yield workout, movement, item, PersonalRecordType.WEIGHT
+                    yield RecordEvent(workout, movement, item, PersonalRecordType.WEIGHT)
                 current["weight"] = max(float(current["weight"]), weight)
                 rep_bests = current["reps"]
                 assert isinstance(rep_bests, dict)
                 previous_reps = rep_bests.get(weight)
                 if previous_reps is not None and item.reps > int(previous_reps):
-                    yield workout, movement, item, PersonalRecordType.REPS_AT_WEIGHT
+                    yield RecordEvent(workout, movement, item, PersonalRecordType.REPS_AT_WEIGHT)
                 rep_bests[weight] = max(int(previous_reps or 0), item.reps)
                 bodyweight = (
                     bodyweights.on(workout.workout_date, item.bodyweight_kg)
                     if bodyweights
                     else item.bodyweight_kg
                 )
-                ratio = relative_strength(item.weight_kg, bodyweight)
+                ratio = relative_strength(item.weight_kg * factor, bodyweight)
                 if ratio is not None:
                     if float(current["relative"]) >= 0 and ratio > float(current["relative"]):
-                        yield workout, movement, item, PersonalRecordType.RELATIVE_STRENGTH
+                        yield RecordEvent(
+                            workout, movement, item, PersonalRecordType.RELATIVE_STRENGTH
+                        )
                     current["relative"] = max(float(current["relative"]), ratio)
 
 

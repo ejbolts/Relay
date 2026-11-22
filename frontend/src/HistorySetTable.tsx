@@ -44,7 +44,7 @@ export function HistorySetTable({
   recordColumn?: boolean;
   /** The one-line result of a set that does not fit the Weight and Reps columns. */
   formatSet: (item: TrackedSet) => string;
-  recordLabel: (type: PersonalRecord['record_type']) => string;
+  recordLabel: (record: PersonalRecord) => string;
 }) {
   const weightUnit = useWeightUnit();
   const numbers = setNumberLabels(sets);
@@ -150,10 +150,7 @@ export function HistorySetTable({
                         <strong
                           className="pr-badge"
                           title={records[index]
-                            .map(
-                              (record) =>
-                                `${recordScopeLabel(record)} ${recordLabel(record.record_type)}`,
-                            )
+                            .map((record) => `${recordScopeLabel(record)} ${recordLabel(record)}`)
                             .join(', ')}
                         >
                           {records[index].some(isAllTimeRecord) ? (

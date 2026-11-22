@@ -28,16 +28,17 @@ export function onAdminActivity(listener: Listener): () => void {
   };
 }
 
+function waiting(user: AdminUser): boolean {
+  return Boolean(user.password_reset_requested_at || user.username_reminder_requested_at);
+}
+
 /**
- * Accounts waiting for a password reset first, otherwise in the server's order. Sorted only when
- * the list loads, so a card stays in place after its request is handled until the next refresh.
+ * Accounts waiting for a password reset or their username first, otherwise in the server's order.
+ * Sorted only when the list loads, so a card stays in place after its request is handled until the
+ * next refresh.
  */
-export function resetRequestsFirst(users: AdminUser[]): AdminUser[] {
-  return [...users].sort(
-    (a, b) =>
-      Number(Boolean(b.password_reset_requested_at)) -
-      Number(Boolean(a.password_reset_requested_at)),
-  );
+export function requestsFirst(users: AdminUser[]): AdminUser[] {
+  return [...users].sort((a, b) => Number(waiting(b)) - Number(waiting(a)));
 }
 
 /** Update only user cards; incoming activity never reloads editable server settings. */
@@ -54,7 +55,7 @@ export function useAdminUsers(active: boolean) {
     const snapshot = await api.admin.users();
     if (request !== generation.current) return;
     setUsers(
-      resetRequestsFirst(snapshot).map((user) => {
+      requestsFirst(snapshot).map((user) => {
         const update = updates.current.get(user.id);
         return update && update.revision > before
           ? { ...user, presence: update.presence, last_active_at: update.presence.last_active_at }

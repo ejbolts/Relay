@@ -48,7 +48,7 @@ async function open() {
   return document.querySelector<HTMLDialogElement>('dialog')!;
 }
 
-it('opens the entire stored square and closes using the close button or Escape', async () => {
+it('opens the entire stored square full screen and closes using Back or Escape', async () => {
   await render();
   expect(container.querySelector('button')?.getAttribute('aria-label')).toBe(
     "View Sample Lifter's profile photo",
@@ -57,7 +57,9 @@ it('opens the entire stored square and closes using the close button or Escape',
   expect(dialog.open).toBe(true);
   expect(dialog.querySelector('img')?.getAttribute('src')).toBe(user.profile_photo_url);
   expect(dialog.querySelector('img')?.alt).toBe("Sample Lifter's profile photo");
-  await act(async () => dialog.querySelector('button')!.click());
+  expect(dialog.classList).toContain('popup-dialog--screen');
+  expect(dialog.querySelector('.popup-dialog-close')).toBeNull();
+  await act(async () => dialog.querySelector<HTMLButtonElement>('.popup-dialog-back')!.click());
   expect(document.querySelector('dialog')).toBeNull();
   dialog = await open();
   await act(async () => dialog.dispatchEvent(new Event('cancel', { cancelable: true })));

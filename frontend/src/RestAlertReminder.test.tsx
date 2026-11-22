@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastElement, toastText } from './toastTestUtils';
+import { TOAST_MS } from './Toast';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runningAsInstalledApp } from './homeScreenGuideState';
 import {
@@ -37,7 +39,7 @@ beforeEach(() => {
   vi.mocked(existingPhonePushSubscription).mockResolvedValue(null);
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
 });
 
 afterEach(async () => {
@@ -128,11 +130,12 @@ describe('rest alert reminder popup', () => {
     await click(button('Turn on'));
 
     expect(enablePhonePushNotifications).toHaveBeenCalledTimes(1);
-    expect(document.querySelector('dialog')).toBeNull();
-    expect(document.querySelector('[role="status"]')?.textContent).toContain('Rest alerts on');
-    expect(onClose).not.toHaveBeenCalled();
-    await act(async () => vi.advanceTimersByTime(3000));
+    // The pop-up closes at once; the confirmation stays in the shared toast.
     expect(onClose).toHaveBeenCalledTimes(1);
+    await act(async () => root.render(null));
+    expect(toastText()).toBe('Rest alerts on');
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard));
+    expect(toastElement()).toBeNull();
   });
 
   it('keeps the popup open with the reason when alerts cannot be turned on', async () => {

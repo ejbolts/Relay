@@ -72,6 +72,29 @@ def jpeg() -> bytes:
     return buffer.getvalue()
 
 
+def test_shared_consistency_includes_an_enabled_split_without_its_routine(client, other_client):
+    share(other_client)
+    assert profile(client, other_client).json()["consistency"]["training_split"] is None
+    start = date.today() - timedelta(days=4)
+    split = {
+        "name": "Upper / Lower",
+        "start_date": start.isoformat(),
+        "progression": "calendar",
+        "steps": [{"workout_type_id": "upper"}, {"workout_type_id": "lower"}],
+    }
+    assert other_client.put("/api/training-split", json=split).is_success
+    shared = profile(client, other_client).json()["consistency"]["training_split"]
+    assert shared["name"] == "Upper / Lower"
+    assert shared["routine_id"] is None
+    assert [step["workout_type_id"] for step in shared["steps"]] == ["upper", "lower"]
+    # Nothing was logged, so every planned day before today was missed.
+    assert [day["workout_date"] for day in shared["missed_days"]] == [
+        (start + timedelta(days=offset)).isoformat() for offset in range(4)
+    ]
+    assert other_client.put("/api/training-split", json={**split, "enabled": False}).is_success
+    assert profile(client, other_client).json()["consistency"]["training_split"] is None
+
+
 @pytest.mark.parametrize("stored_choices", [True, False])
 def test_private_owner_can_preview_without_exposing_profile(client, other_client, stored_choices):
     share(other_client)
@@ -356,7 +379,8 @@ def test_people_search_matches_names_and_exact_uuid_without_wildcards(client, ot
         response = client.get("/api/sharing/profiles", params={"q": term})
         assert response.status_code == 200
         assert [item["id"] for item in response.json()] == [target_id]
-        assert "username" not in response.json()[0]
+        # A public profile's username tells same-named people apart, as in suggestions.
+        assert response.json()[0]["username"] == "tagged.user"
     for term in ("not-a-uuid", target_id[:8], "  "):
         assert client.get("/api/sharing/profiles", params={"q": term}).json() == []
     assert len(client.get("/api/sharing/profiles").json()) == 2
@@ -373,7 +397,7 @@ def test_people_search_keeps_profile_permissions(client, other_client):
     share(other_client, "followers")
     [found] = client.get("/api/sharing/profiles", params={"q": target_id}).json()
     assert found["can_view"] is False and found["workout_count"] is None
-    assert found["shares"] is None and "username" not in found
+    assert found["shares"] is None and found["username"] is None
     assert client.patch(f"/api/admin/users/{target_id}", json={"disabled": True}).is_success
     for term in terms:
         assert client.get("/api/sharing/profiles", params={"q": term}).json() == []
@@ -408,7 +432,8 @@ def test_public_profiles_are_open_but_friend_requests_still_need_accepting(clien
     assert owner["visibility"] == "public" and owner["can_view"] is True
     assert owner["workout_count"] == 1
     assert owner["friend_status"] == "none"
-    assert "username" not in owner
+    # Only a search names the account; the plain listing does not.
+    assert owner["username"] is None
 
     sent = other_client.post(f"/api/sharing/friends/{client.user['id']}")
     assert sent.json() == {"status": "outgoing"}
@@ -690,6 +715,45 @@ def test_shared_workout_filters_cover_full_history_and_filtered_pagination(clien
     )
 
 
+def test_shared_workouts_split_strength_from_cardio_only_sessions(client, other_client):
+    bench = named(client, "Barbell Bench Press")["id"]
+    running = named(client, "Running")["id"]
+    today = date.today()
+    sessions = {
+        "Push": [{"exercise_id": bench, "sets": [{"reps": 8, "weight_kg": 60}]}],
+        "Run": [{"exercise_id": running, "sets": [{"duration_seconds": 1500, "distance_km": 5}]}],
+        "Push and run": [
+            {"exercise_id": bench, "sets": [{"reps": 8, "weight_kg": 60}]},
+            {"exercise_id": running, "sets": [{"duration_seconds": 600}]},
+        ],
+    }
+    for days, (name, movements) in enumerate(sessions.items()):
+        response = client.post(
+            "/api/workouts",
+            json={
+                "name": name,
+                "workout_date": (today - timedelta(days=days)).isoformat(),
+                "category": "other",
+                "movements": movements,
+            },
+        )
+        assert response.status_code == 201, response.text
+    share(client, "public")
+    base = f"/api/sharing/profiles/{client.user['id']}/workouts"
+
+    def names(**params):
+        page = other_client.get(base, params=params).json()
+        assert page["total"] == len(page["workouts"])
+        return [workout["name"] for workout in page["workouts"]]
+
+    assert names() == ["Push", "Run", "Push and run"]
+    # A workout with any strength exercise stays under Workouts, as the profile counts it.
+    assert names(kind="strength") == ["Push", "Push and run"]
+    assert names(kind="cardio") == ["Run"]
+    assert names(kind="cardio", exercise_id=bench) == []
+    assert other_client.get(base, params={"kind": "yoga"}).status_code == 422
+
+
 def test_shared_filter_options_respect_profile_access_and_photo_sharing(client, other_client):
     history = add_training_history(client)
     share(client, "public")
@@ -825,6 +889,7 @@ def test_friends_only_search_request_and_notification_accept(client, other_clien
         found = other_client.get("/api/sharing/profiles", params={"q": term}).json()
         owner = next(item for item in found if item["id"] == target)
         assert owner["can_view"] is False and owner["workout_count"] is None
+        assert owner["username"] is None
     assert other_client.post(f"/api/sharing/friends/{target}").json()["status"] == "outgoing"
     assert other_client.get(f"/api/sharing/profiles/{target}/workouts").status_code == 403
     notices = client.get("/api/sharing/notifications").json()

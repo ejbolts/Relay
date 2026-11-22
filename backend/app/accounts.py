@@ -100,6 +100,7 @@ from .session_events import session_events
 from .storage import remove_session_files
 from .tracker import (
     bump_workout_cache_revision,
+    report_workout_revision,
     seed_default_exercises,
     sync_all_workout_cardio_sessions,
 )
@@ -132,6 +133,32 @@ LEGACY_OWNED_MODELS = (
 
 class UsernameTakenError(Exception):
     pass
+
+
+class DisplayNameTakenError(Exception):
+    pass
+
+
+def comparable_display_name(name: str) -> str:
+    """A display name as uniqueness and Forgot username compare it, ignoring case and spacing."""
+    return " ".join(name.split()).casefold()
+
+
+def display_name_in_use(db: Session, name: str, *, except_user_id: str | None = None) -> bool:
+    """Whether another account already goes by this name.
+
+    Names must be unique so Forgot username can find the one account a name belongs to. Accounts
+    that shared a name before this rule keep it until one of them changes it.
+    """
+    wanted = comparable_display_name(name)
+    query = select(User.display_name)
+    if except_user_id is not None:
+        query = query.where(User.id != except_user_id)
+    return any(comparable_display_name(existing) == wanted for existing in db.scalars(query))
+
+
+def display_name_taken():
+    return api_error(409, "display_name_taken", "Another account already uses that name.")
 
 
 def normalize_username(value: str) -> str:
@@ -172,6 +199,8 @@ class LoginRequest(BaseModel):
 
 class ProfileUpdate(BaseModel):
     display_name: str | None = Field(default=None, min_length=1, max_length=80)
+    # Older apps send it from Edit profile. Only an administrator can change a username, so only
+    # the account's current one is accepted here.
     username: str | None = None
     # Accepted once: after that only an administrator can change it.
     sex: Sex | None = None
@@ -285,6 +314,8 @@ def create_user(
         first_user = db.scalar(select(func.count(User.id))) == 0
         if db.scalar(select(User.id).where(User.username == username)) is not None:
             raise UsernameTakenError
+        if display_name_in_use(db, display_name):
+            raise DisplayNameTakenError
         user = User(
             username=username,
             display_name=display_name,
@@ -490,6 +521,8 @@ def register(
         raise api_error(
             409, "username_taken", "An account with that username already exists."
         ) from error
+    except DisplayNameTakenError as error:
+        raise display_name_taken() from error
     return user_to_read(db, user, settings)
 
 
@@ -528,8 +561,11 @@ def login(
         user.password_hash = hash_password(payload.password)
     # They remembered it, so an admin no longer needs to reset it; committed with the session.
     user.password_reset_requested_at = None
+    # Likewise, they found their username.
+    user.username_reminder_requested_at = None
     token = create_user_session(db, user, settings, request.headers.get("user-agent"))
     set_session_cookie(response, token, settings)
+    report_workout_revision(response, db, user.id)
     return user_to_read(db, user, settings)
 
 
@@ -565,9 +601,35 @@ def logout(request: Request, response: Response, db: DbDependency, settings: App
     clear_session_cookie(response, settings)
 
 
+@auth_router.post("/logout-session", status_code=204)
+def logout_session(
+    request: Request, response: Response, db: DbDependency, settings: AppSettings
+) -> None:
+    """Sign out this browser only; the account's other devices stay signed in.
+
+    The app removes this browser's own push subscription first, while the session is valid.
+    """
+    token = request.cookies.get(settings.session_cookie)
+    session = (
+        db.scalar(select(UserSession).where(UserSession.token_hash == hash_token(token)))
+        if token
+        else None
+    )
+    if session is not None:
+        user_id = session.user_id
+        db.delete(session)
+        db.commit()
+        session_events.changed(user_id)
+    clear_session_cookie(response, settings)
+
+
 @auth_router.get("/me", response_model=UserRead)
-def me(context: AuthContextDependency, db: DbDependency, settings: AppSettings) -> UserRead:
+def me(
+    context: AuthContextDependency, response: Response, db: DbDependency, settings: AppSettings
+) -> UserRead:
     # Uses the auth context directly so it still answers while a new password is required.
+    # The app loads its data as soon as it knows who is signed in, so the revision comes with it.
+    report_workout_revision(response, db, context.user.id)
     return user_to_read(db, context.user, settings)
 
 
@@ -575,28 +637,23 @@ def me(context: AuthContextDependency, db: DbDependency, settings: AppSettings) 
 def update_profile(
     payload: ProfileUpdate, user: CurrentUser, db: DbDependency, settings: AppSettings
 ) -> UserRead:
-    if payload.display_name is not None:
-        user.display_name = payload.display_name
     if payload.username is not None and payload.username != user.username:
-        taken = db.scalar(
-            select(User.id).where(User.username == payload.username, User.id != user.id)
+        raise api_error(409, "username_locked", "Only an administrator can change your username.")
+    if payload.display_name is not None:
+        # Changing only the case or spacing of your own name is not a clash.
+        renamed = comparable_display_name(payload.display_name) != comparable_display_name(
+            user.display_name
         )
-        if taken is not None:
-            raise api_error(409, "username_taken", "An account with that username already exists.")
-        user.username = payload.username
+        if renamed and display_name_in_use(db, payload.display_name, except_user_id=user.id):
+            raise display_name_taken()
+        user.display_name = payload.display_name
     if payload.sex is not None and payload.sex != user.sex:
         if user.sex is not None:
             raise api_error(
                 409, "sex_locked", "Your sex is already set. Ask an administrator to change it."
             )
         user.sex = payload.sex
-    try:
-        db.commit()
-    except IntegrityError as error:
-        db.rollback()
-        raise api_error(
-            409, "username_taken", "An account with that username already exists."
-        ) from error
+    db.commit()
     db.refresh(user)
     return user_to_read(db, user, settings)
 

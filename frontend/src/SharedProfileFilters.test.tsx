@@ -4,7 +4,11 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { SharedProfileScreen } from './SharedProfiles';
+import { consistencyWeeks } from './consistencyWeeks';
 import { clearSharedProfileCache, prefetchSharedProfile } from './sharedProfileCache';
+import { addDays } from './trainingSummary';
+import { GOAL_UNDO_MS } from './useGoalRemoval';
+import { localDate } from './utils';
 import type { SharedProfile, SharedWorkoutPage, TrackedWorkout, User } from './types';
 import { importedTime } from './utils';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
@@ -220,21 +224,63 @@ describe('shared profile friend control', () => {
       'Since Oct 2026Remove friendBlock',
     );
     vi.spyOn(api.sharing, 'removeFriend').mockResolvedValue(undefined);
-    await act(async () => button('Remove friend').click());
-    expect(api.sharing.removeFriend).toHaveBeenCalledWith('friend');
+    vi.useFakeTimers();
+    try {
+      await act(async () => button('Remove friend').click());
+      // The removal waits out its Undo window, showing the result at once.
+      expect(api.sharing.removeFriend).not.toHaveBeenCalled();
+      expect(document.querySelector('.toast')?.textContent).toContain('Removed Sample Friend');
+      expect(button('Add friend')).toBeTruthy();
+      await act(async () => vi.advanceTimersByTime(GOAL_UNDO_MS));
+      expect(api.sharing.removeFriend).toHaveBeenCalledExactlyOnceWith('friend');
+      expect(document.querySelector('.toast')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('asks before blocking, then explains where to unblock', async () => {
+  it('keeps the friendship when Remove friend is undone', async () => {
+    const remove = vi.spyOn(api.sharing, 'removeFriend').mockResolvedValue(undefined);
+    vi.useFakeTimers();
+    try {
+      await act(async () => button('Friends').click());
+      await act(async () => button('Remove friend').click());
+      const undo = document.querySelector<HTMLButtonElement>('.toast .toast-action')!;
+      await act(async () => undo.click());
+      expect(document.querySelector('.toast')).toBeNull();
+      expect(button('Friends')).toBeTruthy();
+      await act(async () => vi.advanceTimersByTime(GOAL_UNDO_MS * 2));
+      expect(remove).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('asks before blocking, then offers Unblock on the blocked profile', async () => {
     const block = vi.spyOn(api.sharing, 'blockMember').mockResolvedValue(undefined);
     await act(async () => button('Friends').click());
     await act(async () => button('Block').click());
     const dialog = document.querySelector('dialog[open]');
     expect(dialog?.textContent).toContain('Block Sample Friend?');
-    expect(dialog?.textContent).toContain('unblock them in Social, under Find');
+    expect(dialog?.textContent).toContain('unblock them in Social, under Friends');
     expect(block).not.toHaveBeenCalled();
-    await act(async () => dialog!.querySelector<HTMLButtonElement>('.profile-danger')!.click());
+    await act(async () =>
+      dialog!.querySelector<HTMLButtonElement>('.popup-primary-action.is-danger')!.click(),
+    );
     expect(block).toHaveBeenCalledWith('friend');
     expect(container.textContent).toContain('You blocked Sample Friend');
+    expect(container.textContent).not.toContain('under Find');
+
+    const unblock = vi.spyOn(api.sharing, 'unblockMember').mockResolvedValue(undefined);
+    vi.mocked(api.sharing.profile).mockResolvedValue({
+      ...profile,
+      friend_status: 'none',
+      friends_since: null,
+    });
+    await act(async () => button('Unblock').click());
+    expect(unblock).toHaveBeenCalledExactlyOnceWith('friend');
+    expect(container.textContent).not.toContain('You blocked Sample Friend');
+    expect(button('Add friend')).toBeTruthy();
   });
 
   it('accepts or declines a friend request from a friends-only profile', async () => {
@@ -492,8 +538,133 @@ describe('opening a profile loaded in the background', () => {
     await act(async () => button('Remove friend').click());
     vi.mocked(api.sharing.profile).mockImplementation(() => new Promise(() => {}));
     await reopen();
-    expect(container.textContent).toContain('as a friend to see their training');
+    // Leaving sends the removal, and the friends-only copy is not shown again.
+    expect(api.sharing.removeFriend).toHaveBeenCalledExactlyOnceWith('friend');
+    expect(container.querySelector('.profile-loading-skeleton')).not.toBeNull();
     expect(container.textContent).not.toContain('First workout');
+  });
+});
+
+describe('shared workouts and cardio tabs', () => {
+  const cardioOnly: TrackedWorkout = {
+    ...workout,
+    id: 'treadmill',
+    name: 'Treadmill workout',
+    movements: [{ exercise: { kind: 'cardio' } }] as unknown as TrackedWorkout['movements'],
+  };
+  const withCardio: SharedProfile = {
+    ...profile,
+    cardio_sessions: [
+      {
+        id: 'walk',
+        session_date: '2026-10-17',
+        activity_type: 'Incline Treadmill Walking',
+        duration_minutes: 60,
+        calories_kcal: 705,
+        average_heart_rate_bpm: 138,
+        distance_km: 4.66,
+        average_speed_kph: null,
+        incline_percent: null,
+        average_power_watts: null,
+        average_mets: null,
+        zone: null,
+        qualifies_zone2: false,
+        notes: null,
+      },
+    ],
+    cardio_total: 1,
+  };
+  async function reopen() {
+    await act(async () => root.unmount());
+    root = createRoot(container);
+    await renderProfile();
+  }
+  function tab(name: string) {
+    return [...container.querySelectorAll<HTMLButtonElement>('[role="tab"]')].find(
+      (item) => item.textContent === name,
+    )!;
+  }
+  function panel(name: string) {
+    return document.getElementById(tab(name).getAttribute('aria-controls')!)!;
+  }
+
+  it('opens on All sessions and lists Workouts and Cardio through the same list', async () => {
+    vi.mocked(api.sharing.profile).mockResolvedValue(withCardio);
+    vi.mocked(api.sharing.workouts).mockImplementation(async (_id, _offset, _limit, filters) => {
+      const listed = [workout, cardioOnly].filter(
+        (item) =>
+          (!filters?.start_date || item.workout_date === filters.start_date) &&
+          (!filters?.kind || (filters.kind === 'cardio') === (item === cardioOnly)),
+      );
+      return { total: listed.length, workouts: listed, personal_records: [] };
+    });
+    await reopen();
+    const list = () => panel('All sessions');
+    const cards = () => [...list().querySelectorAll('ul > li')].map((item) => item.textContent);
+    expect(container.querySelector('.shared-workouts-header h2')).toBeNull();
+    expect([...container.querySelectorAll('[role="tab"]')].map((item) => item.textContent)).toEqual(
+      ['All sessions', 'Workouts', 'Cardio'],
+    );
+    expect(tab('All sessions').getAttribute('aria-selected')).toBe('true');
+    expect(cards()).toEqual(['First workout', 'Treadmill workout']);
+    expect(api.sharing.workouts).toHaveBeenLastCalledWith(
+      'friend',
+      0,
+      10,
+      expect.not.objectContaining({ kind: expect.anything() }),
+    );
+
+    await act(async () => tab('Workouts').click());
+    expect(tab('Workouts').getAttribute('aria-selected')).toBe('true');
+    expect(list().getAttribute('aria-labelledby')).toBe(tab('Workouts').id);
+    expect(api.sharing.workouts).toHaveBeenLastCalledWith(
+      'friend',
+      0,
+      10,
+      expect.objectContaining({ kind: 'strength' }),
+    );
+    expect(cards()).toEqual(['First workout']);
+
+    // Cardio lists the cardio-only workouts through the same list, and keeps the filters.
+    await act(async () => tab('Cardio').click());
+    expect(tab('Cardio').getAttribute('aria-selected')).toBe('true');
+    expect(api.sharing.workouts).toHaveBeenLastCalledWith(
+      'friend',
+      0,
+      10,
+      expect.objectContaining({ kind: 'cardio' }),
+    );
+    expect(cards()).toEqual(['Treadmill workout']);
+    expect(container.querySelector('.shared-workout-filter-toggle')).not.toBeNull();
+
+    // Choosing a calendar day returns to the full list, showing every workout that day.
+    await act(async () =>
+      container.querySelector<HTMLButtonElement>('.calendar-panel .calendar-day.trained')!.click(),
+    );
+    expect(tab('All sessions').getAttribute('aria-selected')).toBe('true');
+    expect(cards()).toEqual(['First workout', 'Treadmill workout']);
+  });
+
+  it('says when a member has logged no cardio sessions', async () => {
+    vi.mocked(api.sharing.profile).mockResolvedValue(withCardio);
+    vi.mocked(api.sharing.workouts).mockImplementation(async (_id, _offset, _limit, filters) => ({
+      total: filters?.kind === 'cardio' ? 0 : 1,
+      workouts: filters?.kind === 'cardio' ? [] : [workout],
+      personal_records: [],
+    }));
+    await reopen();
+    await act(async () => tab('Cardio').click());
+    expect(panel('Cardio').textContent).toContain('No cardio sessions yet.');
+  });
+
+  it('keeps the plain Workouts list when the member does not share cardio', async () => {
+    vi.mocked(api.sharing.workouts).mockClear();
+    await reopen();
+    expect(container.querySelector('[role="tab"]')).toBeNull();
+    expect(container.querySelector('.shared-workouts-header h2')?.textContent).toBe('Workouts');
+    for (const [, , , filters] of vi.mocked(api.sharing.workouts).mock.calls) {
+      expect(filters).not.toHaveProperty('kind');
+    }
   });
 });
 
@@ -655,6 +826,8 @@ it('keeps the counting explanation in a help popup next to Time trained', async 
   const card = container.querySelector('.profile-training-time')!;
   expect(card.textContent).not.toContain('Totals use each');
   const help = card.querySelector<HTMLButtonElement>('[aria-label="About time trained"]')!;
+  // PopupDialog returns focus to the control it opened from, as a browser focuses it.
+  help.focus();
   await act(async () => help.click());
   const dialog = document.querySelector('dialog[open]')!;
   expect(dialog.textContent).toContain(
@@ -717,7 +890,10 @@ it('shows the viewed account calendar, toggles its legend and selects a day with
   expect(card.textContent).toContain('Consistency');
   expect(card.querySelector('.consistency-stats')?.textContent).toContain('2 days');
   expect(card.querySelector('.consistency-stats')?.textContent).toContain('23');
-  expect(card.querySelector('.consistency-stats')?.textContent).toContain('1.9');
+  // Averaged over the weeks since the member's first workout, up to twelve.
+  expect(card.querySelector('.consistency-stats')?.textContent).toContain(
+    (23 / consistencyWeeks('2026-10-17', localDate())).toFixed(1),
+  );
   const legend = card.querySelector<HTMLButtonElement>('.category-legend button')!;
   expect(legend.textContent).toContain('Push');
   expect(legend.querySelector('i')?.style.background).toBe('rgb(171, 205, 239)');
@@ -758,4 +934,61 @@ it('refreshes a changed training revision while retaining the selected workout f
     10,
     expect.objectContaining({ category: 'lower' }),
   );
+});
+
+it('averages a new member’s training days over the weeks since they started', async () => {
+  const today = localDate();
+  vi.mocked(api.sharing.profile).mockResolvedValue({
+    ...profile,
+    consistency: {
+      ...profile.consistency!,
+      training_days: 4,
+      heatmap: [6, 4, 2, 1].map((back) => ({
+        workout_date: addDays(today, -back),
+        categories: ['push'],
+        workout_count: 1,
+        set_count: 3,
+        workouts: [],
+      })),
+    },
+  });
+  await renderProfile('new-member');
+  const stats = container.querySelector('.consistency-stats')!;
+  expect(stats.textContent).toContain('Training days4');
+  expect(stats.textContent).toContain('Avg / week4.0');
+});
+
+it('outlines the member’s planned and missed split days on their calendar', async () => {
+  const today = localDate();
+  vi.mocked(api.sharing.profile).mockResolvedValue({
+    ...profile,
+    consistency: {
+      ...profile.consistency!,
+      training_split: {
+        name: 'Push / Rest',
+        enabled: true,
+        start_date: today,
+        progression: 'calendar',
+        steps: [{ workout_type_id: 'push' }, { workout_type_id: null }],
+        missed_days: [{ workout_date: addDays(today, -1), workout_type_id: 'push' }],
+      },
+    },
+  });
+  await renderProfile('split-member');
+  const day = (date: string) =>
+    container.querySelector<HTMLButtonElement>(`.calendar-panel [data-date="${date}"]`);
+  // Today's planned push and yesterday's missed one take its colour; the rest day stays plain.
+  for (const date of [today, addDays(today, -1)]) {
+    expect(day(date)?.className).toContain('scheduled');
+    expect(day(date)?.style.getPropertyValue('--day-ring')).toBe('#abcdef');
+  }
+  expect(day(addDays(today, -1))?.getAttribute('aria-label')).toContain('Push missed');
+  expect(day(addDays(today, 1))?.className ?? '').not.toContain('scheduled');
+  // A day the split plans is still not one to open: the member logged nothing there.
+  expect(day(today)?.disabled).toBe(true);
+});
+
+it('leaves the calendar unplanned when the member has no split on', async () => {
+  await renderProfile('no-split-member');
+  expect(container.querySelector('.calendar-panel .calendar-day.scheduled')).toBeNull();
 });

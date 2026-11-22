@@ -5,10 +5,11 @@ import { motionReduced } from './motion';
 import { PopupDialog } from './PopupDialog';
 import { FriendsRail } from './FriendsRail';
 import { ProfileAvatar } from './ProfileAvatar';
+import { ShowMoreButton } from './ShowMoreButton';
 import { LoadProblem, SharingLocked } from './SharedProfiles';
 import { updateCachedReactions } from './sharedProfileCache';
 import { useTimeline } from './timeline';
-import { formatVolume, workingSets, workoutVolumeKg } from './trainingSummary';
+import { formatVolume, strengthSets, workoutVolumeKg } from './trainingSummary';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type {
   FriendActivity,
@@ -41,7 +42,7 @@ function completedSets(movement: TrackedMovement) {
 function FeedStats({ workout, records }: { workout: TrackedWorkout; records: number }) {
   const weightUnit = useWeightUnit();
   const session = friendSession(workout);
-  const sets = workingSets(workout).length;
+  const sets = strengthSets(workout).length;
   const volume = workoutVolumeKg(workout);
   // One line: each value carries its own unit, so none needs a label.
   const stats: string[] = [];
@@ -223,14 +224,14 @@ function FeedCard({
                   type="button"
                   aria-label={
                     showAll
-                      ? 'Show fewer exercises'
+                      ? 'Show less'
                       : `Show ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`
                   }
                   aria-expanded={showAll}
                   aria-controls={exercisesId}
                   onClick={() => setShowAll((current) => !current)}
                 >
-                  {showAll ? 'Show fewer' : `+${hidden} more`}
+                  {showAll ? 'Show less' : `+${hidden} more`}
                 </button>
               </li>
             )}
@@ -267,6 +268,7 @@ function FeedSkeleton() {
  */
 export function SocialFeed({
   active,
+  preload = false,
   friends,
   today = localDate(),
   onOpenProfile,
@@ -275,6 +277,8 @@ export function SocialFeed({
   onChooseSharing,
 }: {
   active: boolean;
+  /** Reads the first page in the background before the feed is shown. */
+  preload?: boolean;
   /** Friends with live activity, from Social's friend list; null until it has loaded. */
   friends: FriendActivity[] | null;
   today?: string;
@@ -286,8 +290,10 @@ export function SocialFeed({
   onOpenFind: () => void;
   onChooseSharing: () => void;
 }) {
-  const { items, hasMore, state, error, loadingMore, refresh, loadMore, update } =
-    useTimeline(active);
+  const { items, hasMore, state, error, loadingMore, refresh, loadMore, update } = useTimeline(
+    active,
+    preload,
+  );
   const [picking, setPicking] = useState<string | null>(null);
   const viewerId = useUserSession().user?.id ?? null;
   const request = useWorkoutFocus();
@@ -404,14 +410,9 @@ export function SocialFeed({
         </PopupDialog>
       )}
       {hasMore && (
-        <button
-          type="button"
-          className="show-more-button"
-          disabled={loadingMore}
-          onClick={() => void loadMore()}
-        >
-          {loadingMore ? 'Loading…' : 'Show older workouts'}
-        </button>
+        <ShowMoreButton loading={loadingMore} onClick={() => void loadMore()}>
+          Show older workouts
+        </ShowMoreButton>
       )}
     </div>
   );

@@ -32,10 +32,6 @@
 .feedback-form .profile-secondary {
   justify-self: start;
 }
-.feedback-form-success {
-  color: #8be0b0;
-}
-
 .feedback-form button:disabled {
   opacity: 0.5;
   cursor: default;

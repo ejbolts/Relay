@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { createPortal } from 'react-dom';
+import { useId, useRef, useState, type FormEvent } from 'react';
 import { api } from './api';
 import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
@@ -32,40 +31,6 @@ function presetFor(start: string): StartPreset {
   return start === `${today.slice(0, 4)}-01-01` ? 'january' : 'custom';
 }
 
-/** Brief confirmation after a block starts; clears itself after a few seconds. */
-export function TrainingBlockToast({
-  notice,
-  onDismiss,
-}: {
-  notice: string;
-  onDismiss: () => void;
-}) {
-  const dismiss = useRef(onDismiss);
-  useEffect(() => {
-    dismiss.current = onDismiss;
-  });
-  useEffect(() => {
-    if (!notice) return;
-    const timer = setTimeout(() => dismiss.current(), 4000);
-    return () => clearTimeout(timer);
-  }, [notice]);
-  if (!notice) return null;
-  return createPortal(
-    <div className="undo-toast top-toast" role="status">
-      <span>{notice}</span>
-      <button
-        type="button"
-        className="undo-toast-close"
-        aria-label="Dismiss training block notification"
-        onClick={onDismiss}
-      >
-        <Icon name="close" />
-      </button>
-    </div>,
-    document.body,
-  );
-}
-
 /** Lists, creates, edits and removes training blocks. */
 export function TrainingBlockDialog({
   start: opening,
@@ -92,20 +57,28 @@ export function TrainingBlockDialog({
   const [error, setError] = useState<string | null>(null);
   const guide = useActiveGuide('blocks');
   const [guideStep, setGuideStep] = useState(0);
+  const formId = useId();
   const today = localDate();
   const january = `${today.slice(0, 4)}-01-01`;
 
-  // Closing a form or confirmation returns to the blocks it came from; the list closes the dialog.
   const close = () => {
     if (busyRef.current) return;
-    setError(null);
-    if (view === 'remove') setView('form');
-    else if (view === 'form' && formBack) setView(formBack);
-    else {
-      exitGuide('blocks');
-      onClose();
-    }
+    exitGuide('blocks');
+    onClose();
   };
+  // A form or confirmation steps back to the view it came from.
+  const back =
+    view === 'remove'
+      ? () => {
+          setError(null);
+          setView('form');
+        }
+      : view === 'form' && formBack
+        ? () => {
+            setError(null);
+            setView(formBack);
+          }
+        : undefined;
   const startForm = (item: TrainingBlock | null, back: View | null) => {
     setEditing(item);
     const date = item?.start_date ?? today;
@@ -209,7 +182,7 @@ export function TrainingBlockDialog({
       body: lift
         ? `Home then shows the week you’re on, and ${lift.name} records start fresh from your next session.`
         : 'Home then shows the week you’re on, and records start fresh from your next session.',
-      target: '.training-block-form button[type="submit"]',
+      target: '.training-block-dialog .popup-dialog-footer button[type="submit"]',
     },
   ];
 
@@ -217,7 +190,65 @@ export function TrainingBlockDialog({
     <PopupDialog
       title={dialogTitle}
       onClose={close}
+      onBack={back}
+      busy={busy}
       className="training-block-dialog"
+      actions={
+        view === 'form' ? (
+          <>
+            {editing && (
+              <button
+                type="button"
+                className="popup-tertiary-action is-danger"
+                disabled={busy}
+                onClick={() => {
+                  setError(null);
+                  setView('remove');
+                }}
+              >
+                Remove
+              </button>
+            )}
+            {back && (
+              <button type="button" disabled={busy} onClick={back}>
+                Cancel
+              </button>
+            )}
+            <button
+              type="submit"
+              form={formId}
+              className="popup-primary-action"
+              disabled={busy || !name.trim()}
+            >
+              {busy ? 'Saving…' : editing ? 'Save block' : 'Start block'}
+            </button>
+          </>
+        ) : view === 'remove' && editing ? (
+          <>
+            {/* Keyed, so it mounts fresh and takes focus instead of reusing the Remove button. */}
+            <button key="keep" type="button" autoFocus disabled={busy} onClick={back}>
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="popup-primary-action is-danger"
+              disabled={busy}
+              onClick={() =>
+                void save(
+                  () => api.trainingBlocks.remove(editing.id),
+                  (next) => {
+                    setEditing(null);
+                    if (next.blocks.length) setView('blocks');
+                    else onClose();
+                  },
+                )
+              }
+            >
+              Remove block
+            </button>
+          </>
+        ) : undefined
+      }
       headerActions={
         view === 'blocks' ? (
           <button
@@ -240,7 +271,7 @@ export function TrainingBlockDialog({
         />
       )}
       {view === 'form' && (
-        <form onSubmit={submit} className="training-block-form">
+        <form id={formId} onSubmit={submit} className="training-block-form">
           <fieldset disabled={busy}>
             <label>
               Block name
@@ -293,7 +324,7 @@ export function TrainingBlockDialog({
               <span aria-hidden="true">Ends</span>
               {(
                 [
-                  ['none', 'No end', ''],
+                  ['none', 'No set date', ''],
                   ['8', '8 weeks', blockDay(weeksEnd(start, 8), false)],
                   ['12', '12 weeks', blockDay(weeksEnd(start, 12), false)],
                   ['custom', 'Custom', plan === 'custom' ? blockDay(planEnd, false) : ''],
@@ -323,73 +354,14 @@ export function TrainingBlockDialog({
                 />
               </label>
             )}
-            <div className="training-block-actions">
-              {editing && (
-                <button
-                  type="button"
-                  className="danger-button"
-                  onClick={() => {
-                    setError(null);
-                    setView('remove');
-                  }}
-                >
-                  Remove
-                </button>
-              )}
-              {formBack && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setError(null);
-                    setView(formBack);
-                  }}
-                >
-                  Cancel
-                </button>
-              )}
-              <button type="submit" className="primary-action" disabled={!name.trim()}>
-                {busy ? 'Saving…' : editing ? 'Save block' : 'Start block'}
-              </button>
-            </div>
           </fieldset>
         </form>
       )}
       {view === 'remove' && editing && (
-        <>
-          <p>
-            Remove “{editing.name}”? Workouts stay saved. Block records will follow the remaining
-            dates.
-          </p>
-          <div className="training-block-actions">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                setError(null);
-                setView('form');
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="danger-button"
-              disabled={busy}
-              onClick={() =>
-                void save(
-                  () => api.trainingBlocks.remove(editing.id),
-                  (next) => {
-                    setEditing(null);
-                    if (next.blocks.length) setView('blocks');
-                    else onClose();
-                  },
-                )
-              }
-            >
-              Remove block
-            </button>
-          </div>
-        </>
+        <p>
+          Remove “{editing.name}”? Workouts stay saved. Block records will follow the remaining
+          dates.
+        </p>
       )}
       {error && (
         <p role="alert" className="error-message">

@@ -2,8 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { Icon } from './Icon';
-import { NotificationDialog } from './NotificationDialog';
 import { PopupDialog } from './PopupDialog';
+import { useToast } from './Toast';
 import { ProfileAvatar } from './ProfileAvatar';
 import { RARITY_LABELS, borderUnlockedLabel } from './profileBorderLabels';
 import {
@@ -39,7 +39,7 @@ export function ProfileBorderPicker({
   const [previewKey, setPreviewKey] = useState<string | null>(user.profile_border ?? null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-  const [status, setStatus] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     let current = true;
@@ -86,7 +86,7 @@ export function ProfileBorderPicker({
     try {
       onSaved(await api.chooseProfileBorder(key));
       setData((current) => (current ? { ...current, selected: key } : current));
-      setStatus(key ? 'Border updated' : 'Border removed');
+      toast.show(key ? 'Border updated' : 'Border removed');
     } catch (reason) {
       setSaveError(authErrorMessage(reason));
     } finally {
@@ -309,14 +309,6 @@ export function ProfileBorderPicker({
             ))}
           </div>
         </>
-      )}
-      {status && (
-        <NotificationDialog
-          message={status}
-          portal={false}
-          durationMs={2500}
-          onClose={() => setStatus(null)}
-        />
       )}
     </PopupDialog>
   );

@@ -11,6 +11,7 @@
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
+import { useToast } from './Toast';
 import { openTipTarget } from './tipActions';
 import {
   canShowTip,
@@ -77,13 +78,12 @@ const TipsContext = createContext<TipsApi>({
 // eslint-disable-next-line react-refresh/only-export-components
 export const useTips = () => useContext(TipsContext);
 
-function quiet() {
+function quiet(toastShowing: boolean) {
   return (
+    !toastShowing &&
     document.visibilityState !== 'hidden' &&
     !document.activeElement?.matches('input, textarea, select, [contenteditable="true"]') &&
-    !document.querySelector(
-      'dialog[open], [role="dialog"], .setup-coach, .pr-toast, .workout-completion-toast, .workout-share-prompt, .undo-toast, .weekly-sets-shelf, .body-check-in-toast, .workout-share-toast',
-    )
+    !document.querySelector('dialog[open], [role="dialog"], .setup-coach, .weekly-sets-shelf')
   );
 }
 function visible(element: HTMLElement) {
@@ -124,6 +124,8 @@ export function TipsProvider({
   const activePage = useRef('');
   const activeSince = useRef(0);
   const quietSince = useRef(0);
+  const toastShowing = useRef(false);
+  toastShowing.current = useToast().active;
   const [api] = useState(() => {
     function write(change: TipState) {
       // A guided tip put away before its feature is used is scheduled to come back.
@@ -223,7 +225,8 @@ export function TipsProvider({
     const tick = () => {
       const now = Date.now(),
         current = env.current;
-      const available = !!account && current.ready && stateRef.current.enabled && quiet();
+      const available =
+        !!account && current.ready && stateRef.current.enabled && quiet(toastShowing.current);
       // Before a first saved workout, only priority tips may appear.
       const established = current.workoutCount > 0;
       if (!available) {

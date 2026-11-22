@@ -4,9 +4,11 @@ import {
   fuzzyMatchIndices,
   fuzzyMatchesFields,
   fuzzyScoreFields,
+  exerciseSearchAllowsTypos,
   exerciseSearchScore,
   progressExerciseMatches,
   rankExerciseSearchMatches,
+  similarExercises,
 } from './exerciseSearch';
 
 describe('exercise fuzzy search', () => {
@@ -103,6 +105,24 @@ describe('exercise fuzzy search', () => {
     expect(directScore).not.toBeNull();
     expect(scatteredScore).not.toBeNull();
     expect(directScore!).toBeLessThan(scatteredScore!);
+  });
+
+  it('finds exercises typed with a mistake only when nothing matches as typed', () => {
+    const exercises = [
+      { id: 'bench', name: 'Barbell Bench Press', muscle_group: 'Chest', equipment: 'Barbell' },
+      { id: 'pushdown', name: 'Triceps Pushdown', muscle_group: 'Triceps', equipment: 'Cable' },
+      { id: 'pulldown', name: 'Lat Pulldown', muscle_group: 'Lats', equipment: 'Cable' },
+      { id: 'raise', name: 'Full Can Raise', muscle_group: 'Shoulders', equipment: 'Dumbbell' },
+    ];
+    const ids = (query: string) =>
+      rankExerciseSearchMatches(exercises, query, []).map((exercise) => exercise.id);
+    expect(ids('bemch press')).toEqual(['bench']);
+    expect(ids('tricepps')).toEqual(['pushdown']);
+    expect(ids('pull')).toEqual(['pulldown']);
+    expect(exerciseSearchAllowsTypos(exercises, 'pull')).toBe(false);
+    expect(exerciseSearchScore(exercises[0], 'bemch')).toBeNull();
+    expect(exerciseSearchScore(exercises[0], 'bemch', true)).not.toBeNull();
+    expect(fuzzyHighlightIndices('Barbell Bench Press', 'bemch')).toEqual([8, 9, 10, 11, 12]);
   });
 
   it('does not match letters in the wrong order', () => {
@@ -207,5 +227,38 @@ describe('exercise fuzzy search', () => {
     ];
     expect(progressExerciseMatches(exercises, '').map((item) => item.id)).toEqual(['a', 'z']);
     expect(progressExerciseMatches(exercises, 'no match')).toEqual([]);
+  });
+});
+
+describe('existing exercises like a new name', () => {
+  const library = [
+    { id: 'db-bench', name: 'Dumbbell Bench Press' },
+    { id: 'bb-bench', name: 'Barbell Bench Press' },
+    { id: 'incline', name: 'Incline Dumbbell Bench Press' },
+    { id: 'short', name: 'DB Bench' },
+    { id: 'squat', name: 'Back Squat' },
+    { id: 'curl', name: 'Hammer Curl' },
+  ];
+  const ids = (name: string) => similarExercises(library, name).map((item) => item.id);
+
+  it('finds near-duplicates through abbreviations, closest first, three at most', () => {
+    expect(ids('DB Bench')).toEqual(['short', 'db-bench', 'incline']);
+    expect(ids('Dumbbell bench')[0]).toBe('db-bench');
+    expect(ids('Dumbbell bench')).toEqual(expect.arrayContaining(['short', 'incline']));
+    expect(ids('bench press')).toHaveLength(3);
+  });
+
+  it('puts an exact name first whatever its case or spacing', () => {
+    expect(ids('  dumbbell bench press ')[0]).toBe('db-bench');
+  });
+
+  it('allows one loosely typed word among exact ones', () => {
+    expect(ids('Dumbell Bench Press')).toContain('db-bench');
+  });
+
+  it('suggests nothing for a new name or one too short to judge', () => {
+    expect(ids('Zercher Squat')).toEqual([]);
+    expect(ids('Sissy curl machine')).toEqual([]);
+    expect(ids('ba')).toEqual([]);
   });
 });

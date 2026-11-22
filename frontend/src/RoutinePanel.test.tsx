@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { RoutinePanel } from './RoutinePanel';
+import { TOAST_MS } from './Toast';
 import type { Exercise, Routine } from './types';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 
@@ -61,6 +62,15 @@ async function click(text: string) {
   );
   expect(button).toBeDefined();
   await act(async () => button!.click());
+}
+/** The split editor is a full screen, closed with its back button. */
+async function closeEditor() {
+  const back = document.querySelector<HTMLButtonElement>(
+    'dialog.routine-editor-screen .popup-dialog-back',
+  );
+  expect(back?.getAttribute('aria-label')).toBe('Back');
+  await act(async () => back!.click());
+  expect(document.querySelector('dialog.routine-editor-screen')).toBeNull();
 }
 async function input(selector: string, value: string) {
   await act(async () => {
@@ -165,7 +175,7 @@ it('opens My splits at the imported copy after dismissing the editor', async () 
   await mount(false, open);
   expect(host.textContent).not.toContain('View my splits');
   await click('Save split');
-  await click('Close Edit split');
+  await closeEditor();
   await click('View my splits');
   expect(open).toHaveBeenCalledWith('copy');
   expect(api.routines.use).not.toHaveBeenCalled();
@@ -189,23 +199,21 @@ it('shows save feedback in a dismissible popup that clears automatically after r
     await mount(true);
     await click('Edit split');
     await save();
-    expect(document.querySelector('.app-notification-toast')?.textContent).toContain(
-      'Split saved.',
-    );
+    expect(document.querySelector('.toast')?.textContent).toContain('Split saved.');
     expect(host.textContent).not.toContain('Split saved.');
-    await click('Close notification');
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    await click('Dismiss notification');
+    expect(document.querySelector('.toast')).toBeNull();
 
     await click('Edit split');
     await save();
-    await act(async () => vi.advanceTimersByTime(7000));
-    expect(document.querySelector('.app-notification-toast')).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
+    expect(document.querySelector('.toast')).not.toBeNull();
     await click('Edit split');
     await save();
     await act(async () => vi.advanceTimersByTime(1000));
-    expect(document.querySelector('.app-notification-toast')).not.toBeNull();
-    await act(async () => vi.advanceTimersByTime(7000));
-    expect(document.querySelector('.app-notification-toast')).toBeNull();
+    expect(document.querySelector('.toast')).not.toBeNull();
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard));
+    expect(document.querySelector('.toast')).toBeNull();
   } finally {
     vi.useRealTimers();
   }
@@ -221,9 +229,17 @@ it('requires an explicit date confirmation before replacing the active split', a
       .querySelector('.routine-use')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
-  expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02', 'workouts');
-  expect(document.querySelector('.app-notification-toast')).toBeNull();
+  expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02');
+  expect(document.querySelector('.toast')).toBeNull();
   expect(host.textContent).not.toContain('is your active split');
+});
+
+it('asks only for a start date, without a schedule choice or note', async () => {
+  await mount(true);
+  await click('Use split');
+  const dialog = document.querySelector('.routine-use')!;
+  expect(dialog.querySelector('[role="radio"], [role="switch"]')).toBeNull();
+  expect(dialog.textContent).not.toContain('Saved splits');
 });
 
 it('creates private splits without a publishing switch and shares from split options', async () => {
@@ -243,14 +259,14 @@ it('creates private splits without a publishing switch and shares from split opt
     }),
   );
   expect(host.querySelectorAll('.routine-card')).toHaveLength(2);
-  await click('Close notification');
+  await click('Dismiss notification');
   await click('Options for My split');
   await click('Show on my profile');
   expect(api.routines.save).toHaveBeenLastCalledWith(
     expect.objectContaining({ id: 'new', shared: true }),
   );
   expect(host.querySelector('.routine-card-meta')?.textContent).toContain('On profile');
-  await click('Close notification');
+  await click('Dismiss notification');
   await click('Options for My split');
   await click('Hide from my profile');
   expect(api.routines.save).toHaveBeenLastCalledWith(
@@ -292,7 +308,7 @@ it('explains how to complete an empty workout day before sharing and allows retr
   await openDay(2);
   await addExercise(2, 'row', 'Cable row');
   await save();
-  await click('Close notification');
+  await click('Dismiss notification');
   await click('Options for Upper / Rest');
   await click('Show on my profile');
   expect(api.routines.save).toHaveBeenLastCalledWith(

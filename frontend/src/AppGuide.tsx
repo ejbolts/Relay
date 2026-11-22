@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { FeedbackForm } from './FeedbackForm';
+import { GuideCard } from './GuideCard';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { HomeScreenGuideContent } from './HomeScreenGuide';
@@ -96,87 +97,98 @@ export function AppGuide({
         ? box.top - 32
         : window.innerHeight - box.top - box.height - 32
       : null;
+  // Back, Escape and phone Back all go to the previous page; only Skip or End leave the guide.
+  const back = index > 0 && !finished ? () => setIndex(index - 1) : undefined;
+  const next = () => setIndex(index + 1);
   return (
     <PopupDialog
       title={installing ? 'Add to Home Screen' : 'App guide'}
-      kicker={
-        finished
-          ? 'YOU ARE READY'
-          : installing
-            ? 'SET UP YOUR PHONE'
-            : `QUICK TOUR · ${index + 1} OF ${steps.length}`
-      }
-      className={`app-guide ${installing ? 'home-guide app-guide-install' : finished ? 'app-guide-finish' : `app-guide-${position}`}`}
+      kicker={finished ? 'YOU ARE READY' : installing ? 'SET UP YOUR PHONE' : undefined}
+      className={`app-guide ${installing ? 'home-guide app-guide-install' : finished ? 'app-guide-finish' : `app-guide-${position} app-guide-tour`}`}
       style={
         availableHeight
           ? ({ '--guide-max-height': `${Math.max(180, availableHeight)}px` } as CSSProperties)
           : undefined
       }
+      dismissOnBackdrop={false}
+      onBack={back}
       onClose={onClose}
+      actionsClassName="guide-actions"
+      actions={
+        !step && (
+          <>
+            <button
+              type="button"
+              className="popup-tertiary-action guide-skip"
+              disabled={sendingFeedback}
+              onClick={onClose}
+            >
+              {finished ? 'End guide' : 'Skip guide'}
+            </button>
+            {back && (
+              <button type="button" className="pulse-button secondary" onClick={back}>
+                <Icon name="chevron-left" />
+                Back
+              </button>
+            )}
+            {!finished && (
+              <button type="button" className="pulse-button primary" onClick={next}>
+                Next
+                <Icon name="chevron-right" />
+              </button>
+            )}
+          </>
+        )
+      }
     >
       {step && box && <div className="app-guide-spotlight" style={box} aria-hidden="true" />}
-      {installing ? (
+      {step ? (
+        <GuideCard
+          guide="Quick tour"
+          index={index}
+          total={steps.length}
+          title={step.title}
+          titleRef={titleRef}
+          edge={position}
+          onBack={back}
+          next={{ label: index === steps.length - 1 ? 'Show steps' : 'Next', onClick: next }}
+          onLeave={onClose}
+        >
+          <p>{step.description}</p>
+        </GuideCard>
+      ) : installing ? (
         <HomeScreenGuideContent />
       ) : (
         <div className="app-guide-body">
-          <div className="app-guide-step" key={index}>
+          <div className="app-guide-step">
             <span className="app-guide-glyph">
-              <Icon name={step?.icon ?? 'heart'} />
+              <Icon name="heart" />
             </span>
             <h3 ref={titleRef} tabIndex={-1}>
-              {step?.title ?? 'Thanks for trying Relay!'}
+              Thanks for trying Relay!
             </h3>
             <p>
-              {step?.description ??
-                'We hope it makes your next workout a little easier. What worked well, and what could be better?'}
+              We hope it makes your next workout a little easier. What worked well, and what could
+              be better?
             </p>
           </div>
-          {finished ? (
-            <>
-              <FeedbackForm optional onSendingChange={setSendingFeedback} />
-              <details className="guide-contribute">
-                <summary>Want to help build Relay?</summary>
-                <p>
-                  Check existing issues, discuss bigger changes first, then work on a focused branch
-                  or fork. Use sample data, run the project checks and include screenshots for UI
-                  changes in your pull request.
-                </p>
-                <a href={PROJECT_URL} target="_blank" rel="noopener noreferrer">
-                  GitHub repository <Icon name="external" />
-                </a>
-                <a href={CONTRIBUTING_URL} target="_blank" rel="noopener noreferrer">
-                  Contribution instructions <Icon name="external" />
-                </a>
-              </details>
-            </>
-          ) : (
-            <div className="app-guide-progress" aria-label={`Step ${index + 1} of ${steps.length}`}>
-              {steps.map((item, itemIndex) => (
-                <span key={item.target} className={itemIndex <= index ? 'complete' : ''} />
-              ))}
-            </div>
-          )}
+          <FeedbackForm optional onSendingChange={setSendingFeedback} />
+          <details className="guide-contribute">
+            <summary>Want to help build Relay?</summary>
+            <p>
+              Check existing issues, discuss bigger changes first, then work on a focused branch or
+              fork. Use sample data, run the project checks and include screenshots for UI changes
+              in your pull request.
+            </p>
+            <a href={PROJECT_URL} target="_blank" rel="noopener noreferrer">
+              GitHub repository <Icon name="external" />
+            </a>
+            <a href={CONTRIBUTING_URL} target="_blank" rel="noopener noreferrer">
+              Contribution instructions <Icon name="external" />
+            </a>
+          </details>
         </div>
       )}
-      <footer className="popup-dialog-actions">
-        <button type="button" className="guide-skip" disabled={sendingFeedback} onClick={onClose}>
-          {finished ? 'End guide' : 'Skip guide'}
-        </button>
-        {index > 0 && !finished && (
-          <button type="button" onClick={() => setIndex(index - 1)}>
-            Back
-          </button>
-        )}
-        {!finished && (
-          <button
-            type="button"
-            className="popup-primary-action"
-            onClick={() => setIndex(index + 1)}
-          >
-            {index === steps.length - 1 ? 'Show steps' : 'Next'} <span aria-hidden="true">→</span>
-          </button>
-        )}
-      </footer>
     </PopupDialog>
   );
 }

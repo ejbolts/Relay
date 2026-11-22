@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastText } from './toastTestUtils';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { WorkoutTypesProvider } from './WorkoutTypesProvider';
@@ -85,7 +86,7 @@ beforeEach(async () => {
   );
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
   await act(async () =>
     root.render(
       <WorkoutTypesProvider>
@@ -108,6 +109,14 @@ it('saves exercises to a workout type without a split', async () => {
 
   await act(async () => byLabel<HTMLButtonElement>('Arms exercises')!.click());
   expect(document.querySelector('dialog h2')!.textContent).toBe('Arms exercises');
+  // A full screen: back on the left and the shared header Save, with no close button.
+  const screen = document.querySelector('dialog')!;
+  expect(screen.classList).toContain('popup-dialog--screen');
+  expect(screen.querySelector('.popup-dialog-back')?.getAttribute('aria-label')).toBe('Back');
+  expect(screen.querySelector('.popup-dialog-close')).toBeNull();
+  expect(screen.querySelector('header button[type="submit"]')?.className).toBe(
+    'overlay-header-save routine-editor-save',
+  );
   await act(async () => byLabel<HTMLButtonElement>('Add exercise to Arms')!.click());
   const option = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find((item) =>
     item.textContent?.includes('Band Biceps Curl'),
@@ -130,8 +139,10 @@ it('saves exercises to a workout type without a split', async () => {
   const [typeId, movements] = vi.mocked(api.saveWorkoutTypeExercises).mock.calls[0];
   expect(typeId).toBe('custom-arms');
   expect(movements.map((item) => [item.exercise_id, item.sets.length])).toEqual([['curl', 4]]);
+  // A new planned set leaves its rest to last time or the default rest in Settings.
+  expect(movements[0].sets.map((item) => item.rest_seconds)).toEqual([null, null, null, null]);
   expect(document.querySelector('dialog')).toBeNull();
-  expect(document.querySelector('.top-toast')!.textContent).toContain('Arms exercises saved');
+  expect(toastText()).toBe('Arms exercises saved');
   expect(count('Arms')).toBe('1');
 });
 

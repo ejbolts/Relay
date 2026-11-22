@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastElement, toastText } from './toastTestUtils';
+import { TOAST_MS } from './Toast';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProfileSharingPanel } from './ProfileSharing';
@@ -38,7 +40,7 @@ beforeEach(() => {
   }));
   container = document.createElement('div');
   document.body.append(container);
-  root = createRoot(container);
+  root = createToastRoot(container);
 });
 
 afterEach(async () => {
@@ -71,6 +73,8 @@ describe('profile sharing visibility', () => {
     const explanation =
       'Choose who can see your training. Only members who share their own profile can see or follow others.';
     expect(container.textContent).not.toContain('Choose who can see your training.');
+    // PopupDialog returns focus to the control it opened from, as a browser focuses it.
+    help.focus();
     await act(async () => help.click());
     const dialog = document.querySelector('dialog[open]')!;
     expect(dialog.textContent).toContain(explanation);
@@ -103,30 +107,30 @@ describe('profile sharing visibility', () => {
     expect(api.sharing.updateChoices).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ visibility: 'public' }),
     );
-    expect(button('Make my profile public')!.disabled).toBe(true);
+    // Once saved there is nothing to confirm, so the button goes.
+    expect(button('Make my profile public')).toBeUndefined();
   });
 
-  it('keeps one confirm button under the options and reselecting cancels the change', async () => {
+  it('shows one confirm button only while a change is waiting, and reselecting cancels it', async () => {
     await render();
-    expect(button('Make my profile friends only')!.disabled).toBe(true);
+    expect(container.querySelector('.sharing-start')).toBeNull();
     await act(async () => radio('private').click());
     expect(button('Make my profile private')!.disabled).toBe(false);
 
     await act(async () => radio('followers').click());
-    expect(button('Make my profile friends only')!.disabled).toBe(true);
+    expect(container.querySelector('.sharing-start')).toBeNull();
     expect(button('Make my profile private')).toBeUndefined();
     expect(api.sharing.updateChoices).not.toHaveBeenCalled();
   });
 
-  it('shows the saved message as a five-second popup', async () => {
+  it('shows the saved message in a toast that clears itself', async () => {
     await render();
     await act(async () => radio('public').click());
     await act(async () => button('Make my profile public')!.click());
 
-    const toast = document.querySelector('.top-toast');
-    expect(toast?.textContent).toContain('Your profile is public to every member who shares.');
-    await act(async () => vi.advanceTimersByTime(5000));
-    expect(document.querySelector('.top-toast')).toBeNull();
+    expect(toastText()).toContain('Your profile is public to every member who shares.');
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard));
+    expect(toastElement()).toBeNull();
   });
 });
 

@@ -1,11 +1,26 @@
 // @vitest-environment jsdom
 import { renderToStaticMarkup } from 'react-dom/server';
-import { afterEach, expect, it } from 'vitest';
+import { afterEach, expect, it, vi } from 'vitest';
 import { ColourThemePanel } from './ColourThemePanel';
 
-afterEach(() => localStorage.clear());
+afterEach(() => {
+  localStorage.clear();
+  vi.unstubAllGlobals();
+});
+
+function stubPhoneMode(mode: 'dark' | 'light') {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({
+      matches: mode === 'dark',
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    })),
+  );
+}
 
 it('offers Default, Stained and OLED dark styles in dark mode with the saved one selected', () => {
+  localStorage.setItem('gym-logger-colour-mode', 'dark');
   localStorage.setItem('gym-logger-dark-style', 'stained');
   const markup = renderToStaticMarkup(<ColourThemePanel />);
   expect(markup).toContain('class="dark-style-options"');
@@ -62,4 +77,31 @@ it('no longer offers a Set colours choice', () => {
   const markup = renderToStaticMarkup(<ColourThemePanel />);
   expect(markup).not.toContain('<legend>Set colours</legend>');
   expect(markup).not.toContain('name="set-tint"');
+});
+
+it('offers Dark, Light and Automatic, with Automatic selected on a device with no saved mode', () => {
+  stubPhoneMode('dark');
+  const markup = renderToStaticMarkup(<ColourThemePanel />);
+  for (const name of ['Dark', 'Light', 'Automatic'])
+    expect(markup).toContain(`<strong>${name}</strong>`);
+  expect(markup.match(/<input[^>]*name="colour-mode"[^>]*value="auto"[^>]*>/)?.[0]).toContain(
+    'checked=""',
+  );
+});
+
+it('shows the style choices for the mode the phone is in while Automatic', () => {
+  stubPhoneMode('light');
+  let markup = renderToStaticMarkup(<ColourThemePanel />);
+  expect(markup).toContain('light-style-options');
+  expect(markup).not.toContain('name="dark-style"');
+  stubPhoneMode('dark');
+  markup = renderToStaticMarkup(<ColourThemePanel />);
+  expect(markup).toContain('name="dark-style"');
+  expect(markup).not.toContain('light-style-options');
+});
+
+it('has no description under the title and no inline saved message', () => {
+  const markup = renderToStaticMarkup(<ColourThemePanel />);
+  expect(markup).not.toContain('Your choices stay on this device');
+  expect(markup).not.toContain('role="status"');
 });

@@ -12,7 +12,7 @@ import { api } from './api';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
-import { NotificationDialog } from './NotificationDialog';
+import { Toast } from './Toast';
 import { PopupDialog } from './PopupDialog';
 import { RoutineMovementList } from './RoutineMovementList';
 import { CARDIO_ROW, SplitVolumeChart } from './SplitVolumeChart';
@@ -22,9 +22,8 @@ import { useWorkoutTypes } from './workoutTypesContext';
 import { exitGuide, finishGuide, updateGuide, useActiveGuide } from './setupGuides';
 import { formatWeight } from './weightUnits';
 import { localDate } from './utils';
-import { SplitScheduleChoice } from './SplitScheduleChoice';
 import { SPLIT_TEMPLATES } from './trainingSplit';
-import type { Exercise, Routine, RoutineDay, SplitProgression, TrainingSplit } from './types';
+import type { Exercise, Routine, RoutineDay, TrainingSplit } from './types';
 import './routines.css';
 
 const failure = (reason: unknown) =>
@@ -178,7 +177,6 @@ export function RoutinePanel({
   const [deleting, setDeleting] = useState<Routine | null>(null);
   const [options, setOptions] = useState<Routine | null>(null);
   const [startDate, setStartDate] = useState(localDate());
-  const [progression, setProgression] = useState<SplitProgression>('workouts');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -311,7 +309,7 @@ export function RoutinePanel({
           <h2 id={headingId}>{heading}</h2>
           <button
             type="button"
-            className="routine-link"
+            className="pulse-button link small routine-link"
             disabled={busy || types.loading}
             onClick={() => template('custom')}
           >
@@ -323,7 +321,11 @@ export function RoutinePanel({
         <header className="routine-heading">
           <h2 id={headingId}>{heading}</h2>
           {own && onOpenSplits && (
-            <button type="button" className="routine-link" onClick={() => onOpenSplits()}>
+            <button
+              type="button"
+              className="pulse-button link small routine-link"
+              onClick={() => onOpenSplits()}
+            >
               My splits
               <Icon name="chevron-right" />
             </button>
@@ -332,7 +334,12 @@ export function RoutinePanel({
       )}
       {own && !embedded && (
         <div className="routine-create">
-          <button type="button" disabled={busy || types.loading} onClick={() => template('custom')}>
+          <button
+            type="button"
+            className="pulse-button tonal block"
+            disabled={busy || types.loading}
+            onClick={() => template('custom')}
+          >
             <Icon name="plus" />
             New split
           </button>
@@ -341,17 +348,21 @@ export function RoutinePanel({
       {error && !editing && !using && !deleting && !options && (
         <p className="inline-error" role="alert">
           {error}{' '}
-          <button type="button" onClick={() => setAttempt((x) => x + 1)}>
+          <button
+            type="button"
+            className="pulse-button link small"
+            onClick={() => setAttempt((x) => x + 1)}
+          >
             Try again
           </button>
         </p>
       )}
-      {notice && <NotificationDialog message={notice} onClose={() => setNotice(null)} />}
+      {notice && <Toast id={notice} message={notice} onDismiss={() => setNotice(null)} />}
       {showView && (
         <div className="routine-notice">
           <button
             type="button"
-            className="routine-link"
+            className="pulse-button link small routine-link"
             onClick={() => onOpenSplits(importedId ?? undefined)}
           >
             View my splits
@@ -409,6 +420,7 @@ export function RoutinePanel({
                 <>
                   <button
                     type="button"
+                    className="pulse-button secondary small"
                     onClick={() => {
                       setError(null);
                       setEditing(structuredClone(routine));
@@ -419,7 +431,7 @@ export function RoutinePanel({
                   {routine.id !== 'current-split' && (
                     <button
                       type="button"
-                      className="routine-options-button"
+                      className="pulse-button secondary small icon-only routine-options-button"
                       aria-label={`Options for ${routine.name}`}
                       onClick={() => {
                         setError(null);
@@ -431,7 +443,11 @@ export function RoutinePanel({
                   )}
                   <button
                     type="button"
-                    className={routine.id === activeId ? 'routine-secondary' : 'routine-primary'}
+                    className={
+                      routine.id === activeId
+                        ? 'pulse-button secondary small'
+                        : 'pulse-button primary small routine-primary'
+                    }
                     onClick={() => {
                       setError(null);
                       setStartDate(
@@ -439,7 +455,6 @@ export function RoutinePanel({
                           ? (trainingSplit?.start_date ?? localDate())
                           : localDate(),
                       );
-                      setProgression(trainingSplit?.progression ?? 'workouts');
                       setUsing(routine);
                     }}
                   >
@@ -449,7 +464,7 @@ export function RoutinePanel({
               ) : (
                 <button
                   type="button"
-                  className="routine-primary routine-save"
+                  className="pulse-button primary small routine-primary routine-save"
                   disabled={busy || copied.includes(routine.id)}
                   onClick={() => void copy(routine)}
                 >
@@ -635,11 +650,27 @@ export function RoutinePanel({
       {using && (
         <PopupDialog
           title="Use split"
-          onClose={() => {
-            if (!busy) setUsing(null);
-          }}
+          className="routine-use-dialog"
+          busy={busy}
+          onClose={() => setUsing(null)}
+          actions={
+            <>
+              <button type="button" disabled={busy} onClick={() => setUsing(null)}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="routine-use-form"
+                className="popup-primary-action"
+                disabled={busy}
+              >
+                {busy ? 'Saving…' : 'Use this split'}
+              </button>
+            </>
+          }
         >
           <form
+            id="routine-use-form"
             className="routine-use"
             onSubmit={(event) => {
               event.preventDefault();
@@ -650,9 +681,10 @@ export function RoutinePanel({
                         ...trainingSplit!,
                         start_date: startDate,
                         enabled: true,
-                        progression,
+                        // Splits follow logged workouts; saving here moves a By date split over.
+                        progression: 'workouts',
                       })
-                    : await api.routines.use(using.id, startDate, progression);
+                    : await api.routines.use(using.id, startDate);
                 focusCard.current = using.id;
                 onUsed?.(saved);
                 setUsing(null);
@@ -675,23 +707,18 @@ export function RoutinePanel({
                 disabled={busy}
               />
             </label>
-            <SplitScheduleChoice value={progression} disabled={busy} onChange={setProgression} />
-            <p className="routine-note">Replaces your active split. Saved splits stay available.</p>
             {error && (
               <p role="alert" className="inline-error">
                 {error}
               </p>
             )}
-            <button className="popup-primary-action" disabled={busy}>
-              {busy ? 'Saving…' : 'Use this split'}
-            </button>
           </form>
           {guide?.useRoutineId === using.id && (
             <GuideCoach
               step={{
-                title: 'Choose how it runs',
-                body: 'Follow my workouts moves on each time you train; By date keeps to set days. Then tap Use this split.',
-                target: '.routine-use .popup-primary-action',
+                title: 'Pick a start date',
+                body: 'Choose the day your split starts, then tap Use this split.',
+                target: '.routine-use-dialog .popup-primary-action',
               }}
               index={NEW_SPLIT_STEPS - 1}
               total={NEW_SPLIT_STEPS}
@@ -706,27 +733,17 @@ export function RoutinePanel({
       {deleting && (
         <PopupDialog
           title="Delete split?"
-          onClose={() => {
-            if (!busy) setDeleting(null);
-          }}
-        >
-          <div className="routine-confirm">
-            <p>
-              {deleting.name} will be removed from your library and profile. Friends keep their
-              saved copies.
-            </p>
-            {error && (
-              <p role="alert" className="inline-error">
-                {error}
-              </p>
-            )}
-            <div className="popup-dialog-actions">
-              <button type="button" disabled={busy} onClick={() => setDeleting(null)}>
+          size="compact"
+          busy={busy}
+          onClose={() => setDeleting(null)}
+          actions={
+            <>
+              <button type="button" autoFocus disabled={busy} onClick={() => setDeleting(null)}>
                 Cancel
               </button>
               <button
                 type="button"
-                className="popup-primary-action routine-danger-action"
+                className="popup-primary-action is-danger"
                 disabled={busy}
                 onClick={() =>
                   void run(async () => {
@@ -739,7 +756,19 @@ export function RoutinePanel({
               >
                 {busy ? 'Deleting…' : 'Delete split'}
               </button>
-            </div>
+            </>
+          }
+        >
+          <div className="routine-confirm">
+            <p>
+              {deleting.name} will be removed from your library and profile. Friends keep their
+              saved copies.
+            </p>
+            {error && (
+              <p role="alert" className="inline-error">
+                {error}
+              </p>
+            )}
           </div>
         </PopupDialog>
       )}
@@ -987,15 +1016,16 @@ function RoutineEditor({
   const canSave = !busy && !addingType && !types.loading && !types.error && !loadError;
   return (
     <PopupDialog
+      variant="screen"
       title={routine.id ? 'Edit split' : 'New split'}
       className="routine-editor-dialog routine-editor-screen"
-      closeLabel={
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M14.5 5.5 8 12l6.5 6.5" />
-        </svg>
-      }
       headerActions={
-        <button type="submit" form={formId} className="routine-editor-save" disabled={!canSave}>
+        <button
+          type="submit"
+          form={formId}
+          className="overlay-header-save routine-editor-save"
+          disabled={!canSave}
+        >
           {busy ? 'Saving…' : 'Save'}
         </button>
       }
@@ -1036,7 +1066,11 @@ function RoutineEditor({
           {types.error && (
             <p className="inline-error" role="alert">
               {types.error}{' '}
-              <button type="button" onClick={() => void types.reload()}>
+              <button
+                type="button"
+                className="pulse-button link small"
+                onClick={() => void types.reload()}
+              >
                 Retry workout types
               </button>
             </p>
@@ -1044,7 +1078,11 @@ function RoutineEditor({
           {loadError && (
             <p role="alert" className="inline-error">
               {loadError}{' '}
-              <button type="button" onClick={() => setAttempt((x) => x + 1)}>
+              <button
+                type="button"
+                className="pulse-button link small"
+                onClick={() => setAttempt((x) => x + 1)}
+              >
                 Try again
               </button>
             </p>
@@ -1188,7 +1226,7 @@ function RoutineEditor({
           <div className="routine-add-days">
             <button
               type="button"
-              className="routine-add"
+              className="pulse-button tonal small routine-add"
               disabled={value.days.length >= 28 || types.loading}
               onClick={() => {
                 const type = types.types.find((t) => !t.archived);
@@ -1200,7 +1238,7 @@ function RoutineEditor({
             </button>
             <button
               type="button"
-              className="routine-add"
+              className="pulse-button tonal small routine-add"
               disabled={value.days.length >= 28}
               onClick={() => addDay({ workout_type_id: null, workout_type: null, movements: [] })}
             >
@@ -1226,6 +1264,7 @@ function RoutineEditor({
               />
               <button
                 type="button"
+                className="pulse-button tonal small"
                 disabled={addingType || !typeName.trim()}
                 onClick={() =>
                   void (async () => {
@@ -1260,7 +1299,7 @@ function RoutineEditor({
                   })()
                 }
               >
-                {addingType ? 'Adding...' : 'Add type'}
+                {addingType ? 'Adding…' : 'Add type'}
               </button>
             </div>
           </details>

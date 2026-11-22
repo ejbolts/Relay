@@ -1,0 +1,57 @@
+/* The goal summary tile opens the goal to edit; the whole tile is the tap target. */
+.body-screen .body-reference-stats > .body-goal-tile {
+  position: relative;
+}
+
+.body-goal-tile > button {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.body-goal-tile > button::after {
+  position: absolute;
+  inset: 0;
+  content: '';
+}
+
+.body-goal-tile > button:focus-visible {
+  outline: none;
+}
+
+.body-goal-tile > button:focus-visible::after {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: -2px;
+}
+
+.body-goal-tile > button:active::after {
+  background: color-mix(in srgb, var(--p-ink) 6%, transparent);
+}
+
+.body-goal-tile > button .pulse-icon {
+  width: 0.8rem;
+  height: 0.8rem;
+  margin-left: 0.15rem;
+  vertical-align: -0.12rem;
+  stroke-width: 2.4;
+}
+
+/* The dialogs open outside the app shell, so in light mode their fields take the light input
+   surface the app's other fields use. */
+:root[data-colour-mode='light']
+  :is(.body-entry-form input, .body-entry-form textarea, .body-goal-form input) {
+  border-color: var(--p-line-strong);
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+}
+
+:root[data-colour-mode='light'] :is(.body-entry-form, .body-goal-form) ::placeholder {
+  color: var(--p-muted);
+}

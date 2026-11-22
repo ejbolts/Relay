@@ -27,6 +27,24 @@ export function WorkoutCsvGuide({
       kicker="WORKOUTS & BODYWEIGHT"
       className="workout-csv-guide"
       onClose={onClose}
+      actions={
+        <>
+          <button
+            type="button"
+            className="popup-tertiary-action workout-csv-guide-close"
+            onClick={onClose}
+          >
+            Close
+          </button>
+          <button
+            type="button"
+            className="popup-primary-action"
+            onClick={() => input.current?.click()}
+          >
+            ↑ Choose CSV file
+          </button>
+        </>
+      }
     >
       <div className="workout-csv-guide-body">
         <p>
@@ -60,18 +78,6 @@ export function WorkoutCsvGuide({
           if (file) onFileSelected(file, options);
         }}
       />
-      <footer className="popup-dialog-actions workout-csv-guide-actions">
-        <button type="button" className="workout-csv-guide-close" onClick={onClose}>
-          Close
-        </button>
-        <button
-          type="button"
-          className="popup-primary-action"
-          onClick={() => input.current?.click()}
-        >
-          ↑ Choose CSV file
-        </button>
-      </footer>
     </PopupDialog>
   );
 }

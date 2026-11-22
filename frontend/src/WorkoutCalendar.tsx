@@ -49,6 +49,8 @@ type WorkoutCalendarProps = {
   /** Workout types switched off in the legend; their dots and day borders are greyed out. */
   hiddenCategories?: ReadonlySet<string>;
   activeWorkoutDate?: string | null;
+  /** The colour of the workout type being logged, for the live day's outline and ripple. */
+  activeWorkoutColor?: string | null;
   selectedDate?: string | null;
   onActiveWorkoutClick?: () => void;
   olderHistory?: OlderHistoryProps;
@@ -81,6 +83,7 @@ export function WorkoutCalendar({
   categoryColors,
   hiddenCategories,
   activeWorkoutDate = null,
+  activeWorkoutColor = null,
   selectedDate = null,
   onActiveWorkoutClick,
   onDayClick,
@@ -289,6 +292,9 @@ export function WorkoutCalendar({
                           : null;
                       const dayRingStyle =
                         ring.length && !inProgress ? dayRing(ring) : scheduledColor;
+                      // Today's outer ring and ripple repeat the day's workout colours, split into
+                      // the same arcs as its outline on a mixed day.
+                      const todayRing = key === todayKey && ring.length > 0 && !inProgress;
                       const scheduledNote = scheduled
                         ? `${scheduled.name} ${key < todayKey ? 'missed' : 'planned'}`
                         : null;
@@ -299,9 +305,11 @@ export function WorkoutCalendar({
                           key={key}
                           data-date={key}
                           style={
-                            dayRingStyle
-                              ? ({ '--day-ring': dayRingStyle } as CSSProperties)
-                              : undefined
+                            inProgress && activeWorkoutColor
+                              ? ({ '--live-color': activeWorkoutColor } as CSSProperties)
+                              : dayRingStyle
+                                ? ({ '--day-ring': dayRingStyle } as CSSProperties)
+                                : undefined
                           }
                           disabled={previewMode || (readOnly && !entry)}
                           onClick={() => {
@@ -318,7 +326,7 @@ export function WorkoutCalendar({
                                 ? `Resume workout in progress for ${prettyDate(key)}`
                                 : entry
                                   ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
-                                  : `${readOnly ? 'No workouts' : 'Create workout'} for ${prettyDate(key)}${scheduledNote ? `, ${scheduledNote}` : ''}`
+                                  : `${readOnly ? 'No workouts' : key > todayKey ? 'Plan' : 'Create workout'} for ${prettyDate(key)}${scheduledNote ? `, ${scheduledNote}` : ''}`
                           }
                           title={
                             previewMode
@@ -332,6 +340,7 @@ export function WorkoutCalendar({
                                     : prettyDate(key)
                           }
                         >
+                          {todayRing && <span className="calendar-today-ring" aria-hidden="true" />}
                           <span className="calendar-day-number">{day.getDate()}</span>
                           <span className="calendar-day-dots" aria-hidden="true">
                             {planned ? (
@@ -365,6 +374,7 @@ export function WorkoutCalendar({
       )),
     [
       activeWorkoutDate,
+      activeWorkoutColor,
       selectedDate,
       categoryColors,
       hiddenCategories,
@@ -391,7 +401,11 @@ export function WorkoutCalendar({
           {olderHistory.olderError ? (
             <>
               <p>Earlier months could not load.</p>
-              <button type="button" onClick={olderHistory.onLoadOlder}>
+              <button
+                type="button"
+                className="pulse-button secondary small"
+                onClick={olderHistory.onLoadOlder}
+              >
                 Try again
               </button>
             </>
@@ -401,7 +415,11 @@ export function WorkoutCalendar({
               <p>Loading earlier months…</p>
             </>
           ) : (
-            <button type="button" onClick={olderHistory.onLoadOlder}>
+            <button
+              type="button"
+              className="pulse-button secondary small"
+              onClick={olderHistory.onLoadOlder}
+            >
               Load earlier months
             </button>
           )}
@@ -424,6 +442,7 @@ export function WeekStrip({
   hiddenCategories,
   weekStartDay,
   activeWorkoutDate = null,
+  activeWorkoutColor = null,
   selectedDate = null,
   onActiveWorkoutClick,
   onDayClick,
@@ -435,6 +454,8 @@ export function WeekStrip({
   /** 0 (Sunday) to 6, matching the week the rest of Home counts. */
   weekStartDay: number;
   activeWorkoutDate?: string | null;
+  /** The colour of the workout type being logged, for the live day's tint and dot. */
+  activeWorkoutColor?: string | null;
   selectedDate?: string | null;
   onActiveWorkoutClick?: () => void;
   onDayClick: (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => void;
@@ -466,9 +487,11 @@ export function WeekStrip({
             key={key}
             data-date={key}
             style={
-              ring.length && !inProgress
-                ? ({ '--day-ring': dayRing(ring) } as CSSProperties)
-                : undefined
+              inProgress && activeWorkoutColor
+                ? ({ '--live-color': activeWorkoutColor } as CSSProperties)
+                : ring.length && !inProgress
+                  ? ({ '--day-ring': dayRing(ring) } as CSSProperties)
+                  : undefined
             }
             onClick={() => {
               if (inProgress && onActiveWorkoutClick) onActiveWorkoutClick();
@@ -480,7 +503,7 @@ export function WeekStrip({
                 ? `Resume workout in progress for ${prettyDate(key)}`
                 : entry
                   ? `View ${entry.workout_count} ${entry.workout_count === 1 ? 'workout' : 'workouts'} for ${prettyDate(key)}`
-                  : `Create workout for ${prettyDate(key)}`
+                  : `${key > todayKey ? 'Plan' : 'Create workout'} for ${prettyDate(key)}`
             }
           >
             <span className="week-strip-weekday" aria-hidden="true">

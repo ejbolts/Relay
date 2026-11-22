@@ -1,8 +1,14 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import type { CardioPreferences } from './types';
+import {
+  invalidZoneFields,
+  withZoneMax,
+  zonesFromMaxHeartRate,
+  type ZoneDraft,
+} from './cardioZones';
 import './cardioZones.css';
 
 export function CardioZoneSettings({
@@ -14,7 +20,7 @@ export function CardioZoneSettings({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [zones, setZones] = useState(() =>
+  const [zones, setZones] = useState<ZoneDraft[]>(() =>
     Array.from({ length: 5 }, (_, index) => {
       const saved = preferences.heart_rate_zones.find((item) => item.zone === index + 1);
       return {
@@ -27,10 +33,33 @@ export function CardioZoneSettings({
   const [goals, setGoals] = useState(preferences.goals);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [maxHeartRate, setMaxHeartRate] = useState('');
+  // Fields are marked once Save finds a problem, and clear as they are fixed.
+  const [checked, setChecked] = useState(false);
+  const invalid = checked ? invalidZoneFields(zones) : new Set<string>();
+  const maxBpm = Number(maxHeartRate);
+  const canFill = Number.isInteger(maxBpm) && maxBpm >= 100 && maxBpm <= 250;
   const unusedZone = [1, 2, 3, 4, 5].find((zone) => !goals.some((goal) => goal.zone === zone));
+  const formId = useId();
   return (
-    <PopupDialog title="Heart-rate zones & goals" onClose={onClose} className="cardio-zone-dialog">
+    <PopupDialog
+      title="Heart-rate zones & goals"
+      busy={saving}
+      onClose={onClose}
+      className="cardio-zone-dialog"
+      actions={
+        <>
+          <button type="button" disabled={saving} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="submit" form={formId} className="popup-primary-action" disabled={saving}>
+            {saving ? 'Saving…' : 'Save zones & goals'}
+          </button>
+        </>
+      }
+    >
       <form
+        id={formId}
         onSubmit={async (event) => {
           event.preventDefault();
           setError(null);
@@ -43,6 +72,7 @@ export function CardioZoneSettings({
               }))
             : [];
           if (anyRange && zones.some((zone) => !zone.min || !zone.max)) {
+            setChecked(true);
             setError('Enter a minimum and maximum for all five zones.');
             return;
           }
@@ -53,6 +83,7 @@ export function CardioZoneSettings({
                 (index > 0 && ranges[index - 1].max_bpm >= zone.min_bpm),
             )
           ) {
+            setChecked(true);
             setError('Zone ranges must increase without overlapping.');
             return;
           }
@@ -71,6 +102,32 @@ export function CardioZoneSettings({
       >
         <fieldset disabled={saving}>
           <legend>Personal ranges (bpm)</legend>
+          <div className="cardio-zone-fill">
+            <label>
+              <span>Max heart rate</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="100"
+                max="250"
+                step="1"
+                placeholder="bpm"
+                value={maxHeartRate}
+                onChange={(event) => setMaxHeartRate(event.target.value)}
+              />
+            </label>
+            <button
+              type="button"
+              className="pulse-button secondary"
+              disabled={!canFill}
+              onClick={() => {
+                setZones(zonesFromMaxHeartRate(maxBpm));
+                setError(null);
+              }}
+            >
+              Fill zones
+            </button>
+          </div>
           <div className="cardio-zone-columns" aria-hidden="true">
             <span>Zone</span>
             <span>From</span>
@@ -94,18 +151,27 @@ export function CardioZoneSettings({
                   max="250"
                   step="1"
                   aria-label={`Zone ${zone.zone} ${bound === 'min' ? 'minimum' : 'maximum'} bpm`}
+                  aria-invalid={invalid.has(`${zone.zone}:${bound}`) || undefined}
                   value={zone[bound]}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    const value = event.target.value;
                     setZones(
-                      zones.map((item, row) =>
-                        row === index ? { ...item, [bound]: event.target.value } : item,
-                      ),
-                    )
-                  }
+                      bound === 'max'
+                        ? withZoneMax(zones, index, value)
+                        : zones.map((item, row) =>
+                            row === index ? { ...item, min: value } : item,
+                          ),
+                    );
+                  }}
                 />,
               ])}
             </div>
           ))}
+          {error && invalid.size > 0 && (
+            <p className="inline-error" role="alert">
+              {error}
+            </p>
+          )}
         </fieldset>
         <fieldset disabled={saving}>
           <legend>Weekly goals</legend>
@@ -167,7 +233,7 @@ export function CardioZoneSettings({
           {unusedZone && (
             <button
               type="button"
-              className="cardio-goal-add"
+              className="pulse-button tonal small cardio-goal-add"
               onClick={() => setGoals([...goals, { zone: unusedZone, minutes: 30 }])}
             >
               <Icon name="plus" />
@@ -175,14 +241,11 @@ export function CardioZoneSettings({
             </button>
           )}
         </fieldset>
-        {error && (
+        {error && invalid.size === 0 && (
           <p className="inline-error" role="alert">
             {error}
           </p>
         )}
-        <button className="primary-action" disabled={saving}>
-          {saving ? 'Saving…' : 'Save zones & goals'}
-        </button>
       </form>
     </PopupDialog>
   );

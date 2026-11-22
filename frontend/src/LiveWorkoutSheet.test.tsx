@@ -30,7 +30,7 @@ async function render(active = true) {
           onRename={noop}
           onAddNote={noop}
           onTogglePause={noop}
-          onAddExercise={noop}
+          onStartRest={noop}
           onDiscard={noop}
           onFinish={noop}
         />
@@ -98,6 +98,37 @@ it.each([
   await act(async () => vi.advanceTimersByTime(400));
   expect(minimise).not.toHaveBeenCalled();
   expect(sheet().style.transform).toBe('translate3d(0, 0px, 0)');
+});
+
+it('minimises on a quick flick, but not on a slow short pull or a sideways flick', async () => {
+  const wait = (ms: number) => act(async () => vi.advanceTimersByTime(ms));
+  // A slow 40px pull springs back: it is short of the distance and has no speed when let go.
+  await pointer('pointerdown', 100, 10);
+  await wait(200);
+  await pointer('pointermove', 100, 30);
+  await wait(200);
+  await pointer('pointermove', 100, 50);
+  await wait(200);
+  await pointer('pointerup', 100, 50);
+  await wait(400);
+  // A fast flick that is mostly sideways is not a minimise either.
+  await pointer('pointerdown', 100, 10);
+  await wait(20);
+  await pointer('pointermove', 135, 55);
+  await wait(20);
+  await pointer('pointerup', 135, 55);
+  await wait(400);
+  expect(minimise).not.toHaveBeenCalled();
+  expect(sheet().style.transform).toBe('translate3d(0, 0px, 0)');
+  // A quick 45px flick down minimises, well short of the distance a slow drag needs.
+  await pointer('pointerdown', 100, 10);
+  await wait(20);
+  await pointer('pointermove', 102, 35);
+  expect(sheet().classList.contains('sheet-dragging')).toBe(true);
+  await wait(20);
+  await pointer('pointerup', 102, 55);
+  await wait(320);
+  expect(minimise).toHaveBeenCalledOnce();
 });
 
 it('ignores body scrolling, controls and cancelled/multitouch input', async () => {

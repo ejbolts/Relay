@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
@@ -11,12 +11,9 @@ import {
   nextBlockName,
   weeksEnd,
 } from './trainingBlocks';
-import {
-  TrainingBlockDialog,
-  TrainingBlockToast,
-  type TrainingBlockDialogStart,
-} from './TrainingBlockDialog';
+import { TrainingBlockDialog, type TrainingBlockDialogStart } from './TrainingBlockDialog';
 import { TrainingBlockHomeCard, TrainingBlockStartCard } from './TrainingBlockHomeCard';
+import { useToast } from './Toast';
 import type { TrainingBlockCardStyle } from './homeLayout';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { formatVolume, addDays } from './trainingSummary';
@@ -34,7 +31,7 @@ type View = 'summary' | 'next' | 'deload';
 type Plan = 'none' | '8' | '12';
 
 const PLANS: { id: Plan; label: string }[] = [
-  { id: 'none', label: 'No end' },
+  { id: 'none', label: 'No set date' },
   { id: '8', label: '8 weeks' },
   { id: '12', label: '12 weeks' },
 ];
@@ -114,6 +111,7 @@ export function TrainingBlockSummaryDialog({
   const [plan, setPlan] = useState<Plan>('none');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
+  const nextFormId = useId();
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
   const deloadEnd = weeksEnd(today, 1);
@@ -178,8 +176,71 @@ export function TrainingBlockSummaryDialog({
       kicker={
         view === 'summary' ? (block.deload ? 'Deload complete' : 'Block complete') : undefined
       }
-      onClose={() => !busyRef.current && onClose()}
+      onClose={onClose}
+      onBack={view === 'summary' ? undefined : () => setView('summary')}
+      busy={busy}
       className="training-block-dialog training-block-summary"
+      actions={
+        view === 'summary' ? (
+          <>
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenProgress();
+              }}
+            >
+              View progress
+            </button>
+            {!block.deload && (
+              <button type="button" onClick={() => setView('deload')}>
+                Deload week first
+              </button>
+            )}
+            <button type="button" className="popup-primary-action" onClick={() => setView('next')}>
+              Start next block
+            </button>
+          </>
+        ) : view === 'next' ? (
+          <>
+            <button type="button" disabled={busy} onClick={() => setView('summary')}>
+              Back
+            </button>
+            <button
+              type="submit"
+              form={nextFormId}
+              className="popup-primary-action"
+              disabled={busy || !name.trim()}
+            >
+              {busy ? 'Starting…' : 'Start block'}
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" disabled={busy} onClick={() => setView('summary')}>
+              Back
+            </button>
+            <button
+              type="button"
+              className="popup-primary-action"
+              disabled={busy}
+              onClick={() =>
+                void start(
+                  {
+                    name: 'Deload week',
+                    start_date: today,
+                    planned_end_date: deloadEnd,
+                    deload: true,
+                  },
+                  'Deload week started',
+                )
+              }
+            >
+              {busy ? 'Starting…' : 'Start deload'}
+            </button>
+          </>
+        )
+      }
     >
       {view === 'summary' && (
         <div className="training-block-summary-body">
@@ -205,34 +266,15 @@ export function TrainingBlockSummaryDialog({
           {loadFailed && (
             <p role="alert" className="error-message">
               Could not load the summary.{' '}
-              <button type="button" onClick={load}>
+              <button type="button" className="pulse-button link small" onClick={load}>
                 Retry
               </button>
             </p>
           )}
-          <div className="training-block-summary-actions">
-            <button type="button" className="primary-action" onClick={() => setView('next')}>
-              Start next block
-            </button>
-            {!block.deload && (
-              <button type="button" onClick={() => setView('deload')}>
-                Deload week first
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenProgress();
-              }}
-            >
-              View progress
-            </button>
-          </div>
         </div>
       )}
       {view === 'next' && (
-        <form onSubmit={submitNext} className="training-block-form">
+        <form id={nextFormId} onSubmit={submitNext} className="training-block-form">
           <fieldset disabled={busy}>
             <label>
               Block name
@@ -260,14 +302,6 @@ export function TrainingBlockSummaryDialog({
                 </button>
               ))}
             </div>
-            <div className="training-block-actions">
-              <button type="button" onClick={() => setView('summary')}>
-                Back
-              </button>
-              <button type="submit" className="primary-action" disabled={!name.trim()}>
-                {busy ? 'Starting…' : 'Start block'}
-              </button>
-            </div>
           </fieldset>
         </form>
       )}
@@ -277,29 +311,6 @@ export function TrainingBlockSummaryDialog({
             A 7-day deload block starts today and runs to {blockDay(deloadEnd, false)}. Start your
             next block when it ends.
           </p>
-          <div className="training-block-actions">
-            <button type="button" disabled={busy} onClick={() => setView('summary')}>
-              Back
-            </button>
-            <button
-              type="button"
-              className="primary-action"
-              disabled={busy}
-              onClick={() =>
-                void start(
-                  {
-                    name: 'Deload week',
-                    start_date: today,
-                    planned_end_date: deloadEnd,
-                    deload: true,
-                  },
-                  'Deload week started',
-                )
-              }
-            >
-              {busy ? 'Starting…' : 'Start deload'}
-            </button>
-          </div>
         </div>
       )}
       {error && (
@@ -331,7 +342,7 @@ export function TrainingBlockHome({
 }) {
   const [summarised, setSummarised] = useState<TrainingBlock | null>(null);
   const [managing, setManaging] = useState<TrainingBlockDialogStart | null>(null);
-  const [notice, setNotice] = useState('');
+  const toast = useToast();
   const trigger = useRef<HTMLElement | null>(null);
   const card = useRef<HTMLButtonElement>(null);
   const manage = (start: TrainingBlockDialogStart) => {
@@ -367,13 +378,12 @@ export function TrainingBlockHome({
           today={today}
           onClose={() => setSummarised(null)}
           onOpenProgress={onOpen}
-          onStarted={setNotice}
+          onStarted={toast.show}
         />
       )}
       {managing && (
-        <TrainingBlockDialog start={managing} onClose={closeManaging} onNotice={setNotice} />
+        <TrainingBlockDialog start={managing} onClose={closeManaging} onNotice={toast.show} />
       )}
-      <TrainingBlockToast notice={notice} onDismiss={() => setNotice('')} />
     </>
   );
 }

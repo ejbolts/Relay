@@ -34,6 +34,9 @@ const PATHS = {
   more: 'M5.5 12h.01M12 12h.01M18.5 12h.01',
   sun: 'M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 2.5v2M12 19.5v2M4.6 4.6l1.4 1.4M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4',
   moon: 'M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z',
+  // A circle with one half shaded, for following the phone's light or dark setting.
+  contrast:
+    'M12 20.5a8.5 8.5 0 1 0 0-17 8.5 8.5 0 0 0 0 17zM12 3.5v17M12 6h4.5M12 9h7M12 12h7.6M12 15h7M12 18h4.5',
   reset: 'M4 10a8 8 0 1 1 1.7 7M4 4v6h6',
   'chevron-left': 'M15 5.5 8.5 12l6.5 6.5',
   'chevron-right': 'M9 5.5l6.5 6.5L9 18.5',
@@ -86,6 +89,8 @@ const PATHS = {
 
 const FILLED = {
   play: 'M8 5.5v13l10.5-6.5z',
+  // A next-track glyph: play into a bar, for skipping ahead.
+  skip: 'M5 6v12l9-6zM16 6h3v12h-3z',
   pause: 'M6.5 5h3.5v14H6.5zM14 5h3.5v14H14z',
 } as const;
 

@@ -33,6 +33,35 @@
   color: #ff8188;
 }
 
+/* On the light card the dark-mode tints fade out; these keep at least 3:1. */
+:root[data-colour-mode='light'] .body-history-weight-change {
+  color: var(--p-muted);
+}
+
+:root[data-colour-mode='light'] .body-history-weight-change.favorable {
+  color: var(--p-good);
+}
+
+:root[data-colour-mode='light'] .body-history-weight-change.unfavorable {
+  color: var(--p-danger);
+}
+
+/* A check-in row's menu: its items sit flush, and Delete is in the danger colour. */
+.body-row-menu .body-history-actions {
+  gap: 0;
+}
+
+.body-row-menu .body-history-actions .body-row-menu-delete {
+  color: var(--p-danger);
+}
+
+/* Delete's confirm step stacks inside the narrow menu: the danger button above Cancel. */
+.body-row-menu .inline-confirmation {
+  display: grid;
+  gap: 0.375rem;
+  padding: 0.5rem;
+}
+
 /* Option B: the new goal on the left, its start date on the right, joined by round dots. */
 .body-history-goal-divider {
   display: flex;

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
-import { createRoot, type Root } from 'react-dom/client';
+import type { Root } from 'react-dom/client';
+import { createToastRoot, toastElement, toastText } from './toastTestUtils';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { api } from './api';
 import jsQR from 'jsqr';
@@ -38,7 +39,7 @@ beforeEach(() => {
   };
   host = document.createElement('div');
   document.body.append(host);
-  root = createRoot(host);
+  root = createToastRoot(host);
 });
 
 afterEach(async () => {
@@ -77,7 +78,10 @@ it('shows a scannable invite and copies its link', async () => {
   const copy = [...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Copy link')!;
   await act(async () => copy.click());
   expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/#friend=${user.id}`);
-  expect(copy.textContent).toBe('Link copied');
+  expect(toastText()).toBe('Link copied');
+  // Shown inside the open dialog, so the modal does not make it inert.
+  expect(dialog.contains(toastElement())).toBe(true);
+  expect(copy.textContent).toBe('Copy link');
 });
 
 it('opens from the labelled shortcut beside people search', async () => {
@@ -167,4 +171,27 @@ it('switches to scanning a friend’s code', async () => {
   expect(dialog.querySelector('video')).not.toBeNull();
   // This test browser has no camera.
   expect(dialog.querySelector('[role="alert"]')?.textContent).toBe('No camera is available here.');
+});
+
+it('is a plain dialog that a downward drag does not close', async () => {
+  sharing('followers');
+  const dialog = await open();
+  expect(dialog.classList).toContain('popup-dialog--dialog');
+  expect(dialog.querySelector('.sheet-grabber')).toBeNull();
+  const header = dialog.querySelector('header')!;
+  for (const [type, y] of [
+    ['touchstart', 300],
+    ['touchmove', 420],
+    ['touchend', 420],
+  ] as const) {
+    const point = { identifier: 1, clientX: 180, clientY: y };
+    const event = new Event(type, { bubbles: true, cancelable: true });
+    Object.assign(event, {
+      touches: type === 'touchend' ? [] : [point],
+      changedTouches: [point],
+    });
+    await act(async () => header.dispatchEvent(event));
+  }
+  expect(dialog.style.getPropertyValue('--sheet-offset')).toBe('');
+  expect(document.querySelector('.friend-invite-dialog')).toBe(dialog);
 });

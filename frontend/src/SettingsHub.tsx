@@ -11,6 +11,7 @@ import './settingsHub.css';
 export interface SettingsGroup {
   id: SettingsGroupId;
   icon: IconName;
+  /** Shown on the wide overview cards only. */
   description: string;
   content: ReactNode;
 }
@@ -139,7 +140,6 @@ export function SettingsHub({
             <h2 ref={heading} tabIndex={-1}>
               {group ? SETTINGS_GROUP_LABELS[group.id] : ''}
             </h2>
-            <p>{group?.description}</p>
           </header>
           {groups.map((entry) => (
             <div key={entry.id} data-settings-group={entry.id} hidden={selected !== entry.id}>

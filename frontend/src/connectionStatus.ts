@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { POPUP_MS } from './popupTiming';
 
 let usingSavedData = false;
 let savedAnswers = 0;
@@ -78,8 +79,8 @@ export const OFFLINE_CHECK_MS = 10_000;
 export const CHECK_TIMEOUT_MS = 8_000;
 /** Once shown, the offline notice stays at least this long, so it never flashes. */
 export const MIN_OFFLINE_SHOWN_MS = 4_000;
-/** How long "Back online" shows before it leaves. */
-export const BACK_ONLINE_MS = 2_500;
+/** How long "Back online" shows before it leaves: a quick pop-up. */
+export const BACK_ONLINE_MS = POPUP_MS.quick;
 /** A slow read checks the connection at most this often while the server seems fine. */
 const VERIFY_SLOW_EVERY_MS = 15_000;
 const HEALTH_PATH = '/api/health';

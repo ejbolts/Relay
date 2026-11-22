@@ -180,19 +180,6 @@
   width: 6px;
   border-radius: 4px;
 }
-.training-block-dialog .training-block-cards li > button {
-  width: auto;
-  min-height: 36px;
-  margin: 0;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 9px;
-  padding: 0.4rem 0.75rem;
-  background: transparent;
-  color: var(--p-ink);
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-
 /* New / edit form */
 /* The first field starts clear of the title bar. */
 .training-block-form {
@@ -284,46 +271,7 @@
   color: var(--p-muted);
   font-size: 0.72rem;
 }
-.training-block-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-.training-block-actions.split {
-  margin: 0 16px 16px;
-}
-.training-block-actions.split button {
-  flex: 1;
-}
-.training-block-dialog .training-block-actions button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  width: auto;
-  min-height: 44px;
-  margin: 0;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 8px;
-  padding: 0.65rem 0.9rem;
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-}
-.training-block-actions .pulse-icon {
-  width: 16px;
-  height: 16px;
-}
-.training-block-dialog .training-block-actions .primary-action {
-  border-color: var(--p-accent);
-  background: var(--p-accent);
-  color: white;
-}
-.training-block-dialog .training-block-actions .danger-button {
-  margin-right: auto;
-  color: var(--p-danger);
-}
-.training-block-dialog > p,
-.training-block-dialog > .training-block-actions:not(.split) {
+.training-block-dialog > p {
   margin: 16px;
 }
 .training-block-dialog .error-message {
@@ -514,31 +462,31 @@ button.pulse-card.training-block-home {
   width: 12px;
   height: 12px;
 }
-.training-block-summary-actions {
-  display: grid;
-  gap: 8px;
-}
-.training-block-dialog .training-block-summary-actions button {
-  min-height: 44px;
-  margin: 0;
-  border: 1px solid var(--p-line-strong);
-  border-radius: 8px;
-  padding: 0.65rem 0.9rem;
-  background: var(--p-surface-2);
-  color: var(--p-ink);
-  font-weight: 600;
-}
-.training-block-dialog .training-block-summary-actions .primary-action {
-  border-color: var(--p-accent);
-  background: var(--p-accent);
-  color: white;
-}
-.training-block-summary-body .training-block-actions {
-  margin: 0;
-}
 
 /* However short it is against long history, the current block stays wide enough to read. */
 .training-block-segment.current {
   flex-shrink: 0;
   min-width: min(5.5rem, 34%);
+}
+/* The rest of a running block's plan is hatched, with a line marking today. */
+.training-block-segment.has-today {
+  position: relative;
+  flex-shrink: 0;
+  min-width: min(7.5rem, 40%);
+  background-image: linear-gradient(
+    to right,
+    transparent var(--today),
+    color-mix(in srgb, var(--p-page-solid) 30%, transparent) var(--today)
+  );
+}
+.training-block-today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--today);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--p-danger);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--p-page-solid) 60%, transparent);
+  pointer-events: none;
 }

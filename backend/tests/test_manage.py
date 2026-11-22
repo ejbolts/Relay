@@ -49,6 +49,9 @@ def test_create_user_admin_flag_and_duplicate_and_bad_input(monkeypatch, capsys)
     feed_passwords(monkeypatch, TEST_PASSWORD, TEST_PASSWORD)
     with pytest.raises(SystemExit, match="already exists"):
         manage.main(["create-user", "--username", "plain", "--display-name", "P"])
+    feed_passwords(monkeypatch, TEST_PASSWORD, TEST_PASSWORD)
+    with pytest.raises(SystemExit, match="Another account already uses the name p"):
+        manage.main(["create-user", "--username", "plainer", "--display-name", " p "])
     feed_passwords(monkeypatch, "short", "short")
     with pytest.raises(SystemExit, match="Password must be"):
         manage.main(["create-user", "--username", "xxx", "--display-name", "X"])

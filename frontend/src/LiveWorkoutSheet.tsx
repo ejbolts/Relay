@@ -1,4 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  commitsDrag,
+  DRAG_START_PX,
+  dragVelocity,
+  trackDragSample,
+  type DragSample,
+} from './drawerGesture';
 import { motionReduced } from './motion';
 import { LiveWorkoutSheetContext } from './liveWorkoutSheetContext';
 import './liveWorkout.css';
@@ -29,7 +36,7 @@ export function LiveWorkoutSheet({
   const openTimer = useRef<number | null>(null);
   const closingRef = useRef(false);
   const timer = useRef<number | null>(null);
-  const gesture = useRef<{ id: number; x: number; y: number } | null>(null);
+  const gesture = useRef<{ id: number; x: number; y: number; samples: DragSample[] } | null>(null);
   const suppressClick = useRef(false);
 
   // Before the first paint, so the sheet never shows in place and then jumps down to slide up.
@@ -104,7 +111,7 @@ export function LiveWorkoutSheet({
         aria-modal={active ? true : undefined}
         hidden={!active}
         tabIndex={-1}
-        className={`live-workout-sheet${dragging ? ' is-dragging' : ''}${closing ? ' is-closing' : ''}${opening ? ' is-opening' : ''}`}
+        className={`live-workout-sheet${dragging ? ' is-dragging sheet-dragging' : ''}${closing ? ' is-closing' : ''}${opening ? ' is-opening' : ''}`}
         aria-label="Live workout"
         style={{ transform: `translate3d(0, ${offset}px, 0)` }}
         onKeyDown={(event) => {
@@ -160,7 +167,12 @@ export function LiveWorkoutSheet({
           )
             return;
           suppressClick.current = false;
-          gesture.current = { id: event.pointerId, x: event.clientX, y: event.clientY };
+          gesture.current = {
+            id: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+            samples: [{ y: event.clientY, t: event.timeStamp }],
+          };
         }}
         onPointerMove={(event) => {
           const start = gesture.current;
@@ -171,7 +183,8 @@ export function LiveWorkoutSheet({
             cancelGesture();
             return;
           }
-          if (dy > 8) {
+          if (dy > DRAG_START_PX) {
+            trackDragSample(start.samples, event.clientY, event.timeStamp);
             event.currentTarget.setPointerCapture?.(event.pointerId);
             suppressClick.current = true;
             setDragging(true);
@@ -181,9 +194,12 @@ export function LiveWorkoutSheet({
         onPointerUp={(event) => {
           const start = gesture.current;
           if (!start || start.id !== event.pointerId) return;
+          // Far enough or flicked, and mostly downward: the same rule as dismissing a sheet.
+          const velocity = dragVelocity(
+            trackDragSample(start.samples, event.clientY, event.timeStamp),
+          );
           const dy = event.clientY - start.y;
-          const threshold = Math.min(140, Math.max(72, window.innerHeight * 0.12));
-          if (dy >= threshold && Math.abs(event.clientX - start.x) < dy * 0.7) minimise();
+          if (commitsDrag(dy, event.clientX - start.x, velocity, window.innerHeight)) minimise();
           else cancelGesture();
           window.setTimeout(() => (suppressClick.current = false), 0);
         }}

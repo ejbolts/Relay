@@ -3,7 +3,7 @@
 from collections import defaultdict
 from datetime import date
 
-from sqlalchemy import or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from .imported_entries import imported_ids
@@ -19,14 +19,9 @@ def past_year_start(today: date) -> date:
         return today.replace(year=today.year - 1, day=28)
 
 
-def training_time_totals(db: Session, user_id: str, since: date | None = None) -> TrainingTimeRead:
-    """Exclude sample records and count cardio inside each workout once in Combined.
-
-    The ``imported_`` totals are the part of each total brought in by CSV import.
-
-    ``since`` limits the totals to workouts and cardio sessions dated on or after it.
-    """
-    has_strength = (
+def has_strength_movement():
+    """Whether a workout has a non-cardio exercise."""
+    return (
         select(WorkoutMovement.id)
         .join(Exercise, WorkoutMovement.exercise_id == Exercise.id)
         .where(
@@ -35,6 +30,28 @@ def training_time_totals(db: Session, user_id: str, since: date | None = None) -
         )
         .exists()
     )
+
+
+def is_cardio_only_workout():
+    """Whether a workout logged only cardio, such as a session logged on the Cardio tab.
+
+    Its session is in the cardio count, so a workout count shown beside that count leaves it out
+    and the two add up.
+    """
+    has_movement = select(WorkoutMovement.id).where(
+        WorkoutMovement.workout_id == TrainingWorkout.id
+    )
+    return and_(has_movement.exists(), ~has_strength_movement())
+
+
+def training_time_totals(db: Session, user_id: str, since: date | None = None) -> TrainingTimeRead:
+    """Exclude sample records and count cardio inside each workout once in Combined.
+
+    The ``imported_`` totals are the part of each total brought in by CSV import.
+
+    ``since`` limits the totals to workouts and cardio sessions dated on or after it.
+    """
+    has_strength = has_strength_movement()
     workout_query = select(
         TrainingWorkout.id, TrainingWorkout.duration_minutes, has_strength
     ).where(TrainingWorkout.user_id == user_id, TrainingWorkout.is_sample.is_(False))

@@ -451,3 +451,13 @@ def test_fresh_starts_are_validated_and_private(client, other_client):
     assert client.delete("/api/training-blocks/fresh-starts/2026-05-01").status_code == 404
     assert other_client.get("/api/training-blocks").json()["fresh_starts"] == []
     assert other_client.delete("/api/training-blocks/fresh-starts/2026-06-01").status_code == 404
+
+
+def test_block_summary_counts_each_pr_set_once(client):
+    current = block(client, "Strength", "2026-06-01")
+    client.post("/api/body-measurements", json={"measurement_date": "2026-06-01", "weight_kg": 80})
+    log(client, 100, "2026-06-01")
+    # 105 kg is a weight PR and a relative-strength PR on the same set.
+    log(client, 105, "2026-06-02")
+    summary = client.get(f"/api/training-blocks/{current['id']}/summary").json()
+    assert summary["block"]["pr_count"] == 1

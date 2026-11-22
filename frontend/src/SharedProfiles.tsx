@@ -7,17 +7,7 @@ import {
   maintenanceStatus,
 } from './bodyMeasurementHistory';
 import { formatWeight, weightFromKg, type WeightUnit } from './weightUnits';
-import {
-  Fragment,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type ReactNode,
-} from 'react';
-import { createPortal } from 'react-dom';
+import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError } from './api';
 import { authErrorMessage } from './authForm';
 import { clipBodyWeightGoalPath } from './bodyTrend';
@@ -30,10 +20,12 @@ import { SexMark } from './SexMark';
 import { SharedBodySizesCard } from './SharedBodySizesCard';
 import { FriendInviteButton } from './FriendQrCode';
 import { useUserSession } from './userContext';
-import { ProfileCardioCard } from './ProfileCardioCard';
+import { PaginationControls } from './PaginationControls';
 import { SharedWorkoutFilterToggle, SharedWorkoutFilters } from './SharedWorkoutFilters';
 import { ConsistencyCard } from './ConsistencyCard';
+import { consistencyWeeks } from './consistencyWeeks';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
+import { splitCalendarDays } from './trainingSplit';
 import { builtinTypeColors, calendarLegendTypes } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
 import { ImportedShare, TrainingTimeCard } from './TrainingTimeStats';
@@ -44,14 +36,16 @@ import { formatMemberSince } from './profileDisplay';
 import { TrendChart, type GoalPath } from './PulseCharts';
 import type { FriendConnectionsState } from './friendConnections';
 import {
-  friendStatusLabel,
+  searchResultDetail,
   plural,
   SHARED_WORKOUT_PAGE_SIZE,
   sinceMonthLabel,
 } from './sharedProfileDisplay';
 import { byLiveActivity, presenceStatus, presenceText, useNow } from './presence';
 import { addDays, dayMonth, parseLocalDate } from './trainingSummary';
-import { localDateOf } from './utils';
+import { useGoalRemoval } from './useGoalRemoval';
+import { Toast } from './Toast';
+import { localDate, localDateOf } from './utils';
 import {
   cachedSharedProfile,
   forgetSharedProfile,
@@ -73,15 +67,15 @@ import type {
   SharedConsistency,
   SharedWorkoutFilters as WorkoutFilters,
   SharedWorkoutFilterOptions,
+  SharedWorkoutKind,
   SharedWorkoutPage,
   SharingConnection,
   TrackedWorkout,
   User,
+  WorkoutType,
 } from './types';
 
 const BODY_WEIGHT_CHART_DAYS = 90;
-const INVITE_NOTICE_MS = 6000;
-
 /** What scanning a friend QR code did: sent a request, accepted theirs, or could not send. */
 type InviteResult = {
   kind: 'sent' | 'friends' | 'failed' | 'undo-failed';
@@ -248,6 +242,15 @@ function ProfileFriendControl({
   const menu = useRef<HTMLDivElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const menuId = useId();
+  const viewerId = useUserSession().user?.id ?? null;
+  // Remove friend waits out an Undo window before it is sent, so Undo keeps the friendship
+  // without a new request. Leaving the profile sends it at once.
+  const removal = useGoalRemoval<{ id: string }>({
+    remove: (id) => api.sharing.removeFriend(id),
+    onRemoved: () => onChange('none'),
+    onRestore: () => undefined,
+    onFailed: () => setError('Could not remove this friend. You are still friends.'),
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -270,7 +273,7 @@ function ProfileFriendControl({
   }, [open]);
 
   if (profile.is_you) return null;
-  const status = profile.friend_status;
+  const status = removal.pending ? 'none' : profile.friend_status;
   const since = status === 'friends' ? sinceMonthLabel(profile.friends_since) : null;
   const pill = status === 'friends' ? 'Friends' : status === 'outgoing' ? 'Requested' : null;
   const spinner = <span className="auth-spinner" aria-hidden="true" />;
@@ -319,7 +322,7 @@ function ProfileFriendControl({
         {status === 'none' && (
           <button
             type="button"
-            className="profile-follow-button is-follow"
+            className="pulse-button primary small profile-follow-button is-follow"
             disabled={busy}
             onClick={() => void add()}
           >
@@ -331,7 +334,7 @@ function ProfileFriendControl({
           <>
             <button
               type="button"
-              className="profile-follow-button is-follow"
+              className="pulse-button primary small profile-follow-button is-follow"
               disabled={busy}
               onClick={() => void accept()}
             >
@@ -340,7 +343,7 @@ function ProfileFriendControl({
             </button>
             <button
               type="button"
-              className="profile-follow-button"
+              className="pulse-button secondary small profile-follow-button"
               disabled={busy}
               onClick={() => void remove()}
             >
@@ -352,7 +355,7 @@ function ProfileFriendControl({
           <button
             ref={trigger}
             type="button"
-            className={`profile-follow-button${pill ? '' : ' is-more'}`}
+            className={`pulse-button secondary small profile-follow-button${pill ? '' : ' icon-only is-more'}`}
             disabled={busy}
             aria-label={pill ? undefined : `More options for ${profile.display_name}`}
             aria-haspopup="menu"
@@ -377,7 +380,18 @@ function ProfileFriendControl({
             <div ref={menu} id={menuId} className="profile-follow-menu" role="menu">
               {since && <p>{since}</p>}
               {status === 'friends' && (
-                <button type="button" role="menuitem" disabled={busy} onClick={() => void remove()}>
+                <button
+                  type="button"
+                  role="menuitem"
+                  disabled={busy}
+                  onClick={() => {
+                    setOpen(false);
+                    setError(null);
+                    // A copy saved while friends must not reopen once the removal is sent.
+                    forgetSharedProfile(viewerId, profile.id);
+                    removal.start({ id: profile.id }, 0);
+                  }}
+                >
                   Remove friend
                 </button>
               )}
@@ -410,30 +424,45 @@ function ProfileFriendControl({
         <PopupDialog
           title={`Block ${profile.display_name}?`}
           className="friend-block-dialog"
+          size="compact"
+          busy={busy}
           onClose={() => setConfirmBlock(false)}
+          actions={
+            <>
+              <button
+                type="button"
+                autoFocus
+                disabled={busy}
+                onClick={() => setConfirmBlock(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="popup-primary-action is-danger"
+                disabled={busy}
+                onClick={() => void block()}
+              >
+                Block
+              </button>
+            </>
+          }
         >
           <p>
             They will no longer find you or see your profile, data and activity, and you stop being
-            friends. You can unblock them in Social, under Find.
+            friends. You can unblock them in Social, under Friends.
           </p>
-          <div className="friend-block-actions">
-            <button
-              type="button"
-              className="profile-secondary"
-              onClick={() => setConfirmBlock(false)}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="profile-danger"
-              disabled={busy}
-              onClick={() => void block()}
-            >
-              Block
-            </button>
-          </div>
         </PopupDialog>
+      )}
+      {removal.pending && (
+        <Toast
+          id={removal.pending.goal.id}
+          message={`Removed ${profile.display_name}`}
+          duration="important"
+          action={{ label: 'Undo', run: removal.undo }}
+          dismissLabel="Dismiss friend removal notification"
+          onDismiss={removal.dismiss}
+        />
       )}
     </div>
   );
@@ -622,7 +651,7 @@ export function PeopleSearch({
                 <FriendRow
                   key={profile.id}
                   person={profile}
-                  detail={friendStatusLabel(profile)}
+                  detail={searchResultDetail(profile)}
                   onOpen={() => onOpenProfile(profile)}
                   actions={<FriendButton profile={profile} onChange={onFriendChanged} />}
                 />
@@ -652,7 +681,6 @@ export function SuggestedFriends({
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [error, setError] = useState<string | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const focusPage = useRef(false);
   const headingId = useId();
   useEffect(() => {
     if (!active) return;
@@ -675,30 +703,19 @@ export function SuggestedFriends({
       cancelled = true;
     };
   }, [active, refreshKey, requestedPage, revision]);
-  useEffect(() => {
-    if (state !== 'ready' || !focusPage.current) return;
-    focusPage.current = false;
-    heading.current?.focus({ preventScroll: true });
-    heading.current?.scrollIntoView({ block: 'start' });
-  }, [state, result]);
   const pageCount = result ? Math.ceil(result.total / result.page_size) : 0;
-  const page = result?.page ?? 1;
-  const firstPage = Math.max(1, Math.min(page - 2, pageCount - 4));
-  const pageNumbers = Array.from(
-    { length: Math.min(5, pageCount) },
-    (_, index) => firstPage + index,
-  );
-  function changePage(next: number) {
-    if (next === page) return;
-    focusPage.current = true;
-    setRequestedPage(next);
-  }
+  // A page that is loading keeps the previous one on screen, so the list and pager stay put.
+  const loading = state === 'loading';
   return (
-    <div className="friend-group suggested-friends" aria-labelledby={headingId}>
-      <h3 id={headingId} ref={heading} tabIndex={-1}>
+    <div
+      className="friend-group suggested-friends"
+      aria-labelledby={headingId}
+      aria-busy={loading && result !== null}
+    >
+      <h3 id={headingId} ref={heading}>
         Suggested friends
       </h3>
-      {state === 'loading' && (
+      {loading && !result && (
         <p role="status" className="sharing-loading">
           Loading suggestions…
         </p>
@@ -717,7 +734,7 @@ export function SuggestedFriends({
           </button>
         </div>
       )}
-      {state === 'ready' && result && (
+      {state !== 'error' && result && (
         <>
           {result.profiles.length === 0 ? (
             <p className="shared-card-empty">No suggested friends right now.</p>
@@ -742,43 +759,14 @@ export function SuggestedFriends({
               ))}
             </ul>
           )}
-          {result.total > 0 && (
-            <p className="suggested-friends-range" role="status">
-              {(page - 1) * result.page_size + 1}–{Math.min(page * result.page_size, result.total)}{' '}
-              of {result.total}
-            </p>
-          )}
-          {pageCount > 1 && (
-            <nav className="suggested-friends-pages" aria-label="Suggested friends pages">
-              <button
-                type="button"
-                disabled={page === 1}
-                aria-label="Previous suggested friends page"
-                onClick={() => changePage(page - 1)}
-              >
-                ‹
-              </button>
-              {pageNumbers.map((number) => (
-                <button
-                  type="button"
-                  key={number}
-                  aria-current={page === number ? 'page' : undefined}
-                  aria-label={`Suggested friends page ${number}`}
-                  onClick={() => changePage(number)}
-                >
-                  {number}
-                </button>
-              ))}
-              <button
-                type="button"
-                disabled={page === pageCount}
-                aria-label="Next suggested friends page"
-                onClick={() => changePage(page + 1)}
-              >
-                ›
-              </button>
-            </nav>
-          )}
+          <PaginationControls
+            label="suggested friends"
+            currentPage={result.page}
+            totalPages={pageCount}
+            busy={loading}
+            scrollTarget={heading}
+            onPageChange={setRequestedPage}
+          />
         </>
       )}
     </div>
@@ -876,9 +864,7 @@ export function FindPanel({
     return state === 'error' ? (
       <LoadProblem message={error ?? 'Could not load your friends.'} onRetry={onRetry} />
     ) : (
-      <p className="sharing-loading" role="status">
-        Loading your friends…
-      </p>
+      <FriendsSkeleton />
     );
   }
   const open = (person: SharingConnection) => () => onOpenProfile(person);
@@ -1168,6 +1154,8 @@ export interface SharedWorkoutListProps {
   loadMoreFailed?: boolean;
   /** Reads the next older workouts onto the end of `workouts`. */
   onLoadMore?: () => void;
+  /** The member's own workout types, so the list matches the colours of their calendar. */
+  workoutTypes?: WorkoutType[];
 }
 
 function SharedConsistencyCalendar({
@@ -1184,10 +1172,24 @@ function SharedConsistencyCalendar({
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
   const [visibleMonths, setVisibleMonths] = useState<readonly string[] | null>(null);
   const colors = builtinTypeColors(data.workout_types);
+  const today = localDate();
+  // Like Home, the member's split outlines its coming days and the past days it missed.
+  const splitDays = useMemo(
+    () => splitCalendarDays(data.training_split, today, 42),
+    [data.training_split, today],
+  );
+  // The heatmap holds every training day, so its earliest is the member's first workout.
+  const firstWorkout = data.heatmap
+    .filter((day) => day.workout_count > 0)
+    .reduce<string | undefined>(
+      (first, day) => (!first || day.workout_date < first ? day.workout_date : first),
+      undefined,
+    );
   return (
     <ConsistencyCard
       streak={data.current_streak}
       trainingDays={data.training_days}
+      weeks={consistencyWeeks(firstWorkout, today)}
       onOpenSplits={onOpenSplits}
     >
       <WorkoutCalendar
@@ -1197,6 +1199,7 @@ function SharedConsistencyCalendar({
         hiddenCategories={hidden}
         selectedDate={selectedDate}
         readOnly
+        splitDays={splitDays}
         onDayClick={onDayClick}
         onVisibleMonthsChange={setVisibleMonths}
       />
@@ -1225,7 +1228,9 @@ function ProfileStats({ profile }: { profile: SharedProfile }) {
     <dl className="shared-stat-row">
       <div>
         <dt>Workouts</dt>
-        <dd className="num">{(profile.workout_count ?? 0).toLocaleString('en-GB')}</dd>
+        <dd className="num">
+          {(profile.strength_workout_count ?? profile.workout_count ?? 0).toLocaleString('en-GB')}
+        </dd>
         {!!profile.imported_workout_count && (
           <ImportedShare value={profile.imported_workout_count.toLocaleString('en-GB')} />
         )}
@@ -1244,6 +1249,31 @@ function ProfileStats({ profile }: { profile: SharedProfile }) {
         </dd>
       </div>
     </dl>
+  );
+}
+
+/** The outline of Social's Friends list while it loads: a search box and a group of friends. */
+function FriendsSkeleton() {
+  return (
+    <div className="friends-loading-skeleton find-loading-skeleton" role="status">
+      <span className="sr-only">Loading your friends…</span>
+      <div className="find-skeleton-group" aria-hidden="true">
+        <span className="skeleton-block find-skeleton-heading" />
+        <span className="skeleton-block find-skeleton-search" />
+      </div>
+      <div className="find-skeleton-group" aria-hidden="true">
+        <span className="skeleton-block find-skeleton-heading" />
+        {[0, 1, 2].map((row) => (
+          <span className="find-skeleton-row" key={row}>
+            <span className="skeleton-block friend-skeleton-avatar" />
+            <span className="find-skeleton-copy">
+              <span className="skeleton-block friend-skeleton-name" />
+              <span className="skeleton-block friend-skeleton-meta" />
+            </span>
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1272,6 +1302,20 @@ function ProfileSkeleton() {
   );
 }
 
+type HistoryTab = 'all' | 'workouts' | 'cardio';
+// One list in every tab; the server leaves out cardio-only workouts under Workouts and keeps
+// only those under Cardio.
+const HISTORY_KIND: Record<HistoryTab, SharedWorkoutKind | undefined> = {
+  all: undefined,
+  workouts: 'strength',
+  cardio: 'cardio',
+};
+const HISTORY_TABS: readonly (readonly [HistoryTab, string])[] = [
+  ['all', 'All sessions'],
+  ['workouts', 'Workouts'],
+  ['cardio', 'Cardio'],
+];
+
 export function SharedProfileScreen({
   onOpenSplits,
   dataRevision = null,
@@ -1280,6 +1324,7 @@ export function SharedProfileScreen({
   renderWorkouts,
   onChooseSharing,
   active = true,
+  preloadReady = true,
   ownProfile,
   invite = false,
   onLoaded,
@@ -1289,6 +1334,8 @@ export function SharedProfileScreen({
   profileId: string;
   targetWorkout?: Pick<TrackedWorkout, 'id' | 'workout_date'>;
   active?: boolean;
+  /** Your own profile loads while hidden, but only once this is true. */
+  preloadReady?: boolean;
   ownProfile?: { user: User; onSaved: (user: User) => void };
   /** Opened from a friend QR code or invite link. */
   invite?: boolean;
@@ -1314,6 +1361,8 @@ export function SharedProfileScreen({
   const [records, setRecords] = useState<PersonalRecord[]>(seed?.page?.personal_records ?? []);
   const [total, setTotal] = useState(seed?.page?.total ?? 0);
   const [state, setState] = useState<LoadState>(seed ? 'ready' : 'loading');
+  const [unblocking, setUnblocking] = useState(false);
+  const [unblockError, setUnblockError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -1330,9 +1379,13 @@ export function SharedProfileScreen({
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const filtersId = useId();
+  const historyTabsId = useId();
+  const [historyTab, setHistoryTab] = useState<HistoryTab>('all');
   // Your own profile stays mounted beside a friend's, so the list is found by ref, not by id.
   const workoutList = useRef<HTMLElement>(null);
   function showWorkouts() {
+    // A calendar day or lift can be cardio or strength, so show everything that matches it.
+    setHistoryTab('all');
     setFiltersOpen(true);
     workoutList.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
@@ -1352,7 +1405,7 @@ export function SharedProfileScreen({
   const invalidDates = Boolean(
     filters.start_date && filters.end_date && filters.start_date > filters.end_date,
   );
-  const preload = Boolean(ownProfile);
+  const preload = Boolean(ownProfile) && preloadReady;
   const onLoadedRef = useRef(onLoaded);
   onLoadedRef.current = onLoaded;
   // Scanning a friend QR code sends the request once, before the profile first appears. Every
@@ -1374,9 +1427,15 @@ export function SharedProfileScreen({
     }
   }
 
-  const filterKey = JSON.stringify(filters);
+  const cardioTab = Boolean(profile?.can_view && profile.cardio_sessions);
+  const listKind = cardioTab ? HISTORY_KIND[historyTab] : undefined;
+  const query = useMemo(
+    () => (listKind ? { ...filters, kind: listKind } : filters),
+    [filters, listKind],
+  );
+  const filterKey = JSON.stringify(query);
   const loadedFilters = useRef<string | null>(seed?.page ? filterKey : null);
-  const queryKey = JSON.stringify([profileId, attempt, filters, active, dataRevision]);
+  const queryKey = JSON.stringify([profileId, attempt, query, active, dataRevision]);
   const currentQuery = useRef(queryKey);
   currentQuery.current = queryKey;
 
@@ -1390,7 +1449,7 @@ export function SharedProfileScreen({
     setLoadingWorkouts(true);
     setLoadingMore(false);
     setMoreError(null);
-    const unfiltered = !Object.values(filters).some(Boolean);
+    const unfiltered = !Object.values(query).some(Boolean);
     /** The workouts a background copy holds for the current filters, when it can answer them. */
     function warmPage(data: SharedProfileData): SharedWorkoutPage | null {
       if (!data.profile.can_view || unfiltered) return data.page;
@@ -1400,7 +1459,7 @@ export function SharedProfileScreen({
       const initial = preload
         ? await Promise.all([
             api.sharing.profile(profileId),
-            api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, filters),
+            api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, query),
             api.sharing.workoutFilters(profileId),
           ])
         : null;
@@ -1430,7 +1489,7 @@ export function SharedProfileScreen({
             ? [initial[1], initial[2]]
             : nextProfile.can_view
               ? await Promise.all([
-                  api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, filters),
+                  api.sharing.workouts(profileId, 0, SHARED_WORKOUT_PAGE_SIZE, query),
                   api.sharing.workoutFilters(profileId),
                 ])
               : [
@@ -1452,7 +1511,7 @@ export function SharedProfileScreen({
             profileId,
             page.workouts.length,
             SHARED_WORKOUT_PAGE_SIZE,
-            filters,
+            query,
           );
           if (cancelled) return;
           if (!more.workouts.length) break;
@@ -1491,7 +1550,7 @@ export function SharedProfileScreen({
   }, [
     profileId,
     attempt,
-    filters,
+    query,
     filterKey,
     invalidDates,
     active,
@@ -1513,7 +1572,7 @@ export function SharedProfileScreen({
         profileId,
         workouts.length,
         SHARED_WORKOUT_PAGE_SIZE,
-        filters,
+        query,
       );
       if (currentQuery.current !== requestedQuery) return;
       const added = page.workouts.filter(
@@ -1533,6 +1592,23 @@ export function SharedProfileScreen({
     }
   }
 
+  const filtered = Object.values(filters).some(Boolean);
+
+  async function unblock() {
+    if (unblocking) return;
+    setUnblocking(true);
+    setUnblockError(null);
+    try {
+      await api.sharing.unblockMember(profileId);
+      setState('loading');
+      setAttempt((count) => count + 1);
+    } catch (reason) {
+      setUnblockError(authErrorMessage(reason));
+    } finally {
+      setUnblocking(false);
+    }
+  }
+
   function friendChanged(status: FriendStatus) {
     if (!profile) return;
     // Gaining or losing access to a friends-only profile changes what it shows.
@@ -1542,10 +1618,9 @@ export function SharedProfileScreen({
   }
 
   useEffect(() => {
-    if (!inviteResult) return;
-    const timer = setTimeout(() => setInviteResult(null), INVITE_NOTICE_MS);
-    return () => clearTimeout(timer);
-  }, [inviteResult]);
+    // The notice belongs to this visit to the profile; leaving it ends the notice.
+    if (!active) setInviteResult(null);
+  }, [active]);
 
   async function undoInviteRequest() {
     if (undoing) return;
@@ -1564,38 +1639,25 @@ export function SharedProfileScreen({
   }
 
   const inviteNotice =
-    inviteResult && active
-      ? createPortal(
-          <div
-            key={inviteResult.serial}
-            className="undo-toast top-toast friend-invite-toast"
-            role="status"
-            aria-atomic="true"
-            style={{ '--undo-toast-duration': `${INVITE_NOTICE_MS}ms` } as CSSProperties}
-          >
-            <span>{inviteMessage(inviteResult)}</span>
-            {inviteResult.kind === 'sent' && (
-              <button
-                className="undo-toast-action"
-                type="button"
-                disabled={undoing}
-                onClick={() => void undoInviteRequest()}
-              >
-                Undo
-              </button>
-            )}
-            <button
-              className="undo-toast-close"
-              type="button"
-              aria-label="Dismiss friend request notification"
-              onClick={() => setInviteResult(null)}
-            >
-              <Icon name="close" />
-            </button>
-          </div>,
-          document.body,
-        )
-      : null;
+    inviteResult && active ? (
+      <Toast
+        id={inviteResult.serial}
+        message={inviteMessage(inviteResult)}
+        variant={
+          inviteResult.kind === 'failed' || inviteResult.kind === 'undo-failed'
+            ? 'warning'
+            : undefined
+        }
+        action={
+          inviteResult.kind === 'sent'
+            ? { label: 'Undo', run: () => undoInviteRequest() }
+            : undefined
+        }
+        busy={undoing}
+        dismissLabel="Dismiss friend request notification"
+        onDismiss={() => setInviteResult(null)}
+      />
+    ) : null;
 
   const ownIdentity =
     ownProfile?.user.id === profileId ? (
@@ -1628,9 +1690,20 @@ export function SharedProfileScreen({
               <h2>You blocked {profile.display_name}</h2>
             </div>
           </header>
-          <p>
-            They can no longer find you or see your profile. Unblock them in Social, under Find.
-          </p>
+          <p>They can no longer find you or see your profile.</p>
+          {unblockError && (
+            <p className="inline-error" role="alert">
+              {unblockError}
+            </p>
+          )}
+          <button
+            type="button"
+            className="profile-secondary"
+            disabled={unblocking}
+            onClick={() => void unblock()}
+          >
+            {unblocking ? 'Unblocking…' : 'Unblock'}
+          </button>
         </section>
       </section>
     );
@@ -1813,21 +1886,33 @@ export function SharedProfileScreen({
             />
           )}
           {profile.goals && <GoalsCard goals={profile.goals} latestWeight={latestWeight} />}
-          {profile.cardio_sessions && (
-            <ProfileCardioCard
-              profileId={profile.id}
-              sessions={profile.cardio_sessions}
-              total={profile.cardio_total ?? profile.cardio_sessions.length}
-              active={active}
-            />
-          )}
           <section
             ref={workoutList}
             className="history-screen shared-workouts"
-            aria-labelledby="shared-workouts-title"
+            aria-labelledby={cardioTab ? undefined : 'shared-workouts-title'}
+            aria-label={cardioTab ? 'Training history' : undefined}
           >
-            <header className="shared-workouts-header">
-              <h2 id="shared-workouts-title">Workouts</h2>
+            <header className={`shared-workouts-header${cardioTab ? ' has-tabs' : ''}`}>
+              {cardioTab ? (
+                <div className="shared-history-tabs" role="tablist" aria-label="Training history">
+                  {HISTORY_TABS.map(([tab, label]) => (
+                    <button
+                      key={tab}
+                      type="button"
+                      role="tab"
+                      id={`${historyTabsId}-${tab}`}
+                      aria-selected={historyTab === tab}
+                      aria-controls={`${historyTabsId}-panel`}
+                      className={historyTab === tab ? 'active' : ''}
+                      onClick={() => setHistoryTab(tab)}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <h2 id="shared-workouts-title">Workouts</h2>
+              )}
               <SharedWorkoutFilterToggle
                 filters={filters}
                 open={filtersOpen}
@@ -1835,65 +1920,76 @@ export function SharedProfileScreen({
                 onToggle={setFiltersOpen}
               />
             </header>
-            {linkedWorkoutId &&
-              !loadingWorkouts &&
-              !workouts.some((workout) => workout.id === linkedWorkoutId) && (
+            <div
+              role={cardioTab ? 'tabpanel' : undefined}
+              id={`${historyTabsId}-panel`}
+              aria-labelledby={cardioTab ? `${historyTabsId}-${historyTab}` : undefined}
+            >
+              {linkedWorkoutId &&
+                !loadingWorkouts &&
+                !workouts.some((workout) => workout.id === linkedWorkoutId) && (
+                  <p className="inline-error" role="alert">
+                    This workout is no longer available.
+                  </p>
+                )}
+              <SharedWorkoutFilters
+                id={filtersId}
+                filters={filters}
+                options={filterOptions}
+                open={filtersOpen}
+                onChange={setFilters}
+              />
+              {invalidDates ? (
                 <p className="inline-error" role="alert">
-                  This workout is no longer available.
+                  From date must not be after To date.
                 </p>
+              ) : loadingWorkouts &&
+                (workouts.length === 0 || loadedFilters.current !== filterKey) ? (
+                <p className="sharing-loading" role="status">
+                  Loading workouts…
+                </p>
+              ) : workouts.length === 0 ? (
+                <p className="shared-card-empty">
+                  {listKind === 'cardio'
+                    ? filtered
+                      ? 'No cardio sessions match these filters.'
+                      : 'No cardio sessions yet.'
+                    : filtered
+                      ? 'No workouts match these filters.'
+                      : 'No workouts logged yet.'}
+                </p>
+              ) : (
+                <Fragment key={filterKey}>
+                  {renderWorkouts({
+                    workouts,
+                    hasMore: workouts.length < total,
+                    loadingMore: loadingMore || loadingWorkouts,
+                    loadMoreFailed: Boolean(moreError),
+                    onLoadMore: () => void loadMore(),
+                    focusWorkoutId: linkedWorkoutId,
+                    personalRecords: records,
+                    workoutTypes: profile.consistency?.workout_types,
+                    onFilterMachine: (photo) => {
+                      setFilters((current) => ({ ...current, machine_photo_id: photo.id }));
+                      setFiltersOpen(true);
+                    },
+                  })}
+                </Fragment>
               )}
-            <SharedWorkoutFilters
-              id={filtersId}
-              filters={filters}
-              options={filterOptions}
-              open={filtersOpen}
-              onChange={setFilters}
-            />
-            {invalidDates ? (
-              <p className="inline-error" role="alert">
-                From date must not be after To date.
-              </p>
-            ) : loadingWorkouts &&
-              (workouts.length === 0 || loadedFilters.current !== filterKey) ? (
-              <p className="sharing-loading" role="status">
-                Loading workouts…
-              </p>
-            ) : workouts.length === 0 ? (
-              <p className="shared-card-empty">
-                {Object.values(filters).some(Boolean)
-                  ? 'No workouts match these filters.'
-                  : 'No workouts logged yet.'}
-              </p>
-            ) : (
-              <Fragment key={filterKey}>
-                {renderWorkouts({
-                  workouts,
-                  hasMore: workouts.length < total,
-                  loadingMore: loadingMore || loadingWorkouts,
-                  loadMoreFailed: Boolean(moreError),
-                  onLoadMore: () => void loadMore(),
-                  focusWorkoutId: linkedWorkoutId,
-                  personalRecords: records,
-                  onFilterMachine: (photo) => {
-                    setFilters((current) => ({ ...current, machine_photo_id: photo.id }));
-                    setFiltersOpen(true);
-                  },
-                })}
-              </Fragment>
-            )}
-            {moreError && (
-              <div className="history-page-status" role="alert">
-                <p>{moreError}</p>
-                <button
-                  type="button"
-                  className="show-more-button"
-                  disabled={loadingMore}
-                  onClick={() => void loadMore()}
-                >
-                  Retry loading older workouts
-                </button>
-              </div>
-            )}
+              {moreError && (
+                <div className="history-page-status" role="alert">
+                  <p>{moreError}</p>
+                  <button
+                    type="button"
+                    className="show-more-button"
+                    disabled={loadingMore}
+                    onClick={() => void loadMore()}
+                  >
+                    Retry loading older workouts
+                  </button>
+                </div>
+              )}
+            </div>
           </section>
         </>
       )}

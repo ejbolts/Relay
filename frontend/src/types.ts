@@ -99,7 +99,14 @@ export type ExerciseKind = 'strength' | 'cardio';
 
 export type SetType = 'warmup' | 'normal' | 'drop';
 export type PersonalRecordType =
-  'weight' | 'reps_at_weight' | 'relative_strength' | 'estimated_1rm' | 'duration' | 'distance';
+  | 'weight'
+  | 'reps_at_weight'
+  | 'relative_strength'
+  | 'estimated_1rm'
+  | 'duration'
+  | 'distance'
+  /** The fastest time over a set distance, which `normalized_weight` holds in km. */
+  | 'pace';
 
 export interface MuscleContribution {
   muscle_name: string;
@@ -109,6 +116,8 @@ export interface MuscleContribution {
 
 export interface Exercise {
   merged_from_ids?: string[];
+  /** Other names for a standard exercise, such as Military Press for Overhead Press. */
+  alternative_names?: string[];
   id: string;
   name: string;
   category: WorkoutCategory;
@@ -363,6 +372,8 @@ export interface WorkoutRecommendation {
   scheduled_date?: string | null;
   split_name?: string | null;
   routine_day?: RoutineDay | null;
+  /** On a split's rest day: the next training day, which starting a workout then trains. */
+  next_training_day?: WorkoutRecommendation | null;
 }
 
 export type SplitProgression = 'calendar' | 'workouts';
@@ -381,6 +392,14 @@ export interface TrainingSplit {
   next_date?: string | null;
   /** Past days whose planned workout was not done, from the server's replay (last year only). */
   missed_days?: { workout_date: string; workout_type_id: string }[];
+  /** The latest skip: from this date the split stands at this step. */
+  shift?: SplitShift | null;
+}
+
+export interface SplitShift {
+  from_date: string;
+  step: number;
+  rest_saved?: boolean;
 }
 
 export interface RoutineSet {
@@ -506,6 +525,8 @@ export interface DashboardData {
 
 export interface WorkoutHistorySummary {
   total_workouts: number;
+  /** Workouts other than cardio-only sessions; missing from older servers. */
+  strength_workouts?: number | null;
   first_workout_date: string | null;
   last_workout_date: string | null;
   has_sample_workouts: boolean;
@@ -568,13 +589,21 @@ export interface TrainingBlocks {
 }
 
 /** An exercise's history before the loaded window, condensed by the server. */
-export interface HistoryBest {
+/** A cardio exercise's bests, for live distance, time and pace PRs; absent before they existed. */
+export interface CardioBests {
+  best_distance_km?: number | null;
+  best_duration_seconds?: number | null;
+  /** The fastest seconds over each set distance reached. */
+  best_times?: Array<{ distance_km: number; seconds: number }>;
+}
+
+export interface HistoryBest extends CardioBests {
   best_relative_strength?: number | null;
   best_weight_kg: number | null;
   reps_by_weight: Array<{ weight_kg: number; reps: number }>;
 }
 
-export interface ExerciseHistoryBaseline {
+export interface ExerciseHistoryBaseline extends CardioBests {
   best_relative_strength?: number | null;
   block_bests?: Array<HistoryBest & { block_id: string }>;
   /** Bests within each fresh start, until the next one. */
@@ -610,6 +639,7 @@ export interface PersonalRecord {
   record_type: PersonalRecordType;
   value: number;
   unit: string;
+  /** A strength record's weight in the display unit, or a pace record's set distance in km. */
   normalized_weight: number | null;
   weight_kg?: number | null;
   formula: string | null;
@@ -623,6 +653,8 @@ export interface TrainingPreferences {
   weekly_muscle_set_goal: number;
   /** Absent on older servers and cached preferences. */
   weekly_muscle_set_goals?: Record<string, number>;
+  /** The rest a new set gets when last time gives none; unset by default. Absent on older servers. */
+  default_rest_seconds?: number | null;
 }
 
 export interface HeartRateZone {
@@ -965,6 +997,8 @@ export interface AdminUser {
   must_change_password: boolean;
   /** The person asked for a temporary password from the sign-in screen and is still waiting. */
   password_reset_requested_at?: string | null;
+  /** Someone gave this account's name on the sign-in screen and is waiting for its username. */
+  username_reminder_requested_at?: string | null;
   created_at: string;
   last_active_at: string | null;
   /** Admin-only live activity, including accounts that do not share with friends. */
@@ -986,6 +1020,9 @@ export interface PasswordResetRequest {
   display_name: string;
   requested_at: string;
 }
+
+/** A signed-out person who gave this account's name and is waiting to be told its username. */
+export type UsernameReminderRequest = PasswordResetRequest;
 
 export interface ServerSettings {
   video_uploads: VideoUploadMode;
@@ -1130,10 +1167,12 @@ export interface SharedProfileSummary {
   /** Workouts in the last 30 days. */
   recent_workout_count: number | null;
   last_workout_date: string | null;
-  /** Shared cardio sessions and weight and volume PRs, as counted on the member's Today. */
+  /** Shared cardio sessions and PRs (one per set), as counted on the member's Today. */
   cardio_count?: number | null;
   record_count?: number | null;
-  /** How many of the workouts, and of those in the last 30 days, came from a CSV import. */
+  /** Workouts other than cardio-only sessions; missing from older servers. */
+  strength_workout_count?: number | null;
+  /** How many of the strength workouts, and of the workouts in the last 30 days, came from a CSV import. */
   imported_workout_count?: number | null;
   imported_recent_workout_count?: number | null;
   shares: {
@@ -1383,6 +1422,8 @@ export interface SharedConsistency {
   current_streak: number;
   training_days: number;
   workout_types: WorkoutType[];
+  /** The member's split while it is on; absent from servers before it was shared. */
+  training_split?: TrainingSplit | null;
 }
 
 export interface SharedProfile extends SharedProfileSummary {
@@ -1396,11 +1437,6 @@ export interface SharedProfile extends SharedProfileSummary {
   training_time?: TrainingTime | null;
   /** The same totals from this day last year onwards. */
   training_time_past_year?: TrainingTime | null;
-}
-
-export interface SharedCardioPage {
-  total: number;
-  sessions: SharedCardioSession[];
 }
 
 export interface SharedWorkoutPage {
@@ -1418,6 +1454,9 @@ export interface SharedWorkoutFilters {
   start_date: string;
   end_date: string;
 }
+
+/** A profile history tab's server filter: no cardio-only workouts, or only those. */
+export type SharedWorkoutKind = 'strength' | 'cardio';
 
 export interface SharedWorkoutFilterOptions {
   workout_types?: WorkoutType[];

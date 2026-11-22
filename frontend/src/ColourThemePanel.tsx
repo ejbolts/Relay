@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState, useSyncExternalStore, type CSSProperties } from 'react';
 import {
   COLOUR_MODES,
   COLOUR_THEMES,
@@ -15,6 +15,8 @@ import {
   saveDarkStyle,
   saveGlass,
   saveLightStyle,
+  subscribeSystemColourMode,
+  systemColourMode,
 } from './colourThemes';
 import { Icon } from './Icon';
 import { useTips } from './Tips';
@@ -26,7 +28,13 @@ export function ColourThemePanel() {
   const [darkStyle, setDarkStyle] = useState(darkStylePreference);
   const [glass, setGlass] = useState(glassPreference);
   const [lightStyle, setLightStyle] = useState(lightStylePreference);
-  const [status, setStatus] = useState('');
+  // Automatic shows the style choices for whichever mode the phone is in right now.
+  const systemMode = useSyncExternalStore(
+    subscribeSystemColourMode,
+    systemColourMode,
+    systemColourMode,
+  );
+  const shownMode = mode === 'auto' ? systemMode : mode;
   const { learn } = useTips();
   // Opening these settings is what the Appearance tip points to, so it counts as learned.
   useEffect(() => learn('appearance'), [learn]);
@@ -41,7 +49,6 @@ export function ColourThemePanel() {
           <h2 id="colour-theme-title">App theme</h2>
         </div>
       </header>
-      <p>Choose light or dark mode and an accent colour. Your choices stay on this device.</p>
       <fieldset className="colour-mode-options">
         <legend className="sr-only">Mode</legend>
         {COLOUR_MODES.map((option) => (
@@ -53,11 +60,7 @@ export function ColourThemePanel() {
               checked={mode === option.id}
               onChange={() => {
                 setMode(option.id);
-                setStatus(
-                  saveColourMode(option.id)
-                    ? `${option.name} mode saved on this device.`
-                    : `${option.name} mode applied for this visit.`,
-                );
+                saveColourMode(option.id);
               }}
             />
             <Icon name={option.icon} />
@@ -65,7 +68,7 @@ export function ColourThemePanel() {
           </label>
         ))}
       </fieldset>
-      {mode === 'dark' && (
+      {shownMode === 'dark' && (
         <fieldset className="dark-style-options">
           <legend className="sr-only">Dark style</legend>
           {DARK_STYLES.map((option) => (
@@ -77,11 +80,7 @@ export function ColourThemePanel() {
                 checked={darkStyle === option.id}
                 onChange={() => {
                   setDarkStyle(option.id);
-                  setStatus(
-                    saveDarkStyle(option.id)
-                      ? `${option.name} dark style saved on this device.`
-                      : `${option.name} dark style applied for this visit.`,
-                  );
+                  saveDarkStyle(option.id);
                 }}
               />
               <span className="dark-style-swatch" data-style={option.id} aria-hidden="true">
@@ -92,7 +91,7 @@ export function ColourThemePanel() {
           ))}
         </fieldset>
       )}
-      {mode === 'light' && (
+      {shownMode === 'light' && (
         <fieldset className="dark-style-options light-style-options">
           <legend className="sr-only">Light style</legend>
           {LIGHT_STYLES.map((option) => (
@@ -126,11 +125,7 @@ export function ColourThemePanel() {
               checked={selected === theme.id}
               onChange={() => {
                 setSelected(theme.id);
-                setStatus(
-                  saveColourTheme(theme.id)
-                    ? `${theme.name} theme saved on this device.`
-                    : `${theme.name} theme applied for this visit.`,
-                );
+                saveColourTheme(theme.id);
               }}
             />
             <span
@@ -168,9 +163,6 @@ export function ColourThemePanel() {
           ))}
         </div>
       </fieldset>
-      <p className="notification-setting-status" role="status">
-        {status}
-      </p>
     </section>
   );
 }

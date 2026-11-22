@@ -13,8 +13,12 @@ export const APPEARANCE_RESET_VERSION = '4';
 export const COLOUR_MODES = [
   { id: 'dark', name: 'Dark', icon: 'moon' },
   { id: 'light', name: 'Light', icon: 'sun' },
+  { id: 'auto', name: 'Automatic', icon: 'contrast' },
 ] as const;
 export type ColourModeId = (typeof COLOUR_MODES)[number]['id'];
+/** The mode on screen: Automatic shows whichever of these the phone is set to. */
+export type ShownColourMode = Exclude<ColourModeId, 'auto'>;
+const SYSTEM_DARK_QUERY = '(prefers-color-scheme: dark)';
 export const DARK_STYLES = [
   { id: 'default', name: 'Default' },
   { id: 'stained', name: 'Stained' },
@@ -133,7 +137,7 @@ function mixHex(a: string, b: string, pct: number): string {
 
 /** Page colour for the phone's browser bar; kept in step with the `--p-page` token in pulse.css. */
 export function browserThemeColour(
-  mode: ColourModeId,
+  mode: ShownColourMode,
   style: DarkStyleId,
   themeId: ColourThemeId,
   lightStyle: LightStyleId = 'default',
@@ -148,7 +152,7 @@ export function browserThemeColour(
 
 function updateBrowserThemeColour() {
   const root = document.documentElement;
-  const mode: ColourModeId = root.dataset.colourMode === 'light' ? 'light' : 'dark';
+  const mode: ShownColourMode = root.dataset.colourMode === 'light' ? 'light' : 'dark';
   const style = DARK_STYLES.find((entry) => entry.id === root.dataset.darkStyle)?.id ?? 'default';
   const theme = COLOUR_THEMES.find((entry) => entry.id === root.dataset.colourTheme)?.id ?? 'blue';
   const lightStyle =
@@ -192,19 +196,64 @@ export function saveColourTheme(id: ColourThemeId): boolean {
   }
 }
 
+/** Automatic unless this device saved Dark or Light. */
 export function colourModePreference(): ColourModeId {
   try {
-    return localStorage.getItem(MODE_KEY) === 'light' ? 'light' : 'dark';
+    const saved = localStorage.getItem(MODE_KEY);
+    return saved === 'light' || saved === 'dark' ? saved : 'auto';
   } catch {
-    return 'dark';
+    return 'auto';
   }
 }
 
+function systemDarkQuery(): MediaQueryList | null {
+  try {
+    return typeof window.matchMedia === 'function' ? window.matchMedia(SYSTEM_DARK_QUERY) : null;
+  } catch {
+    return null;
+  }
+}
+
+/** The phone's own light or dark setting; dark when the browser cannot tell. */
+export function systemColourMode(): ShownColourMode {
+  const query = systemDarkQuery();
+  return !query || query.matches ? 'dark' : 'light';
+}
+
+/** Calls `onChange` whenever the phone switches between light and dark; returns the unsubscribe. */
+export function subscribeSystemColourMode(onChange: () => void): () => void {
+  const query = systemDarkQuery();
+  if (!query) return () => undefined;
+  if (typeof query.addEventListener === 'function') {
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
+  }
+  // Safari before 14 only has the older listener methods.
+  if (typeof query.addListener !== 'function') return () => undefined;
+  query.addListener(onChange);
+  return () => query.removeListener(onChange);
+}
+
+export function shownColourMode(id: ColourModeId): ShownColourMode {
+  return id === 'auto' ? systemColourMode() : id;
+}
+
+// The mode chosen for this visit, so a phone switch only moves the app while Automatic is on.
+let appliedColourMode: ColourModeId = 'auto';
+
 export function applyColourMode(id: ColourModeId) {
+  appliedColourMode = id;
   const root = document.documentElement;
-  root.dataset.colourMode = id;
+  root.dataset.colourMode = shownColourMode(id);
   const theme = root.dataset.colourTheme;
   applyColourTheme(COLOUR_THEMES.find((entry) => entry.id === theme)?.id ?? 'blue');
+}
+
+/** Keeps Automatic in step with the phone while the app is open. Call once at startup. */
+export function followSystemColourMode(): () => void {
+  return subscribeSystemColourMode(() => {
+    if (appliedColourMode === 'auto') applyColourMode('auto');
+  });
 }
 
 export function saveColourMode(id: ColourModeId): boolean {
@@ -265,8 +314,8 @@ export function saveLightStyle(id: LightStyleId): boolean {
 }
 
 /**
- * Once per device, moves existing appearance choices onto the default look (Dark, Default style,
- * Medium glass) while keeping the accent colour. Later choices are left alone.
+ * Once per device, moves existing appearance choices onto the default look (Automatic mode, Default
+ * style, Medium glass) while keeping the accent colour. Later choices are left alone.
  */
 export function resetAppearanceOnce(): void {
   try {

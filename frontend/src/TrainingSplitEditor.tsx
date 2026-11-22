@@ -48,7 +48,11 @@ export function TrainingSplitEditor({
       {error ? (
         <div className="split-load-error" role="alert">
           {error}
-          <button type="button" onClick={() => setAttempt((n) => n + 1)}>
+          <button
+            type="button"
+            className="pulse-button block"
+            onClick={() => setAttempt((n) => n + 1)}
+          >
             Try again
           </button>
         </div>
@@ -72,9 +76,12 @@ export function TrainingSplitEditor({
           onUsed={(updated) => {
             setSplit(updated);
             void onSaved(updated);
-            // Saved routines return no progress, so ask where a workout-following split stands.
-            // Only its progress is taken, and only while the same schedule is still shown.
-            if (updated.enabled && followsWorkouts(updated) && updated.next_step == null)
+            // Saved routines return no progress or skip, so ask the server. Only those are
+            // taken, and only while the same schedule is still shown.
+            if (
+              updated.enabled &&
+              (followsWorkouts(updated) ? updated.next_step == null : updated.shift === undefined)
+            )
               void api.getTrainingSplit().then(
                 (fresh) =>
                   setSplit((shown) =>
@@ -87,6 +94,7 @@ export function TrainingSplitEditor({
                           next_step: fresh.next_step,
                           rest_saved: fresh.rest_saved,
                           next_date: fresh.next_date,
+                          shift: fresh.shift,
                         }
                       : shown,
                   ),

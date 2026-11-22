@@ -19,7 +19,16 @@ export function WeeklyReviewPopup({
   onOpenBody: () => void;
 }) {
   return (
-    <PopupDialog title="Weekly review" className="weekly-review-popup" onClose={onClose}>
+    <PopupDialog
+      title="Weekly review"
+      className="weekly-review-popup"
+      onClose={onClose}
+      actions={
+        <button type="button" className="popup-primary-action" onClick={onClose}>
+          Got it
+        </button>
+      }
+    >
       <div className="weekly-review-popup-body">
         <WeeklyReviewBrowser
           {...data}
@@ -30,11 +39,6 @@ export function WeeklyReviewPopup({
           onOpenBody={onOpenBody}
         />
       </div>
-      <footer className="popup-dialog-actions">
-        <button type="button" className="popup-primary-action" onClick={onClose}>
-          Got it
-        </button>
-      </footer>
     </PopupDialog>
   );
 }

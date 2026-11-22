@@ -388,6 +388,69 @@ it('leaves the in-progress day to its live marker rather than a workout outline'
   expect(cell('2026-10-26').querySelector('.calendar-live-dot')).not.toBeNull();
 });
 
+it('rings today in its workout colours, split like its outline on a mixed day', async () => {
+  const todayRing = (date = '2026-10-26') => cell(date).querySelector('.calendar-today-ring');
+  const render = (categories: HeatmapDay['categories'], hidden: string[] = [], live = false) =>
+    act(async () =>
+      root.render(
+        <WorkoutCalendar
+          entries={[day('2026-10-25', ['upper']), day('2026-10-26', categories)]}
+          categoryColors={colors}
+          hiddenCategories={new Set(hidden)}
+          activeWorkoutDate={live ? '2026-10-26' : undefined}
+          onDayClick={vi.fn()}
+        />,
+      ),
+    );
+  await render(['lower']);
+  expect(todayRing()).not.toBeNull();
+  expect(ring('2026-10-26')).toBe('#f59e0b');
+  // Only today gets the extra ring; other trained days keep just their outline.
+  expect(todayRing('2026-10-25')).toBeNull();
+
+  // The ring reads the day's split outline, so every type on a mixed day keeps its arc.
+  await render(['upper', 'cardio']);
+  expect(todayRing()).not.toBeNull();
+  expect(ring('2026-10-26')).toBe(dayRing(['#8b5cf6', '#22c55e']));
+
+  // With every type switched off, or a workout live, today keeps its default outline.
+  await render(['upper', 'cardio'], ['upper', 'cardio']);
+  expect(todayRing()).toBeNull();
+  await render(['upper'], [], true);
+  expect(todayRing()).toBeNull();
+});
+
+it('colours the live day in the workout type being logged', async () => {
+  const live = () => cell('2026-10-26').style.getPropertyValue('--live-color');
+  await act(async () =>
+    root.render(
+      <WorkoutCalendar
+        entries={[]}
+        categoryColors={colors}
+        activeWorkoutDate="2026-10-26"
+        activeWorkoutColor="#8b5cf6"
+        onDayClick={vi.fn()}
+      />,
+    ),
+  );
+  expect(live()).toBe('#8b5cf6');
+  expect(cell('2026-10-25').style.getPropertyValue('--live-color')).toBe('');
+
+  await act(async () =>
+    root.render(
+      <WeekStrip
+        entries={[]}
+        categoryColors={colors}
+        weekStartDay={1}
+        activeWorkoutDate="2026-10-26"
+        activeWorkoutColor="#f59e0b"
+        onDayClick={vi.fn()}
+      />,
+    ),
+  );
+  expect(live()).toBe('#f59e0b');
+});
+
 it('leads Home with this week, naming each day’s workout types', async () => {
   const select = vi.fn();
   const resume = vi.fn();
