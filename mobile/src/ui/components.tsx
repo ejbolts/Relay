@@ -13,7 +13,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Icon, type IconName } from './Icon';
+import { Icon, type IconName, type IconPair } from './Icon';
 import { useTheme } from './theme';
 
 /**
@@ -126,7 +126,7 @@ export function Button({
 }: {
   label: string;
   onPress: () => void;
-  icon?: IconName;
+  icon?: IconName | IconPair;
   variant?: Variant;
   disabled?: boolean;
   accessibilityLabel?: string;

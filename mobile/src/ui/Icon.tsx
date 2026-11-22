@@ -5,8 +5,9 @@ import { Platform, type ColorValue } from 'react-native';
 
 type Material = ComponentProps<typeof MaterialIcons>['name'];
 
-// One name per meaning, with its SF Symbol on iOS and Material icon elsewhere. Add new icons
-// here rather than importing an icon set in a screen, so both platforms stay covered.
+// One name per meaning, with its SF Symbol on iOS and Material icon elsewhere. A feature that
+// needs another icon passes its own { sf, md } pair (keep them in the feature's folder), so both
+// platforms stay covered without everyone editing this list.
 const ICONS = {
   home: { sf: 'house.fill', md: 'home' },
   training: { sf: 'calendar', md: 'calendar-month' },
@@ -42,6 +43,7 @@ const ICONS = {
 } satisfies Record<string, { sf: SFSymbol; md: Material }>;
 
 export type IconName = keyof typeof ICONS;
+export type IconPair = { sf: SFSymbol; md: Material };
 export const iconSymbols = ICONS;
 
 export function Icon({
@@ -49,11 +51,11 @@ export function Icon({
   size = 20,
   color,
 }: {
-  name: IconName;
+  name: IconName | IconPair;
   size?: number;
   color: ColorValue;
 }) {
-  const icon = ICONS[name];
+  const icon = typeof name === 'string' ? ICONS[name] : name;
   const fallback = <MaterialIcons name={icon.md} size={size} color={color as string} />;
   if (Platform.OS !== 'ios') return fallback;
   return (
