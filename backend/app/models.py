@@ -83,6 +83,8 @@ class PersonalRecordType(enum.StrEnum):
     ESTIMATED_1RM = "estimated_1rm"
     DURATION = "duration"
     DISTANCE = "distance"
+    # The fastest time over a set distance, held in the record's normalized_weight (km).
+    PACE = "pace"
 
 
 def new_uuid() -> str:

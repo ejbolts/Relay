@@ -468,3 +468,25 @@ button.pulse-card.training-block-home {
   flex-shrink: 0;
   min-width: min(5.5rem, 34%);
 }
+/* The rest of a running block's plan is hatched, with a line marking today. */
+.training-block-segment.has-today {
+  position: relative;
+  flex-shrink: 0;
+  min-width: min(7.5rem, 40%);
+  background-image: linear-gradient(
+    to right,
+    transparent var(--today),
+    color-mix(in srgb, var(--p-page-solid) 30%, transparent) var(--today)
+  );
+}
+.training-block-today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: var(--today);
+  width: 2px;
+  margin-left: -1px;
+  background: var(--p-danger);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--p-page-solid) 60%, transparent);
+  pointer-events: none;
+}

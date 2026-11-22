@@ -82,7 +82,9 @@ export function TrainingBlockHomeCard({
         <span className="training-block-home-cta">
           See your summary <Icon name="chevron-right" />
         </span>
-        {style !== 'progress' && <BlockTimeline config={config} currentId={block.id} />}
+        {style !== 'progress' && (
+          <BlockTimeline config={config} currentId={block.id} today={today} />
+        )}
       </button>
     );
   }
@@ -113,7 +115,7 @@ export function TrainingBlockHomeCard({
           <span style={{ width: `${progress * 100}%` }} />
         </span>
       )}
-      {style !== 'progress' && <BlockTimeline config={config} currentId={block.id} />}
+      {style !== 'progress' && <BlockTimeline config={config} currentId={block.id} today={today} />}
     </button>
   );
 }

@@ -200,8 +200,8 @@ describe('daily bodyweight check-in', () => {
     expect(container.querySelector('input')!.value).toBe('84.3');
     expect(status.textContent).toBe('0.384.2 kg');
     expect(container.querySelector('.quick-bodyweight-message')).toBeNull();
-    expect(toast()!.getAttribute('style')).toContain(`${TOAST_MS.action}ms`);
-    await act(async () => vi.advanceTimersByTime(TOAST_MS.action - 1));
+    expect(toast()!.getAttribute('style')).toContain(`${TOAST_MS.standard}ms`);
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1));
     expect(toast()).not.toBeNull();
     await act(async () => vi.advanceTimersByTime(1));
     expect(toast()).toBeNull();
@@ -221,10 +221,10 @@ describe('daily bodyweight check-in', () => {
     const latestUndo = vi.fn().mockResolvedValue(undefined);
     await render();
     await submit();
-    await act(async () => vi.advanceTimersByTime(4000));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
     save.mockResolvedValueOnce(latestUndo);
     await submit();
-    await act(async () => vi.advanceTimersByTime(4000));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
     expect(toast()).not.toBeNull();
     await clickUndo();
     expect(latestUndo).toHaveBeenCalledOnce();
@@ -248,7 +248,7 @@ describe('daily bodyweight check-in', () => {
     expect(toast()).not.toBeNull();
     await act(async () => rejectUndo(new Error('Could not undo. Try again.')));
     expect(container.querySelector('[role="alert"]')!.textContent).toContain('Could not undo');
-    await act(async () => vi.advanceTimersByTime(TOAST_MS.action - 1));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1));
     expect(toast()).not.toBeNull();
     await clickUndo();
     expect(undo).toHaveBeenCalledTimes(2);

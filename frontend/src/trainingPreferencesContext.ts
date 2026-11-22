@@ -16,6 +16,11 @@ export function useWeekStartDay(): number {
   return weekStart === 'sunday' ? 0 : weekStart === 'saturday' ? 6 : 1;
 }
 
+/** The rest a new set gets when last time gives none, or null when the user has not set one. */
+export function useDefaultRest(): number | null {
+  return useTrainingPreferences().preferences?.default_rest_seconds ?? null;
+}
+
 export function useWeightUnit() {
   return useTrainingPreferences().preferences?.preferred_weight_unit ?? 'kg';
 }

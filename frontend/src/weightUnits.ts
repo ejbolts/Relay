@@ -1,4 +1,5 @@
 import type { PersonalRecord, TrainingPreferences } from './types';
+import { formatRecordTime } from './cardioRecords';
 import { decimalNumberOrNull } from './utils';
 
 export type WeightUnit = TrainingPreferences['preferred_weight_unit'];
@@ -49,6 +50,9 @@ export function recordDisplayValue(
   unit: WeightUnit,
 ): string {
   if (record.unit === '× BW') return `${record.value.toFixed(2)}× BW`;
+  // A cardio duration or the fastest time over a set distance.
+  if (record.unit === 'seconds') return formatRecordTime(record.value);
+  if (record.unit === 'km') return `${Number(record.value.toFixed(2))} km`;
   if (record.unit !== 'kg' && record.unit !== 'lb') {
     return `${Number(record.value.toFixed(1))} ${record.unit}`;
   }

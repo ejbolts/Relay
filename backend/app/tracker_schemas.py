@@ -481,7 +481,21 @@ class TrainingBlockSummaryRead(BaseModel):
     previous: BlockStatsRead | None = None
 
 
-class HistoryBestRead(BaseModel):
+class DistanceTimeRead(BaseModel):
+    distance_km: float
+    seconds: float
+
+
+class CardioBestsRead(BaseModel):
+    """A cardio exercise's bests, for live distance, time and pace PR checks."""
+
+    best_distance_km: float | None = None
+    best_duration_seconds: float | None = None
+    # The fastest time over each set distance reached, shortest distance first.
+    best_times: list[DistanceTimeRead] = Field(default_factory=list)
+
+
+class HistoryBestRead(CardioBestsRead):
     best_relative_strength: float | None = None
     best_weight_kg: float | None
     reps_by_weight: list[WeightRepsRead]
@@ -495,7 +509,7 @@ class FreshStartBaselineRead(HistoryBestRead):
     start_date: date
 
 
-class ExerciseHistoryBaselineRead(BaseModel):
+class ExerciseHistoryBaselineRead(CardioBestsRead):
     """An exercise's history before a date, condensed for PR checks and set suggestions."""
 
     block_bests: list[BlockHistoryBaselineRead] = Field(default_factory=list)
@@ -962,6 +976,9 @@ class TrainingPreferencesUpdate(BaseModel):
         ]
         | None
     ) = Field(default=None, max_length=200)
+    # The rest a new set gets when last time gives none. Unset by default; null clears it, and
+    # omission (an older app) keeps the saved value.
+    default_rest_seconds: int | None = Field(default=None, ge=1, le=7_200)
 
 
 class TrainingPreferencesRead(TrainingPreferencesUpdate):

@@ -100,6 +100,14 @@ export const SETTINGS_DESTINATIONS: SettingsDestination[] = [
     selector: '[aria-label="Show rest times"]',
   },
   {
+    id: 'default-rest',
+    group: 'training',
+    title: 'Default rest',
+    page: 'settings',
+    keywords: 'between sets new set standard length duration',
+    selector: '[aria-label="Default rest"]',
+  },
+  {
     id: 'alerts',
     group: 'notifications',
     title: 'Phone alerts',

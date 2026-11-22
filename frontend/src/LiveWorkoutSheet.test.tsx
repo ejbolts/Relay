@@ -30,7 +30,7 @@ async function render(active = true) {
           onRename={noop}
           onAddNote={noop}
           onTogglePause={noop}
-          onAddExercise={noop}
+          onStartRest={noop}
           onDiscard={noop}
           onFinish={noop}
         />

@@ -783,6 +783,7 @@ export function BodyCompositionScreen({
         <Toast
           id={goalRemoval.pending.goal.id}
           message="Goal removed"
+          duration="important"
           action={{ label: 'Undo', run: goalRemoval.undo }}
           dismissLabel="Dismiss goal notification"
           onDismiss={goalRemoval.dismiss}

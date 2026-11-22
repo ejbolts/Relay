@@ -1,12 +1,12 @@
 import { setKindOf } from './setFieldValues';
 import type { ExerciseKind, TrackedSet, TrackedWorkout, WorkoutSetInput } from './types';
 
-export const DEFAULT_REST_SECONDS = 180;
-
+/** `defaultRest` is the user's default rest, for a strength set with no rest to copy. */
 export function createWorkoutSet(
   kind: ExerciseKind,
   previous?: WorkoutSetInput,
   isFirstSet = previous === undefined,
+  defaultRest: number | null = null,
 ): WorkoutSetInput {
   const setType = isFirstSet
     ? 'warmup'
@@ -17,7 +17,7 @@ export function createWorkoutSet(
     weight_kg: kind === 'strength' ? (previous?.weight_kg ?? null) : null,
     // Effort is logged only when picked; last time's RPE is shown as a hint instead.
     rpe: null,
-    rest_seconds: kind === 'strength' ? (previous?.rest_seconds ?? DEFAULT_REST_SECONDS) : null,
+    rest_seconds: kind === 'strength' ? (previous?.rest_seconds ?? defaultRest) : null,
     duration_seconds: kind === 'cardio' ? (previous?.duration_seconds ?? null) : null,
     distance_km: kind === 'cardio' ? (previous?.distance_km ?? null) : null,
     calories_kcal: kind === 'cardio' ? (previous?.calories_kcal ?? null) : null,

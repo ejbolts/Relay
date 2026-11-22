@@ -36,6 +36,7 @@ from .accounts import no_store
 from .auth import AppSettings, CurrentUser, as_utc, get_current_user
 from .body_sizes import PREFIX as BODY_SIZES_PREFIX
 from .body_sizes import BodySizeLog
+from .cardio_records import CARDIO_RECORD_TYPES
 from .cardio_zones import CardioGoalWeek, cardio_goal_weeks, cardio_preferences, classify_session
 from .database import get_db
 from .errors import api_error
@@ -69,12 +70,14 @@ from .tracker_schemas import (
     HeatmapDay,
     MachinePhotoRead,
     PersonalRecordRead,
+    TrainingSplitRead,
     TrainingTimeRead,
     TrainingWorkoutRead,
     WorkoutTypeRead,
     Zone2WeekRead,
 )
 from .training_metrics import start_of_week
+from .training_split import saved_training_split, split_read
 from .training_time import is_cardio_only_workout, past_year_start, training_time_totals
 from .workout_types import workout_type_catalog
 
@@ -221,6 +224,8 @@ class SharedConsistencyRead(BaseModel):
     current_streak: int
     training_days: int
     workout_types: list[WorkoutTypeRead]
+    # The member's split while it is on, so their calendar can show planned and missed days.
+    training_split: TrainingSplitRead | None = None
 
 
 class SharedProfileRead(SharedProfileSummary):
@@ -488,10 +493,11 @@ def viewable_member(db: Session, viewer: User, user_id: str) -> tuple[User, Prof
 
 
 # Records counted as PRs; a set that earns several of them counts once.
-STRENGTH_RECORD_TYPES = (
+COUNTED_RECORD_TYPES = (
     PersonalRecordType.WEIGHT,
     PersonalRecordType.REPS_AT_WEIGHT,
     PersonalRecordType.RELATIVE_STRENGTH,
+    *CARDIO_RECORD_TYPES,
 )
 
 
@@ -551,7 +557,7 @@ def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
             .where(
                 PersonalRecord.user_id.in_(user_ids),
                 PersonalRecord.value > 0,
-                PersonalRecord.record_type.in_(STRENGTH_RECORD_TYPES),
+                PersonalRecord.record_type.in_(COUNTED_RECORD_TYPES),
                 PersonalRecord.workout_id.not_in(sample_workout_ids()),
             )
             .group_by(PersonalRecord.user_id)
@@ -913,11 +919,17 @@ def shared_consistency(db: Session, user_id: str) -> SharedConsistencyRead:
     first_day = start_of_week(today, training_preferences(db, user_id).week_start) - timedelta(
         weeks=11
     )
+    split = saved_training_split(db, user_id)
+    shared_split = split_read(db, user_id, split, today) if split and split.enabled else None
+    if shared_split:
+        # The calendar needs the cycle only; which routine it came from stays with its owner.
+        shared_split.routine_id = None
     return SharedConsistencyRead(
         heatmap=heatmap,
         current_streak=streak,
         training_days=sum(first_day <= day <= today for day in dates),
         workout_types=catalog,
+        training_split=shared_split,
     )
 
 
@@ -987,6 +999,8 @@ def list_shared_workouts(
     machine_photo_id: str | None = None,
     start_date: date | None = None,
     end_date: date | None = None,
+    # The profile's Workouts and Cardio tabs; a cardio-only workout is listed under Cardio.
+    kind: Literal["strength", "cardio"] | None = None,
 ) -> SharedWorkoutPage:
     member, sharing = viewable_member(db, user, user_id)
     if start_date and end_date and start_date > end_date:
@@ -1013,6 +1027,10 @@ def list_shared_workouts(
         owned.append(TrainingWorkout.workout_date >= start_date)
     if end_date:
         owned.append(TrainingWorkout.workout_date <= end_date)
+    if kind == "cardio":
+        owned.append(is_cardio_only_workout())
+    elif kind == "strength":
+        owned.append(~is_cardio_only_workout())
     total = db.scalar(select(func.count(TrainingWorkout.id)).where(*owned)) or 0
     workouts = list(
         db.scalars(
@@ -1045,7 +1063,7 @@ def list_shared_workouts(
                     "bodyweight_kg": bodyweights.on(
                         record.achieved_date, record.workout_set.bodyweight_kg
                     )
-                    if bodyweights
+                    if bodyweights and record.record_type not in CARDIO_RECORD_TYPES
                     else None
                 }
             )
@@ -1437,7 +1455,7 @@ def workout_timeline(
                 select(PersonalRecord.workout_id, func.count(func.distinct(PersonalRecord.set_id)))
                 .where(
                     PersonalRecord.workout_id.in_(workout_ids),
-                    PersonalRecord.record_type.in_(STRENGTH_RECORD_TYPES),
+                    PersonalRecord.record_type.in_(COUNTED_RECORD_TYPES),
                 )
                 .group_by(PersonalRecord.workout_id)
             ).all()

@@ -105,6 +105,7 @@ export function WorkoutTypesSettings({
       replaceType({ ...type, archived: true });
       toast.show({
         message: `${type.name} removed`,
+        duration: 'important',
         action: { label: 'Undo', run: () => restoreType(type) },
       });
     });

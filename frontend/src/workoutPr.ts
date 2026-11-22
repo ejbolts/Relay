@@ -8,6 +8,14 @@ import type {
 } from './types';
 import type { WorkoutDraftMovement as DraftMovement } from './workoutMovements';
 import { blockOn, freshStartOn } from './trainingBlocks';
+import {
+  addCardioSet,
+  cardioBestsFrom,
+  cardioHitLabel,
+  isCardioRecordEligible,
+  paceDistances,
+  type CardioBestsState,
+} from './cardioRecords';
 import { bodyweightContext, bodyweightOn, relativeStrength } from './relativeStrength';
 import { formatWeight, type WeightUnit } from './weightUnits';
 
@@ -39,14 +47,25 @@ export function calculateDraftPrs(
   olderHistory?: Map<string, ExerciseHistoryBaseline> | null,
   measurements: BodyMeasurement[] = [],
 ): Map<string, Map<string, string[]>> {
-  type State = { weight: number; reps: Map<number, number>; relative: number };
+  type State = {
+    weight: number;
+    reps: Map<number, number>;
+    relative: number;
+    cardio: CardioBestsState;
+  };
+  const emptyState = (): State => ({
+    weight: -1,
+    reps: new Map(),
+    relative: -1,
+    cardio: cardioBestsFrom(null),
+  });
   const states = new Map<string, State>();
   for (const [exerciseId, baseline] of olderHistory ?? []) {
-    if (baseline.best_weight_kg === null) continue;
     states.set(exerciseId, {
-      weight: prWeight(baseline.best_weight_kg),
+      weight: baseline.best_weight_kg === null ? -1 : prWeight(baseline.best_weight_kg),
       relative: baseline.best_relative_strength ?? -1,
       reps: new Map(baseline.reps_by_weight.map((item) => [prWeight(item.weight_kg), item.reps])),
+      cardio: cardioBestsFrom(baseline),
     });
   }
   const excluded = historicalWorkouts.find((workout) => workout.id === excludedWorkoutId);
@@ -61,12 +80,18 @@ export function calculateDraftPrs(
   // History is the baseline: PR rows alone omit first attempts at each weight.
   for (const workout of priorWorkouts) {
     for (const movement of workout.movements) {
+      if (movement.exercise.kind === 'cardio') {
+        const state = states.get(movement.exercise.id) ?? emptyState();
+        const distances = paceDistances(movement.exercise.name);
+        for (const item of movement.sets) {
+          if (isCardioRecordEligible(item))
+            addCardioSet(state.cardio, item.duration_seconds, item.distance_km, distances);
+        }
+        states.set(movement.exercise.id, state);
+        continue;
+      }
       if (movement.exercise.kind !== 'strength') continue;
-      const state = states.get(movement.exercise.id) ?? {
-        weight: -1,
-        reps: new Map(),
-        relative: -1,
-      };
+      const state = states.get(movement.exercise.id) ?? emptyState();
       for (const item of movement.sets) {
         if (!isStrengthPrEligible(item)) continue;
         const weight = prWeight(item.weight_kg!);
@@ -84,8 +109,19 @@ export function calculateDraftPrs(
 
   const result = new Map<string, Map<string, string[]>>();
   for (const movement of movements) {
-    const state = states.get(movement.exercise.id) ?? { weight: -1, reps: new Map(), relative: -1 };
+    const state = states.get(movement.exercise.id) ?? emptyState();
     const badges = new Map<string, string[]>();
+    if (movement.exercise.kind === 'cardio') {
+      const distances = paceDistances(movement.exercise.name);
+      for (const item of movement.sets) {
+        if (!isCardioRecordEligible(item)) continue;
+        const hits = addCardioSet(state.cardio, item.duration_seconds, item.distance_km, distances);
+        if (hits.length) badges.set(item.key, hits.map(cardioHitLabel));
+      }
+      states.set(movement.exercise.id, state);
+      result.set(movement.key, badges);
+      continue;
+    }
     for (const item of movement.sets) {
       if (movement.exercise.kind !== 'strength' || !isStrengthPrEligible(item)) continue;
       const weight = prWeight(item.weight_kg!);
@@ -192,22 +228,22 @@ export function calculateScopedDraftPrs(
 }
 
 /** A record set just logged in the live workout, for its celebrate toast. */
-export interface PrToastEntry {
-  exercise: string;
-  labels: string[];
-  reps: number;
-  weightKg: number;
-  bodyweightKg?: number | null;
-}
+export type PrToastEntry = { exercise: string; labels: string[] } & (
+  | { reps: number; weightKg: number; bodyweightKg?: number | null }
+  /** A cardio set, described by what it covered, such as “7.2 km in 36:00”. */
+  | { summary: string }
+);
 
 /** The celebrate toast's lines: which records the set beat, then the set itself. */
 export function prToastLines(entries: PrToastEntry[], weightUnit: WeightUnit) {
   return entries.map((entry) => ({
     title: entry.labels.join(' + '),
     detail:
-      `${entry.exercise} · ${entry.reps} reps at ${formatWeight(entry.weightKg, weightUnit)}` +
-      (entry.bodyweightKg != null
-        ? ` · ${bodyweightContext(entry.weightKg, entry.bodyweightKg, weightUnit)}`
-        : ''),
+      'summary' in entry
+        ? [entry.exercise, entry.summary].filter(Boolean).join(' · ')
+        : `${entry.exercise} · ${entry.reps} reps at ${formatWeight(entry.weightKg, weightUnit)}` +
+          (entry.bodyweightKg != null
+            ? ` · ${bodyweightContext(entry.weightKg, entry.bodyweightKg, weightUnit)}`
+            : ''),
   }));
 }
