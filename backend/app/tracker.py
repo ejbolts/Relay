@@ -231,7 +231,8 @@ router = APIRouter(
 DbSession = Annotated[Session, Depends(get_db)]
 SettingsDependency = Annotated[Settings, Depends(get_settings)]
 WORKOUT_CACHE_REVISION_KEY = "workout_cache_revision"
-# Saves report the revision their data reached, so the app can refresh without asking for it.
+# Saves report the revision their data reached, and sign-in the revision it starts from, so the
+# app can read its data without first asking for the revision.
 WORKOUT_REVISION_HEADER = "X-Workout-Revision"
 WORKOUT_TYPE_COLORS_KEY = "workout_type_colors"
 DEFAULT_WORKOUT_TYPE_COLORS = WorkoutTypeColors(
@@ -254,7 +255,7 @@ def bump_workout_cache_revision(db: Session, user_id: str) -> None:
 
 
 def report_workout_revision(response: Response, db: Session, user_id: str) -> None:
-    # Read after the save commits: later reads can only be newer than this revision.
+    # Read after any save commits: later reads can only be newer than this revision.
     response.headers[WORKOUT_REVISION_HEADER] = workout_cache_revision(db, user_id)
 
 
