@@ -29,6 +29,7 @@ import {
   deleteSet,
   groupSuperset,
   moveMovement,
+  moveSet,
   removeMovement,
   restoreSet,
   selectedType,
@@ -233,6 +234,8 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           run: () => change((latest) => restoreSet(latest, movementKey, removed, index)),
         });
       },
+      moveSet: (movementKey, from, to) =>
+        change((latest) => moveSet(latest, movementKey, from, to)),
       setKind: (movementKey, setKey, kind: SetKind) =>
         change((latest) => setSetKind(latest, movementKey, setKey, kind)),
       completeExercise: (movementKey, isComplete) =>

@@ -11,6 +11,7 @@ import {
   loggerFromDraft,
   loggerToDraft,
   moveMovement,
+  moveSet,
   restoreSet,
   setCounts,
   setSetKind,
@@ -140,6 +141,10 @@ test('sets can be added, retyped, deleted (never the last) and put back', () => 
   expect(state.movements[0].sets).toHaveLength(3);
   expect(state.movements[0].sets[2]).toMatchObject({ key: added.setKey, weight_kg: 80, reps: 7 });
   state = setSetKind(state, key, added.setKey!, 'drop');
+  state = moveSet(state, key, 2, 1);
+  expect(state.movements[0].sets[1].key).toBe(added.setKey);
+  expect(moveSet(state, key, 0, -1).movements[0].sets).toBe(state.movements[0].sets);
+  state = moveSet(state, key, 1, 2);
   expect(state.movements[0].sets[2]).toMatchObject({ set_type: 'drop', warmup: false });
   const removed = state.movements[0].sets[0];
   state = deleteSet(state, key, removed.key);

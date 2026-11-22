@@ -37,6 +37,7 @@ export interface MovementActions {
   updateSet: (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => void;
   addSet: (movementKey: string) => void;
   deleteSet: (movementKey: string, setKey: string) => void;
+  moveSet: (movementKey: string, from: number, to: number) => void;
   setKind: (movementKey: string, setKey: string, kind: SetKind) => void;
   completeExercise: (movementKey: string, isComplete: boolean) => void;
   openActions: (movementKey: string) => void;
@@ -322,6 +323,16 @@ function SetRow({
             })),
             { label: 'No rest', onPress: () => update({ rest_seconds: null }) },
           ]),
+      });
+    if (index > 0)
+      options.push({
+        label: 'Move up',
+        onPress: () => actions.moveSet(movement.key, index, index - 1),
+      });
+    if (index < movement.sets.length - 1)
+      options.push({
+        label: 'Move down',
+        onPress: () => actions.moveSet(movement.key, index, index + 1),
       });
     options.push({
       label: 'Delete set',
