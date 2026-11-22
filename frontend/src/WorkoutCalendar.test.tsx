@@ -388,32 +388,36 @@ it('leaves the in-progress day to its live marker rather than a workout outline'
   expect(cell('2026-10-26').querySelector('.calendar-live-dot')).not.toBeNull();
 });
 
-it('gives today its workout colour for the outline and ripple', async () => {
-  const today = () => cell('2026-10-26').style.getPropertyValue('--today-color');
-  const render = (categories: HeatmapDay['categories'], hidden: string[] = []) =>
+it('rings today in its workout colours, split like its outline on a mixed day', async () => {
+  const todayRing = (date = '2026-10-26') => cell(date).querySelector('.calendar-today-ring');
+  const render = (categories: HeatmapDay['categories'], hidden: string[] = [], live = false) =>
     act(async () =>
       root.render(
         <WorkoutCalendar
           entries={[day('2026-10-25', ['upper']), day('2026-10-26', categories)]}
           categoryColors={colors}
           hiddenCategories={new Set(hidden)}
+          activeWorkoutDate={live ? '2026-10-26' : undefined}
           onDayClick={vi.fn()}
         />,
       ),
     );
   await render(['lower']);
-  expect(today()).toBe('#f59e0b');
-  // Only today carries it; other trained days keep just their outline.
-  expect(cell('2026-10-25').style.getPropertyValue('--today-color')).toBe('');
+  expect(todayRing()).not.toBeNull();
+  expect(ring('2026-10-26')).toBe('#f59e0b');
+  // Only today gets the extra ring; other trained days keep just their outline.
+  expect(todayRing('2026-10-25')).toBeNull();
 
-  // A mixed day uses its first type, the one its split outline starts with.
+  // The ring reads the day's split outline, so every type on a mixed day keeps its arc.
   await render(['upper', 'cardio']);
-  expect(today()).toBe('#8b5cf6');
-  // A type switched off in the legend hands the colour to the next one, then to the default.
-  await render(['upper', 'cardio'], ['upper']);
-  expect(today()).toBe('#22c55e');
+  expect(todayRing()).not.toBeNull();
+  expect(ring('2026-10-26')).toBe(dayRing(['#8b5cf6', '#22c55e']));
+
+  // With every type switched off, or a workout live, today keeps its default outline.
   await render(['upper', 'cardio'], ['upper', 'cardio']);
-  expect(today()).toBe('');
+  expect(todayRing()).toBeNull();
+  await render(['upper'], [], true);
+  expect(todayRing()).toBeNull();
 });
 
 it('colours the live day in the workout type being logged', async () => {

@@ -1825,14 +1825,71 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
     color-mix(in srgb, var(--live-color, var(--p-accent)) 45%, transparent);
 }
 
-/* Today's outline and ripple take its workout colour: the type being logged while a workout is
-   live, otherwise the logged workout's colour (--today-color). */
+/* The live day's outline and ripple take the colour of the workout type being logged. */
 .calendar-panel .calendar-day.today.in-progress {
   outline-color: var(--live-color, var(--accent));
 }
 
+/* Today with workouts logged swaps the flat outline and ripple for a ring in the day's own colours
+   (.calendar-today-ring), split into the same arcs as its outline on a mixed day. */
 .calendar-panel .calendar-day.today.trained:not(.in-progress) {
-  outline-color: var(--today-color, var(--accent));
+  outline-color: transparent;
+}
+
+.calendar-panel .calendar-day.today.trained:not(.in-progress)::after {
+  content: none;
+}
+
+/* Sits where the outline would be (2px wide, 1px outside the day) and draws its ripple outward. */
+.calendar-today-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 13px;
+  pointer-events: none;
+}
+
+.calendar-today-ring::before,
+.calendar-today-ring::after {
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 2px solid transparent;
+  border-radius: inherit;
+  background: var(--day-ring);
+  background-origin: border-box;
+  background-repeat: no-repeat;
+  content: '';
+  /* Keep only the border area, so the conic arcs read as a ring. */
+  -webkit-mask:
+    linear-gradient(#000 0 0) padding-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) padding-box exclude,
+    linear-gradient(#000 0 0);
+}
+
+/* The ripple is a band that grows from the ring's outer edge and fades, matching the flat ripple's
+   timing and reach while keeping every workout colour in its arc. */
+.calendar-today-ring::after {
+  border-width: 0;
+  animation: calendar-today-ring-ripple 2.4s ease-out infinite;
+}
+
+@keyframes calendar-today-ring-ripple {
+  0% {
+    inset: 0;
+    border-width: 0;
+    border-radius: 13px;
+    opacity: 0.9;
+  }
+  70%,
+  100% {
+    inset: -7px;
+    border-width: 7px;
+    border-radius: 20px;
+    opacity: 0;
+  }
 }
 
 /* The live dot already marks the day; drop the legacy corner dot that stacked under it. */
@@ -1857,18 +1914,17 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 @keyframes calendar-today-ripple {
   0% {
-    box-shadow: 0 0 0 0
-      color-mix(in srgb, var(--live-color, var(--today-color, var(--accent))) 90%, transparent);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--live-color, var(--accent)) 90%, transparent);
   }
   70%,
   100% {
-    box-shadow: 0 0 0 7px
-      color-mix(in srgb, var(--live-color, var(--today-color, var(--accent))) 0%, transparent);
+    box-shadow: 0 0 0 7px color-mix(in srgb, var(--live-color, var(--accent)) 0%, transparent);
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .calendar-panel .calendar-day.today::after {
+  .calendar-panel .calendar-day.today::after,
+  .calendar-today-ring::after {
     content: none;
   }
 }
