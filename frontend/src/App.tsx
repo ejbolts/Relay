@@ -194,7 +194,7 @@ import { ExerciseLibraryList } from './ExerciseLibraryList';
 import { ExerciseMergeDialog } from './ExerciseMergeDialog';
 import { ExerciseMergeNudge } from './ExerciseMergeNudge';
 import { ExerciseOptionsMenu } from './ExerciseOptionsMenu';
-import { ExerciseRenameDialog } from './ExerciseRenameDialog';
+import { ExerciseEditDialog } from './ExerciseEditDialog';
 import { ExerciseSwapSheet } from './ExerciseSwapSheet';
 import { swapMovementExercise } from './exerciseSwap';
 import { useExerciseLibrary, type ExerciseLibraryState } from './useExerciseLibrary';
@@ -8103,7 +8103,7 @@ interface ExerciseDetailHeader {
   blockName?: string | null;
   onBack: () => void;
   onMerge?: (trigger: HTMLButtonElement) => void;
-  onRename?: (trigger: HTMLButtonElement) => void;
+  onEdit?: (trigger: HTMLButtonElement) => void;
   onToggleHidden?: () => void;
 }
 
@@ -8209,8 +8209,8 @@ export function ProgressScreen({
     (targetId: string) => setMergeRequest({ sourceId: exerciseId, targetId }),
     [exerciseId],
   );
-  const [renameOpen, setRenameOpen] = useState(false);
-  const openSelectedRename = useCallback(() => setRenameOpen(true), []);
+  const [editOpen, setEditOpen] = useState(false);
+  const openSelectedEdit = useCallback(() => setEditOpen(true), []);
   const setSelectedHidden = useCallback(
     async (exercise: Exercise, hidden: boolean, undoable: boolean) => {
       try {
@@ -8261,8 +8261,7 @@ export function ProgressScreen({
             blockName: block?.name ?? null,
             onBack: backToExercises,
             onMerge: canMergeSelected ? openSelectedMerge : undefined,
-            onRename:
-              canEditSelected && selectedExercise.is_custom ? openSelectedRename : undefined,
+            onEdit: canEditSelected && selectedExercise.is_custom ? openSelectedEdit : undefined,
             onToggleHidden: canEditSelected ? toggleSelectedHidden : undefined,
           }
         : null,
@@ -8278,7 +8277,7 @@ export function ProgressScreen({
     canMergeSelected,
     canEditSelected,
     openSelectedMerge,
-    openSelectedRename,
+    openSelectedEdit,
     toggleSelectedHidden,
   ]);
   useEffect(() => () => onDetailChange?.(null), [onDetailChange]);
@@ -8503,13 +8502,14 @@ export function ProgressScreen({
           }}
         />
       )}
-      {renameOpen && selectedExercise && (
-        <ExerciseRenameDialog
+      {editOpen && selectedExercise && (
+        <ExerciseEditDialog
           exercise={selectedExercise}
-          onClose={() => setRenameOpen(false)}
-          onRenamed={() => {
-            setRenameOpen(false);
-            showToast('Exercise renamed');
+          exercises={exercises}
+          onClose={() => setEditOpen(false)}
+          onSaved={() => {
+            setEditOpen(false);
+            showToast('Exercise updated');
             void onExercisesMerged?.();
           }}
         />
@@ -8558,7 +8558,7 @@ export function ProgressScreen({
                     key={selectedExercise.id}
                     exerciseName={selectedExercise.name}
                     hidden={selectedExercise.hidden}
-                    onRename={selectedExercise.is_custom ? openSelectedRename : undefined}
+                    onEdit={selectedExercise.is_custom ? openSelectedEdit : undefined}
                     onMerge={canMergeSelected ? openSelectedMerge : undefined}
                     onToggleHidden={toggleSelectedHidden}
                   />
@@ -9870,7 +9870,7 @@ function HistoryScreen({
                 key={exerciseHeader.exercise.id}
                 exerciseName={exerciseHeader.exercise.name}
                 hidden={exerciseHeader.exercise.hidden}
-                onRename={exerciseHeader.onRename}
+                onEdit={exerciseHeader.onEdit}
                 onMerge={exerciseHeader.onMerge}
                 onToggleHidden={exerciseHeader.onToggleHidden}
               />

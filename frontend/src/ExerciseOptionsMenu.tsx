@@ -6,14 +6,14 @@ import { leavesMenu } from './menuDismiss';
 export function ExerciseOptionsMenu({
   exerciseName,
   hidden = false,
-  onRename,
+  onEdit,
   onMerge,
   onToggleHidden,
 }: {
   exerciseName: string;
   hidden?: boolean;
   /** Custom exercises only. */
-  onRename?: (trigger: HTMLButtonElement) => void;
+  onEdit?: (trigger: HTMLButtonElement) => void;
   /** Custom exercises only. */
   onMerge?: (trigger: HTMLButtonElement) => void;
   onToggleHidden?: () => void;
@@ -43,7 +43,7 @@ export function ExerciseOptionsMenu({
     if (action && trigger.current) action(trigger.current);
   }
 
-  if (!onRename && !onMerge && !onToggleHidden) return null;
+  if (!onEdit && !onMerge && !onToggleHidden) return null;
 
   return (
     <span
@@ -95,10 +95,10 @@ export function ExerciseOptionsMenu({
           role="menu"
           aria-label={`Options for ${exerciseName}`}
         >
-          {onRename && (
-            <button type="button" role="menuitem" onClick={() => choose(onRename)}>
+          {onEdit && (
+            <button type="button" role="menuitem" onClick={() => choose(onEdit)}>
               <Icon name="edit" />
-              Rename
+              Edit
             </button>
           )}
           {onMerge && (

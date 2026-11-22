@@ -117,7 +117,7 @@ def test_upgrade_keeps_ambiguous_custom_names_without_assuming_their_equipment(c
 def test_catalogue_has_distinct_equipment_variants_and_explicit_muscle_credits(client):
     exercises = client.get("/api/exercises").json()
     strength = [exercise for exercise in exercises if exercise["kind"] == "strength"]
-    assert len(strength) == len(DEFAULT_EXERCISES) == 92
+    assert len(strength) == len(DEFAULT_EXERCISES) == 93
     assert {exercise["equipment"] for exercise in strength} == {
         "Barbell",
         "Dumbbell",
@@ -139,6 +139,59 @@ def test_catalogue_has_distinct_equipment_variants_and_explicit_muscle_credits(c
     assert curls["Dumbbell Curl"]["equipment"] == "Dumbbell"
     assert curls["Cable Biceps Curl"]["equipment"] == "Cable"
     assert curls["Machine Bicep Preacher Curl"]["equipment"] == "Machine"
+    ez_preacher = curls["EZ Bar Preacher Curl"]
+    assert (ez_preacher["muscle_group"], ez_preacher["equipment"]) == ("Biceps", "EZ bar")
+    assert {
+        (item["muscle_name"], item["contribution_factor"])
+        for item in ez_preacher["muscle_contributions"]
+    } == {("Biceps", 1.0), ("Forearms", 0.5)}
+    assert canonical_exercise_name("EZ-Bar Preacher Curl") == "EZ Bar Preacher Curl"
+
+
+def test_upgrade_makes_an_unlogged_custom_exercise_with_a_new_default_name_official(client):
+    with SessionLocal() as db:
+        # Emulate an account from before the catalogue had the exercise.
+        db.delete(
+            db.scalar(
+                select(Exercise).where(
+                    Exercise.user_id == client.user["id"],
+                    Exercise.name == "EZ Bar Preacher Curl",
+                )
+            )
+        )
+        db.commit()
+    response = client.post(
+        "/api/exercises",
+        json={
+            "name": "Ez bar preacher curl",
+            "category": "pull",
+            "kind": "strength",
+            "muscle_group": "Biceps",
+            "equipment": None,
+        },
+    )
+    assert response.status_code == 201, response.text
+    custom = response.json()
+    assert client.patch(
+        f"/api/exercises/{custom['id']}/favorite", json={"is_favorite": True}
+    ).is_success
+    revision_before = client.get("/api/workouts/revision").json()
+    with SessionLocal() as db:
+        seed_default_exercises(db, client.user["id"])
+    exercises = client.get("/api/exercises").json()
+    matching = [item for item in exercises if item["name"].casefold() == "ez bar preacher curl"]
+    assert len(matching) == 1
+    official = matching[0]
+    assert official["id"] == custom["id"]
+    assert official["name"] == "EZ Bar Preacher Curl"
+    assert official["is_custom"] is False
+    assert official["is_favorite"] is True
+    assert official["equipment"] == "EZ bar"
+    assert {
+        (item["muscle_name"], item["contribution_factor"])
+        for item in official["muscle_contributions"]
+    } == {("Biceps", 1.0), ("Forearms", 0.5)}
+    assert client.get("/api/workouts/revision").json() != revision_before
 
 
 def test_catalogue_upgrade_is_idempotent_and_preserves_custom_exercises_and_history(client):

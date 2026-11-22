@@ -228,7 +228,7 @@ function EditableScreen({
 }
 const menuItems = () =>
   [...host.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim());
-it('keeps merge and rename unavailable for official exercises, which can only be hidden', async () => {
+it('keeps merge and edit unavailable for official exercises, which can only be hidden', async () => {
   await act(async () =>
     root.render(
       <EditableScreen exercises={catalogue} refreshed={vi.fn().mockResolvedValue(undefined)} />,
@@ -238,6 +238,13 @@ it('keeps merge and rename unavailable for official exercises, which can only be
   await click(host.querySelector('[aria-label="Options for Pec Deck"]')!);
   expect(menuItems()).toEqual(['Hide from exercise lists']);
 });
+const typeInto = async (input: HTMLInputElement, value: string) =>
+  act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+const editField = (name: string) =>
+  document.querySelector<HTMLInputElement>(`.exercise-edit-dialog input[name="${name}"]`)!;
 it('renames a custom exercise from its options menu', async () => {
   const custom = { ...row, id: 'custom-row', name: 'My cable row', is_custom: true };
   const refreshed = vi.fn().mockResolvedValue(undefined);
@@ -250,28 +257,71 @@ it('renames a custom exercise from its options menu', async () => {
   );
   await click(host.querySelector('[data-exercise-id="custom-row"]')!);
   await click(host.querySelector('[aria-label="Options for My cable row"]')!);
-  expect(menuItems()).toEqual([
-    'Rename',
-    'Merge with another exercise',
-    'Hide from exercise lists',
-  ]);
-  await click(named('Rename'));
-  const input = document.querySelector<HTMLInputElement>('.exercise-rename-dialog input')!;
-  expect(input.value).toBe('My cable row');
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
-      input,
-      '  Seated cable row ',
-    );
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await click(document.querySelector('.exercise-rename-dialog [type="submit"]')!);
+  expect(menuItems()).toEqual(['Edit', 'Merge with another exercise', 'Hide from exercise lists']);
+  await click(named('Edit'));
+  expect(editField('name').value).toBe('My cable row');
+  expect(editField('equipment').value).toBe('Cable');
+  await typeInto(editField('name'), '  Seated cable row ');
+  await click(document.querySelector('.exercise-edit-dialog [type="submit"]')!);
   expect(update).toHaveBeenCalledExactlyOnceWith('custom-row', { name: 'Seated cable row' });
   expect(refreshed).toHaveBeenCalledOnce();
-  expect(document.querySelector('.exercise-rename-dialog')).toBeNull();
-  expect(toastText()).toBe('Exercise renamed');
+  expect(document.querySelector('.exercise-edit-dialog')).toBeNull();
+  expect(toastText()).toBe('Exercise updated');
 });
-it('keeps the rename dialog open with the reason when the name is taken', async () => {
+it("changes a custom exercise's equipment, suggesting the standard kinds", async () => {
+  const custom = {
+    ...row,
+    id: 'custom-preacher',
+    name: 'Preacher Curl',
+    muscle_group: 'Biceps',
+    equipment: null,
+    is_custom: true,
+  };
+  const refreshed = vi.fn().mockResolvedValue(undefined);
+  const update = vi
+    .spyOn(api, 'updateExercise')
+    .mockResolvedValue({ ...custom, equipment: 'EZ bar' });
+  vi.mocked(api.exerciseProgress).mockImplementation(async () => progress(custom));
+  await act(async () =>
+    root.render(<EditableScreen exercises={[custom, row]} refreshed={refreshed} />),
+  );
+  await click(host.querySelector('[data-exercise-id="custom-preacher"]')!);
+  await click(host.querySelector('[aria-label="Options for Preacher Curl"]')!);
+  await click(named('Edit'));
+  const equipment = editField('equipment');
+  expect(equipment.value).toBe('');
+  const suggestions = [
+    ...document.getElementById(equipment.getAttribute('list')!)!.querySelectorAll('option'),
+  ].map((option) => option.value);
+  expect(suggestions).toEqual(expect.arrayContaining(['Cable', 'EZ bar', 'Machine', 'Dumbbell']));
+  await typeInto(equipment, 'EZ bar');
+  await click(document.querySelector('.exercise-edit-dialog [type="submit"]')!);
+  expect(update).toHaveBeenCalledExactlyOnceWith('custom-preacher', { equipment: 'EZ bar' });
+  expect(refreshed).toHaveBeenCalledOnce();
+  expect(toastText()).toBe('Exercise updated');
+});
+it("clears a custom exercise's equipment, and closes without saving when nothing changed", async () => {
+  const custom = { ...row, id: 'custom-row', name: 'My cable row', is_custom: true };
+  const update = vi.spyOn(api, 'updateExercise').mockResolvedValue({ ...custom, equipment: null });
+  vi.mocked(api.exerciseProgress).mockImplementation(async () => progress(custom));
+  await act(async () =>
+    root.render(
+      <EditableScreen exercises={[custom, row]} refreshed={vi.fn().mockResolvedValue(undefined)} />,
+    ),
+  );
+  await click(host.querySelector('[data-exercise-id="custom-row"]')!);
+  await click(host.querySelector('[aria-label="Options for My cable row"]')!);
+  await click(named('Edit'));
+  await click(document.querySelector('.exercise-edit-dialog [type="submit"]')!);
+  expect(update).not.toHaveBeenCalled();
+  expect(document.querySelector('.exercise-edit-dialog')).toBeNull();
+  await click(host.querySelector('[aria-label="Options for My cable row"]')!);
+  await click(named('Edit'));
+  await typeInto(editField('equipment'), '  ');
+  await click(document.querySelector('.exercise-edit-dialog [type="submit"]')!);
+  expect(update).toHaveBeenCalledExactlyOnceWith('custom-row', { equipment: null });
+});
+it('keeps the edit dialog open with the reason when the name is taken', async () => {
   const custom = { ...row, id: 'custom-row', name: 'My cable row', is_custom: true };
   vi.spyOn(api, 'updateExercise').mockRejectedValue(
     new Error('An exercise with that name already exists.'),
@@ -284,17 +334,10 @@ it('keeps the rename dialog open with the reason when the name is taken', async 
   );
   await click(host.querySelector('[data-exercise-id="custom-row"]')!);
   await click(host.querySelector('[aria-label="Options for My cable row"]')!);
-  await click(named('Rename'));
-  const input = document.querySelector<HTMLInputElement>('.exercise-rename-dialog input')!;
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(
-      input,
-      'Cable Row',
-    );
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-  });
-  await click(document.querySelector('.exercise-rename-dialog [type="submit"]')!);
-  expect(document.querySelector('.exercise-rename-dialog [role="alert"]')?.textContent).toBe(
+  await click(named('Edit'));
+  await typeInto(editField('name'), 'Cable Row');
+  await click(document.querySelector('.exercise-edit-dialog [type="submit"]')!);
+  expect(document.querySelector('.exercise-edit-dialog [role="alert"]')?.textContent).toBe(
     'An exercise with that name already exists.',
   );
 });
