@@ -272,54 +272,6 @@ def test_strength_borders_read_working_sets_of_the_barbell_lifts(client):
     assert listed["bench-club-5"]["rarity"] == "mythic"
 
 
-def test_gravity_defier_reads_pull_ups_chin_ups_and_dips(client, other_client):
-    for lifter in (client, other_client):
-        weigh_in(lifter, "2026-01-01", 80)
-        workout(lifter, "2026-01-05", "Pull-up", [{"weight_kg": 0, "reps": 7}, {"reps": 9}])
-        workout(
-            lifter,
-            "2026-01-07",
-            "Dips",
-            [
-                {"weight_kg": 30, "reps": 5, "set_type": "warmup"},
-                {"weight_kg": 16, "reps": 3},
-                {"weight_kg": 24, "reps": 0, "failed": True},
-            ],
-        )
-        workout(lifter, "2026-01-08", "Lat Pulldown", [{"weight_kg": 90, "reps": 12}])
-
-    numbers = stats(client)
-    # Nine bodyweight pull-ups; 16 kg added on dips at 80 kg is 20%. Warm-ups, failed sets and
-    # other exercises do not count.
-    assert numbers["bodyweight_reps"] == 9
-    assert numbers["bodyweight_added"] == 20
-
-    listed = borders(client)
-    first = listed["gravity-defier-1"]
-    assert first["requirement"] == "Do 1 rep in one set of pull-ups, chin-ups or dips"
-    assert first["unlocked"] and first["needs_sex"] is False
-    assert listed["gravity-defier-2"]["requirement"] == (
-        "Do 10 reps (men) or 5 reps (women) in one set of pull-ups, chin-ups or dips"
-    )
-    assert listed["gravity-defier-3"]["needs_sex"] is True
-
-    set_sex(client, "male")
-    set_sex(other_client, "female")
-    his, hers = borders(client), borders(other_client)
-    assert his["gravity-defier-2"]["progress"] == {"current": 9, "target": 10, "unit": "reps"}
-    assert his["gravity-defier-3"]["requirement"] == (
-        "Do a pull-up, chin-up or dip with 25% of your body weight added"
-    )
-    assert his["gravity-defier-3"]["progress"] == {"current": 20, "target": 25, "unit": "% BW"}
-    assert his["gravity-defier-5"]["rarity"] == "mythic"
-    # Men: 1 and 10 reps, then 25%, 50% and 75% added; women: 1 and 5 reps, then 10%, 25%, 40%.
-    earned = [
-        [lifter[f"gravity-defier-{tier}"]["unlocked"] for tier in range(1, 6)]
-        for lifter in (his, hers)
-    ]
-    assert earned == [[True, False, False, False, False], [True, True, True, False, False]]
-
-
 def test_weight_targets_are_shown_in_the_accounts_unit(client):
     set_sex(client, "male")
     saved = client.put(

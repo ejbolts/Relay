@@ -81,14 +81,14 @@ PERCENT_BW = "% BW"
 
 # Pull-ups, chin-ups and dips, by canonical exercise name: Gravity Defier's bodyweight strength.
 BODYWEIGHT_MOVES = {
-    "pull-up",
-    "chin-up",
-    "dips",
-    "dip",
-    "weighted pull-up",
-    "weighted chin-up",
-    "weighted dips",
-    "weighted dip",
+    "pull-up": "pull-ups",
+    "chin-up": "pull-ups",
+    "weighted pull-up": "pull-ups",
+    "weighted chin-up": "pull-ups",
+    "dips": "dips",
+    "dip": "dips",
+    "weighted dips": "dips",
+    "weighted dip": "dips",
 }
 
 METRICS = {
@@ -108,14 +108,8 @@ METRICS = {
     "bench_kg": Metric("Strength", "Bench press {target}", weight=True),
     "squat_kg": Metric("Strength", "Squat {target}", weight=True),
     "deadlift_kg": Metric("Strength", "Deadlift {target}", weight=True),
-    "bodyweight_reps": Metric(
-        "Bodyweight strength", "Do {target} in one set of pull-ups, chin-ups or dips", "reps"
-    ),
-    "bodyweight_added": Metric(
-        "Bodyweight strength",
-        "Do a pull-up, chin-up or dip with {target} of your body weight added",
-        PERCENT_BW,
-    ),
+    "bodyweight_reps": Metric("Bodyweight strength", ""),
+    "bodyweight_added": Metric("Bodyweight strength", "", PERCENT_BW),
     "records_in_workout": Metric("Records", "Set {target} PRs in one workout", "PRs"),
     "records": Metric("Records", "Set {target} PRs", "PRs"),
     "cardio_month_km": Metric("Cardio", "Cover {target} km of cardio in one calendar month", "km"),
@@ -168,6 +162,7 @@ class Border:
     tier: int | None = None
     # Set for a limited edition: the only dates whose training counts.
     window: Window | None = None
+    dip_target: tuple[float, float] | None = None
 
     @property
     def measure(self) -> Metric:
@@ -207,13 +202,13 @@ STRENGTH_RARITIES: tuple[Rarity, ...] = ("common", "rare", "epic", "legendary", 
 NUMERALS = ("I", "II", "III", "IV", "V")
 
 
-# (metric, target) for each Gravity Defier tier; (men, women) where the standard differs.
-GRAVITY_DEFIER: tuple[tuple[str, float | tuple[float, float]], ...] = (
-    ("bodyweight_reps", 1),
-    ("bodyweight_reps", (10, 5)),
-    ("bodyweight_added", (25, 10)),
-    ("bodyweight_added", (50, 25)),
-    ("bodyweight_added", (75, 40)),
+# Metric, pull-up standards (men, women), and dip standards (men, women).
+GRAVITY_DEFIER = (
+    ("bodyweight_reps", (1, 1), (5, 3)),
+    ("bodyweight_reps", (8, 3), (15, 8)),
+    ("bodyweight_reps", (15, 6), (25, 15)),
+    ("bodyweight_reps", (20, 10), (35, 22)),
+    ("bodyweight_added", (40, 20), (60, 30)),
 )
 
 
@@ -304,8 +299,9 @@ BORDERS: tuple[Border, ...] = (
             target,
             family="bodyweight",
             tier=index,
+            dip_target=dip_target,
         )
-        for index, (rarity, (metric, target)) in enumerate(
+        for index, (rarity, (metric, target, dip_target)) in enumerate(
             zip(STRENGTH_RARITIES, GRAVITY_DEFIER, strict=True), start=1
         )
     ),
@@ -688,7 +684,6 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
             Exercise.name,
             WorkoutSet.weight_kg,
             WorkoutSet.reps,
-            WorkoutSet.bodyweight_kg,
         )
         .join(WorkoutMovement, WorkoutMovement.workout_id == TrainingWorkout.id)
         .join(Exercise, Exercise.id == WorkoutMovement.exercise_id)
@@ -709,19 +704,23 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
     lifting_days: set[date] = set()
     best_lift = {lift: 0.0 for lift in LIFT_NAMES}
     lift_by_name: dict[str, str | None] = {}
-    bodyweight_by_name: dict[str, bool] = {}
-    bodyweight_reps = 0
-    added_sets: list[tuple[date, float, float | None]] = []
-    for workout_id, day, name, weight, reps, set_body_weight in sets:
+    bodyweight_by_name: dict[str, str | None] = {}
+    bodyweight_reps = {"pull-ups": 0, "dips": 0}
+    bodyweight_added = {"pull-ups": 0.0, "dips": 0.0}
+    added_sets: list[tuple[date, str, float]] = []
+    for workout_id, day, name, weight, reps in sets:
         if workout_id in skipped_workouts:
             continue
         lifting_days.add(day)
         if name not in bodyweight_by_name:
-            bodyweight_by_name[name] = canonical_exercise_name(name).casefold() in BODYWEIGHT_MOVES
-        if bodyweight_by_name[name]:
-            bodyweight_reps = max(bodyweight_reps, reps)
-            if weight and weight > 0:
-                added_sets.append((day, weight, set_body_weight))
+            bodyweight_by_name[name] = BODYWEIGHT_MOVES.get(
+                canonical_exercise_name(name).casefold()
+            )
+        movement = bodyweight_by_name[name]
+        if movement and (weight is None or weight >= 0):
+            bodyweight_reps[movement] = max(bodyweight_reps[movement], reps)
+            if reps >= 5 and weight and weight > 0:
+                added_sets.append((day, movement, weight))
         if not weight or weight <= 0:
             continue
         lifted_kg += weight * reps
@@ -731,13 +730,14 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
         if lift is not None:
             best_lift[lift] = max(best_lift[lift], weight)
     # Weight added to a pull-up, chin-up or dip, as a percentage of the body weight on the day.
-    bodyweight_added = 0.0
     if added_sets:
         body_weights = BodyweightHistory(db, user.id)
-        for day, weight, set_body_weight in added_sets:
-            body_weight = body_weights.on(day, set_body_weight or None)
+        for day, movement, weight in added_sets:
+            body_weight = body_weights.nearest(day)
             if body_weight:
-                bodyweight_added = max(bodyweight_added, weight / body_weight * 100)
+                bodyweight_added[movement] = max(
+                    bodyweight_added[movement], weight / body_weight * 100
+                )
 
     cardio_week_minutes: dict[date, int] = defaultdict(int)
     cardio_month_km: dict[tuple[int, int], float] = defaultdict(float)
@@ -786,8 +786,10 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
         "bench_kg": best_lift["bench"],
         "squat_kg": best_lift["squat"],
         "deadlift_kg": best_lift["deadlift"],
-        "bodyweight_reps": bodyweight_reps,
-        "bodyweight_added": bodyweight_added,
+        "bodyweight_reps": bodyweight_reps["pull-ups"],
+        "dip_reps": bodyweight_reps["dips"],
+        "bodyweight_added": bodyweight_added["pull-ups"],
+        "dip_added": bodyweight_added["dips"],
         "records": sum(record_counts),
         "records_in_workout": max(record_counts, default=0),
         "cardio_week_minutes": max(cardio_week_minutes.values(), default=0),
@@ -834,10 +836,6 @@ def _target_text(border: Border, target: float, unit: str) -> str:
         text = f"{_number(round(_shown(border, target, unit)))} {unit}"
         count = plates(target) if border.metric in PLATE_LIFTS else None
         return f"{text} · {count} plate{'s' if count > 1 else ''}" if count else text
-    if border.measure.unit == PERCENT_BW:
-        return f"{_number(target)}%"
-    if border.metric == "bodyweight_reps":
-        return f"{_number(target)} rep{'' if target == 1 else 's'}"
     return _number(target)
 
 
@@ -849,8 +847,39 @@ def _requirement(border: Border, target: str) -> str:
     return f"{text} {border.note}" if border.window else f"{text}, {border.note}"
 
 
+def _gravity_requirement(border: Border, target: float, dips: float) -> str:
+    if border.metric == "bodyweight_added":
+        return (
+            f"Do 5 pull-ups or chin-ups with {_number(target)}% of your body weight added, "
+            f"or 5 dips with {_number(dips)}%"
+        )
+    suffix = "" if target == 1 else "s"
+    return (
+        f"Do {_number(target)} pull-up{suffix} or chin-up{suffix}, "
+        f"or {_number(dips)} dips, in one set"
+    )
+
+
+def _gravity_progress(border: Border, stats: Stats, sex: str, target: float) -> BorderProgress:
+    assert border.dip_target is not None
+    weighted = border.metric == "bodyweight_added"
+    dip_target = border.dip_target[sex == "female"]
+    pull_ups = value_of(border, stats)
+    dips = stats.values["dip_added" if weighted else "dip_reps"]
+    if dips / dip_target > pull_ups / target:
+        return BorderProgress(
+            current=dips, target=dip_target, unit=PERCENT_BW if weighted else "dips"
+        )
+    return BorderProgress(
+        current=pull_ups, target=target, unit=PERCENT_BW if weighted else "pull-ups"
+    )
+
+
 def is_unlocked(border: Border, stats: Stats, sex: str | None) -> bool:
     target = border.target_for(sex)
+    if border.dip_target is not None and target is not None and sex is not None:
+        progress = _gravity_progress(border, stats, sex, target)
+        return progress.current + 1e-9 >= progress.target
     # A float sum can land a hair under a target it has reached.
     return target is not None and value_of(border, stats) + 1e-9 >= target
 
@@ -868,7 +897,22 @@ def _read(border: Border, stats: Stats, sex: str | None, unit: str, today: date)
         tier=border.tier,
     )
     target = border.target_for(sex)
-    if target is None:
+    if border.dip_target is not None:
+        assert isinstance(border.target, tuple)
+        if target is None or sex is None:
+            male, female = (
+                _gravity_requirement(border, pull_ups, dips)
+                for pull_ups, dips in zip(border.target, border.dip_target, strict=True)
+            )
+            read.requirement = f"{male} (men) or {female} (women)"
+            read.needs_sex = True
+        else:
+            read.requirement = _gravity_requirement(
+                border, target, border.dip_target[sex == "female"]
+            )
+            read.progress = _gravity_progress(border, stats, sex, target)
+            read.progress.current = round(read.progress.current, 1)
+    elif target is None:
         assert isinstance(border.target, tuple)
         male, female = (_target_text(border, value, unit) for value in border.target)
         read.requirement = _requirement(border, f"{male} (men) or {female} (women)")
