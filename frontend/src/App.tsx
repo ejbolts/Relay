@@ -154,7 +154,7 @@ import {
   MachineFilterPicker,
   type MachineFilter,
 } from './MachineHistoryFilter';
-import { machineDate, machineUsedShort } from './machineHistory';
+import { machineDate, machineUsedShort, timeSince } from './machineHistory';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { useReleaseAnnouncement } from './useReleaseAnnouncement';
 import { usePresenceConnection } from './presence';
@@ -6991,7 +6991,12 @@ function MovementCard({
               .join(' · ')}
           </p>
           {!cardio && history[0] && (
-            <p className="movement-last-session">Last {shortDate(history[0].workoutDate)}</p>
+            <p className="movement-last-session">
+              Last done{' '}
+              <time dateTime={history[0].workoutDate}>
+                {timeSince(history[0].workoutDate, localDate())}
+              </time>
+            </p>
           )}
           {movement.swappedFrom && (
             <p className="movement-last-session movement-swapped-from">
