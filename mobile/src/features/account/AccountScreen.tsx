@@ -126,12 +126,9 @@ export function AccountScreen() {
       setScreen({ kind: 'loading' });
       setRevision((v) => v + 1);
     } catch (e) {
+      // Signing out works offline, so this only fails if secure storage is unavailable.
       if (logout)
-        setScreen({
-          kind: 'error',
-          message: 'Sign-out was not confirmed. Reconnect to Relay and try again.',
-          signedIn: true,
-        });
+        setScreen({ kind: 'error', message: 'Could not sign out. Try again.', signedIn: true });
       else setError(message(e));
     } finally {
       action.current = false;

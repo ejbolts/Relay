@@ -34,7 +34,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from .auth import as_utc, hash_token, origin_matches_host
+from .auth import as_utc, hash_token, origin_matches_host, session_token
 from .database import SessionLocal
 from .models import LiveWorkout, ProfileSharing, User, UserSession, utc_now
 
@@ -433,7 +433,7 @@ async def presence_socket(websocket: WebSocket) -> None:
     if origin is not None and not origin_matches_host(origin, websocket.headers.get("host")):
         await websocket.close(code=1008)
         return
-    token = websocket.cookies.get(websocket.app.state.settings.session_cookie)
+    token = session_token(websocket, websocket.app.state.settings)
     user_id = await run_in_threadpool(signed_in_user_id, token) if token else None
     if user_id is None:
         await websocket.accept()

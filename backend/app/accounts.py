@@ -7,7 +7,7 @@ import re
 import shutil
 import threading
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from fastapi.responses import FileResponse
@@ -36,6 +36,7 @@ from .auth import (
     hash_password,
     hash_token,
     password_needs_rehash,
+    session_token,
     set_session_cookie,
     too_many_attempts,
     utc_now,
@@ -186,6 +187,9 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(max_length=320)
     password: str = Field(min_length=1, max_length=MAX_PASSWORD_LENGTH)
+    # The native app asks for "token": the session comes back in the response body for it to
+    # send as a bearer header, and no cookie is set. Browsers omit it and keep the cookie.
+    session: Literal["cookie", "token"] = "cookie"
 
 
 class ProfileUpdate(BaseModel):
@@ -237,6 +241,11 @@ class UserRead(BaseModel):
     # Versioned by the stored file's name, so a new photo never shows a cached old one.
     profile_photo_url: str | None = None
     sex: Sex | None = None
+
+
+class LoginRead(UserRead):
+    # Only when the sign-in asked for a token (the native app); browsers get a cookie instead.
+    session_token: str | None = None
 
 
 def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
@@ -506,7 +515,7 @@ def register(
     return user_to_read(db, user, settings)
 
 
-@auth_router.post("/login", response_model=UserRead)
+@auth_router.post("/login", response_model=LoginRead)
 def login(
     payload: LoginRequest,
     request: Request,
@@ -514,7 +523,7 @@ def login(
     db: DbDependency,
     settings: AppSettings,
     throttle: Throttle,
-) -> UserRead:
+) -> LoginRead:
     username = payload.username.strip().lower()
     ip_key, username_key = f"ip:{client_ip(request)}", f"username:{username}"
     if throttle.is_blocked(ip_key) or throttle.is_blocked(
@@ -544,14 +553,17 @@ def login(
     # Likewise, they found their username.
     user.username_reminder_requested_at = None
     token = create_user_session(db, user, settings, request.headers.get("user-agent"))
-    set_session_cookie(response, token, settings)
     report_workout_revision(response, db, user.id)
-    return user_to_read(db, user, settings)
+    read = user_to_read(db, user, settings).model_dump()
+    if payload.session == "token":
+        return LoginRead(**read, session_token=token)
+    set_session_cookie(response, token, settings)
+    return LoginRead(**read)
 
 
 @auth_router.post("/logout", status_code=204)
 def logout(request: Request, response: Response, db: DbDependency, settings: AppSettings) -> None:
-    token = request.cookies.get(settings.session_cookie)
+    token = session_token(request, settings)
     user_id = (
         db.scalar(
             select(UserSession.user_id)
@@ -585,11 +597,11 @@ def logout(request: Request, response: Response, db: DbDependency, settings: App
 def logout_session(
     request: Request, response: Response, db: DbDependency, settings: AppSettings
 ) -> None:
-    """Sign out this browser only; the account's other devices stay signed in.
+    """Sign out this browser or native app only; the account's other devices stay signed in.
 
     The app removes this browser's own push subscription first, while the session is valid.
     """
-    token = request.cookies.get(settings.session_cookie)
+    token = session_token(request, settings)
     session = (
         db.scalar(select(UserSession).where(UserSession.token_hash == hash_token(token)))
         if token

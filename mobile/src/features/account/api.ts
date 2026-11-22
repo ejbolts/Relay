@@ -7,6 +7,14 @@ import type {
   WorkoutTypeExercises,
 } from '../../../../frontend/src/types';
 import { accountRoutine } from '../training/accountRoutine';
+import {
+  finishSignOut,
+  forgetSessionToken,
+  pendingSignOut,
+  saveSessionToken,
+  sessionToken,
+  startSignOut,
+} from './session';
 
 export const apiOrigin = process.env.EXPO_PUBLIC_RELAY_API_ORIGIN?.trim();
 
@@ -22,7 +30,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+function serverOrigin() {
   const origin = new URL(apiOrigin!);
   const loopback = __DEV__ && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
   if (
@@ -35,18 +43,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   ) {
     throw new Error('Set a valid HTTPS preview origin for Relay.');
   }
+  return origin.origin;
+}
+
+/**
+ * Sends the saved session as a bearer header. Cookies are never sent or kept, so the session is
+ * exactly the token in secure storage. `token` overrides it: null for none, or a given token.
+ */
+async function request<T>(path: string, init: RequestInit = {}, token?: string | null): Promise<T> {
+  const origin = serverOrigin();
+  const bearer = token === undefined ? await sessionToken(origin) : token;
   // React Native's fetch has no timeout of its own, so a dropped connection would wait forever.
   const controller = new AbortController();
   const cancel = () => controller.abort();
-  const caller = init?.signal;
+  const caller = init.signal;
   if (caller?.aborted) cancel();
   caller?.addEventListener('abort', cancel);
   const timer = setTimeout(cancel, TIMEOUT_MS);
   let response: Response;
   try {
-    response = await fetch(origin.origin + path, {
+    response = await fetch(origin + path, {
       ...init,
-      credentials: 'include',
+      headers: {
+        ...(init.headers as Record<string, string> | undefined),
+        ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
+      },
+      credentials: 'omit',
       signal: controller.signal,
     });
   } catch (error) {
@@ -57,6 +79,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     caller?.removeEventListener('abort', cancel);
   }
   if (!response.ok) {
+    // The session ended on the server (signed out elsewhere, password changed or expired).
+    if (response.status === 401 && token === undefined && bearer) await forgetSessionToken();
     const body = await response.json().catch(() => null);
     throw new ApiError(
       response.status,
@@ -66,14 +90,51 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.status === 204 ? (undefined as T) : response.json();
 }
 
-export const currentUser = (signal: AbortSignal) => request<User>('/api/auth/me', { signal });
-export const signIn = (username: string, password: string) =>
-  request<User>('/api/auth/login', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username, password }),
-  });
-export const signOut = () => request<void>('/api/auth/logout-session', { method: 'POST' });
+/** Ends a sign-out the server has not confirmed yet. Never throws: it retries next launch. */
+async function endPendingSignOut(origin: string) {
+  try {
+    const token = await pendingSignOut(origin);
+    if (!token) return;
+    try {
+      await request<void>('/api/auth/logout-session', { method: 'POST' }, token);
+    } catch (error) {
+      // A server error or no connection leaves it for next time; a 401 means it already ended.
+      if (!(error instanceof ApiError) || error.status >= 500) return;
+    }
+    await finishSignOut();
+  } catch {
+    // Secure storage was unavailable; the next launch tries again.
+  }
+}
+
+export async function currentUser(signal: AbortSignal) {
+  const origin = serverOrigin();
+  void endPendingSignOut(origin);
+  if (!(await sessionToken(origin))) throw new ApiError(401, 'Sign in to continue.');
+  return request<User>('/api/auth/me', { signal });
+}
+
+export async function signIn(username: string, password: string) {
+  const origin = serverOrigin();
+  const user = await request<User & { session_token?: string | null }>(
+    '/api/auth/login',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, session: 'token' }),
+    },
+    null,
+  );
+  if (!user.session_token) throw new Error('Update Relay on the server to sign in from the app.');
+  await saveSessionToken(origin, user.session_token);
+  return user;
+}
+
+/** Signs out on this phone at once, even offline; the server session ends now or next launch. */
+export async function signOut() {
+  const origin = serverOrigin();
+  if (await startSignOut(origin)) await endPendingSignOut(origin);
+}
 
 function isoDate(year: number, monthIndex: number, day: number) {
   const date = new Date(year, monthIndex, day);

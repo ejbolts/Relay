@@ -97,6 +97,19 @@ def test_socket_obeys_account_and_session_lifecycle(client, other_client, monkey
     assert client.get("/api/auth/me").status_code == 200
 
 
+def test_native_app_socket_uses_its_bearer_token(client):
+    phone = TestClient(client.app)
+    token = phone.post(
+        "/api/auth/login",
+        json={"username": "owner", "password": TEST_PASSWORD, "session": "token"},
+    ).json()["session_token"]
+    bearer = {"Authorization": f"Bearer {token}"}
+    with phone.websocket_connect("/api/auth/ws", headers=bearer) as socket:
+        assert socket.receive_json() == {"type": "session", "user_id": client.user["id"]}
+        assert phone.post("/api/auth/logout-session", headers=bearer).status_code == 204
+        expect_signed_out(socket)
+
+
 def test_socket_requires_valid_cookie_and_same_origin(anonymous_client):
     with anonymous_client.websocket_connect("/api/auth/ws") as socket:
         expect_signed_out(socket)
