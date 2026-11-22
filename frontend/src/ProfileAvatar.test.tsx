@@ -72,7 +72,7 @@ describe('ProfileAvatar', () => {
     for (const id of used) expect(ids).toContain(id);
   });
 
-  it('draws seasons and yearly events from their key alone', () => {
+  it('draws yearly events from their key alone', () => {
     const draw = (key: string) =>
       renderToStaticMarkup(
         <ProfileAvatar
@@ -80,11 +80,8 @@ describe('ProfileAvatar', () => {
           user={{ ...account, profile_photo_url: null, profile_border: key }}
         />,
       );
-    expect(draw('season-1-3')).toContain('>S1</text>');
-    expect(draw('season-12-1')).toContain('>S12</text>');
     expect(draw('christmas-2026')).toContain('>2026</text>');
     expect(draw('summer-2026')).toContain('>26–27</text>');
-    expect(draw('season-1-4')).not.toContain('profile-border-art');
     expect(draw('easter-2027')).not.toContain('profile-border-art');
   });
 
@@ -117,7 +114,7 @@ describe('ProfileAvatar', () => {
       expect(draw(`${family}-5`)).toContain('class="profile-border-sheen"');
       for (const tier of [4, 3, 2]) expect(draw(`${family}-${tier}`)).not.toContain('sheen');
     }
-    for (const key of ['thousand-hours', 'unbreakable', 'million-kilo', 'season-1-3']) {
+    for (const key of ['thousand-hours', 'unbreakable', 'million-kilo']) {
       expect(draw(key)).not.toContain('sheen');
     }
   });

@@ -32,8 +32,6 @@ interface Spec {
   detail?: Detail;
   /** A tier in a family, shown on the banner. */
   tier?: number;
-  /** Words on the crest instead of the emblem, such as a season's number. */
-  crestText?: string;
   /** Words on the banner instead of the tier, such as an event's year. */
   bannerText?: string;
 }
@@ -460,9 +458,7 @@ function crest(id: string, spec: Spec) {
   const cy = C - RING;
   const r = [9.4, 10.8, 12.2, 13.4, 14.6][grade - 1];
   const inner = r - 2.2;
-  const glyph: { d: string } | { text: string } = spec.crestText
-    ? { text: spec.crestText }
-    : GLYPHS[spec.glyph];
+  const glyph = GLYPHS[spec.glyph];
   const base = cy - r + 2.2;
   const crown =
     `M${round(C - r * 0.9)} ${round(base)}L${round(C - r * 1.05)} ${round(base - 7)}` +
@@ -1044,24 +1040,6 @@ const baubles: Detail = () => (
   </>
 );
 
-/** The year in thirds, with the season's own third lit. */
-const seasonThirds =
-  (third: number): Detail =>
-  (_, spec) => (
-    <>
-      {[0, 1, 2].map((index) => (
-        <path
-          key={index}
-          d={arcPath(RING, index * 120 + 6, (index + 1) * 120 - 6)}
-          fill="none"
-          stroke={index === third ? spec.palette.accent : spec.palette.light}
-          strokeOpacity={index === third ? 1 : 0.35}
-          strokeWidth={ringWidth(spec) - 2.4}
-        />
-      ))}
-    </>
-  );
-
 const BENCH = { palette: P.crimson, glyph: 'bench', detail: plates } as const;
 const SQUAT = { palette: P.cobalt, glyph: 'rack', detail: plates } as const;
 const DEADLIFT = { palette: P.molten, glyph: 'bentbar', detail: plates } as const;
@@ -1156,32 +1134,6 @@ const SPECS: Record<string, Spec> = {
   },
 };
 
-/* Limited editions: drawn from their key, so a new season or year needs no new entry. */
-
-/** Each season takes the next of these looks, round and round. */
-const SEASON_LOOKS: Palette[] = [
-  palette('#1a0b2e', '#9333ea', '#fae8ff', '#22d3ee', '#a855f7'),
-  palette('#04261c', '#059669', '#ecfdf5', '#fde047', '#34d399'),
-  palette('#2a0a0a', '#dc2626', '#fff1f2', '#fbbf24', '#f97316'),
-  palette('#0b1a3a', '#1d4ed8', '#eff6ff', '#f472b6', '#60a5fa'),
-  palette('#1f1300', '#b45309', '#fffbeb', '#a3e635', '#f59e0b'),
-  palette('#06212b', '#0e7490', '#ecfeff', '#fb7185', '#22d3ee'),
-];
-const SEASON_KEY = /^season-(\d{1,3})-([1-3])$/;
-
-function seasonSpec(number: number, tier: number): Spec {
-  return {
-    grade: ([1, 2, 3] as const)[tier - 1],
-    palette: SEASON_LOOKS[(number - 1) % SEASON_LOOKS.length],
-    glyph: 'seven',
-    crestText: `S${number}`,
-    tier,
-    sides: tier === 1 ? 'feather' : 'crystal',
-    // Season 1 runs September to December, the last third of the year.
-    detail: seasonThirds((number + 1) % 3),
-  };
-}
-
 const EVENT_LOOKS: Record<string, Omit<Spec, 'bannerText'> & { spans?: boolean }> = {
   'new-year': {
     grade: 1,
@@ -1212,8 +1164,6 @@ const EVENT_KEY = /^([a-z-]+)-(\d{4})$/;
 
 function specFor(key: string): Spec | undefined {
   if (Object.hasOwn(SPECS, key)) return SPECS[key];
-  const season = SEASON_KEY.exec(key);
-  if (season) return seasonSpec(Number(season[1]), Number(season[2]));
   const event = EVENT_KEY.exec(key);
   if (event && Object.hasOwn(EVENT_LOOKS, event[1])) {
     const { spans, ...look } = EVENT_LOOKS[event[1]];

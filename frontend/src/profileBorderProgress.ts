@@ -19,7 +19,7 @@ export function borderTimeLabel(border: ProfileBorder): string | null {
   if (border.status === 'upcoming' && days != null) {
     return days === 1 ? 'Starts tomorrow' : `Starts in ${days} days`;
   }
-  if (border.status === 'ended') return border.kind === 'season' ? 'Season over' : 'Event over';
+  if (border.status === 'ended') return 'Event over';
   return null;
 }
 

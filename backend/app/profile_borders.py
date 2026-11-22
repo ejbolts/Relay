@@ -11,10 +11,7 @@ Strength borders have a standard for each sex. That is why an account's sex is f
 chosen: it decides which standard the account is measured against. Strength is also where the
 rarest look, mythic, lives: effort alone (more minutes, more sessions) tops out lower.
 
-Some borders are limited editions. A season is a third of the year, and each has three tiers for
-the days trained during it; yearly events (New Year, Winter, Halloween, Christmas, Summer) each
-have one. They reward turning up rather than strength, so they are common, and only a season's
-higher tiers climb to rare and epic. A limited border can only be earned while its window is open:
+Yearly event borders can only be earned while their window is open:
 training logged after the window closes does not count, but a border earned in time stays earned.
 """
 
@@ -135,7 +132,7 @@ METRICS = {
 class Window:
     """When a limited border can be earned: from `starts` to `ends`, both days included."""
 
-    kind: Literal["season", "event"]
+    kind: Literal["event"]
     starts: date
     ends: date
 
@@ -335,15 +332,6 @@ BORDERS_BY_KEY = {border.key: border for border in BORDERS}
 # Single lifts, whose targets also read as plates on the bar.
 PLATE_LIFTS = {"bench_kg", "squat_kg", "deadlift_kg"}
 
-# Seasons are thirds of the year: January to April, May to August, September to December.
-# Season 1 is September to December 2026.
-FIRST_SEASON = (2026, 3)
-SEASON_TIERS: tuple[tuple[str, Rarity, int], ...] = (
-    ("Contender", "common", 15),
-    ("Challenger", "rare", 40),
-    ("Champion", "epic", 70),
-)
-
 
 @dataclass(frozen=True)
 class Event:
@@ -384,44 +372,7 @@ EVENTS_BY_SLUG = {event.slug: event for event in EVENTS}
 EVENTS_FROM = date(2026, 12, 1)
 # How far ahead an event shows as coming soon.
 UPCOMING_DAYS = 30
-SEASON_KEY = re.compile(r"^season-(\d{1,3})-([1-3])$")
 EVENT_KEY = re.compile(r"^([a-z-]+)-(\d{4})$")
-
-
-def season_of(day: date) -> int:
-    """The season a date falls in; 0 or less before Season 1."""
-    first_year, first_third = FIRST_SEASON
-    return (day.year - first_year) * 3 + (day.month - 1) // 4 + 1 - (first_third - 1)
-
-
-def season_window(number: int) -> Window:
-    first_year, first_third = FIRST_SEASON
-    index = number - 1 + first_third - 1
-    year, third = first_year + index // 3, index % 3
-    last_month = third * 4 + 4
-    return Window(
-        "season",
-        date(year, third * 4 + 1, 1),
-        date(year, last_month, calendar.monthrange(year, last_month)[1]),
-    )
-
-
-def season_borders(number: int) -> tuple[Border, ...]:
-    window = season_window(number)
-    return tuple(
-        Border(
-            f"season-{number}-{index}",
-            f"Season {number} {title}",
-            rarity,
-            "window_days",
-            days,
-            window.describe(),
-            family=f"season-{number}",
-            tier=index,
-            window=window,
-        )
-        for index, (title, rarity, days) in enumerate(SEASON_TIERS, start=1)
-    )
 
 
 def event_border(event: Event, year: int) -> Border:
@@ -439,16 +390,13 @@ def event_border(event: Event, year: int) -> Border:
 
 def limited_borders(today: date) -> tuple[Border, ...]:
     """Every limited border offered up to today, plus events opening within UPCOMING_DAYS."""
-    seasons = [
-        border for number in range(1, season_of(today) + 1) for border in season_borders(number)
-    ]
     events = [
         event_border(event, year)
         for year in range(EVENTS_FROM.year, today.year + 1)
         for event in EVENTS
         if EVENTS_FROM <= event.window(year).starts <= today + timedelta(days=UPCOMING_DAYS)
     ]
-    return (*seasons, *events)
+    return tuple(events)
 
 
 def find_border(key: str | None, today: date | None = None) -> Border | None:
@@ -458,11 +406,6 @@ def find_border(key: str | None, today: date | None = None) -> Border | None:
     if key in BORDERS_BY_KEY:
         return BORDERS_BY_KEY[key]
     today = today or date.today()
-    if match := SEASON_KEY.match(key):
-        number, tier = int(match[1]), int(match[2])
-        if 1 <= number <= season_of(today):
-            return season_borders(number)[tier - 1]
-        return None
     if (match := EVENT_KEY.match(key)) and (event := EVENTS_BY_SLUG.get(match[1])):
         year = int(match[2])
         starts = event.window(year).starts
@@ -490,8 +433,8 @@ class BorderRead(BaseModel):
     # A tiered border's family and its place in it, from 1; both are None for a single border.
     family: str | None = None
     tier: int | None = None
-    # Limited editions only: a season or an event, its window, and whether it is open.
-    kind: Literal["season", "event"] | None = None
+    # Limited editions only: an event, its window, and whether it is open.
+    kind: Literal["event"] | None = None
     status: Status | None = None
     starts_on: date | None = None
     ends_on: date | None = None
@@ -900,27 +843,24 @@ def _read(border: Border, stats: Stats, sex: str | None, unit: str, today: date)
 def borders_for(db: Session, user: User, today: date | None = None) -> BordersRead:
     """Every border to show the account, in the order the app lists them.
 
-    The open season comes first, then events that are open or about to open, then the permanent
+    First come events that are open or about to open, then the permanent
     borders. Limited editions whose window has closed are listed only where they were earned.
     """
     today = today or date.today()
     stats = border_stats(db, user, today)
     unit = preferred_weight_unit(db, user.id)
-    season = season_of(today)
-    current, events, permanent, past = [], [], [], []
+    events, permanent, past = [], [], []
     for border in (*limited_borders(today), *BORDERS):
         read = _read(border, stats, user.sex, unit, today)
         if border.window is None:
             permanent.append(read)
         elif read.status == "ended":
             if read.unlocked:
-                past.append(read.model_copy(update={"group": "Past seasons and events"}))
-        elif read.kind == "season":
-            current.append(read.model_copy(update={"group": f"Season {season}"}))
+                past.append(read.model_copy(update={"group": "Past events"}))
         else:
             events.append(read.model_copy(update={"group": "Events"}))
     return BordersRead(
-        selected=worn_border(user), sex=user.sex, borders=[*current, *events, *permanent, *past]
+        selected=worn_border(user), sex=user.sex, borders=[*events, *permanent, *past]
     )
 
 

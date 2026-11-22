@@ -300,23 +300,6 @@ describe('tiered borders', () => {
 });
 
 describe('limited editions', () => {
-  const season = (tier: number, unlocked: boolean) =>
-    border({
-      key: `season-1-${tier}`,
-      name: `Season 1 ${['Contender', 'Challenger', 'Champion'][tier - 1]}`,
-      group: 'Season 1',
-      rarity: (['common', 'rare', 'epic'] as const)[tier - 1],
-      requirement: `Train on ${[15, 40, 70][tier - 1]} days between 1 Sep and 31 Dec 2026`,
-      unlocked,
-      progress: { current: 17, target: [15, 40, 70][tier - 1], unit: 'days' },
-      family: 'season-1',
-      tier,
-      kind: 'season',
-      status: 'active',
-      starts_on: '2026-09-01',
-      ends_on: '2026-12-31',
-      days_left: 43,
-    });
   const christmas = border({
     key: 'christmas-2026',
     name: 'Christmas 2026',
@@ -333,19 +316,17 @@ describe('limited editions', () => {
   const limited: ProfileBorders = {
     selected: null,
     sex: 'male',
-    borders: [season(1, true), season(2, false), season(3, false), christmas],
+    borders: [...borders.borders, christmas],
   };
 
   it('says how long a border is open, or how soon it opens', () => {
-    expect(borderTimeLabel(season(1, true))).toBe('43 days left');
+    expect(borderTimeLabel({ ...christmas, status: 'active', days_left: 12 })).toBe('12 days left');
     expect(borderTimeLabel({ ...christmas, days_left: 1, status: 'active' })).toBe('Last day');
     expect(borderTimeLabel(christmas)).toBe('Starts in 12 days');
     expect(borderTimeLabel({ ...christmas, days_left: 1 })).toBe('Starts tomorrow');
-    expect(borderTimeLabel({ ...season(1, true), status: 'ended', days_left: null })).toBe(
-      'Season over',
-    );
+    expect(borderTimeLabel({ ...christmas, status: 'ended', days_left: null })).toBe('Event over');
     expect(borderTimeLabel(border({ key: 'regular', name: 'Regular' }))).toBeNull();
-    expect(borderTimeBadge(season(1, true))).toBe('43d');
+    expect(borderTimeBadge({ ...christmas, status: 'active', days_left: 12 })).toBe('12d');
     expect(borderTimeBadge(christmas)).toBe('Soon');
   });
 
@@ -353,14 +334,10 @@ describe('limited editions', () => {
     expect(borderProgressLabel({ current: 20.6, target: 25, unit: '% BW' })).toBe('20.6 / 25% BW');
   });
 
-  it('heads the season with its countdown and badges each coming event', async () => {
+  it('badges a coming event and shows its countdown in the preview', async () => {
     await open(limited);
-    const headings = [...dialog().querySelectorAll('.border-group h3')];
-    expect(headings[0].textContent).toBe('Season 143 days left');
-    expect(headings[0].querySelector('.border-group-timer')?.textContent).toBe('43 days left');
-    expect(tile('Season 1 Contender').querySelector('.border-tile-timer')).toBeNull();
+    expect(dialog().querySelector('[aria-label=Events] h3')?.textContent).toBe('Events');
     expect(tile('Christmas 2026').querySelector('.border-tile-timer')?.textContent).toBe('Soon');
-    expect(preview().querySelector('.border-preview-timer')?.textContent).toBe('43 days left');
 
     await press(tile('Christmas 2026'));
     expect(preview().querySelector('.border-preview-timer')?.textContent).toBe('Starts in 12 days');
