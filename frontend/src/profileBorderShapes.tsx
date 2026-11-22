@@ -36,6 +36,8 @@ interface Spec {
   crestText?: string;
   /** Words on the banner instead of the tier, such as an event's year. */
   bannerText?: string;
+  /** A fan of bristles behind the crest, like the crest on a centurion's helmet. */
+  plume?: boolean;
 }
 
 type Detail = (id: string, spec: Spec) => ReactNode;
@@ -487,6 +489,7 @@ function crest(id: string, spec: Spec) {
           strokeLinejoin="round"
         />
       )}
+      {spec.plume && plume(id, spec, cy, r)}
       {grade === 5 && (
         <ellipse
           className="profile-border-halo"
@@ -549,6 +552,53 @@ function crest(id: string, spec: Spec) {
         />
       )}
     </>
+  );
+}
+
+/** Bristles fanning out across the top of the crest, gathered in a trim band at their root. */
+function plume(id: string, spec: Spec, cy: number, r: number) {
+  const point = (rx: number, ry: number, deg: number) => {
+    const angle = (deg * Math.PI) / 180;
+    return `${round(C + rx * Math.sin(angle))} ${round(cy - ry * Math.cos(angle))}`;
+  };
+  const tips = Array.from({ length: 17 }, (_, index) => -96 + index * 12);
+  const outline =
+    `M${point(r, r, -102)}` +
+    tips.map((deg) => `L${point(r + 12, r + 7, deg - 5)}L${point(r + 16, r + 11, deg)}`).join('') +
+    `L${point(r + 12, r + 7, 101)}L${point(r, r, 102)}Z`;
+  return (
+    <g className="profile-border-plume">
+      <path
+        d={outline}
+        fill={spec.palette.base}
+        stroke={OUTLINE}
+        strokeWidth={0.8}
+        strokeLinejoin="round"
+      />
+      <path
+        d={tips
+          .map((deg) => `M${point(r + 1.5, r + 1.5, deg)}L${point(r + 13, r + 8.5, deg)}`)
+          .join('')}
+        stroke={spec.palette.deep}
+        strokeWidth={0.7}
+        strokeLinecap="round"
+      />
+      <path
+        d={tips
+          .map((deg) => `M${point(r + 4, r + 3, deg + 4)}L${point(r + 12, r + 7.5, deg + 4)}`)
+          .join('')}
+        stroke={spec.palette.light}
+        strokeOpacity={0.7}
+        strokeWidth={0.6}
+        strokeLinecap="round"
+      />
+      <path
+        d={`M${point(r + 1.6, r + 1.6, -104)}A${r + 1.6} ${r + 1.6} 0 0 1 ${point(r + 1.6, r + 1.6, 104)}`}
+        fill="none"
+        stroke={`url(#${id}trim)`}
+        strokeWidth={2.2}
+      />
+    </g>
   );
 }
 
@@ -985,8 +1035,8 @@ const P = {
   ember: palette('#431407', '#ea580c', '#fed7aa', '#fbbf24', '#fb923c'),
   ice: palette('#082f49', '#0ea5e9', '#e0f2fe', '#bae6fd', '#38bdf8'),
   bronze: palette('#3b1d0a', '#a16207', '#fde68a', '#fcd34d', '#f59e0b'),
-  legion: palette('#450a0a', '#b91c1c', '#fecaca', '#fbbf24', '#f87171'),
-  imperial: palette('#1e0b3d', '#6d28d9', '#ede9fe', '#fde047', '#c084fc'),
+  garnet: palette('#3b0716', '#9f1239', '#ffe4e6', '#fbbf24', '#f43f5e'),
+  emerald: palette('#022c22', '#047857', '#d1fae5', '#fde047', '#34d399'),
   ocean: palette('#042f2e', '#0f766e', '#99f6e4', '#5eead4', '#2dd4bf'),
   prism: palette('#1e1b4b', '#6366f1', '#f5f3ff', '#f0abfc', '#a5b4fc'),
   crimson: palette('#3f0a0a', '#dc2626', '#fecaca', '#fca5a5', '#ef4444'),
@@ -1072,21 +1122,22 @@ const BODYWEIGHT = { palette: P.void, glyph: 'pullup', detail: facets } as const
  * these keys and grades, so a new border needs an entry here.
  */
 const SPECS: Record<string, Spec> = {
-  'first-steps': { grade: 1, palette: P.sprout, glyph: 'steps' },
-  'seven-straight': { grade: 1, palette: P.sky, glyph: 'seven', detail: segments(7) },
-  'locked-in': { grade: 2, palette: P.violet, glyph: 'lock', detail: chain, tier: 1 },
-  'hundred-days': { grade: 3, palette: P.ember, glyph: 'flame', tier: 2 },
-  unbreakable: { grade: 4, palette: P.ice, glyph: 'infinity', tier: 3 },
-  regular: { grade: 1, palette: P.bronze, glyph: 'shield', sides: 'laurel', tier: 1 },
-  centurion: { grade: 2, palette: P.legion, glyph: 'helmet', sides: 'laurel', tier: 2 },
-  'iron-legion': {
-    grade: 4,
-    palette: P.imperial,
-    glyph: 'swords',
+  'first-steps': { grade: 1, palette: P.sky, glyph: 'steps', detail: segments(5) },
+  'seven-straight': { grade: 1, palette: P.sprout, glyph: 'seven' },
+  'locked-in': { grade: 2, palette: P.bronze, glyph: 'lock', sides: 'laurel', tier: 1 },
+  'hundred-days': { grade: 3, palette: P.garnet, glyph: 'flame', sides: 'laurel', tier: 2 },
+  unbreakable: {
+    grade: 3,
+    palette: P.emerald,
+    glyph: 'infinity',
     sides: 'laurel',
     detail: rivets,
     tier: 3,
   },
+  regular: { grade: 1, palette: P.violet, glyph: 'shield', detail: chain, tier: 1 },
+  // A hundred workouts is the first big jump, so Centurion wears a crest of bristles too.
+  centurion: { grade: 3, palette: P.ember, glyph: 'helmet', plume: true, tier: 2 },
+  'iron-legion': { grade: 4, palette: P.ice, glyph: 'swords', tier: 3 },
   'monday-club': { grade: 2, palette: P.lime, glyph: 'calendar', detail: segments(8) },
   'dawn-patrol': { grade: 2, palette: P.dawn, glyph: 'sunrise', detail: sunrays },
   'night-shift': { grade: 2, palette: P.night, glyph: 'moon', detail: starlight },
