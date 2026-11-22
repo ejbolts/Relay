@@ -1,4 +1,4 @@
-"""Skipping a split day from Up next, and catching up a calendar split after missed workouts."""
+"""Skipping a split day from Up next."""
 
 from test_training_split import log_workout, missed_days, save_split, up_next
 
@@ -83,74 +83,6 @@ def test_a_followed_skip_carries_the_saved_rest(client):
     assert up_next(client, "2026-10-29") == "push"
 
 
-def test_two_missed_workouts_in_a_row_offer_a_catch_up_once(client):
-    save_split(client, "push", "pull", "lower", None)
-    log_workout(client, "2026-10-26", "push")
-    assert read(client, "2026-10-28")["catch_up"] is None
-    # 27th Pull and 28th Lower missed; the 29th is a rest and the 30th's date says Push.
-    assert read(client, "2026-10-30")["catch_up"] == {
-        "on_date": "2026-10-30",
-        "step": 1,
-        "missed": 2,
-    }
-    shift(client, 1, "2026-10-30")
-    assert read(client, "2026-10-30")["catch_up"] is None
-    assert up_next(client, "2026-10-30") == "pull"
-    # Undo puts Push back without offering the catch-up again.
-    shift(client, 0, "2026-10-30")
-    assert read(client, "2026-10-30")["catch_up"] is None
-    assert up_next(client, "2026-10-30") == "push"
-
-
-def test_an_automatic_catch_up_applies_only_while_it_is_still_due(client):
-    save_split(client, "push", "pull", "lower", None)
-    log_workout(client, "2026-10-26", "push")
-
-    def catch_up(step):
-        return client.put(
-            "/api/training-split/position",
-            json={"step": step, "catch_up": True},
-            params={"on_date": "2026-10-30"},
-        )
-
-    assert catch_up(2).status_code == 409
-    assert catch_up(1).json()["shift"]["step"] == 1
-    # Undone on this device; a second device's saved copy then asks again.
-    shift(client, 0, "2026-10-30")
-    response = catch_up(1)
-    assert response.status_code == 409
-    assert response.json()["error"]["code"] == "split_up_to_date"
-    assert up_next(client, "2026-10-30") == "push"
-
-
-def test_any_split_workout_ends_the_missed_run_but_other_workouts_do_not(client):
-    save_split(client, "push", "pull", "lower", None)
-    log_workout(client, "2026-10-26", "push")
-    log_workout(client, "2026-10-28", "cardio")
-    assert read(client, "2026-10-30")["catch_up"]["missed"] == 2
-    log_workout(client, "2026-10-28", "pull")
-    assert read(client, "2026-10-30")["catch_up"] is None
-
-
-def test_no_catch_up_when_off_already_trained_today_or_already_lined_up(client):
-    save_split(client, "push", "pull", "lower", None, auto_shift=False)
-    log_workout(client, "2026-10-26", "push")
-    assert read(client, "2026-10-30")["catch_up"] is None
-    save_split(client, "push", "pull", "lower", None, auto_shift=True)
-    log_workout(client, "2026-10-30", "push")
-    assert read(client, "2026-10-30")["catch_up"] is None
-    # Upper / Lower missed Lower then Upper; the 29th's date already resumes with Lower.
-    save_split(client, "upper", "lower", auto_shift=True)
-    log_workout(client, "2026-10-26", "upper")
-    assert read(client, "2026-10-29")["catch_up"] is None
-
-
-def test_a_followed_split_never_offers_a_catch_up(client):
-    save_split(client, "push", "pull", "lower", None, progression="workouts")
-    log_workout(client, "2026-10-26", "push")
-    assert read(client, "2026-11-05")["catch_up"] is None
-
-
 def test_a_new_schedule_drops_shifts_but_a_rename_keeps_them(client):
     save_split(client, "push", "pull", "lower", None)
     shift(client, 1, "2026-10-26")
@@ -159,32 +91,6 @@ def test_a_new_schedule_drops_shifts_but_a_rename_keeps_them(client):
     save_split(client, "push", "pull", "lower", None, start_date="2026-10-25")
     assert read(client, "2026-10-26")["shift"] is None
     assert up_next(client, "2026-10-26") == "pull"
-
-
-def test_older_apps_keep_the_auto_shift_choice(client):
-    assert save_split(client, "push", None)["auto_shift"] is True
-    assert save_split(client, "push", None, auto_shift=False)["auto_shift"] is False
-    # An older app saves without the field.
-    assert save_split(client, "push", None, name="Older")["auto_shift"] is False
-    routine = client.post(
-        "/api/routines",
-        json={
-            "name": "PPL",
-            "days": [{"workout_type_id": t, "movements": []} for t in ("push", "pull", None)],
-            "schedule": {"start_date": "2026-10-26", "progression": "calendar"},
-        },
-    ).json()
-    assert read(client, "2026-10-26")["auto_shift"] is False
-    used = client.post(
-        f"/api/routines/{routine['id']}/use",
-        json={"start_date": "2026-10-26", "progression": "calendar"},
-    ).json()
-    assert used["auto_shift"] is False
-    used = client.post(
-        f"/api/routines/{routine['id']}/use",
-        json={"start_date": "2026-10-26", "progression": "calendar", "auto_shift": True},
-    ).json()
-    assert used["auto_shift"] is True
 
 
 def test_moving_the_split_is_checked_and_refreshes_other_devices(client, other_client):

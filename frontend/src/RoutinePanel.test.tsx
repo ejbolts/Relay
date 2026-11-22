@@ -229,46 +229,17 @@ it('requires an explicit date confirmation before replacing the active split', a
       .querySelector('.routine-use')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
-  expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02', 'workouts', true);
+  expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02');
   expect(document.querySelector('.toast')).toBeNull();
   expect(host.textContent).not.toContain('is your active split');
 });
 
-it('offers Shift after missed workouts only for a By date schedule', async () => {
+it('asks only for a start date, without a schedule choice or note', async () => {
   await mount(true);
   await click('Use split');
-  const toggle = () =>
-    document.querySelector<HTMLButtonElement>(
-      '[role="switch"][aria-label="Shift after missed workouts"]',
-    );
-  expect(toggle()).toBeNull();
-  await click('By date');
-  expect(toggle()?.getAttribute('aria-checked')).toBe('true');
-  await act(async () => toggle()!.click());
-  expect(toggle()?.getAttribute('aria-checked')).toBe('false');
-  expect(toggle()?.textContent).toBe('Off');
-  await act(async () =>
-    document
-      .querySelector('.routine-use')!
-      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
-  );
-  expect(api.routines.use).toHaveBeenCalledWith('source', expect.any(String), 'calendar', false);
-});
-
-it('explains Shift after missed workouts in place and keeps the dialog open on Escape', async () => {
-  await mount(true);
-  await click('Use split');
-  expect(document.querySelector('.routine-use')?.textContent).not.toContain('Saved splits');
-  await click('By date');
-  await click('What Shift after missed workouts does');
-  const help = () =>
-    document.querySelector('[role="region"][aria-label="Shift after missed workouts"]');
-  expect(help()?.textContent).toContain('Pull moves to today');
-  await act(async () =>
-    help()!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
-  );
-  expect(help()).toBeNull();
-  expect(document.querySelector('.routine-use')).not.toBeNull();
+  const dialog = document.querySelector('.routine-use')!;
+  expect(dialog.querySelector('[role="radio"], [role="switch"]')).toBeNull();
+  expect(dialog.textContent).not.toContain('Saved splits');
 });
 
 it('creates private splits without a publishing switch and shares from split options', async () => {

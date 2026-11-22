@@ -392,12 +392,8 @@ export interface TrainingSplit {
   next_date?: string | null;
   /** Past days whose planned workout was not done, from the server's replay (last year only). */
   missed_days?: { workout_date: string; workout_type_id: string }[];
-  /** Whether a By date split moves its first missed workout to today after two in a row. */
-  auto_shift?: boolean;
-  /** The latest skip or catch-up: from this date the split stands at this step. */
+  /** The latest skip: from this date the split stands at this step. */
   shift?: SplitShift | null;
-  /** A By date split's run of missed workouts, and the step to resume with on `on_date`. */
-  catch_up?: { on_date: string; step: number; missed: number } | null;
 }
 
 export interface SplitShift {

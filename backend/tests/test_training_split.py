@@ -258,7 +258,7 @@ def test_account_snapshot_preserves_only_the_owners_split_and_custom_types(clien
         ).fetchall()
         assert len(rows) == 1
         assert rows[0][0] == client.user["id"]
-        progress = ("next_step", "rest_saved", "next_date", "missed_days", "shift", "catch_up")
+        progress = ("next_step", "rest_saved", "next_date", "missed_days", "shift")
         stored = {key: value for key, value in saved.items() if key not in progress}
         assert json.loads(rows[0][1]) == stored
         assert connection.execute("SELECT id FROM workout_types").fetchall() == [(custom["id"],)]

@@ -12,7 +12,6 @@ from sqlalchemy.orm import Session
 
 from .models import TrainingWorkout, WorkoutCategory
 from .tracker_schemas import (
-    SplitCatchUp,
     SplitMissedDay,
     SplitProgression,
     SplitShift,
@@ -27,8 +26,6 @@ TRAINING_SPLIT_KEY = "training_split"
 TRAINING_SPLIT_SHIFTS_KEY = "training_split_shifts"
 # Missed split days are reported for this long, enough for every month the calendar opens with.
 MISSED_DAYS_LOOKBACK = timedelta(days=366)
-# Missed workouts in a row, rest days aside, before an auto-shifting calendar split catches up.
-CATCH_UP_AFTER = 2
 
 
 def saved_training_split(db: Session, user_id: str) -> TrainingSplit | None:
@@ -55,7 +52,7 @@ def _schedule(split: TrainingSplit) -> tuple[date, SplitProgression, list[str | 
 
 
 def saved_shifts(db: Session, user_id: str, split: TrainingSplit) -> list[SplitShift]:
-    """The split's skips and catch-ups, oldest first, if they were made for this schedule."""
+    """The split's skips, oldest first, if they were made for this schedule."""
     stored = get_setting(db, user_id, TRAINING_SPLIT_SHIFTS_KEY, "")
     if not stored:
         return []
@@ -176,39 +173,6 @@ def calendar_missed_days(
     return missed
 
 
-def calendar_catch_up(
-    split: TrainingSplit,
-    shifts: Sequence[SplitShift],
-    logged: list[tuple[date, str]],
-    today: date,
-) -> SplitCatchUp | None:
-    """Where an auto-shifting calendar split resumes after missed workouts in a row.
-
-    Counting back from yesterday, a day with any of the split's workouts ends the run and planned
-    rests are passed over. The latest shift starts a fresh count, so a catch-up, or its Undo,
-    happens once. The split resumes with the first workout of the run.
-    """
-    if not split.auto_shift or split.progression != "calendar" or today <= split.start_date:
-        return None
-    types = {step.workout_type_id for step in split.steps if step.workout_type_id}
-    trained = {day for day, type_id in logged if type_id in types}
-    if today in trained:
-        return None
-    floor = max(split.start_date, today - MISSED_DAYS_LOOKBACK)
-    if shifts:
-        floor = max(floor, shifts[-1].from_date)
-    missed, resume = 0, None
-    day = today - timedelta(days=1)
-    while day >= floor and day not in trained:
-        step = calendar_step(split, shifts, day)
-        if split.steps[step].workout_type_id is not None:
-            missed, resume = missed + 1, step
-        day -= timedelta(days=1)
-    if missed < CATCH_UP_AFTER or resume is None or resume == calendar_step(split, shifts, today):
-        return None
-    return SplitCatchUp(on_date=today, step=resume, missed=missed)
-
-
 def logged_split_workouts(
     db: Session, user_id: str, start: date, end: date
 ) -> list[tuple[date, str]]:
@@ -256,15 +220,14 @@ def split_read(
     shifts = saved_shifts(db, user_id, split)
     progress = split_progress(db, user_id, split, today, shifts)
     since = today - MISSED_DAYS_LOOKBACK
-    catch_up = None
     if not split.enabled:
         missed: Sequence[tuple[date, str]] = ()
     elif progress:
         missed = progress.missed
     else:
-        logged = logged_split_workouts(db, user_id, since, today)
-        missed = calendar_missed_days(split, logged, since, today, shifts)
-        catch_up = calendar_catch_up(split, shifts, logged, today)
+        missed = calendar_missed_days(
+            split, logged_split_workouts(db, user_id, since, today), since, today, shifts
+        )
     return TrainingSplitRead(
         **split.model_dump(),
         next_step=progress.step if progress else None,
@@ -276,14 +239,13 @@ def split_read(
             if day >= since
         ],
         shift=shifts[-1] if shifts else None,
-        catch_up=catch_up,
     )
 
 
 def shift_split(
     db: Session, user_id: str, step: int, rest_saved: bool, today: date
 ) -> TrainingSplit:
-    """Save that the active split's next day is ``step``: a skip, its Undo or a catch-up.
+    """Save that the active split's next day is ``step``: a skip or its Undo.
 
     A calendar split moves from today. A workout-following split moves from its next day, which
     is tomorrow once today's workout is logged. One shift is kept per day, the latest winning.

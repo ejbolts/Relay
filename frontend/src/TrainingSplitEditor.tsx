@@ -76,12 +76,11 @@ export function TrainingSplitEditor({
           onUsed={(updated) => {
             setSplit(updated);
             void onSaved(updated);
-            // Saved routines return no progress, shift or auto-shift choice, so ask the server.
-            // Only those are taken, and only while the same schedule is still shown.
-            const builtHere = updated.auto_shift === undefined;
+            // Saved routines return no progress or skip, so ask the server. Only those are
+            // taken, and only while the same schedule is still shown.
             if (
-              builtHere ||
-              (updated.enabled && followsWorkouts(updated) && updated.next_step == null)
+              updated.enabled &&
+              (followsWorkouts(updated) ? updated.next_step == null : updated.shift === undefined)
             )
               void api.getTrainingSplit().then(
                 (fresh) =>
@@ -96,7 +95,6 @@ export function TrainingSplitEditor({
                           rest_saved: fresh.rest_saved,
                           next_date: fresh.next_date,
                           shift: fresh.shift,
-                          auto_shift: fresh.auto_shift,
                         }
                       : shown,
                   ),

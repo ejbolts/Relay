@@ -249,7 +249,7 @@ it('activates a different split after date confirmation, expands it and refreshe
   await click('Use split');
   await input('.routine-use input[type="date"]', '2026-11-02');
   await submit('.routine-use');
-  expect(api.routines.use).toHaveBeenCalledWith('other', '2026-11-02', 'workouts', true);
+  expect(api.routines.use).toHaveBeenCalledWith('other', '2026-11-02');
   expect(host.querySelector('.routine-active')?.closest('.routine-card')?.textContent).toContain(
     'Another split',
   );
@@ -405,14 +405,12 @@ it('Enter adds the named custom workout type without submitting the split', asyn
   expect(api.routines.create).not.toHaveBeenCalled();
 });
 
-it('defaults to following logged workouts and can switch the active split to dates', async () => {
+it('changes the start date without a schedule choice, so splits follow logged workouts', async () => {
   await mount();
   await click('Change schedule');
-  expect(button('Follow my workouts').getAttribute('aria-checked')).toBe('true');
-  await click('By date');
-  expect(button('By date').getAttribute('aria-checked')).toBe('true');
+  expect(document.querySelector('.routine-use [role="radio"]')).toBeNull();
   await submit('.routine-use');
-  expect(api.routines.use).toHaveBeenCalledWith('plan', '2026-10-26', 'calendar', true);
+  expect(api.routines.use).toHaveBeenCalledWith('plan', '2026-10-26');
 });
 it('previews a workout-following split from where it stands', async () => {
   vi.mocked(api.getTrainingSplit).mockResolvedValue({

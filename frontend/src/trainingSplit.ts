@@ -25,7 +25,7 @@ export function splitFromTemplate(id: string, startDate: string): TrainingSplit 
 }
 
 /**
- * A By date split's step on a date, counted from its latest skip or catch-up once that has
+ * A By date split's step on a date, counted from its latest skip once that has
  * happened. UTC day numbers avoid daylight-saving changes in the length of a local day.
  */
 export function splitStepOnDate(split: TrainingSplit, date: string): number | null {

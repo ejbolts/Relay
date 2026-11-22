@@ -36,13 +36,7 @@ import {
 } from 'react';
 import type { ContextType, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
-import {
-  api,
-  ApiError,
-  revisionAfterSave,
-  revisionAtSignIn,
-  type SavedStartupData,
-} from './api';
+import { api, revisionAfterSave, revisionAtSignIn, type SavedStartupData } from './api';
 import { SetDragHandle } from './SetDragHandle';
 import { hasUnassignedMachineSets, withMachinePins } from './setMachines';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
@@ -67,13 +61,7 @@ import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
-import {
-  currentSplitStep,
-  followsWorkouts,
-  nextTrainingStep,
-  splitCalendarDays,
-  splitStepOnDate,
-} from './trainingSplit';
+import { currentSplitStep, nextTrainingStep, splitCalendarDays } from './trainingSplit';
 import { PlannedDaySheet, type PlannedStart } from './PlannedDaySheet';
 import {
   useDefaultRest,
@@ -2241,37 +2229,6 @@ function AppContent() {
     }
   };
   useEffect(() => onTipTarget((action) => openTipTargetRef.current(action)), []);
-
-  /**
-   * A By date split that missed two or more workouts in a row moves its first missed workout to
-   * today, once per day, with Undo. The server refuses it if it is no longer due.
-   */
-  const catchUpTriedRef = useRef<string | null>(null);
-  const catchUpRef = useRef<(split: TrainingSplit) => void>(() => undefined);
-  catchUpRef.current = (split) => {
-    const catchUp = split.catch_up;
-    const today = localDate();
-    if (!catchUp || !split.enabled || followsWorkouts(split) || catchUp.on_date !== today) return;
-    const key = `${user?.id ?? 'device'}:${today}:${catchUp.step}`;
-    if (catchUpTriedRef.current === key || isUsingSavedData()) return;
-    const from = splitStepOnDate(split, today);
-    if (from === null || from === catchUp.step) return;
-    catchUpTriedRef.current = key;
-    void moveSplit(catchUp.step, 'Shifting your split…', { catch_up: true }).then(
-      () =>
-        showToast({
-          message: `Split shifted after ${catchUp.missed} missed workouts · ${splitDayName(split, catchUp.step)} today`,
-          action: { label: 'Undo', run: () => undoSplitMove(from, false) },
-        }),
-      (error: unknown) => {
-        // Already caught up elsewhere stays done; a lost connection tries again on the next load.
-        if (!(error instanceof ApiError && error.status === 409)) catchUpTriedRef.current = null;
-      },
-    );
-  };
-  useEffect(() => {
-    if (dashboard?.training_split) catchUpRef.current(dashboard.training_split);
-  }, [dashboard?.training_split]);
 
   function updateReduceMotion(reduced: boolean) {
     saveReduceMotionPreference(reduced);

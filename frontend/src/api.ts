@@ -1052,22 +1052,13 @@ export const api = {
     remove: (id: string) => request<void>(`/api/routines/${id}`, { method: 'DELETE' }),
     copy: (owner: string, id: string) =>
       request<Routine>(`/api/routines/profile/${owner}/${id}/copy`, { method: 'POST' }),
-    use: (
-      id: string,
-      start_date: string,
-      progression: SplitProgression = 'workouts',
-      auto_shift?: boolean,
-    ) =>
+    use: (id: string, start_date: string, progression: SplitProgression = 'workouts') =>
       request<TrainingSplit>(
         `/api/routines/${id}/use?${new URLSearchParams({ on_date: localDate() })}`,
         {
           method: 'POST',
           headers: jsonHeaders,
-          body: JSON.stringify({
-            start_date,
-            progression,
-            ...(auto_shift === undefined ? {} : { auto_shift }),
-          }),
+          body: JSON.stringify({ start_date, progression }),
         },
       ),
   },
@@ -1077,17 +1068,14 @@ export const api = {
       headers: jsonHeaders,
       body: JSON.stringify(payload),
     }),
-  /**
-   * Moves the active split to another day: Skip on Up next or its Undo. A `catch_up` move is
-   * refused with 409 unless the split still reports that catch-up.
-   */
-  moveTrainingSplit: (step: number, { rest_saved = false, catch_up = false } = {}) =>
+  /** Moves the active split to another day: Skip on Up next, or its Undo. */
+  moveTrainingSplit: (step: number, { rest_saved = false } = {}) =>
     request<TrainingSplit>(
       `/api/training-split/position?${new URLSearchParams({ on_date: localDate() })}`,
       {
         method: 'PUT',
         headers: jsonHeaders,
-        body: JSON.stringify({ step, rest_saved, catch_up }),
+        body: JSON.stringify({ step, rest_saved }),
       },
     ),
   trainingTime: () => accountRead<TrainingTime>('/api/training-time'),

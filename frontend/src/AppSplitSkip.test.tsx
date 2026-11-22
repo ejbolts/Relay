@@ -3,7 +3,7 @@ import { act } from 'react';
 import type { Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
-import { api, ApiError } from './api';
+import { api } from './api';
 import { createToastRoot, toastButton, toastText } from './toastTestUtils';
 import { addDays } from './trainingSummary';
 import type { DashboardData, TrainingSplit, WorkoutType } from './types';
@@ -58,9 +58,7 @@ function datedSplit(step: number, extra: Partial<TrainingSplit> = {}): TrainingS
       { workout_type_id: 'lower' },
       { workout_type_id: null },
     ],
-    auto_shift: true,
     shift: null,
-    catch_up: null,
     ...extra,
   };
 }
@@ -180,48 +178,5 @@ describe('Skip on Up next', () => {
     await mount();
     await act(async () => skipButton()!.click());
     expect(toastText()).toBe('Turn on a split first.');
-  });
-});
-
-describe('catching up after missed workouts', () => {
-  const missed = datedSplit(0, { catch_up: { on_date: today, step: 1, missed: 2 } });
-
-  it('shifts the split once on opening, with Undo', async () => {
-    const caughtUp = datedSplit(0, { shift: { from_date: today, step: 1 } });
-    vi.mocked(api.dashboard)
-      .mockResolvedValueOnce(dashboardFor(missed, 0))
-      .mockResolvedValue(dashboardFor(caughtUp, 1));
-    vi.mocked(api.moveTrainingSplit).mockResolvedValue(caughtUp);
-    await mount();
-    expect(api.moveTrainingSplit).toHaveBeenCalledWith(1, { catch_up: true });
-    expect(heading()).toBe('Pull day');
-    expect(toastText()).toBe('Split shifted after 2 missed workouts · Pull today');
-
-    vi.mocked(api.dashboard).mockResolvedValue(dashboardFor(missed, 0));
-    await act(async () => toastButton('Undo')!.click());
-    expect(api.moveTrainingSplit).toHaveBeenLastCalledWith(0, { rest_saved: false });
-    // The same catch-up is not attempted again in this session.
-    expect(api.moveTrainingSplit).toHaveBeenCalledTimes(2);
-  });
-
-  it('stays quiet when another device already caught up', async () => {
-    vi.mocked(api.dashboard).mockResolvedValue(dashboardFor(missed, 0));
-    vi.mocked(api.moveTrainingSplit).mockRejectedValue(
-      new ApiError('Your split is already up to date.', 'split_up_to_date', 409),
-    );
-    await mount();
-    expect(api.moveTrainingSplit).toHaveBeenCalledTimes(1);
-    expect(toastText()).toBeNull();
-  });
-
-  it('ignores a catch-up worked out for another day', async () => {
-    vi.mocked(api.dashboard).mockResolvedValue(
-      dashboardFor(
-        datedSplit(0, { catch_up: { on_date: addDays(today, -1), step: 1, missed: 2 } }),
-        0,
-      ),
-    );
-    await mount();
-    expect(api.moveTrainingSplit).not.toHaveBeenCalled();
   });
 });
