@@ -13,6 +13,7 @@ import {
   borderTimeLabel,
   shownTier,
 } from './profileBorderProgress';
+import { streakLines } from './profileBorderStreak';
 import type { ProfileBorder, ProfileBorders, User } from './types';
 
 const RARITY_LABELS: Record<ProfileBorder['rarity'], string> = {
@@ -187,6 +188,22 @@ export function ProfileBorderPicker({
                       <span style={{ width: `${borderProgressPercent(preview.progress)}%` }} />
                     </span>
                     <small className="num">{borderProgressLabel(preview.progress)}</small>
+                    {preview.streak && (
+                      <ul className="border-streak num">
+                        {streakLines(preview.streak).map((line) => (
+                          <li key={line.label}>
+                            <strong>{line.label}</strong>
+                            {line.length && ` ${line.length}`}
+                            {line.dates && (
+                              <>
+                                {line.length ? ' · ' : ' '}
+                                <span>{line.dates}</span>
+                              </>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
                   </div>
                 ) : worn === preview.key ? (
                   <div className="border-preview-actions">
@@ -285,6 +302,13 @@ export function ProfileBorderPicker({
                                     className={tier.unlocked ? 'is-earned' : undefined}
                                   />
                                 ))}
+                              </span>
+                            )}
+                            {!border.unlocked && border.progress && (
+                              <span className="border-tile-progress" aria-hidden="true">
+                                <span
+                                  style={{ width: `${borderProgressPercent(border.progress)}%` }}
+                                />
                               </span>
                             )}
                           </button>

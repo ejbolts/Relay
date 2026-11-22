@@ -347,6 +347,32 @@
   font-size: 0.75rem;
 }
 
+/* A streak border's current or ended run, then its best. */
+.border-streak {
+  display: grid;
+  gap: 0.1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.border-streak:empty {
+  display: none;
+}
+
+.border-streak strong {
+  color: var(--p-ink-2);
+  font-weight: 650;
+}
+
+/* A date range moves to the next line whole, and wraps only if it can't fit a line. */
+.border-streak span {
+  display: inline-block;
+}
+
 .border-preview-copy .border-wear {
   width: auto;
   min-height: 2.5rem;
@@ -484,6 +510,30 @@
 .border-tile-pips > i.is-earned {
   border-color: var(--p-gold);
   background: var(--p-gold);
+}
+
+/* How close a locked border is, along the foot of its tile. */
+.border-tile.is-locked {
+  position: relative;
+  padding-bottom: 0.85rem;
+}
+
+.border-tile-progress {
+  position: absolute;
+  right: 0.8rem;
+  bottom: 0.4rem;
+  left: 0.8rem;
+  height: 3px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--p-surface-3);
+}
+
+.border-tile-progress > span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--p-accent);
 }
 
 /* Tier switcher in the preview. */
