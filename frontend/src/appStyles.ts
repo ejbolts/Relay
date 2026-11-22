@@ -22,6 +22,7 @@ import './swipeFold.css';
 import './guideCard.css';
 import './machineWeights.css';
 import './muscleGoals.css';
+import './defaultRestSetting.css';
 import './collapsibleSection.css';
 import './exerciseMuscleHelp.css';
 import './routineExerciseSearch.css';
