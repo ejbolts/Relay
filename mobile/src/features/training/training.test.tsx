@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from '@testing-library/react-native
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { prettyDate } from '../../../../frontend/src/appShared';
+import { formatLastDone } from '../../../../frontend/src/exerciseLastDone';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
 import { apiGet } from '../../data/api';
 import { ExerciseDetailScreen } from './ExerciseDetailScreen';
@@ -270,7 +271,9 @@ test('Cardio shows the week, its sessions and zone goals, and logs a session', a
 test('an exercise shows its progress, personal bests and sessions', async () => {
   await open(<ExerciseDetailScreen exerciseId="bench" />);
   expect(await screen.findByText('Personal bests')).toBeVisible();
-  expect(screen.getByText('Chest · Barbell · 2 sessions · Last done 21 Nov')).toBeVisible();
+  // Dates follow the device's locale ("21 Nov" or "Nov 21"), as on the web.
+  const lastDone = formatLastDone('2026-11-21', '2026-11-22');
+  expect(screen.getByText(`Chest · Barbell · 2 sessions · Last done ${lastDone}`)).toBeVisible();
   const bests = within(screen.getByLabelText('Personal bests'));
   expect(bests.getByText('100 kg × 5')).toBeVisible();
   expect(bests.getByText('116.7 kg')).toBeVisible();
