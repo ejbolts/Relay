@@ -9,10 +9,10 @@ import { useDashboard, useUpNext, useWeightUnit, useWorkoutHistory } from '../..
 import { Button, Card, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { showToast } from '../../ui/Toast';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { useMoveSplit, useTypeColors } from './homeData';
 import { homeIcons } from './homeIcons';
-import { useToast } from './Toast';
 
 const SHOWN_EXERCISES = 6;
 
@@ -27,7 +27,6 @@ export function UpNextCard() {
   const weightUnit = useWeightUnit();
   const { categoryColors, types } = useTypeColors();
   const moveSplit = useMoveSplit();
-  const toast = useToast();
   const workouts = history.data;
   const latestSets = useMemo(() => latestTopSets(workouts ?? [], today), [workouts, today]);
   const { recommendation, label, template, isRestDay, needsSplitUpdate } = upNext;
@@ -80,21 +79,16 @@ export function UpNextCard() {
     try {
       await moveSplit.mutateAsync({ step: skip.to, restSaved });
     } catch (error) {
-      toast({ message: errorMessage(error) || 'Could not skip this day.', variant: 'error' });
+      showToast(errorMessage(error) || 'Could not skip this day.');
       return;
     }
     void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    toast({
-      message: splitSkipMessage(skip, types),
-      action: {
-        label: 'Undo',
-        run: async () => {
-          try {
-            await moveSplit.mutateAsync({ step: skip.from, restSaved });
-          } catch (error) {
-            toast({ message: errorMessage(error), variant: 'error' });
-          }
-        },
+    showToast(splitSkipMessage(skip, types), {
+      label: 'Undo',
+      run: () => {
+        moveSplit
+          .mutateAsync({ step: skip.from, restSaved })
+          .catch((error) => showToast(errorMessage(error)));
       },
     });
   }

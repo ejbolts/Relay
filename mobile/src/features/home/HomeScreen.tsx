@@ -12,7 +12,6 @@ import { MuscleSetsCard } from './MuscleSetsCard';
 import { ProfileCard } from './ProfileCard';
 import { RecordsCard } from './RecordsCard';
 import { ThisWeekCard } from './ThisWeekCard';
-import { ToastHost } from './Toast';
 import { UpNextCard } from './UpNextCard';
 
 // Everything Home shows, refreshed together by pull to refresh.
@@ -49,7 +48,7 @@ export function HomeScreen() {
   }
 
   return (
-    <ToastHost>
+    <>
       <Screen
         title="Home"
         eyebrow={parseLocalDate(today).toLocaleDateString('en-GB', {
@@ -68,6 +67,6 @@ export function HomeScreen() {
         <RecordsCard />
       </Screen>
       <DaySheet day={day} onClose={() => setDay(null)} />
-    </ToastHost>
+    </>
   );
 }

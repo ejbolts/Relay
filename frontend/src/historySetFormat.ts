@@ -1,5 +1,4 @@
-import { cardioRecordLabel } from './cardioRecords';
-import type { PersonalRecord, TrackedSet } from './types';
+import type { TrackedSet } from './types';
 import { formatSeconds } from './utils';
 import { formatWeight, type WeightUnit } from './weightUnits';
 
@@ -22,16 +21,5 @@ export function setResult(item: TrackedSet, weightUnit: WeightUnit): string {
   return `${item.reps ?? '–'} reps`;
 }
 
-/** A record's name, such as "Weight PR" or "Fastest 5 km". */
-export function recordTypeLabel(record: Pick<PersonalRecord, 'record_type' | 'normalized_weight'>) {
-  return (
-    cardioRecordLabel(record) ??
-    {
-      weight: 'Weight PR',
-      relative_strength: 'Relative strength PR',
-      reps_at_weight: 'Volume PR for this weight',
-      estimated_1rm: 'estimated 1RM PR',
-    }[record.record_type as string] ??
-    'PR'
-  );
-}
+/** A record's name, such as "Weight PR" or "Fastest 5 km" (defined with the other record names). */
+export { recordTypeLabel } from './recordLabels';

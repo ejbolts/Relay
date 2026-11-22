@@ -18,7 +18,7 @@ export function LiveWorkoutAccessory() {
 function Accessory({ live, onPress }: { live: LiveWorkout; onPress: () => void }) {
   const placement = NativeTabs.BottomAccessory.usePlacement();
   const { colors, type } = useTheme();
-  const elapsed = useElapsed(live.startedAt);
+  const elapsed = useElapsed(live.startedAt, live.pause);
   return (
     <Pressable
       accessibilityRole="button"
@@ -40,5 +40,11 @@ function Accessory({ live, onPress }: { live: LiveWorkout; onPress: () => void }
 }
 
 const styles = StyleSheet.create({
-  row: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16 },
+  row: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 16,
+  },
 });

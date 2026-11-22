@@ -13,6 +13,7 @@ import type {
 } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { apiGet, apiSend } from '../../data/api';
+import { ToastHost } from '../../ui/Toast';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { HomeScreen } from './HomeScreen';
 
@@ -222,6 +223,8 @@ async function renderHome() {
     >
       <QueryClientProvider client={client}>
         <HomeScreen />
+        {/* In the app the toast host lives with the workout provider at the root. */}
+        <ToastHost />
       </QueryClientProvider>
     </SafeAreaProvider>,
   );
