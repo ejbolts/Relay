@@ -70,13 +70,7 @@ import {
 } from './trainingPreferencesContext';
 import { HistorySetTable } from './HistorySetTable';
 import { WeightInput } from './WeightInput';
-import {
-  formatWeight,
-  formatWeightNumber,
-  recordDisplayValue,
-  weightFromKg,
-  weightUnitName,
-} from './weightUnits';
+import { formatWeight, formatWeightNumber, weightFromKg, weightUnitName } from './weightUnits';
 import type { WeightUnit } from './weightUnits';
 import { RestAlertReminder } from './RestAlertReminder';
 import { shouldShowRestAlertReminder } from './restAlertReminderState';
@@ -427,6 +421,7 @@ import {
   isLoggedWorkingSet,
 } from './workoutSets';
 import { restToAdd } from './workoutRestHistory';
+import { completionRecordDetail, recordTypeLabel } from './recordLabels';
 import {
   checkWorkoutFinish,
   finishedWorkoutInput as finishedWorkoutInputRule,
@@ -465,7 +460,7 @@ import {
   weekGroupPage,
 } from './workoutHistory';
 import { calculateScopedDraftPrs, prToastLines, type PrToastEntry } from './workoutPr';
-import { cardioRecordLabel, cardioSetSummary } from './cardioRecords';
+import { cardioSetSummary } from './cardioRecords';
 import { bodyweightOn, bodyweightContext, relativeStrength } from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
@@ -579,19 +574,6 @@ function formatDuration(totalSeconds: number): string {
   return formatSeconds(totalSeconds);
 }
 
-function recordTypeLabel(record: Pick<PersonalRecord, 'record_type' | 'normalized_weight'>) {
-  return (
-    cardioRecordLabel(record) ??
-    {
-      weight: 'Weight PR',
-      relative_strength: 'Relative strength PR',
-      reps_at_weight: 'Volume PR for this weight',
-      estimated_1rm: 'estimated 1RM PR',
-    }[record.record_type as string] ??
-    'PR'
-  );
-}
-
 /** Identifies a celebrated set's records, so the same ones never celebrate twice. */
 function prSignature(
   exerciseId: string,
@@ -599,16 +581,6 @@ function prSignature(
   labels: string[],
 ) {
   return `${exerciseId}:${item.key}:${labels.join(',')}:${item.weight_kg}:${item.reps}:${item.duration_seconds}:${item.distance_km}`;
-}
-
-function completionRecordDetail(record: PersonalRecord, unit: WeightUnit): string {
-  return [
-    `${recordScopeLabel(record)} ${recordTypeLabel(record)} · ${recordDisplayValue(record, unit)}`,
-    record.record_type === 'reps_at_weight' && record.weight_kg != null
-      ? ` @ ${formatWeight(record.weight_kg, unit)}`
-      : '',
-    record.bodyweight_kg != null ? ` · at ${formatWeight(record.bodyweight_kg, unit)} BW` : '',
-  ].join('');
 }
 
 /** Set just before the reload that follows a backup restore, so it can be confirmed. */
