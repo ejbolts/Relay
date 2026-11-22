@@ -8,8 +8,17 @@ export function TrainingPreferencesProvider({ children }: { children: ReactNode 
   const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
+    let answered = false;
+    // This device's copy shows first, so units and targets do not change once a screen is up.
+    void api.saved
+      .trainingPreferences()
+      .then((copy) => {
+        if (active && !answered && copy) setPreferences((current) => current ?? copy);
+      })
+      .catch(() => undefined);
     void api.getTrainingPreferences().then(
       (saved) => {
+        answered = true;
         if (active) setPreferences(saved);
       },
       (reason) => {
