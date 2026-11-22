@@ -3,10 +3,18 @@ import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-nati
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../theme';
 import { sampleRoutine } from './sampleRoutine';
+import type { RoutineView } from './accountRoutine';
+import type { ReactNode } from 'react';
 
-export function TrainingScreen() {
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const { name, exercises } = sampleRoutine;
+export function TrainingScreen({
+  routine = sampleRoutine,
+  accountAction,
+}: {
+  routine?: RoutineView;
+  accountAction?: ReactNode;
+} = {}) {
+  const [expanded, setExpanded] = useState<number | null>(null);
+  const { name, exercises } = routine;
   const totalSets = exercises.reduce((sum, exercise) => sum + exercise.sets, 0);
 
   return (
@@ -15,50 +23,66 @@ export function TrainingScreen() {
         <View style={styles.brand}>
           <Image source={require('../../../assets/icon.png')} style={styles.logo} />
           <Text style={styles.wordmark}>Relay</Text>
+          {accountAction}
         </View>
         <View style={styles.summary}>
-          <Text style={styles.eyebrow}>SAMPLE ROUTINE</Text>
+          <Text style={styles.eyebrow}>{accountAction ? 'UP NEXT' : 'SAMPLE ROUTINE'}</Text>
           <Text accessibilityRole="header" style={styles.title}>
             {name}
           </Text>
           <Text style={styles.summaryText}>
-            {exercises.length} exercises · {totalSets} sets
+            {exercises.length
+              ? `${exercises.length} ${exercises.length === 1 ? 'exercise' : 'exercises'} · ${totalSets} ${totalSets === 1 ? 'set' : 'sets'}`
+              : routine.empty}
           </Text>
         </View>
 
-        <Text accessibilityRole="header" style={styles.heading}>
-          Exercises
-        </Text>
-        <View style={styles.list}>
-          {exercises.map((exercise, index) => {
-            const open = expanded === exercise.name;
-            const prescription = `${exercise.sets} sets · ${exercise.reps} reps`;
-            return (
-              <View key={exercise.name} style={index > 0 && styles.separator}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${exercise.name}, ${prescription}, previous set`}
-                  accessibilityState={{ expanded: open }}
-                  onPress={() => setExpanded(open ? null : exercise.name)}
-                  style={({ pressed }) => [styles.row, pressed && styles.pressed]}
-                >
-                  <Image source={exercise.image} style={styles.exerciseImage} />
-                  <View style={styles.description}>
-                    <Text style={styles.exerciseName}>{exercise.name}</Text>
-                    <Text style={styles.detail}>{prescription}</Text>
+        {exercises.length > 0 && (
+          <>
+            <Text accessibilityRole="header" style={styles.heading}>
+              Exercises
+            </Text>
+            <View style={styles.list}>
+              {exercises.map((exercise, index) => {
+                const open = expanded === index;
+                const prescription = [
+                  `${exercise.sets} ${exercise.sets === 1 ? 'set' : 'sets'}`,
+                  exercise.reps && `${exercise.reps} reps`,
+                ]
+                  .filter(Boolean)
+                  .join(' · ');
+                return (
+                  <View key={`${index}-${exercise.name}`} style={index > 0 && styles.separator}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${exercise.name}, ${prescription}, previous set`}
+                      accessibilityState={{ expanded: open }}
+                      onPress={() => setExpanded(open ? null : index)}
+                      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                    >
+                      {exercise.image && (
+                        <Image source={exercise.image} style={styles.exerciseImage} />
+                      )}
+                      <View style={styles.description}>
+                        <Text style={styles.exerciseName}>{exercise.name}</Text>
+                        <Text style={styles.detail}>{prescription}</Text>
+                      </View>
+                      <View style={[styles.chevron, open && styles.chevronOpen]} />
+                    </Pressable>
+                    {open && (
+                      <View style={styles.previous}>
+                        <Text style={styles.detail}>Previous set</Text>
+                        <Text style={styles.previousValue}>
+                          {exercise.previous ?? 'None recorded'}
+                        </Text>
+                      </View>
+                    )}
                   </View>
-                  <View style={[styles.chevron, open && styles.chevronOpen]} />
-                </Pressable>
-                {open && (
-                  <View style={styles.previous}>
-                    <Text style={styles.detail}>Previous set</Text>
-                    <Text style={styles.previousValue}>{exercise.previous}</Text>
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </View>
+                );
+              })}
+            </View>
+          </>
+        )}
       </ScrollView>
     </SafeAreaView>
   );

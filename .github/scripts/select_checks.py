@@ -40,10 +40,26 @@ CONTRACT_MODULES = {
     "workout_type_exercises.py",
     "youtube_connections.py",
 }
-# Frontend files the mobile app imports (its API types). A change to one can break the
-# mobile typecheck, so it also runs the mobile checks. A repository test keeps this
-# set equal to what mobile/ actually imports from outside its folder.
-MOBILE_SHARED_FILES: frozenset[str] = frozenset()
+# Frontend files the mobile app imports: its API types and the Up next rule it shares with the
+# web. A change to one can break the mobile app, so it also runs the mobile checks. A repository
+# test keeps this set equal to what mobile/ imports from outside its folder, and checks that
+# these files import no packages.
+MOBILE_SHARED_FILES = frozenset(
+    {
+        "frontend/src/bodySizes.ts",
+        "frontend/src/cardioRecords.ts",
+        "frontend/src/recordScope.ts",
+        "frontend/src/routines.ts",
+        "frontend/src/setFieldValues.ts",
+        "frontend/src/trainingSummary.ts",
+        "frontend/src/types.ts",
+        "frontend/src/upNextSession.ts",
+        "frontend/src/utils.ts",
+        "frontend/src/weightUnits.ts",
+        "frontend/src/workoutCategory.ts",
+        "frontend/src/workoutSets.ts",
+    }
+)
 
 
 FrontendScope = Literal["none", "styles", "related", "full"]
