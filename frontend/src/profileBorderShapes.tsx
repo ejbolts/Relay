@@ -690,21 +690,23 @@ function effects(id: string, spec: Spec, layer: 'back' | 'front') {
   }
   return (
     <>
-      <circle
-        // Mythic, tier V of the strength families, runs its sheen the other way.
-        className={`profile-border-sheen${spec.grade === 5 ? ' is-reversed' : ''}`}
-        cx={C}
-        cy={C}
-        r={RING}
-        fill="none"
-        stroke="#ffffff"
-        strokeWidth={ringWidth(spec)}
-        strokeLinecap="round"
-        pathLength={100}
-        strokeDasharray="6 94"
-        opacity={0.5}
-        transform={`rotate(-60 ${C} ${C})`}
-      />
+      {/* Only mythic, tier V of the strength families, has the circling sheen. */}
+      {spec.grade === 5 && (
+        <circle
+          className="profile-border-sheen"
+          cx={C}
+          cy={C}
+          r={RING}
+          fill="none"
+          stroke="#ffffff"
+          strokeWidth={ringWidth(spec)}
+          strokeLinecap="round"
+          pathLength={100}
+          strokeDasharray="6 94"
+          opacity={0.5}
+          transform={`rotate(-60 ${C} ${C})`}
+        />
+      )}
       <path
         className="profile-border-sparks"
         d={SPARKS.slice(0, spec.grade >= 4 ? 6 : 3)

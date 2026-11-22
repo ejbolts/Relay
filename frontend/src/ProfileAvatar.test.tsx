@@ -46,7 +46,7 @@ describe('ProfileAvatar', () => {
       />,
     );
     expect(markup).toContain('class="profile-border-art is-animated"');
-    expect(markup).toContain('profile-border-sheen');
+    expect(markup).toContain('profile-border-aura');
   });
 
   it('gives each drawing its own gradients, so two borders never share colours', () => {
@@ -104,7 +104,7 @@ describe('ProfileAvatar', () => {
     expect(draw('deadlift-club-5')).toContain('>V</text>');
   });
 
-  it('runs the sheen the other way on every tier V strength border', () => {
+  it('circles a sheen around tier V strength borders only', () => {
     const draw = (key: string) =>
       renderToStaticMarkup(
         <ProfileAvatar
@@ -114,10 +114,12 @@ describe('ProfileAvatar', () => {
         />,
       );
     for (const family of ['bench-club', 'squat-club', 'deadlift-club', 'gravity-defier']) {
-      expect(draw(`${family}-5`)).toContain('profile-border-sheen is-reversed');
-      expect(draw(`${family}-4`)).not.toContain('is-reversed');
+      expect(draw(`${family}-5`)).toContain('class="profile-border-sheen"');
+      for (const tier of [4, 3, 2]) expect(draw(`${family}-${tier}`)).not.toContain('sheen');
     }
-    expect(draw('season-1-3')).not.toContain('is-reversed');
+    for (const key of ['thousand-hours', 'unbreakable', 'million-kilo', 'season-1-3']) {
+      expect(draw(key)).not.toContain('sheen');
+    }
   });
 
   it('leaves the photo plain for a border this version cannot draw', () => {

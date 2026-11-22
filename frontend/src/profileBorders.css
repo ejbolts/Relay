@@ -27,10 +27,6 @@
     animation: profile-border-sheen 7s linear infinite;
   }
 
-  html:not([data-reduce-motion]) .profile-border-art.is-animated .profile-border-sheen.is-reversed {
-    animation-direction: reverse;
-  }
-
   html:not([data-reduce-motion]) .profile-border-art.is-animated .profile-border-embers {
     animation: profile-border-flicker 1.6s ease-in-out infinite alternate;
   }
