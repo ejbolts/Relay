@@ -1055,7 +1055,7 @@ const P = {
   garnet: palette('#3b0716', '#9f1239', '#ffe4e6', '#fbbf24', '#f43f5e'),
   emerald: palette('#022c22', '#047857', '#d1fae5', '#fde047', '#34d399'),
   ocean: palette('#042f2e', '#0f766e', '#99f6e4', '#5eead4', '#2dd4bf'),
-  emerald: palette('#022c22', '#059669', '#ecfdf5', '#6ee7b7', '#34d399'),
+  bullion: palette('#3d2c03', '#d4a106', '#fffbe0', '#fff3a3', '#facc15'),
   crimson: palette('#3f0a0a', '#dc2626', '#fecaca', '#fca5a5', '#ef4444'),
   cobalt: palette('#0b1b4d', '#2563eb', '#dbeafe', '#93c5fd', '#3b82f6'),
   molten: palette('#0c0a09', '#57534e', '#d6d3d1', '#fb923c', '#f97316'),
@@ -1143,7 +1143,7 @@ const SPECS: Record<string, Spec> = {
   'iron-habit': { grade: 3, palette: P.iron, glyph: 'anvil', detail: rivets },
   'four-seasons': { grade: 3, palette: P.seasons, glyph: 'seasons', detail: colourArcs(SEASONS) },
   'whale-lifter': { grade: 2, palette: P.ocean, glyph: 'whale', detail: waves, tier: 1 },
-  'million-kilo': { grade: 3, palette: P.emerald, glyph: 'diamond', tier: 2 },
+  'million-kilo': { grade: 3, palette: P.bullion, glyph: 'diamond', tier: 2 },
   'hundred-hours': { grade: 2, palette: P.slate, glyph: 'hourglass', detail: clock, tier: 1 },
   'time-under-tension': { grade: 3, palette: P.tempo, glyph: 'stopwatch', detail: clock, tier: 2 },
   'thousand-hours': {

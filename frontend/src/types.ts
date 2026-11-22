@@ -902,6 +902,23 @@ export interface User {
 
 export type BorderRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic';
 
+/** A streak border's runs: the latest one and the longest, in days, Mondays or weeks. */
+export interface BorderStreak {
+  /** "days", "Mondays" or "weeks"; an unknown unit is shown as sent. */
+  unit: string;
+  /** Length of the latest run, 0 if none. */
+  current: number;
+  current_start?: string | null;
+  current_end?: string | null;
+  /** The latest run can still be continued. */
+  active: boolean;
+  /** When the latest run is over: the first day, Monday or week that was missed. */
+  broken_on?: string | null;
+  best: number;
+  best_start?: string | null;
+  best_end?: string | null;
+}
+
 /** One profile border: a challenge, and how far the account is towards it. */
 export interface ProfileBorder {
   key: string;
@@ -915,6 +932,8 @@ export interface ProfileBorder {
   /** Missing only for a strength border while the account has not set its sex. */
   progress: { current: number; target: number; unit: string } | null;
   needs_sex: boolean;
+  /** Streak borders only; a locked one's progress counts the current run. */
+  streak?: BorderStreak | null;
   /** A tiered border's family and its place in it, from 1; absent for a single border. */
   family?: string | null;
   tier?: number | null;

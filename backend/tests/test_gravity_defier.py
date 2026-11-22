@@ -33,8 +33,12 @@ def test_rep_tiers(client, sex, earned, progress):
     unknown = borders(client)["gravity-defier-1"]
     assert unknown["needs_sex"] and not unknown["unlocked"]
     assert unknown["requirement"] == (
-        "Do 1 pull-up or chin-up, or 5 dips, in one set (men) or "
-        "Do 1 pull-up or chin-up, or 3 dips, in one set (women)"
+        "Do 1 pull-up or chin-up, or 5 dips (men), or 1 pull-up or chin-up, "
+        "or 3 dips (women), in one set"
+    )
+    assert borders(client)["gravity-defier-5"]["requirement"] == (
+        "Do 5 pull-ups or chin-ups with 40% of your body weight added, or 5 dips with 60% "
+        "(men), or 20% and 30% (women)"
     )
     set_sex(client, sex)
     listed = borders(client)

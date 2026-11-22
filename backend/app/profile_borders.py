@@ -828,6 +828,11 @@ def compute_border_stats(history: BorderHistory, through: date) -> Stats:
             week_of(through) - timedelta(weeks=1),
         ),
     }
+    # A run of weeks ends on the last day of its last week, or today while that week is on.
+    weeks = streaks["week_streak"]
+    for end in ("current_end", "best_end"):
+        if (last := getattr(weeks, end)) is not None:
+            setattr(weeks, end, min(last + timedelta(days=6), through))
     values = {
         "workouts": len(workouts),
         **{metric: streak.best for metric, streak in streaks.items()},
@@ -900,16 +905,34 @@ def _requirement(border: Border, target: str) -> str:
     return f"{text} {border.note}" if border.window else f"{text}, {border.note}"
 
 
+def _pull_ups(count: float) -> str:
+    return (
+        f"{_number(count)} pull-up{'' if count == 1 else 's'} or chin-up{'' if count == 1 else 's'}"
+    )
+
+
 def _gravity_requirement(border: Border, target: float, dips: float) -> str:
     if border.metric == "bodyweight_added":
         return (
             f"Do 5 pull-ups or chin-ups with {_number(target)}% of your body weight added, "
             f"or 5 dips with {_number(dips)}%"
         )
-    suffix = "" if target == 1 else "s"
+    return f"Do {_pull_ups(target)}, or {_number(dips)} dips, in one set"
+
+
+def _gravity_requirement_by_sex(border: Border) -> str:
+    """Both standards in one sentence, for an account that has not set its sex."""
+    assert isinstance(border.target, tuple) and border.dip_target is not None
+    (men, women), (men_dips, women_dips) = border.target, border.dip_target
+    if border.metric == "bodyweight_added":
+        return (
+            f"Do 5 pull-ups or chin-ups with {_number(men)}% of your body weight added, or 5 "
+            f"dips with {_number(men_dips)}% (men), or {_number(women)}% and "
+            f"{_number(women_dips)}% (women)"
+        )
     return (
-        f"Do {_number(target)} pull-up{suffix} or chin-up{suffix}, "
-        f"or {_number(dips)} dips, in one set"
+        f"Do {_pull_ups(men)}, or {_number(men_dips)} dips (men), or {_pull_ups(women)}, "
+        f"or {_number(women_dips)} dips (women), in one set"
     )
 
 
@@ -954,11 +977,7 @@ def _read(border: Border, stats: Stats, sex: str | None, unit: str, today: date)
     if border.dip_target is not None:
         assert isinstance(border.target, tuple)
         if target is None or sex is None:
-            male, female = (
-                _gravity_requirement(border, pull_ups, dips)
-                for pull_ups, dips in zip(border.target, border.dip_target, strict=True)
-            )
-            read.requirement = f"{male} (men) or {female} (women)"
+            read.requirement = _gravity_requirement_by_sex(border)
             read.needs_sex = True
         else:
             read.requirement = _gravity_requirement(

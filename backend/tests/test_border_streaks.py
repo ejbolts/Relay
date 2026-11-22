@@ -92,7 +92,8 @@ def test_monday_and_week_streaks_use_their_own_calendar_boundaries(client):
     assert monday.streak.broken_on == sunday + timedelta(days=15)
     assert week.streak.active and week.progress.current == 2
     assert week.streak.current_start == sunday
-    assert week.streak.current_end == sunday + timedelta(days=7)
+    # The run's last week ends on its Saturday.
+    assert week.streak.current_end == sunday + timedelta(days=13)
 
     week = read_at(client, sunday + timedelta(days=21))["iron-habit"]
     assert not week.streak.active and week.progress.current == 0
