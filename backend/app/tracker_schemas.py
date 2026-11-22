@@ -670,6 +670,8 @@ class RoutineRead(RoutineInput):
 class RoutineActivation(BaseModel):
     start_date: date
     progression: SplitProgression = "workouts"
+    # Omitted by older apps, which keeps the active split's choice.
+    auto_shift: bool | None = None
 
 
 class MuscleFrequencyRead(BaseModel):
@@ -935,6 +937,8 @@ class TrainingSplit(BaseModel):
     progression: SplitProgression = "workouts"
     steps: list[TrainingSplitStep] = Field(min_length=1, max_length=28)
     routine_id: str | None = None
+    # A "calendar" split moves its first missed workout to today after two in a row are missed.
+    auto_shift: bool = True
 
     @field_validator("name", mode="before")
     @classmethod
@@ -953,6 +957,28 @@ class SplitMissedDay(BaseModel):
     workout_type_id: str
 
 
+class SplitShift(BaseModel):
+    # From this date the split stands at this step: a skipped day or a catch-up after missed
+    # workouts. ``rest_saved`` carries a workout-following split's saved rest across it.
+    from_date: date
+    step: int = Field(ge=0, lt=28)
+    rest_saved: bool = False
+
+
+class SplitCatchUp(BaseModel):
+    # A calendar split's run of missed workouts, up to yesterday, and the step to resume with.
+    on_date: date
+    step: int
+    missed: int
+
+
+class SplitPositionUpdate(BaseModel):
+    step: int = Field(ge=0, lt=28)
+    rest_saved: bool = False
+    # An automatic catch-up, applied only while the split still reports one for this step.
+    catch_up: bool = False
+
+
 class TrainingSplitRead(TrainingSplit):
     # Where a workout-following split currently stands; unset for calendar splits.
     next_step: int | None = None
@@ -961,6 +987,10 @@ class TrainingSplitRead(TrainingSplit):
     # Past days, within the last year, whose planned workout was not done. A workout-following
     # split leaves out the one day off it absorbs as a rest.
     missed_days: list[SplitMissedDay] = Field(default_factory=list)
+    # The latest skip or catch-up, which calendar previews count from instead of the start.
+    shift: SplitShift | None = None
+    # Set when an auto-shifting calendar split has missed two or more workouts in a row.
+    catch_up: SplitCatchUp | None = None
 
 
 class TrainingPreferencesUpdate(BaseModel):

@@ -152,6 +152,7 @@ from .tracker_schemas import (
     MuscleVolumeRead,
     PersonalRecordRead,
     ProgressPoint,
+    SplitPositionUpdate,
     TrainingBlockSummaryRead,
     TrainingPreferencesRead,
     TrainingPreferencesUpdate,
@@ -199,6 +200,7 @@ from .training_metrics import (
 from .training_split import (
     TRAINING_SPLIT_KEY,
     saved_training_split,
+    shift_split,
     split_read,
     split_recommendation,
     validate_split_types,
@@ -1784,10 +1786,33 @@ def update_training_split(
     validate_split_types(db, user.id, payload)
     # Editing the schedule directly returns it to history-based workout suggestions.
     payload.routine_id = None
+    # Older apps don't send auto_shift; keep the saved choice instead of turning it back on.
+    if "auto_shift" not in payload.model_fields_set:
+        stored = saved_training_split(db, user.id)
+        if stored is not None:
+            payload.auto_shift = stored.auto_shift
     set_setting(db, user.id, TRAINING_SPLIT_KEY, payload.model_dump_json())
     bump_workout_cache_revision(db, user.id)
     db.commit()
     return split_read(db, user.id, payload, on_date or date.today())
+
+
+@router.put("/training-split/position", response_model=TrainingSplitRead)
+def update_training_split_position(
+    payload: SplitPositionUpdate, db: DbSession, user: CurrentUser, on_date: date | None = None
+) -> TrainingSplitRead:
+    """Move the active split to another day: Skip on Up next, its Undo, or a catch-up."""
+    today = on_date or date.today()
+    if payload.catch_up:
+        # Another device, or a saved copy of the dashboard, may be behind: catch up only once.
+        current = split_read(db, user.id, saved_training_split(db, user.id), today)
+        due = current.catch_up if current else None
+        if due is None or due.step != payload.step:
+            raise api_error(409, "split_up_to_date", "Your split is already up to date.")
+    split = shift_split(db, user.id, payload.step, payload.rest_saved, today)
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return split_read(db, user.id, split, today)
 
 
 @router.get("/workout-type-colors", response_model=WorkoutTypeColors)

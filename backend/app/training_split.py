@@ -6,22 +6,29 @@ from datetime import date, timedelta
 from itertools import groupby
 
 from fastapi import HTTPException
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from .models import TrainingWorkout, WorkoutCategory
 from .tracker_schemas import (
+    SplitCatchUp,
     SplitMissedDay,
+    SplitProgression,
+    SplitShift,
     TrainingSplit,
     TrainingSplitRead,
     WorkoutRecommendationRead,
 )
-from .training_metrics import get_setting
+from .training_metrics import get_setting, set_setting
 from .workout_types import workout_type_catalog
 
 TRAINING_SPLIT_KEY = "training_split"
+TRAINING_SPLIT_SHIFTS_KEY = "training_split_shifts"
 # Missed split days are reported for this long, enough for every month the calendar opens with.
 MISSED_DAYS_LOOKBACK = timedelta(days=366)
+# Missed workouts in a row, rest days aside, before an auto-shifting calendar split catches up.
+CATCH_UP_AFTER = 2
 
 
 def saved_training_split(db: Session, user_id: str) -> TrainingSplit | None:
@@ -32,6 +39,44 @@ def saved_training_split(db: Session, user_id: str) -> TrainingSplit | None:
         except ValueError:
             pass
     return None
+
+
+class StoredShifts(BaseModel):
+    # The schedule the shifts were made for. A new start date, schedule or day order makes their
+    # steps meaningless, so they are ignored rather than migrated.
+    start_date: date
+    progression: SplitProgression
+    steps: list[str | None]
+    shifts: list[SplitShift] = []
+
+
+def _schedule(split: TrainingSplit) -> tuple[date, SplitProgression, list[str | None]]:
+    return split.start_date, split.progression, [step.workout_type_id for step in split.steps]
+
+
+def saved_shifts(db: Session, user_id: str, split: TrainingSplit) -> list[SplitShift]:
+    """The split's skips and catch-ups, oldest first, if they were made for this schedule."""
+    stored = get_setting(db, user_id, TRAINING_SPLIT_SHIFTS_KEY, "")
+    if not stored:
+        return []
+    try:
+        record = StoredShifts.model_validate_json(stored)
+    except ValueError:
+        return []
+    if (record.start_date, record.progression, record.steps) != _schedule(split):
+        return []
+    return sorted(
+        (shift for shift in record.shifts if shift.step < len(split.steps)),
+        key=lambda shift: shift.from_date,
+    )
+
+
+def calendar_step(split: TrainingSplit, shifts: Sequence[SplitShift], day: date) -> int:
+    """A calendar split's step on ``day``: counted from the latest shift by then, else the start."""
+    anchor = next((shift for shift in reversed(shifts) if shift.from_date <= day), None)
+    if anchor is None:
+        return (day - split.start_date).days % len(split.steps)
+    return (anchor.step + (day - anchor.from_date).days) % len(split.steps)
 
 
 def validate_split_types(db: Session, user_id: str, split: TrainingSplit) -> None:
@@ -55,18 +100,23 @@ class SplitProgress:
 
 
 def follow_progress(
-    split: TrainingSplit, logged: list[tuple[date, str]], today: date
+    split: TrainingSplit,
+    logged: list[tuple[date, str]],
+    today: date,
+    shifts: Sequence[SplitShift] = (),
 ) -> SplitProgress:
     """Replay logged workouts through a split that only advances when its workouts are done.
 
     Each logged workout moves the split past the next day of that type. A day with no split
     workout completes a planned rest, or else saves one rest that the next planned rest absorbs.
     At most one rest is ever saved, so a further day without the planned workout is missed.
+    A shift puts the split on its step at the start of its day, before that day's workouts.
     """
     steps = [step.workout_type_id for step in split.steps]
     size = len(steps)
     index, saved = 0, False
     missed: list[tuple[date, str]] = []
+    shift_on = {shift.from_date: shift for shift in shifts}
 
     def arrive(position: int) -> int:
         nonlocal saved
@@ -82,6 +132,8 @@ def follow_progress(
     progressed = False
     while day <= today:
         progressed = False
+        if (shift := shift_on.get(day)) is not None:
+            index, saved = shift.step, shift.rest_saved
         for type_id in by_day.get(day, []):
             offset = next((n for n in range(size) if steps[(index + n) % size] == type_id), None)
             if offset is None:
@@ -97,24 +149,64 @@ def follow_progress(
             else:
                 saved = True
         day += timedelta(days=1)
+    # A day skipped after today's workout is logged takes effect tomorrow, where it is saved.
+    if progressed and (shift := shift_on.get(today + timedelta(days=1))) is not None:
+        index, saved = shift.step, shift.rest_saved
     return SplitProgress(
         index, saved, today + timedelta(days=1) if progressed else today, tuple(missed)
     )
 
 
 def calendar_missed_days(
-    split: TrainingSplit, logged: list[tuple[date, str]], start: date, today: date
+    split: TrainingSplit,
+    logged: list[tuple[date, str]],
+    start: date,
+    today: date,
+    shifts: Sequence[SplitShift] = (),
 ) -> list[tuple[date, str]]:
     """Days from ``start`` to yesterday that a calendar split gave a workout type not logged."""
     done = set(logged)
     missed = []
     day = max(start, split.start_date)
     while day < today:
-        planned = split.steps[(day - split.start_date).days % len(split.steps)].workout_type_id
+        planned = split.steps[calendar_step(split, shifts, day)].workout_type_id
         if planned is not None and (day, planned) not in done:
             missed.append((day, planned))
         day += timedelta(days=1)
     return missed
+
+
+def calendar_catch_up(
+    split: TrainingSplit,
+    shifts: Sequence[SplitShift],
+    logged: list[tuple[date, str]],
+    today: date,
+) -> SplitCatchUp | None:
+    """Where an auto-shifting calendar split resumes after missed workouts in a row.
+
+    Counting back from yesterday, a day with any of the split's workouts ends the run and planned
+    rests are passed over. The latest shift starts a fresh count, so a catch-up, or its Undo,
+    happens once. The split resumes with the first workout of the run.
+    """
+    if not split.auto_shift or split.progression != "calendar" or today <= split.start_date:
+        return None
+    types = {step.workout_type_id for step in split.steps if step.workout_type_id}
+    trained = {day for day, type_id in logged if type_id in types}
+    if today in trained:
+        return None
+    floor = max(split.start_date, today - MISSED_DAYS_LOOKBACK)
+    if shifts:
+        floor = max(floor, shifts[-1].from_date)
+    missed, resume = 0, None
+    day = today - timedelta(days=1)
+    while day >= floor and day not in trained:
+        step = calendar_step(split, shifts, day)
+        if split.steps[step].workout_type_id is not None:
+            missed, resume = missed + 1, step
+        day -= timedelta(days=1)
+    if missed < CATCH_UP_AFTER or resume is None or resume == calendar_step(split, shifts, today):
+        return None
+    return SplitCatchUp(on_date=today, step=resume, missed=missed)
 
 
 def logged_split_workouts(
@@ -142,14 +234,18 @@ def logged_split_workouts(
 
 
 def split_progress(
-    db: Session, user_id: str, split: TrainingSplit, today: date
+    db: Session,
+    user_id: str,
+    split: TrainingSplit,
+    today: date,
+    shifts: Sequence[SplitShift] = (),
 ) -> SplitProgress | None:
     if split.progression != "workouts":
         return None
     if today < split.start_date:
         return SplitProgress(0, False, split.start_date)
     logged = logged_split_workouts(db, user_id, split.start_date, today)
-    return follow_progress(split, logged, today)
+    return follow_progress(split, logged, today, shifts)
 
 
 def split_read(
@@ -157,16 +253,18 @@ def split_read(
 ) -> TrainingSplitRead | None:
     if split is None:
         return None
-    progress = split_progress(db, user_id, split, today)
+    shifts = saved_shifts(db, user_id, split)
+    progress = split_progress(db, user_id, split, today, shifts)
     since = today - MISSED_DAYS_LOOKBACK
+    catch_up = None
     if not split.enabled:
         missed: Sequence[tuple[date, str]] = ()
     elif progress:
         missed = progress.missed
     else:
-        missed = calendar_missed_days(
-            split, logged_split_workouts(db, user_id, since, today), since, today
-        )
+        logged = logged_split_workouts(db, user_id, since, today)
+        missed = calendar_missed_days(split, logged, since, today, shifts)
+        catch_up = calendar_catch_up(split, shifts, logged, today)
     return TrainingSplitRead(
         **split.model_dump(),
         next_step=progress.step if progress else None,
@@ -177,7 +275,43 @@ def split_read(
             for day, type_id in missed
             if day >= since
         ],
+        shift=shifts[-1] if shifts else None,
+        catch_up=catch_up,
     )
+
+
+def shift_split(
+    db: Session, user_id: str, step: int, rest_saved: bool, today: date
+) -> TrainingSplit:
+    """Save that the active split's next day is ``step``: a skip, its Undo or a catch-up.
+
+    A calendar split moves from today. A workout-following split moves from its next day, which
+    is tomorrow once today's workout is logged. One shift is kept per day, the latest winning.
+    """
+    split = saved_training_split(db, user_id)
+    if split is None or not split.enabled:
+        raise HTTPException(422, "Turn on a split first.")
+    if step >= len(split.steps):
+        raise HTTPException(422, "Choose a day in your split.")
+    if today < split.start_date:
+        raise HTTPException(422, "Your split hasn't started yet.")
+    shifts = saved_shifts(db, user_id, split)
+    if split.progression == "workouts":
+        progress = split_progress(db, user_id, split, today, shifts)
+        from_date = progress.next_date if progress else today
+    else:
+        from_date, rest_saved = today, False
+    kept = [shift for shift in shifts if shift.from_date != from_date]
+    kept.append(SplitShift(from_date=from_date, step=step, rest_saved=rest_saved))
+    kept.sort(key=lambda shift: shift.from_date)
+    # Older shifts only map days beyond the missed-day lookback, except the last one before it.
+    cutoff = today - MISSED_DAYS_LOOKBACK
+    older = [shift for shift in kept if shift.from_date < cutoff]
+    kept = older[-1:] + [shift for shift in kept if shift.from_date >= cutoff]
+    start_date, progression, steps = _schedule(split)
+    record = StoredShifts(start_date=start_date, progression=progression, steps=steps, shifts=kept)
+    set_setting(db, user_id, TRAINING_SPLIT_SHIFTS_KEY, record.model_dump_json())
+    return split
 
 
 def split_recommendation(
@@ -187,10 +321,9 @@ def split_recommendation(
     if split is None or not split.enabled:
         return None
     scheduled_date = max(today, split.start_date)
-    progress = split_progress(db, user_id, split, today)
-    index = (
-        progress.step if progress else (scheduled_date - split.start_date).days % len(split.steps)
-    )
+    shifts = saved_shifts(db, user_id, split)
+    progress = split_progress(db, user_id, split, today, shifts)
+    index = progress.step if progress else calendar_step(split, shifts, scheduled_date)
     recommendation = _split_day(db, user_id, split, index, scheduled_date, progress)
     if recommendation.is_rest_day:
         # What starting a workout on the rest day trains: the next training day of the cycle.

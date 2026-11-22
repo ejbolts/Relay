@@ -128,6 +128,7 @@ def save_routine(
             enabled=schedule.enabled,
             progression=schedule.progression,
             steps=[{"workout_type_id": day.workout_type_id} for day in content.days],
+            auto_shift=active.auto_shift if active else True,
         )
         set_setting(db, user_id, TRAINING_SPLIT_KEY, active.model_dump_json())
     elif active and active.routine_id == routine_id:
@@ -256,12 +257,18 @@ def use_routine(
 ):
     content = routine_content(db, user.id, routine_id)
     validate_content(db, user.id, content)
+    active = saved_training_split(db, user.id)
     split = TrainingSplit(
         name=content.name,
         start_date=payload.start_date,
         progression=payload.progression,
         routine_id=routine_id,
         steps=[{"workout_type_id": day.workout_type_id} for day in content.days],
+        auto_shift=(
+            payload.auto_shift
+            if payload.auto_shift is not None
+            else (active.auto_shift if active else True)
+        ),
     )
     set_setting(db, user.id, TRAINING_SPLIT_KEY, split.model_dump_json())
     bump_workout_cache_revision(db, user.id)

@@ -179,6 +179,7 @@ export function RoutinePanel({
   const [options, setOptions] = useState<Routine | null>(null);
   const [startDate, setStartDate] = useState(localDate());
   const [progression, setProgression] = useState<SplitProgression>('workouts');
+  const [autoShift, setAutoShift] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -458,6 +459,7 @@ export function RoutinePanel({
                           : localDate(),
                       );
                       setProgression(trainingSplit?.progression ?? 'workouts');
+                      setAutoShift(trainingSplit?.auto_shift ?? true);
                       setUsing(routine);
                     }}
                   >
@@ -685,8 +687,9 @@ export function RoutinePanel({
                         start_date: startDate,
                         enabled: true,
                         progression,
+                        auto_shift: autoShift,
                       })
-                    : await api.routines.use(using.id, startDate, progression);
+                    : await api.routines.use(using.id, startDate, progression, autoShift);
                 focusCard.current = using.id;
                 onUsed?.(saved);
                 setUsing(null);
@@ -710,6 +713,25 @@ export function RoutinePanel({
               />
             </label>
             <SplitScheduleChoice value={progression} disabled={busy} onChange={setProgression} />
+            {progression === 'calendar' && (
+              <div className="notification-setting-row routine-auto-shift">
+                <div>
+                  <strong>Shift after missed workouts</strong>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-label="Shift after missed workouts"
+                  aria-checked={autoShift}
+                  className={autoShift ? 'is-on' : ''}
+                  disabled={busy}
+                  onClick={() => setAutoShift(!autoShift)}
+                >
+                  <span />
+                  {autoShift ? 'On' : 'Off'}
+                </button>
+              </div>
+            )}
             <p className="routine-note">Replaces your active split. Saved splits stay available.</p>
             {error && (
               <p role="alert" className="inline-error">

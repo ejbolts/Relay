@@ -532,7 +532,7 @@ describe('splits guide', () => {
     expect(coachTitle()).toBe('Make it your split');
     await click('Use split');
     await submit('.routine-use');
-    expect(api.routines.use).toHaveBeenCalledWith('new', expect.any(String), 'workouts');
+    expect(api.routines.use).toHaveBeenCalledWith('new', expect.any(String), 'workouts', true);
     expect(finished).toEqual(['split']);
   });
 });

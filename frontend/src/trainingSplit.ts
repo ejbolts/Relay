@@ -24,14 +24,37 @@ export function splitFromTemplate(id: string, startDate: string): TrainingSplit 
   };
 }
 
-/** UTC day numbers avoid daylight-saving changes in the length of a local day. */
+/**
+ * A By date split's step on a date, counted from its latest skip or catch-up once that has
+ * happened. UTC day numbers avoid daylight-saving changes in the length of a local day.
+ */
 export function splitStepOnDate(split: TrainingSplit, date: string): number | null {
   const dayNumber = (value: string) => {
     const parsed = parseLocalDate(value);
     return Date.UTC(parsed.getFullYear(), parsed.getMonth(), parsed.getDate()) / 86_400_000;
   };
+  const size = split.steps.length;
+  const shift = followsWorkouts(split) ? null : split.shift;
+  if (size && shift && date >= shift.from_date)
+    return (shift.step + dayNumber(date) - dayNumber(shift.from_date)) % size;
   const elapsed = dayNumber(date) - dayNumber(split.start_date);
-  return elapsed < 0 || !split.steps.length ? null : elapsed % split.steps.length;
+  return elapsed < 0 || !size ? null : elapsed % size;
+}
+
+/** The split day Up next stands on: a followed split's next step, else today's dated step. */
+export function currentSplitStep(split: TrainingSplit, today: string): number | null {
+  if (!split.steps.length) return null;
+  return followsWorkouts(split) ? (split.next_step ?? null) : splitStepOnDate(split, today);
+}
+
+/** The next workout day after `step`, passing over rest days; `step` itself if it is the only one. */
+export function nextTrainingStep(split: TrainingSplit, step: number): number {
+  const size = split.steps.length;
+  for (let ahead = 1; ahead <= size; ahead += 1) {
+    const next = (step + ahead) % size;
+    if (split.steps[next].workout_type_id !== null) return next;
+  }
+  return step;
 }
 
 /** Splits follow logged workouts unless explicitly pinned to the calendar. */

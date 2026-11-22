@@ -87,6 +87,8 @@ const PATHS = {
 
 const FILLED = {
   play: 'M8 5.5v13l10.5-6.5z',
+  // A next-track glyph: play into a bar, for skipping ahead.
+  skip: 'M5 6v12l9-6zM16 6h3v12h-3z',
   pause: 'M6.5 5h3.5v14H6.5zM14 5h3.5v14H14z',
 } as const;
 

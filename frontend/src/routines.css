@@ -515,6 +515,27 @@
   color: var(--p-muted);
   font-size: 12px;
 }
+/* The On/Off pill from Settings, sized like the dialog's other controls. */
+.routine-use .routine-auto-shift strong {
+  color: var(--p-ink-2);
+  font-size: 12px;
+  font-weight: 600;
+}
+.routine-use .routine-auto-shift > button {
+  min-width: 4.25rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border-radius: 999px;
+  color: var(--p-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.routine-use .routine-auto-shift > button.is-on {
+  border-color: var(--p-accent-text);
+  color: var(--p-accent-text);
+}
 .routine-use .routine-note {
   margin: -6px 0 0;
   color: var(--p-muted);

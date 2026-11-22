@@ -229,9 +229,30 @@ it('requires an explicit date confirmation before replacing the active split', a
       .querySelector('.routine-use')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
-  expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02', 'workouts');
+  expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02', 'workouts', true);
   expect(document.querySelector('.toast')).toBeNull();
   expect(host.textContent).not.toContain('is your active split');
+});
+
+it('offers Shift after missed workouts only for a By date schedule', async () => {
+  await mount(true);
+  await click('Use split');
+  const toggle = () =>
+    document.querySelector<HTMLButtonElement>(
+      '[role="switch"][aria-label="Shift after missed workouts"]',
+    );
+  expect(toggle()).toBeNull();
+  await click('By date');
+  expect(toggle()?.getAttribute('aria-checked')).toBe('true');
+  await act(async () => toggle()!.click());
+  expect(toggle()?.getAttribute('aria-checked')).toBe('false');
+  expect(toggle()?.textContent).toBe('Off');
+  await act(async () =>
+    document
+      .querySelector('.routine-use')!
+      .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+  );
+  expect(api.routines.use).toHaveBeenCalledWith('source', expect.any(String), 'calendar', false);
 });
 
 it('creates private splits without a publishing switch and shares from split options', async () => {
