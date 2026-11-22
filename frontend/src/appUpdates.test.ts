@@ -214,6 +214,25 @@ describe('app updates', () => {
     await app.checkForAppUpdate();
   });
 
+  it('registers the offline worker only once the page has its own files', async () => {
+    const { app, register } = await setup();
+    let arrived!: () => void;
+    // The worker downloads every file when it first installs; the app's own download goes first.
+    app.registerAppUpdates(new Promise<void>((resolve) => (arrived = resolve)));
+    await flushPromises();
+    expect(register).not.toHaveBeenCalled();
+    arrived();
+    await flushPromises();
+    expect(register).toHaveBeenCalledTimes(1);
+  });
+
+  it('still registers the offline worker when the page\u2019s own download failed', async () => {
+    const { app, register } = await setup();
+    app.registerAppUpdates(Promise.reject(new Error('download failed')));
+    await flushPromises();
+    expect(register).toHaveBeenCalledTimes(1);
+  });
+
   it('registers once, defers automatic startup to load, and skips hidden/offline background checks', async () => {
     const { app, register, update, document, navigator, window } = await setup({
       readyState: 'loading',
