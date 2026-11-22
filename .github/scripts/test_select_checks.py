@@ -12,7 +12,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from select_checks import ROOT, git, main, select_event, select_paths
+from select_checks import MOBILE_SHARED_FILES, ROOT, git, main, select_event, select_paths
 
 
 class PathSelectionTests(unittest.TestCase):
@@ -28,6 +28,7 @@ class PathSelectionTests(unittest.TestCase):
                 selected = select_paths([path])
                 self.assertEqual(selected.frontend, "full")
                 self.assertFalse(selected.backend)
+                self.assertFalse(selected.mobile)
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -64,6 +65,58 @@ class PathSelectionTests(unittest.TestCase):
                 selected = select_paths([path])
                 self.assertEqual(selected.frontend, "none")
                 self.assertTrue(selected.backend)
+                self.assertFalse(selected.mobile)
+
+    def test_mobile_paths_run_only_the_mobile_checks(self):
+        for path in (
+            "mobile/src/app/index.tsx",
+            "mobile/package-lock.json",
+            "mobile/app.json",
+            "mobile/assets/icon.png",
+            "mobile/README.md",
+        ):
+            with self.subTest(path=path):
+                selected = select_paths([path])
+                self.assertEqual(
+                    (selected.frontend, selected.backend, selected.mobile), ("none", False, True)
+                )
+
+    def test_frontend_files_the_mobile_app_imports_run_the_mobile_checks(self):
+        for path in MOBILE_SHARED_FILES:
+            with self.subTest(path=path):
+                self.assertTrue(select_paths([path]).mobile)
+
+    def test_mobile_shared_files_match_what_mobile_imports(self):
+        # Follow relative imports from mobile/ into the rest of the repository, so a
+        # new shared import cannot change outside mobile/ without the mobile checks.
+        pattern = re.compile(
+            r"""(?:\bfrom\s*|\bimport\s*|\brequire\(\s*)['"](\.{1,2}/[^'"]+)['"]"""
+        )
+        mobile = ROOT / "mobile"
+        pending = [
+            path
+            for path in mobile.rglob("*")
+            if path.suffix in {".ts", ".tsx", ".js", ".jsx"}
+            and "node_modules" not in path.parts
+            and path.is_file()
+        ]
+        seen: set[Path] = set()
+        shared: set[str] = set()
+        while pending:
+            source = pending.pop()
+            if source in seen:
+                continue
+            seen.add(source)
+            for specifier in pattern.findall(source.read_text(encoding="utf-8")):
+                base = (source.parent / specifier).resolve()
+                if base.is_relative_to(mobile):
+                    continue
+                candidates = [base, *(base.with_name(base.name + ext) for ext in (".ts", ".tsx"))]
+                target = next((path for path in candidates if path.is_file()), None)
+                self.assertIsNotNone(target, f"{source}: cannot resolve {specifier}")
+                shared.add(target.relative_to(ROOT).as_posix())
+                pending.append(target)
+        self.assertEqual(shared, set(MOBILE_SHARED_FILES))
 
     def test_shared_contract_and_unknown_paths_run_both(self):
         for path in (
@@ -73,6 +126,11 @@ class PathSelectionTests(unittest.TestCase):
             "backend/app/new_schemas.py",
             "frontend/src/api.ts",
             "frontend/src/types.ts",
+        ):
+            with self.subTest(path=path):
+                selected = select_paths([path])
+                self.assertEqual((selected.frontend, selected.backend), ("full", True))
+        for path in (
             ".github/workflows/checks.yml",
             ".github/scripts/select_checks.py",
             ".env.example",
@@ -81,7 +139,9 @@ class PathSelectionTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 selected = select_paths([path])
-                self.assertEqual((selected.frontend, selected.backend), ("full", True))
+                self.assertEqual(
+                    (selected.frontend, selected.backend, selected.mobile), ("full", True, True)
+                )
 
     def test_docs_and_empty_diff_need_neither_suite(self):
         for paths in (
@@ -90,7 +150,9 @@ class PathSelectionTests(unittest.TestCase):
         ):
             with self.subTest(paths=paths):
                 selected = select_paths(paths)
-                self.assertEqual((selected.frontend, selected.backend), ("none", False))
+                self.assertEqual(
+                    (selected.frontend, selected.backend, selected.mobile), ("none", False, False)
+                )
 
     def test_mixed_changes_run_both(self):
         selected = select_paths(["frontend/vite.config.ts", "backend/app/cardio_energy.py"])
@@ -112,11 +174,15 @@ class PathSelectionTests(unittest.TestCase):
 
     def test_main_release_push_and_manual_runs_are_full(self):
         selected = select_event("pull_request", {"pull_request": {"base": {"ref": "main"}}}, "")
-        self.assertEqual((selected.frontend, selected.backend), ("full", True))
+        self.assertEqual(
+            (selected.frontend, selected.backend, selected.mobile), ("full", True, True)
+        )
         for name in ("push", "workflow_dispatch", "unexpected-event"):
             with self.subTest(event=name):
                 selected = select_event(name, {}, "")
-                self.assertEqual((selected.frontend, selected.backend), ("full", True))
+                self.assertEqual(
+                    (selected.frontend, selected.backend, selected.mobile), ("full", True, True)
+                )
 
 
 class MergeSelectionTests(unittest.TestCase):
@@ -275,11 +341,13 @@ class RequiredCheckTests(unittest.TestCase):
             r"(?:        .*\n)*?        run: \|\n((?:          .*\n)+)",
             workflow,
         )
-        self.assertEqual(len(gates), 2)
+        self.assertEqual(len(gates), 3)
         bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
         self.assertTrue(bash, "Bash is needed to verify the workflow's actual gate scripts")
         for gate, valid_flags in zip(
-            gates, [("true", "false"), ("none", "styles", "related", "full")], strict=True
+            gates,
+            [("true", "false"), ("none", "styles", "related", "full"), ("true", "false")],
+            strict=True,
         ):
             script = "\n".join(line[10:] for line in gate.splitlines())
             for result, flag, expected in (
@@ -338,7 +406,9 @@ class RequiredCheckTests(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 self.assertEqual(main(), 0)
-            self.assertEqual(output.read_text(encoding="utf-8"), "frontend=full\nbackend=true\n")
+            self.assertEqual(
+                output.read_text(encoding="utf-8"), "frontend=full\nbackend=true\nmobile=true\n"
+            )
             self.assertIn("Backend suite: run", summary.read_text(encoding="utf-8"))
 
 
