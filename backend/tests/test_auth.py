@@ -860,6 +860,7 @@ ACCOUNT_TABLES = {
     "account_backups",
     "app_feedback",
     "profile_sharing",
+    "profile_border_unlocks",
     "youtube_connections",
     "youtube_oauth_states",
     # Created only by signed-in accounts (user_id is required), so never legacy data.
