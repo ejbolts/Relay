@@ -292,6 +292,10 @@ export function WorkoutCalendar({
                           : null;
                       const dayRingStyle =
                         ring.length && !inProgress ? dayRing(ring) : scheduledColor;
+                      // Today's outline and ripple take its workout colour (the first type on a
+                      // mixed day, since an outline cannot be split into arcs).
+                      const todayColor =
+                        key === todayKey && ring.length && !inProgress ? ring[0] : null;
                       const scheduledNote = scheduled
                         ? `${scheduled.name} ${key < todayKey ? 'missed' : 'planned'}`
                         : null;
@@ -305,7 +309,10 @@ export function WorkoutCalendar({
                             inProgress && activeWorkoutColor
                               ? ({ '--live-color': activeWorkoutColor } as CSSProperties)
                               : dayRingStyle
-                                ? ({ '--day-ring': dayRingStyle } as CSSProperties)
+                                ? ({
+                                    '--day-ring': dayRingStyle,
+                                    ...(todayColor ? { '--today-color': todayColor } : {}),
+                                  } as CSSProperties)
                                 : undefined
                           }
                           disabled={previewMode || (readOnly && !entry)}
