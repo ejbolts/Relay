@@ -1825,9 +1825,14 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
     color-mix(in srgb, var(--live-color, var(--p-accent)) 45%, transparent);
 }
 
-/* The live day's outline and ripple take the colour of the workout type being logged. */
+/* Today's outline and ripple take its workout colour: the type being logged while a workout is
+   live, otherwise the logged workout's colour (--today-color). */
 .calendar-panel .calendar-day.today.in-progress {
   outline-color: var(--live-color, var(--accent));
+}
+
+.calendar-panel .calendar-day.today.trained:not(.in-progress) {
+  outline-color: var(--today-color, var(--accent));
 }
 
 /* The live dot already marks the day; drop the legacy corner dot that stacked under it. */
@@ -1852,11 +1857,13 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 
 @keyframes calendar-today-ripple {
   0% {
-    box-shadow: 0 0 0 0 color-mix(in srgb, var(--live-color, var(--accent)) 90%, transparent);
+    box-shadow: 0 0 0 0
+      color-mix(in srgb, var(--live-color, var(--today-color, var(--accent))) 90%, transparent);
   }
   70%,
   100% {
-    box-shadow: 0 0 0 7px color-mix(in srgb, var(--live-color, var(--accent)) 0%, transparent);
+    box-shadow: 0 0 0 7px
+      color-mix(in srgb, var(--live-color, var(--today-color, var(--accent))) 0%, transparent);
   }
 }
 
