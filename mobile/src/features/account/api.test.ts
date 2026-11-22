@@ -9,9 +9,9 @@ jest.mock('expo-secure-store', () => ({
 
 const answers: Record<string, unknown> = {
   '/api/dashboard': { recommendation: null },
+  '/api/workout-types': [],
   '/api/workout-type-exercises': [],
   '/api/workouts/snapshot': { revision: 1, workouts: [] },
-  '/api/exercise-history-baselines': [],
   '/api/training-preferences': { preferred_weight_unit: 'kg' },
   '/api/auth/me': { id: 'sample-user' },
 };
@@ -49,16 +49,16 @@ beforeEach(() => {
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 });
 
-test('reads three months of workouts and condenses everything older', async () => {
+test("reads what Home's Up next reads, with the web's three-month history window", async () => {
   const api = signedIn();
   const routine = await api.loadRoutine(new AbortController().signal, new Date(2026, 0, 15));
 
   const requested = fetchMock.mock.calls.map(([url]) => url.replace('https://relay.test', ''));
   expect(requested).toEqual([
     '/api/dashboard?on_date=2026-01-15',
+    '/api/workout-types',
     '/api/workout-type-exercises',
     '/api/workouts/snapshot?start=2025-11-01&end=2026-01-15',
-    '/api/exercise-history-baselines?before=2025-11-01',
     '/api/training-preferences',
   ]);
   fetchMock.mock.calls.forEach(([, init], call) => {
