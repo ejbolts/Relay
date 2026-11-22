@@ -858,6 +858,27 @@ const clock: Detail = () => (
   </>
 );
 
+/** A gilded dial: the clock's hour marks cast in the trim's gold, for the longest hour count. */
+const dial: Detail = (id, spec) => {
+  const reach = ringWidth(spec) / 2 - 0.6;
+  const hours = radialLines(around(12), RING - reach, RING + reach);
+  return (
+    <>
+      <path
+        d={radialLines(
+          around(60).filter((_, index) => index % 5 !== 0),
+          RING - 1,
+          RING + 1,
+        )}
+        stroke="#cbd5e1"
+        strokeWidth={0.5}
+      />
+      <path d={hours} stroke={OUTLINE} strokeWidth={3.6} />
+      <path d={hours} stroke={`url(#${id}trim)`} strokeWidth={2.2} />
+    </>
+  );
+};
+
 /** Rivets round the ring, for iron. */
 const rivets: Detail = (id) => (
   <>
@@ -988,7 +1009,7 @@ const P = {
   legion: palette('#450a0a', '#b91c1c', '#fecaca', '#fbbf24', '#f87171'),
   imperial: palette('#1e0b3d', '#6d28d9', '#ede9fe', '#fde047', '#c084fc'),
   ocean: palette('#042f2e', '#0f766e', '#99f6e4', '#5eead4', '#2dd4bf'),
-  prism: palette('#1e1b4b', '#6366f1', '#f5f3ff', '#f0abfc', '#a5b4fc'),
+  emerald: palette('#022c22', '#059669', '#ecfdf5', '#6ee7b7', '#34d399'),
   crimson: palette('#3f0a0a', '#dc2626', '#fecaca', '#fca5a5', '#ef4444'),
   cobalt: palette('#0b1b4d', '#2563eb', '#dbeafe', '#93c5fd', '#3b82f6'),
   molten: palette('#0c0a09', '#57534e', '#d6d3d1', '#fb923c', '#f97316'),
@@ -1093,15 +1114,15 @@ const SPECS: Record<string, Spec> = {
   'iron-habit': { grade: 3, palette: P.iron, glyph: 'anvil', detail: rivets },
   'four-seasons': { grade: 3, palette: P.seasons, glyph: 'seasons', detail: colourArcs(SEASONS) },
   'whale-lifter': { grade: 2, palette: P.ocean, glyph: 'whale', detail: waves, tier: 1 },
-  'million-kilo': { grade: 4, palette: P.prism, glyph: 'diamond', tier: 2 },
+  'million-kilo': { grade: 3, palette: P.emerald, glyph: 'diamond', tier: 2 },
   'hundred-hours': { grade: 2, palette: P.slate, glyph: 'hourglass', detail: clock, tier: 1 },
   'time-under-tension': { grade: 3, palette: P.tempo, glyph: 'stopwatch', detail: clock, tier: 2 },
   'thousand-hours': {
-    grade: 4,
+    grade: 3,
     palette: P.aeon,
     glyph: 'clockface',
     sides: 'crystal',
-    detail: clock,
+    detail: dial,
     tier: 3,
   },
   'bench-club-1': { grade: 1, ...BENCH, tier: 1 },
