@@ -392,6 +392,14 @@ export interface TrainingSplit {
   next_date?: string | null;
   /** Past days whose planned workout was not done, from the server's replay (last year only). */
   missed_days?: { workout_date: string; workout_type_id: string }[];
+  /** The latest skip: from this date the split stands at this step. */
+  shift?: SplitShift | null;
+}
+
+export interface SplitShift {
+  from_date: string;
+  step: number;
+  rest_saved?: boolean;
 }
 
 export interface RoutineSet {

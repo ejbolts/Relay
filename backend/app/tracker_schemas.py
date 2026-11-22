@@ -953,6 +953,19 @@ class SplitMissedDay(BaseModel):
     workout_type_id: str
 
 
+class SplitShift(BaseModel):
+    # From this date the split stands at this step, after a skipped day. ``rest_saved`` carries
+    # a workout-following split's saved rest across it.
+    from_date: date
+    step: int = Field(ge=0, lt=28)
+    rest_saved: bool = False
+
+
+class SplitPositionUpdate(BaseModel):
+    step: int = Field(ge=0, lt=28)
+    rest_saved: bool = False
+
+
 class TrainingSplitRead(TrainingSplit):
     # Where a workout-following split currently stands; unset for calendar splits.
     next_step: int | None = None
@@ -961,6 +974,8 @@ class TrainingSplitRead(TrainingSplit):
     # Past days, within the last year, whose planned workout was not done. A workout-following
     # split leaves out the one day off it absorbs as a rest.
     missed_days: list[SplitMissedDay] = Field(default_factory=list)
+    # The latest skip, which calendar previews count from instead of the start.
+    shift: SplitShift | None = None
 
 
 class TrainingPreferencesUpdate(BaseModel):

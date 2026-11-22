@@ -22,9 +22,8 @@ import { useWorkoutTypes } from './workoutTypesContext';
 import { exitGuide, finishGuide, updateGuide, useActiveGuide } from './setupGuides';
 import { formatWeight } from './weightUnits';
 import { localDate } from './utils';
-import { SplitScheduleChoice } from './SplitScheduleChoice';
 import { SPLIT_TEMPLATES } from './trainingSplit';
-import type { Exercise, Routine, RoutineDay, SplitProgression, TrainingSplit } from './types';
+import type { Exercise, Routine, RoutineDay, TrainingSplit } from './types';
 import './routines.css';
 
 const failure = (reason: unknown) =>
@@ -178,7 +177,6 @@ export function RoutinePanel({
   const [deleting, setDeleting] = useState<Routine | null>(null);
   const [options, setOptions] = useState<Routine | null>(null);
   const [startDate, setStartDate] = useState(localDate());
-  const [progression, setProgression] = useState<SplitProgression>('workouts');
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [attempt, setAttempt] = useState(0);
@@ -457,7 +455,6 @@ export function RoutinePanel({
                           ? (trainingSplit?.start_date ?? localDate())
                           : localDate(),
                       );
-                      setProgression(trainingSplit?.progression ?? 'workouts');
                       setUsing(routine);
                     }}
                   >
@@ -684,9 +681,10 @@ export function RoutinePanel({
                         ...trainingSplit!,
                         start_date: startDate,
                         enabled: true,
-                        progression,
+                        // Splits follow logged workouts; saving here moves a By date split over.
+                        progression: 'workouts',
                       })
-                    : await api.routines.use(using.id, startDate, progression);
+                    : await api.routines.use(using.id, startDate);
                 focusCard.current = using.id;
                 onUsed?.(saved);
                 setUsing(null);
@@ -709,8 +707,6 @@ export function RoutinePanel({
                 disabled={busy}
               />
             </label>
-            <SplitScheduleChoice value={progression} disabled={busy} onChange={setProgression} />
-            <p className="routine-note">Replaces your active split. Saved splits stay available.</p>
             {error && (
               <p role="alert" className="inline-error">
                 {error}
@@ -720,8 +716,8 @@ export function RoutinePanel({
           {guide?.useRoutineId === using.id && (
             <GuideCoach
               step={{
-                title: 'Choose how it runs',
-                body: 'Follow my workouts moves on each time you train; By date keeps to set days. Then tap Use this split.',
+                title: 'Pick a start date',
+                body: 'Choose the day your split starts, then tap Use this split.',
                 target: '.routine-use-dialog .popup-primary-action',
               }}
               index={NEW_SPLIT_STEPS - 1}

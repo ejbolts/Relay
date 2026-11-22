@@ -152,6 +152,7 @@ from .tracker_schemas import (
     MuscleVolumeRead,
     PersonalRecordRead,
     ProgressPoint,
+    SplitPositionUpdate,
     TrainingBlockSummaryRead,
     TrainingPreferencesRead,
     TrainingPreferencesUpdate,
@@ -199,6 +200,7 @@ from .training_metrics import (
 from .training_split import (
     TRAINING_SPLIT_KEY,
     saved_training_split,
+    shift_split,
     split_read,
     split_recommendation,
     validate_split_types,
@@ -1789,6 +1791,18 @@ def update_training_split(
     bump_workout_cache_revision(db, user.id)
     db.commit()
     return split_read(db, user.id, payload, on_date or date.today())
+
+
+@router.put("/training-split/position", response_model=TrainingSplitRead)
+def update_training_split_position(
+    payload: SplitPositionUpdate, db: DbSession, user: CurrentUser, on_date: date | None = None
+) -> TrainingSplitRead:
+    """Move the active split to another day: Skip on Up next, or its Undo."""
+    today = on_date or date.today()
+    split = shift_split(db, user.id, payload.step, payload.rest_saved, today)
+    bump_workout_cache_revision(db, user.id)
+    db.commit()
+    return split_read(db, user.id, split, today)
 
 
 @router.get("/workout-type-colors", response_model=WorkoutTypeColors)

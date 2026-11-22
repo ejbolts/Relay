@@ -394,6 +394,22 @@
 .next-session-top .next-session-tag {
   margin-bottom: 0;
 }
+/* Skip and Edit split: far enough apart that their 44px tap areas don't overlap. */
+.next-session-links {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 1.125rem;
+}
+.next-session-links .next-session-skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.next-session-skip .pulse-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+}
 @media (max-width: 390px) {
   .split-cycle > li {
     gap: 0.4rem;

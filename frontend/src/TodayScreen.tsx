@@ -184,6 +184,9 @@ export interface TodayScreenProps {
   onStartEmpty: () => void;
   onStartRecommended?: () => void;
   onEditSplit?: () => void;
+  /** Moves the split past Up next's day; only given when that day can be skipped. */
+  onSkipSplitDay?: () => void;
+  skippingSplitDay?: boolean;
   onOpenHistory: () => void;
   onOpenWorkout?: (contribution: WeeklyMuscleContribution) => void | Promise<void>;
   onOpenProgress: (exerciseId?: string) => void;
@@ -244,6 +247,8 @@ export function TodayScreen({
   onStartEmpty,
   onStartRecommended,
   onEditSplit,
+  onSkipSplitDay,
+  skippingSplitDay = false,
   onOpenHistory,
   onOpenWorkout,
   onOpenProgress,
@@ -457,10 +462,26 @@ export function TodayScreen({
               )}
               {recommendation ? 'Up next' : 'Ready when you are'}
             </p>
-            {onEditSplit && (
-              <button className="pulse-button link small" type="button" onClick={onEditSplit}>
-                {recommendation?.split_name ? 'Edit split' : 'Set up split'}
-              </button>
+            {(onSkipSplitDay || onEditSplit) && (
+              <div className="next-session-links">
+                {onSkipSplitDay && (
+                  <button
+                    className="pulse-button link small next-session-skip"
+                    type="button"
+                    onClick={onSkipSplitDay}
+                    disabled={skippingSplitDay}
+                    aria-label={`Skip ${recommendationLabel?.toLowerCase() ?? 'this'} day`}
+                  >
+                    <Icon name="skip" />
+                    Skip
+                  </button>
+                )}
+                {onEditSplit && (
+                  <button className="pulse-button link small" type="button" onClick={onEditSplit}>
+                    {recommendation?.split_name ? 'Edit split' : 'Set up split'}
+                  </button>
+                )}
+              </div>
             )}
           </div>
           <div className="next-session-head">

@@ -229,9 +229,17 @@ it('requires an explicit date confirmation before replacing the active split', a
       .querySelector('.routine-use')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
-  expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02', 'workouts');
+  expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02');
   expect(document.querySelector('.toast')).toBeNull();
   expect(host.textContent).not.toContain('is your active split');
+});
+
+it('asks only for a start date, without a schedule choice or note', async () => {
+  await mount(true);
+  await click('Use split');
+  const dialog = document.querySelector('.routine-use')!;
+  expect(dialog.querySelector('[role="radio"], [role="switch"]')).toBeNull();
+  expect(dialog.textContent).not.toContain('Saved splits');
 });
 
 it('creates private splits without a publishing switch and shares from split options', async () => {

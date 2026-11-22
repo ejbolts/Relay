@@ -1068,6 +1068,16 @@ export const api = {
       headers: jsonHeaders,
       body: JSON.stringify(payload),
     }),
+  /** Moves the active split to another day: Skip on Up next, or its Undo. */
+  moveTrainingSplit: (step: number, { rest_saved = false } = {}) =>
+    request<TrainingSplit>(
+      `/api/training-split/position?${new URLSearchParams({ on_date: localDate() })}`,
+      {
+        method: 'PUT',
+        headers: jsonHeaders,
+        body: JSON.stringify({ step, rest_saved }),
+      },
+    ),
   trainingTime: () => accountRead<TrainingTime>('/api/training-time'),
   workoutRevision: () =>
     request<WorkoutCacheRevision>('/api/workouts/revision', {

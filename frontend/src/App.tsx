@@ -61,7 +61,7 @@ import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
-import { splitCalendarDays } from './trainingSplit';
+import { currentSplitStep, nextTrainingStep, splitCalendarDays } from './trainingSplit';
 import { PlannedDaySheet, type PlannedStart } from './PlannedDaySheet';
 import {
   useDefaultRest,
@@ -867,6 +867,19 @@ function AppContent() {
     workouts,
   );
   const startMenuUpNext = upNext.isRestDay ? nextTrainingDay : upNext;
+  const [splitMoving, setSplitMoving] = useState(false);
+  // Up next's split day and the workout day after it, while that day can be skipped.
+  const splitSkip = useMemo(() => {
+    const split = dashboard?.training_split;
+    const recommendation = upNext.recommendation;
+    if (!split?.enabled || !recommendation?.split_name || upNext.needsSplitUpdate) return null;
+    const today = localDate();
+    if (recommendation.scheduled_date && recommendation.scheduled_date > today) return null;
+    const from = currentSplitStep(split, today);
+    if (from === null) return null;
+    const to = nextTrainingStep(split, from);
+    return to === from ? null : { split, from, to };
+  }, [dashboard?.training_split, upNext.recommendation, upNext.needsSplitUpdate]);
   const workoutTypeColors = useMemo(
     () => builtinTypeColors(workoutTypes.types),
     [workoutTypes.types],
@@ -2121,6 +2134,60 @@ function AppContent() {
     setTab('split');
   }
 
+  function splitDayName(split: TrainingSplit, step: number) {
+    const typeId = split.steps[step]?.workout_type_id;
+    if (!typeId) return 'rest day';
+    return workoutTypes.types.find((type) => type.id === typeId)?.name ?? 'workout';
+  }
+
+  /** Saves the split's new day and reloads Home; a refused move throws. */
+  async function moveSplit(
+    step: number,
+    label: string,
+    options?: Parameters<typeof api.moveTrainingSplit>[1],
+  ) {
+    setSplitMoving(true);
+    try {
+      await withBackgroundActivity(label, async () => {
+        await api.moveTrainingSplit(step, options);
+        await refreshData({ silent: true, activityLabel: null });
+      });
+    } finally {
+      setSplitMoving(false);
+    }
+  }
+
+  async function undoSplitMove(step: number, restSaved: boolean) {
+    try {
+      await moveSplit(step, 'Undoing…', { rest_saved: restSaved });
+    } catch (error) {
+      showToast({
+        message: error instanceof Error ? error.message : 'Could not undo that change.',
+        variant: 'error',
+      });
+    }
+  }
+
+  async function skipSplitDay() {
+    if (!splitSkip || splitMoving) return;
+    const { split, from, to } = splitSkip;
+    const restSaved = split.rest_saved === true;
+    try {
+      await moveSplit(to, 'Skipping…', { rest_saved: restSaved });
+    } catch (error) {
+      showToast({
+        message: error instanceof Error ? error.message : 'Could not skip this day.',
+        variant: 'error',
+      });
+      return;
+    }
+    const fromName = splitDayName(split, from);
+    showToast({
+      message: `Skipped ${fromName} · ${splitDayName(split, to)} is up next`,
+      action: { label: 'Undo', run: () => undoSplitMove(from, restSaved) },
+    });
+  }
+
   function openAllSettings() {
     setSettingsJump(null);
     setSettingsGroup(null);
@@ -2725,6 +2792,8 @@ function AppContent() {
                   onStartEmpty={() => startWorkout()}
                   onStartRecommended={() => startUpNext('home')}
                   onEditSplit={openSplitSchedule}
+                  onSkipSplitDay={splitSkip ? () => void skipSplitDay() : undefined}
+                  skippingSplitDay={splitMoving}
                   onOpenHistory={() => openHistorySection('history')}
                   onOpenWorkout={openMuscleWorkout}
                   onOpenProgress={(exerciseId) =>
