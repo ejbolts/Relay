@@ -43,7 +43,7 @@ CONTRACT_MODULES = {
 # Frontend files the mobile app imports (its API types). A change to one can break the
 # mobile typecheck, so it also runs the mobile checks. A repository test keeps this
 # set equal to what mobile/ actually imports from outside its folder.
-MOBILE_SHARED_FILES: frozenset[str] = frozenset()
+MOBILE_SHARED_FILES = frozenset({"frontend/src/types.ts", "frontend/src/bodySizes.ts"})
 
 
 FrontendScope = Literal["none", "styles", "related", "full"]
