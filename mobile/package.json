@@ -35,6 +35,9 @@
     "typescript": "~6.0.3"
   },
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "moduleNameMapper": {
+      "^@babel/runtime/(.*)$": "<rootDir>/node_modules/@babel/runtime/$1"
+    }
   }
 }
