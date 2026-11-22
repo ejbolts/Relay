@@ -203,6 +203,7 @@ import { ExerciseSessionSheet } from './ExerciseSessionSheet';
 import { ProgressExerciseSearch } from './ProgressExerciseSearch';
 import {
   personalBestProgressPoint,
+  PROGRESS_METRICS,
   progressPointsForChart,
   type ProgressMetric,
 } from './progressChart';
@@ -468,13 +469,14 @@ import {
   weekGroupPage,
 } from './workoutHistory';
 import { calculateScopedDraftPrs, prToastLines, type PrToastEntry } from './workoutPr';
-import { cardioRecordLabel, cardioSetSummary } from './cardioRecords';
+import { cardioSetSummary } from './cardioRecords';
 import { bodyweightOn, bodyweightContext, relativeStrength } from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { recordsForBlock } from './trainingBlocks';
 import { recordBadgeLabel, recordScopeLabel } from './recordScope';
+import { recordTypeLabel, setResult } from './historySetFormat';
 import {
   canResumeWorkout,
   cardioAdjustedEndTime,
@@ -604,19 +606,6 @@ function moveItem<T>(items: T[], from: number, to: number): T[] {
 
 function formatDuration(totalSeconds: number): string {
   return formatSeconds(totalSeconds);
-}
-
-function recordTypeLabel(record: Pick<PersonalRecord, 'record_type' | 'normalized_weight'>) {
-  return (
-    cardioRecordLabel(record) ??
-    {
-      weight: 'Weight PR',
-      relative_strength: 'Relative strength PR',
-      reps_at_weight: 'Volume PR for this weight',
-      estimated_1rm: 'estimated 1RM PR',
-    }[record.record_type as string] ??
-    'PR'
-  );
 }
 
 /** Identifies a celebrated set's records, so the same ones never celebrate twice. */
@@ -8083,12 +8072,6 @@ function MachinePhotoDetail({
 
 /** "zercher squat" as "Zercher Squat", for an exercise named from a search. */
 
-const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: string }> = [
-  { value: 'estimated_1rm', label: 'Est. 1RM', series: 'Est. 1RM' },
-  { value: 'best_weight_kg', label: 'Top set', series: 'Top weight' },
-  { value: 'volume_kg', label: 'Volume', series: 'Session volume' },
-];
-
 interface ExerciseDetailHeader {
   exercise: Exercise;
   sessionCount: number | null;
@@ -10658,21 +10641,6 @@ function HistorySetFlow({
       ))}
     </div>
   );
-}
-
-function setResult(item: TrackedSet, weightUnit: WeightUnit): string {
-  // A bodyweight set is saved at 0 kg; its reps are what matter.
-  if (item.weight_kg === 0 && item.reps !== null) return `${item.reps} reps`;
-  if (item.weight_kg !== null)
-    return `${formatWeight(item.weight_kg, weightUnit)} × ${item.reps ?? '–'}`;
-  const cardioValues = [
-    item.duration_seconds ? formatDuration(item.duration_seconds) : null,
-    item.distance_km !== null ? `${item.distance_km} km` : null,
-    item.incline_percent !== null ? `${item.incline_percent}% incline` : null,
-    item.speed_kph !== null ? `${item.speed_kph} km/h` : null,
-  ].filter((value): value is string => value !== null);
-  if (cardioValues.length) return cardioValues.join(' · ');
-  return `${item.reps ?? '–'} reps`;
 }
 
 function MovementNotes({ notes }: { notes: string }) {

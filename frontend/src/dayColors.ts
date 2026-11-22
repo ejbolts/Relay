@@ -6,7 +6,7 @@ export function workoutTypeColor(type: WorkoutType, categoryColors?: WorkoutType
 }
 
 /** Clear space between the arcs of a mixed day, so neighbouring colours never touch. */
-const RING_GAP_DEG = 10;
+export const RING_GAP_DEG = 10;
 
 /** A day's border: one flat colour, or equal arcs around it when the day mixes workout types. */
 export function dayRing(colors: string[]): string {

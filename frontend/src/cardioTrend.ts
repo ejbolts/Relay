@@ -132,3 +132,62 @@ export function groupCardioHistory(sessions: CardioSession[], weekStartDay: numb
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([start, items]) => ({ start, sessions: items }));
 }
+
+/** The weekly trend card's metrics: what each charts and its unit. */
+export const CARDIO_TREND_METRICS = [
+  { key: 'time', label: 'Time', unit: 'min' },
+  { key: 'distance', label: 'Distance', unit: 'km' },
+  { key: 'elevation', label: 'Elevation', unit: 'm' },
+  { key: 'calories', label: 'Calories', unit: 'kcal', suffix: 'burnt' },
+] as const;
+
+export type CardioTrendMetricKey = (typeof CARDIO_TREND_METRICS)[number]['key'];
+
+export const formatCardioAmount = (value: number) =>
+  value.toLocaleString(undefined, { maximumFractionDigits: 1 });
+
+/**
+ * What the weekly trend card shows: the last eight weeks (plus the week before, for comparison),
+ * the selected week (the newest unless another was picked) against the one before it, and the
+ * Distance tab's activity group, since distances only add up within one kind of movement.
+ */
+export function cardioTrendSelection(
+  sessions: CardioSession[],
+  currentStart: string,
+  today: string,
+  metricKey: CardioTrendMetricKey,
+  selectedStart: string | null,
+  distanceKey: string | null,
+) {
+  const allWeeks = cardioTrendWeeks(sessions, currentStart, today);
+  const distanceGroups = cardioDistanceTabs(sessions, allWeeks[1].start, today);
+  const distanceGroup =
+    distanceGroups.find((group) => group.key === distanceKey) ?? distanceGroups[0] ?? null;
+  const distanceWeeks = distanceGroup
+    ? cardioTrendWeeks(
+        sessions.filter(
+          (session) => distanceGroupFor(session.activity_type).key === distanceGroup.key,
+        ),
+        currentStart,
+        today,
+      )
+    : allWeeks;
+  const weeks = metricKey === 'distance' ? distanceWeeks : allWeeks;
+  const found = weeks.findIndex((week, i) => i > 0 && week.start === selectedStart);
+  const index = found > 0 ? found : 8;
+  const selected = weeks[index];
+  const previous = weeks[index - 1];
+  const value = selected[metricKey];
+  const previousValue = previous[metricKey];
+  return {
+    weeks,
+    distanceGroups,
+    distanceGroup,
+    selected,
+    selectedDistance: distanceWeeks[index].distance,
+    metric: CARDIO_TREND_METRICS.find((item) => item.key === metricKey)!,
+    value,
+    difference: value === null || previousValue === null ? null : value - previousValue,
+    maximum: Math.max(1, ...weeks.slice(1).map((week) => week[metricKey] ?? 0)),
+  };
+}
