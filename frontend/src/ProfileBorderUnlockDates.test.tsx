@@ -275,3 +275,9 @@ describe('Border chip on a shared profile', () => {
     );
   });
 });
+
+describe('unlock date wording', () => {
+  it('uses the same short months as the streak ranges', () => {
+    expect(borderUnlockedLabel('2026-09-12')).toBe('Unlocked 12 Sep 2026');
+  });
+});

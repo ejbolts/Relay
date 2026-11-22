@@ -1,3 +1,4 @@
+import { dayMonth } from './trainingSummary';
 import type { BorderRarity } from './types';
 
 export const RARITY_LABELS: Record<BorderRarity, string> = {
@@ -19,15 +20,10 @@ export const RARITY_BY_GRADE: readonly BorderRarity[] = [
 
 /** "Unlocked 12 Nov 2026" for a border's unlock day, or null when it is missing or unreadable. */
 export function borderUnlockedLabel(day?: string | null): string | null {
-  const match = typeof day === 'string' ? /^\d{4}-\d{2}-\d{2}/.exec(day) : null;
+  const match = typeof day === 'string' ? /^(\d{4})-(\d{2})-(\d{2})/.exec(day) : null;
   if (!match) return null;
-  // Noon keeps the calendar day in every time zone.
-  const date = new Date(`${match[0]}T12:00:00`);
-  if (Number.isNaN(date.getTime())) return null;
-  const shown = date.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
-  return `Unlocked ${shown}`;
+  const [, year, month, date] = match.map(Number);
+  if (month < 1 || month > 12 || date < 1 || date > 31) return null;
+  // The app's own short date ("12 Nov"), so it matches the streak ranges beside it.
+  return `Unlocked ${dayMonth(match[0])} ${year}`;
 }
