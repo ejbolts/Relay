@@ -10,7 +10,8 @@ const emptyRoutineSet = (): RoutineSet => ({
   weight_kg: null,
   duration_seconds: null,
   distance_km: null,
-  rest_seconds: 180,
+  // Left to last time's rest, else the default rest in Settings, when the workout starts.
+  rest_seconds: null,
   set_type: 'normal',
 });
 

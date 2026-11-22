@@ -37,8 +37,11 @@ describe('new workout sets', () => {
     expect(createSuggestedWorkoutSet('strength', previousSet).rpe).toBeNull();
   });
 
-  it('use the standard rest time for the first set', () => {
-    expect(createWorkoutSet('strength').rest_seconds).toBe(180);
+  it('give the first set no rest unless a default rest is set', () => {
+    expect(createWorkoutSet('strength').rest_seconds).toBeNull();
+    expect(createWorkoutSet('strength', undefined, true, 150).rest_seconds).toBe(150);
+    expect(createWorkoutSet('strength', previousSet, false, 150).rest_seconds).toBe(180);
+    expect(createWorkoutSet('cardio', undefined, true, 150).rest_seconds).toBeNull();
   });
 
   it('keeps the matching previous rest for a suggested set, including no rest', () => {

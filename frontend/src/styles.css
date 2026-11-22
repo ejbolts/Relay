@@ -9598,8 +9598,9 @@ html {
   }
 }
 
-/* Shared calendars keep empty dates readable without offering workout creation. */
-.calendar-day:disabled {
+/* Shared calendars keep empty dates readable without offering workout creation. Days ahead
+   still fade as they do on Home, with any planned split outline. */
+.calendar-day:disabled:not(.future) {
   opacity: 1;
   cursor: default;
 }

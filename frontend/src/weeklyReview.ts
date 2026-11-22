@@ -7,7 +7,7 @@ import {
   cardioSessionCount,
   isStrengthWorkout,
   prSetCount,
-  recentStrengthRecords,
+  recentRecords,
   strengthSets,
   weekStartFor,
   workoutVolumeKg,
@@ -202,7 +202,7 @@ export function weeklyReview(input: WeeklyReviewInput): WeeklyReview {
     complete: addDays(start, 6) <= input.today,
     training: trainingTotals(workoutsIn(start)),
     previousTraining: trainingTotals(workoutsIn(previousStart)),
-    records: recentStrengthRecords(recordsIn(start), Number.POSITIVE_INFINITY),
+    records: recentRecords(recordsIn(start), Number.POSITIVE_INFINITY),
     recordCount: prSetCount(recordsIn(start)),
     previousRecordCount: prSetCount(recordsIn(previousStart)),
     muscles: muscleReview(

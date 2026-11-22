@@ -71,7 +71,7 @@ describe('update check notification', () => {
     expect(container.contains(toastElement())).toBe(false);
     expect(container.querySelector('[role="status"], p, time')).toBeNull();
 
-    await advance(TOAST_MS.status - 1);
+    await advance(TOAST_MS.standard - 1);
     expect(toastElement()).not.toBeNull();
     await advance(1);
     expect(toastElement()).toBeNull();
@@ -84,7 +84,7 @@ describe('update check notification', () => {
     await advance(2000);
     await check();
     await finish('current');
-    await advance(TOAST_MS.status - 1);
+    await advance(TOAST_MS.standard - 1);
     expect(toastText()).toBe('Up to date');
     await advance(1);
     expect(toastElement()).toBeNull();
@@ -115,7 +115,7 @@ describe('update check notification', () => {
     await act(async () => render());
     expect(container.querySelector('button')).toBeNull();
     expect(toastText()).toBe('Up to date');
-    await advance(TOAST_MS.status);
+    await advance(TOAST_MS.standard);
     expect(toastElement()).toBeNull();
   });
 });
