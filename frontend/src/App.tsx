@@ -61,7 +61,8 @@ import { WorkoutTypesSettings } from './WorkoutTypesSettings';
 import { TrainingSplitEditor } from './TrainingSplitEditor';
 import { builtinTypeColors, calendarLegendTypes, effectiveWorkoutType } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
-import { currentSplitStep, nextTrainingStep, splitCalendarDays } from './trainingSplit';
+import { splitCalendarDays } from './trainingSplit';
+import { splitSkipMessage, splitSkipMove } from './splitSkip';
 import { PlannedDaySheet, type PlannedStart } from './PlannedDaySheet';
 import {
   useDefaultRest,
@@ -195,6 +196,7 @@ import { ExerciseSessionSheet } from './ExerciseSessionSheet';
 import { ProgressExerciseSearch } from './ProgressExerciseSearch';
 import {
   personalBestProgressPoint,
+  PROGRESS_METRICS,
   progressPointsForChart,
   type ProgressMetric,
 } from './progressChart';
@@ -467,6 +469,7 @@ import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { recordsForBlock } from './trainingBlocks';
 import { recordBadgeLabel, recordScopeLabel } from './recordScope';
+import { setResult } from './historySetFormat';
 import { canResumeWorkout } from './workoutResume';
 import { isWorkoutSetAutoSavable, workoutSetAfterEdit } from './workoutAutoSave';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
@@ -815,17 +818,16 @@ function AppContent() {
   const startMenuUpNext = upNext.isRestDay ? nextTrainingDay : upNext;
   const [splitMoving, setSplitMoving] = useState(false);
   // Up next's split day and the workout day after it, while that day can be skipped.
-  const splitSkip = useMemo(() => {
-    const split = dashboard?.training_split;
-    const recommendation = upNext.recommendation;
-    if (!split?.enabled || !recommendation?.split_name || upNext.needsSplitUpdate) return null;
-    const today = localDate();
-    if (recommendation.scheduled_date && recommendation.scheduled_date > today) return null;
-    const from = currentSplitStep(split, today);
-    if (from === null) return null;
-    const to = nextTrainingStep(split, from);
-    return to === from ? null : { split, from, to };
-  }, [dashboard?.training_split, upNext.recommendation, upNext.needsSplitUpdate]);
+  const splitSkip = useMemo(
+    () =>
+      splitSkipMove(
+        dashboard?.training_split,
+        upNext.recommendation,
+        upNext.needsSplitUpdate,
+        localDate(),
+      ),
+    [dashboard?.training_split, upNext.recommendation, upNext.needsSplitUpdate],
+  );
   const workoutTypeColors = useMemo(
     () => builtinTypeColors(workoutTypes.types),
     [workoutTypes.types],
@@ -2080,12 +2082,6 @@ function AppContent() {
     setTab('split');
   }
 
-  function splitDayName(split: TrainingSplit, step: number) {
-    const typeId = split.steps[step]?.workout_type_id;
-    if (!typeId) return 'rest day';
-    return workoutTypes.types.find((type) => type.id === typeId)?.name ?? 'workout';
-  }
-
   /** Saves the split's new day and reloads Home; a refused move throws. */
   async function moveSplit(
     step: number,
@@ -2127,9 +2123,8 @@ function AppContent() {
       });
       return;
     }
-    const fromName = splitDayName(split, from);
     showToast({
-      message: `Skipped ${fromName} · ${splitDayName(split, to)} is up next`,
+      message: splitSkipMessage(splitSkip, workoutTypes.types),
       action: { label: 'Undo', run: () => undoSplitMove(from, restSaved) },
     });
   }
@@ -7804,12 +7799,6 @@ function MachinePhotoDetail({
 
 /** "zercher squat" as "Zercher Squat", for an exercise named from a search. */
 
-const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: string }> = [
-  { value: 'estimated_1rm', label: 'Est. 1RM', series: 'Est. 1RM' },
-  { value: 'best_weight_kg', label: 'Top set', series: 'Top weight' },
-  { value: 'volume_kg', label: 'Volume', series: 'Session volume' },
-];
-
 interface ExerciseDetailHeader {
   exercise: Exercise;
   sessionCount: number | null;
@@ -10379,21 +10368,6 @@ function HistorySetFlow({
       ))}
     </div>
   );
-}
-
-function setResult(item: TrackedSet, weightUnit: WeightUnit): string {
-  // A bodyweight set is saved at 0 kg; its reps are what matter.
-  if (item.weight_kg === 0 && item.reps !== null) return `${item.reps} reps`;
-  if (item.weight_kg !== null)
-    return `${formatWeight(item.weight_kg, weightUnit)} × ${item.reps ?? '–'}`;
-  const cardioValues = [
-    item.duration_seconds ? formatDuration(item.duration_seconds) : null,
-    item.distance_km !== null ? `${item.distance_km} km` : null,
-    item.incline_percent !== null ? `${item.incline_percent}% incline` : null,
-    item.speed_kph !== null ? `${item.speed_kph} km/h` : null,
-  ].filter((value): value is string => value !== null);
-  if (cardioValues.length) return cardioValues.join(' · ');
-  return `${item.reps ?? '–'} reps`;
 }
 
 function MovementNotes({ notes }: { notes: string }) {

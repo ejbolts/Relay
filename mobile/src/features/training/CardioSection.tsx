@@ -1,0 +1,421 @@
+import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
+import { useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { prettyDate } from '../../../../frontend/src/appShared';
+import {
+  CARDIO_HISTORY_FILTERS,
+  CARDIO_HISTORY_WEEKS_PER_PAGE,
+  cardioSessionContextLabel,
+  cardioSessionEnergy,
+  cardioSessionPerformance,
+  filterCardioHistory,
+  type CardioHistoryFilter,
+} from '../../../../frontend/src/cardioHistory';
+import {
+  CARDIO_TREND_METRICS,
+  cardioTrendSelection,
+  formatCardioAmount,
+  groupCardioHistory,
+  type CardioTrendMetricKey,
+} from '../../../../frontend/src/cardioTrend';
+import { weekStartDayFrom } from '../../../../frontend/src/trainingSummary';
+import type { CardioOverview, CardioSession } from '../../../../frontend/src/types';
+import { localDate } from '../../../../frontend/src/utils';
+import { useWeightUnit } from '../../data/queries';
+import { Button, Card, CardHeader } from '../../ui/components';
+import { Icon } from '../../ui/Icon';
+import { useTheme } from '../../ui/theme';
+import { useWorkout } from '../workout/WorkoutProvider';
+import { trainingIcons } from './icons';
+import { Chip, Divider, MoreButton, Note, Segmented } from './parts';
+import { useCardioOverview } from './trainingQueries';
+
+const shortDay = (value: string) =>
+  new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+  });
+
+/** Cardio: the weekly trend, the session history and the weekly zone goals, as on the web. */
+export function CardioSection() {
+  const overview = useCardioOverview();
+  const workout = useWorkout();
+  if (overview.isPending) return <Note>Loading cardio…</Note>;
+  if (overview.isError)
+    return (
+      <Note
+        action={
+          <Button label="Try again" variant="secondary" onPress={() => void overview.refetch()} />
+        }
+      >
+        Could not load cardio.
+      </Note>
+    );
+  return (
+    <View style={{ gap: 20 }}>
+      <Button label="Log session" icon="cardio" onPress={() => workout.start({ kind: 'cardio' })} />
+      <CardioTrend overview={overview.data} />
+      <CardioHistory overview={overview.data} />
+      <ZoneGoals overview={overview.data} />
+    </View>
+  );
+}
+
+function CardioTrend({ overview }: { overview: CardioOverview }) {
+  const { colors, radius, type } = useTheme();
+  const [metricKey, setMetricKey] = useState<CardioTrendMetricKey>('time');
+  const [selectedStart, setSelectedStart] = useState<string | null>(null);
+  const [distanceKey, setDistanceKey] = useState<string | null>(null);
+  const view = cardioTrendSelection(
+    overview.sessions,
+    overview.current_week.week_start,
+    localDate(),
+    metricKey,
+    selectedStart,
+    distanceKey,
+  );
+  const { selected, metric, value, difference, maximum } = view;
+  return (
+    <Card accessibilityLabel="Weekly cardio trend">
+      <Segmented
+        accessibilityLabel="Cardio trend metric"
+        values={CARDIO_TREND_METRICS.map((item) => item.label)}
+        selectedIndex={CARDIO_TREND_METRICS.findIndex((item) => item.key === metricKey)}
+        onChange={(index) => setMetricKey(CARDIO_TREND_METRICS[index].key)}
+      />
+      {metricKey === 'distance' && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={{ gap: 8 }}
+          accessibilityLabel="Distance activity"
+        >
+          {view.distanceGroups.map((group) => (
+            <Chip
+              key={group.key}
+              label={group.label}
+              selected={view.distanceGroup?.key === group.key}
+              onPress={() => setDistanceKey(group.key)}
+            />
+          ))}
+        </ScrollView>
+      )}
+      <View accessibilityLiveRegion="polite" style={{ gap: 2 }}>
+        <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
+          {selected.start === overview.current_week.week_start ? 'This week' : 'Week'} ·{' '}
+          {shortDay(selected.start)} – {shortDay(selected.end)}
+        </Text>
+        <Text style={[type.largeTitle, type.number, { color: colors.text }]}>
+          {value === null ? '—' : formatCardioAmount(value)}
+          <Text style={[type.headline, { color: colors.muted }]}>
+            {' '}
+            {'suffix' in metric ? `${metric.unit} ${metric.suffix}` : metric.unit}
+          </Text>
+        </Text>
+        <Text style={[type.footnote, { color: colors.secondary }]}>
+          {selected.sessions} {selected.sessions === 1 ? 'session' : 'sessions'}
+          {difference !== null &&
+            ` · ${
+              Math.abs(difference) < 0.05
+                ? 'No change'
+                : `${difference > 0 ? '↑' : '↓'} ${formatCardioAmount(Math.abs(difference))} ${metric.unit}`
+            } vs previous week`}
+        </Text>
+      </View>
+      <View style={styles.bars} accessibilityLabel="Last eight weeks">
+        {view.weeks.slice(1).map((week) => {
+          const amount = week[metricKey];
+          const active = selected.start === week.start;
+          return (
+            <Pressable
+              key={week.start}
+              accessibilityRole="button"
+              accessibilityLabel={`Week of ${shortDay(week.start)}: ${amount === null ? 'not logged' : `${formatCardioAmount(amount)} ${metric.unit}`}`}
+              accessibilityState={{ selected: active }}
+              onPress={() => {
+                void Haptics.selectionAsync();
+                setSelectedStart(week.start);
+              }}
+              style={styles.barColumn}
+            >
+              <View
+                style={[
+                  styles.track,
+                  { backgroundColor: colors.surface2, borderRadius: radius.sm },
+                ]}
+              >
+                <View
+                  style={{
+                    height: `${Math.max(3, ((amount ?? 0) / maximum) * 100)}%`,
+                    borderRadius: radius.sm,
+                    backgroundColor:
+                      amount === null ? colors.deemph : active ? colors.accent : colors.accentSoft,
+                  }}
+                />
+              </View>
+              <Text
+                style={[type.caption, { color: active ? colors.text : colors.muted, fontSize: 10 }]}
+                numberOfLines={1}
+              >
+                {shortDay(week.start)}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      <View style={styles.weekStats}>
+        <WeekStat
+          label="Avg HR"
+          value={selected.heartRate === null ? '—' : `${Math.round(selected.heartRate)} bpm`}
+        />
+        <WeekStat label="Avg MET" value={selected.mets === null ? '—' : selected.mets.toFixed(1)} />
+        <WeekStat
+          label={metricKey === 'time' ? (view.distanceGroup?.label ?? 'Distance') : 'Time'}
+          value={
+            metricKey === 'time'
+              ? view.selectedDistance === null
+                ? '—'
+                : `${formatCardioAmount(view.selectedDistance)} km`
+              : `${formatCardioAmount(selected.time)} min`
+          }
+        />
+      </View>
+    </Card>
+  );
+}
+
+function WeekStat({ label, value }: { label: string; value: string }) {
+  const { colors, type } = useTheme();
+  return (
+    <View style={{ flex: 1, gap: 2 }}>
+      <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function CardioHistory({ overview }: { overview: CardioOverview }) {
+  const { colors, type } = useTheme();
+  const [filter, setFilter] = useState<CardioHistoryFilter>('all');
+  const [weeks, setWeeks] = useState(CARDIO_HISTORY_WEEKS_PER_PAGE);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const sessions = filterCardioHistory(overview.sessions, filter);
+  const groups = groupCardioHistory(sessions, weekStartDayFrom(overview.current_week.week_start));
+  return (
+    <Card accessibilityLabel="Cardio history">
+      <CardHeader title="History" />
+      <Segmented
+        accessibilityLabel="Filter cardio history"
+        values={CARDIO_HISTORY_FILTERS.map(([, label]) => label)}
+        selectedIndex={CARDIO_HISTORY_FILTERS.findIndex(([value]) => value === filter)}
+        onChange={(index) => {
+          setFilter(CARDIO_HISTORY_FILTERS[index][0]);
+          setWeeks(CARDIO_HISTORY_WEEKS_PER_PAGE);
+        }}
+      />
+      {sessions.length === 0 && <Note>No cardio sessions match this filter.</Note>}
+      {groups.slice(0, weeks).map((group) => (
+        <View key={group.start} style={{ gap: 2 }}>
+          <View style={styles.weekHeader}>
+            <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600', flex: 1 }]}>
+              Week of {prettyDate(group.start)}
+            </Text>
+            <Text style={[type.footnote, type.number, { color: colors.secondary }]}>
+              {group.sessions.reduce((total, item) => total + item.duration_minutes, 0)} min
+            </Text>
+          </View>
+          {group.sessions.map((session, index) => (
+            <View key={session.id}>
+              {index > 0 && <Divider inset={44} />}
+              <CardioRow
+                session={session}
+                open={openId === session.id}
+                onToggle={() => setOpenId(openId === session.id ? null : session.id)}
+              />
+            </View>
+          ))}
+        </View>
+      ))}
+      {groups.length > weeks && (
+        <MoreButton
+          label="Show earlier weeks"
+          onPress={() => setWeeks(weeks + CARDIO_HISTORY_WEEKS_PER_PAGE)}
+        />
+      )}
+    </Card>
+  );
+}
+
+function CardioRow({
+  session,
+  open,
+  onToggle,
+}: {
+  session: CardioSession;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const { colors, type } = useTheme();
+  const unit = useWeightUnit();
+  const router = useRouter();
+  const linked = session.source_workout_id;
+  return (
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${session.activity_type}, ${prettyDate(session.session_date)}, ${session.duration_minutes} minutes`}
+        onPress={() => {
+          void Haptics.selectionAsync();
+          onToggle();
+        }}
+        style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+      >
+        <View style={[styles.activityIcon, { backgroundColor: colors.accentSoft }]}>
+          <Icon name={trainingIcons.heart} size={16} color={colors.accentText} />
+        </View>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]} numberOfLines={1}>
+            {session.activity_type}
+          </Text>
+          <Text style={[type.caption, { color: colors.secondary }]} numberOfLines={1}>
+            {prettyDate(session.session_date)} · {cardioSessionContextLabel(session)}
+          </Text>
+        </View>
+        <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '600' }]}>
+          {session.duration_minutes} min
+        </Text>
+        <Icon name={open ? 'chevronUp' : 'chevronDown'} size={12} color={colors.muted} />
+      </Pressable>
+      {open && (
+        <View style={styles.rowDetail}>
+          <Text style={[type.footnote, { color: colors.secondary }]}>
+            {cardioSessionEnergy(session, unit)}
+          </Text>
+          <Text style={[type.footnote, { color: colors.secondary }]}>
+            {cardioSessionPerformance(session)}
+          </Text>
+          {!!linked && (
+            <Button
+              label="Open workout"
+              variant="link"
+              onPress={() =>
+                router.push({
+                  pathname: '/training/session/[id]',
+                  params: { id: linked },
+                })
+              }
+              style={{ alignSelf: 'flex-start' }}
+            />
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function ZoneGoals({ overview }: { overview: CardioOverview }) {
+  const { colors, radius, type } = useTheme();
+  const zones = overview.cardio_preferences?.heart_rate_zones ?? [];
+  const zonesSet = zones.length > 0;
+  const goals = overview.goal_weeks ?? [{ zone: 2, ...overview.current_week }];
+  return (
+    <Card accessibilityLabel="Weekly zone goals">
+      <CardHeader title="Weekly zone goals" />
+      {goals.map((goal, index) => {
+        const range = zones.find((item) => item.zone === goal.zone);
+        const share = zonesSet
+          ? Math.min(1, goal.completed_minutes / Math.max(goal.goal_minutes, 1))
+          : 0;
+        return (
+          <View key={goal.zone} style={{ gap: 8 }}>
+            {index > 0 && <Divider />}
+            <View style={styles.goal}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]}>
+                  Zone {goal.zone}
+                </Text>
+                {range && (
+                  <Text style={[type.caption, { color: colors.muted }]}>
+                    {range.min_bpm}–{range.max_bpm} bpm
+                  </Text>
+                )}
+              </View>
+              <View style={{ alignItems: 'flex-end', gap: 2 }}>
+                <Text
+                  style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}
+                >
+                  {zonesSet ? goal.completed_minutes : '–'} / {goal.goal_minutes} min
+                </Text>
+                {zonesSet && (
+                  <Text
+                    style={[
+                      type.caption,
+                      { color: goal.complete ? colors.good : colors.secondary },
+                    ]}
+                  >
+                    {goal.complete ? 'Goal reached' : `${goal.remaining_minutes} min to go`}
+                  </Text>
+                )}
+              </View>
+            </View>
+            {zonesSet && (
+              <View
+                style={[
+                  styles.goalTrack,
+                  {
+                    backgroundColor: colors.surface2,
+                    borderRadius: radius.pill,
+                  },
+                ]}
+              >
+                <View
+                  style={{
+                    width: `${share * 100}%`,
+                    height: '100%',
+                    borderRadius: radius.pill,
+                    backgroundColor: goal.complete ? colors.good : colors.accent,
+                  }}
+                />
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </Card>
+  );
+}
+
+const styles = StyleSheet.create({
+  bars: { flexDirection: 'row', gap: 6, height: 120, alignItems: 'flex-end' },
+  barColumn: { flex: 1, alignItems: 'center', gap: 4, height: '100%' },
+  track: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'flex-end',
+    overflow: 'hidden',
+  },
+  weekStats: { flexDirection: 'row', gap: 12 },
+  weekHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 56 },
+  activityIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowDetail: { paddingLeft: 44, paddingBottom: 12, gap: 4 },
+  goal: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  goalTrack: { height: 6, overflow: 'hidden' },
+});

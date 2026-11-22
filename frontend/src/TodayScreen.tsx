@@ -9,12 +9,12 @@ import { Toast } from './Toast';
 import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 import { ConsistencyCard } from './ConsistencyCard';
 import { consistencyWeeks } from './consistencyWeeks';
-import { cardioRecordLabel } from './cardioRecords';
+import { recordKindLabel } from './recordLabels';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { MuscleSetsCard } from './MuscleSetsCard';
 import type { MuscleSetsWeek } from './liveMuscleSets';
-import { formatMemberSince } from './profileDisplay';
+import { formatMemberSince, formatProfileTotal as formatTotal } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
 import type { useHomeLayout } from './useHomeLayout';
 import {
@@ -150,16 +150,6 @@ export function SettingsButton({ onClick }: { onClick: () => void }) {
     </button>
   );
 }
-
-function formatTotal(value: number | null | undefined): string {
-  return value == null ? '–' : value.toLocaleString();
-}
-
-const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
-  relative_strength: 'Relative strength PR',
-  reps_at_weight: 'Volume PR for this weight',
-  weight: 'Weight PR',
-};
 
 export interface TodayScreenProps {
   home: ReturnType<typeof useHomeLayout>;
@@ -755,11 +745,7 @@ export function TodayScreen({
                   <span className="record-copy">
                     <b>{record.exercise_name ?? 'Exercise'}</b>
                     <small>
-                      {cardioRecordLabel(record) ?? RECORD_LABELS[record.record_type] ?? 'PR'}
-                      {record.record_type === 'reps_at_weight' && record.weight_kg != null
-                        ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
-                        : ''}{' '}
-                      · {shortDate(record.achieved_date)}
+                      {recordKindLabel(record, weightUnit)} · {shortDate(record.achieved_date)}
                       {record.bodyweight_kg != null && (
                         <span className="record-bodyweight">
                           at {formatWeight(record.bodyweight_kg, weightUnit)} BW
