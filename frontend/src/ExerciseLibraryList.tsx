@@ -5,8 +5,11 @@ import { ExerciseCustomFilter } from './ExerciseCustomFilter';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
-import { exerciseEquipment } from './exerciseEquipment';
-import { exerciseSearchAllowsTypos, exerciseSearchScore } from './exerciseSearch';
+import {
+  EXERCISE_LIBRARY_SORTS as sorts,
+  exerciseLibraryMuscles,
+  filterExerciseLibrary,
+} from './exerciseLibraryFilter';
 import { TrainingBlockDialog, type TrainingBlockDialogStart } from './TrainingBlockDialog';
 import { useToast } from './Toast';
 import { blockOn } from './trainingBlocks';
@@ -17,7 +20,6 @@ import { formatWeightNumber, weightFromKg } from './weightUnits';
 import { localDate } from './utils';
 import type { ExerciseLibraryState } from './useExerciseLibrary';
 
-const sorts = ['Recent first', 'A–Z', 'Most improved'] as const;
 const PAGE_SIZES = [5, 10, 20, 50];
 const DEFAULT_PAGE_SIZE = 10;
 const PAGE_SIZE_KEY = 'relay-exercise-list-page-size';
@@ -36,13 +38,6 @@ function savePageSize(size: number) {
   } catch {
     // The choice still applies until the list is closed.
   }
-}
-function exerciseMuscles(exercise: Exercise) {
-  return (
-    exercise.muscle_set_credits
-      ?.filter((credit) => credit.sets > 0)
-      .map((credit) => credit.muscle_name) ?? [exercise.muscle_group].filter(Boolean)
-  );
 }
 function Sparkline({ summary }: { summary: ExerciseLibrarySummary | undefined }) {
   const values = summary?.trend.map((p) => p.estimated_1rm) ?? [];
@@ -112,40 +107,17 @@ export function ExerciseLibraryList({
     () => new Map(summaries?.map((item) => [item.exercise_id, item])),
     [summaries],
   );
-  const muscles = [
-    ...new Set(
-      exercises.flatMap(
-        (exercise) =>
-          exercise.default_muscle_set_credits?.map((credit) => credit.muscle_name) ??
-          exerciseMuscles(exercise),
-      ),
-    ),
-  ].sort();
+  const muscles = exerciseLibraryMuscles(exercises);
   const hiddenCount = exercises.filter((exercise) => exercise.hidden).length;
   const showHidden = hiddenOnly && hiddenCount > 0;
-  const typos = exerciseSearchAllowsTypos(exercises, query);
-  const list = exercises
-    .filter(
-      (exercise) =>
-        Boolean(exercise.hidden) === showHidden &&
-        (!customOnly || exercise.is_custom) &&
-        (muscle === 'All' || exerciseMuscles(exercise).includes(muscle)) &&
-        (!equipment || exerciseEquipment(exercise.equipment) === equipment) &&
-        exerciseSearchScore(exercise, query, typos) !== null,
-    )
-    .sort((a, b) => {
-      const first = byId.get(a.id),
-        second = byId.get(b.id);
-      if (sort === 1) return a.name.localeCompare(b.name);
-      if (sort === 2) {
-        const change = (second?.change_percent ?? -Infinity) - (first?.change_percent ?? -Infinity);
-        if (change && !Number.isNaN(change)) return change;
-      } else {
-        const recent = (second?.last_date ?? '').localeCompare(first?.last_date ?? '');
-        if (recent) return recent;
-      }
-      return a.name.localeCompare(b.name);
-    });
+  const list = filterExerciseLibrary(exercises, byId, {
+    query,
+    muscle,
+    equipment,
+    customOnly,
+    hiddenOnly,
+    sort,
+  });
   const totalPages = Math.max(1, Math.ceil(list.length / pageSize));
   const currentPage = Math.min(page, totalPages);
   const pageItems = list.slice((currentPage - 1) * pageSize, currentPage * pageSize);

@@ -3,6 +3,13 @@ import type { ProgressPoint } from './types';
 
 export type ProgressMetric = 'estimated_1rm' | 'best_weight_kg' | 'volume_kg';
 
+/** The exercise progress metrics, with their tab label and the series they chart. */
+export const PROGRESS_METRICS: Array<{ value: ProgressMetric; label: string; series: string }> = [
+  { value: 'estimated_1rm', label: 'Est. 1RM', series: 'Est. 1RM' },
+  { value: 'best_weight_kg', label: 'Top set', series: 'Top weight' },
+  { value: 'volume_kg', label: 'Volume', series: 'Session volume' },
+];
+
 export function personalBestProgressPoint(
   points: ProgressPoint[],
   metric: ProgressMetric,
