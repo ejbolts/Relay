@@ -19,4 +19,4 @@ From this directory, run `npm ci` followed by `npm start`. Open the project in a
 | `src/theme.ts`           | Native colors from Relay’s default Pulse theme                     |
 | `assets/`                | Bundled Relay icon and exercise illustrations                      |
 
-Run `npm run typecheck`, `npm run lint` and `npm test` here to verify the shell.
+Run `npm run typecheck`, `npm run lint` and `npm test` here to verify the shell. GitHub's **Checks** workflow runs the same three as **Mobile checks** when a PR changes `mobile/`.

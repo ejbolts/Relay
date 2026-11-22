@@ -490,15 +490,19 @@ stacked PRs, from the changed files in the exact tested merge commit:
 - Backend route, schema, model and frontend-serving modules, plus
   `frontend/src/api.ts` and `frontend/src/types.ts`, run both suites. The detector's
   tests guard the route-module mapping when new API routers are added.
-- CI, deployment, shared configuration and unknown paths run both suites.
+- Changes under `mobile/` run only **Mobile checks**: the mobile typecheck, lint and
+  Jest tests. Frontend files the mobile app imports (`MOBILE_SHARED_FILES` in the
+  detector) also run them, and the detector's tests keep that list equal to what
+  `mobile/` imports from outside its folder.
+- CI, deployment, shared configuration and unknown paths run every suite.
 - Changes confined to `docs/`, the README, contributor/agent instructions or license
-  files need neither application suite on feature PRs.
-- PRs into `main`, `main` pushes and manual dispatch always run both suites.
+  files need no application suite on feature PRs.
+- PRs into `main`, `main` pushes and manual dispatch always run every suite.
 
-Both required job names, **Frontend checks** and **Backend checks**, remain present.
-An unaffected job reports success without checking out code, installing dependencies
-or running its suite. Detection failure, cancellation or invalid output fails both
-required jobs. Labels do not control selection, and the workflow is never suppressed
+The job names **Frontend checks**, **Backend checks** and **Mobile checks** remain
+present. An unaffected job reports success without checking out code, installing
+dependencies or running its suite. Detection failure, cancellation or invalid output
+fails every job. Labels do not control selection, and the workflow is never suppressed
 by path filters. Detection uses a depth-two checkout and a NUL-delimited Git diff,
 including both paths of renames, without the file-count limits of API/path filtering.
 

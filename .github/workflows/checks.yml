@@ -21,6 +21,7 @@ jobs:
     outputs:
       frontend: ${{ steps.scope.outputs.frontend }}
       backend: ${{ steps.scope.outputs.backend }}
+      mobile: ${{ steps.scope.outputs.mobile }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -125,3 +126,47 @@ jobs:
       - name: Run all frontend tests
         if: needs.changes.outputs.frontend == 'full'
         run: npm test
+
+  mobile:
+    name: Mobile checks
+    needs: changes
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - name: Validate check selection
+        working-directory: .
+        env:
+          DETECTION_RESULT: ${{ needs.changes.result }}
+          RUN_CHECKS: ${{ needs.changes.outputs.mobile }}
+        run: |
+          case "$DETECTION_RESULT:$RUN_CHECKS" in
+            success:true) echo "Running mobile checks." ;;
+            success:false) echo "Mobile checks are not needed for this change." ;;
+            *) echo "::error::Change detection failed or returned an invalid scope."; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.changes.outputs.mobile == 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: needs.changes.outputs.mobile == 'true'
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - name: Install locked dependencies
+        if: needs.changes.outputs.mobile == 'true'
+        run: npm ci --no-audit
+      - name: Typecheck mobile
+        if: needs.changes.outputs.mobile == 'true'
+        run: npm run typecheck
+      - name: Lint mobile
+        if: needs.changes.outputs.mobile == 'true'
+        run: npm run lint
+      - name: Run mobile tests
+        if: needs.changes.outputs.mobile == 'true'
+        run: npm test -- --ci

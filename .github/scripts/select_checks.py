@@ -40,6 +40,10 @@ CONTRACT_MODULES = {
     "workout_type_exercises.py",
     "youtube_connections.py",
 }
+# Frontend files the mobile app imports (its API types). A change to one can break the
+# mobile typecheck, so it also runs the mobile checks. A repository test keeps this
+# set equal to what mobile/ actually imports from outside its folder.
+MOBILE_SHARED_FILES: frozenset[str] = frozenset()
 
 
 FrontendScope = Literal["none", "styles", "related", "full"]
@@ -49,19 +53,24 @@ FrontendScope = Literal["none", "styles", "related", "full"]
 class Selection:
     frontend: FrontendScope
     backend: bool
+    mobile: bool
     reason: str
 
 
 def select_paths(paths: list[str], root: Path = ROOT) -> Selection:
     frontend_paths = set()
-    backend = False
+    backend = mobile = False
     full_frontend = False
     for path in paths:
         if not path or path.startswith("/") or ".." in path.split("/"):
             raise ValueError("Invalid changed-file path")
         if path in DOC_FILES or path.startswith("docs/"):
             continue
-        if path in {"frontend/src/api.ts", "frontend/src/types.ts"} or (
+        if path in MOBILE_SHARED_FILES:
+            mobile = True
+        if path.startswith("mobile/"):
+            mobile = True
+        elif path in {"frontend/src/api.ts", "frontend/src/types.ts"} or (
             path.startswith("backend/app/")
             and (path.rsplit("/", 1)[-1] in CONTRACT_MODULES or path.endswith("schemas.py"))
         ):
@@ -72,9 +81,9 @@ def select_paths(paths: list[str], root: Path = ROOT) -> Selection:
             backend = True
         else:
             # CI, deployment, shared configuration and unknown paths are conservative.
-            full_frontend = backend = True
+            full_frontend = backend = mobile = True
     mode = "full" if full_frontend else frontend_scope(frontend_paths, root)
-    return Selection(mode, backend, "Selected from changed files in the tested PR merge.")
+    return Selection(mode, backend, mobile, "Selected from changed files in the tested PR merge.")
 
 
 def frontend_scope(paths: set[str], root: Path) -> FrontendScope:
@@ -105,14 +114,14 @@ def git(root: Path, *args: str) -> bytes:
 
 def select_event(event_name: str, event: dict, merge_sha: str, root: Path = ROOT) -> Selection:
     if event_name != "pull_request":
-        return Selection("full", True, "Push, manual or other verification runs both suites.")
+        return Selection("full", True, True, "Push, manual or other verification runs both suites.")
     pr = event["pull_request"]
     base_ref = pr["base"]["ref"]
     if not isinstance(base_ref, str) or not base_ref:
         raise ValueError("PR base branch is missing")
     if base_ref == "main":
         return Selection(
-            "full", True, "PRs into main verify the complete release with both suites."
+            "full", True, True, "PRs into main verify the complete release with every suite."
         )
     base, head = pr["base"]["sha"], pr["head"]["sha"]
     if not all(isinstance(sha, str) and SHA.fullmatch(sha) for sha in (base, head, merge_sha)):
@@ -143,7 +152,11 @@ def main() -> int:
     try:
         event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
         selected = select_event(os.environ["GITHUB_EVENT_NAME"], event, os.getenv("GITHUB_SHA", ""))
-        output = f"frontend={selected.frontend}\nbackend={str(selected.backend).lower()}\n"
+        output = (
+            f"frontend={selected.frontend}\n"
+            f"backend={str(selected.backend).lower()}\n"
+            f"mobile={str(selected.mobile).lower()}\n"
+        )
         # Publish outputs only after all detection/validation has succeeded.
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
             handle.write(output)
@@ -151,6 +164,7 @@ def main() -> int:
             f"{selected.reason}\n\n"
             f"Frontend scope: {selected.frontend}.\n"
             f"Backend suite: {'run' if selected.backend else 'not needed'}.\n"
+            f"Mobile checks: {'run' if selected.mobile else 'not needed'}.\n"
         )
         if summary_path := os.getenv("GITHUB_STEP_SUMMARY"):
             with Path(summary_path).open("a", encoding="utf-8") as handle:
