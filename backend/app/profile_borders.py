@@ -21,7 +21,7 @@ import calendar
 import re
 from collections import defaultdict
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Literal
 
@@ -420,6 +420,21 @@ class BorderProgress(BaseModel):
     unit: str
 
 
+StreakUnit = Literal["days", "Mondays", "weeks"]
+
+
+class BorderStreak(BaseModel):
+    unit: StreakUnit
+    current: int = 0
+    current_start: date | None = None
+    current_end: date | None = None
+    active: bool = False
+    broken_on: date | None = None
+    best: int = 0
+    best_start: date | None = None
+    best_end: date | None = None
+
+
 class BorderRead(BaseModel):
     key: str
     name: str
@@ -430,6 +445,7 @@ class BorderRead(BaseModel):
     # Missing only for a strength border while the account has not set its sex.
     progress: BorderProgress | None = None
     needs_sex: bool = False
+    streak: BorderStreak | None = None
     # A tiered border's family and its place in it, from 1; both are None for a single border.
     family: str | None = None
     tier: int | None = None
@@ -460,13 +476,41 @@ def worn_border_name(user: User) -> str | None:
 
 def longest_run(days: Iterable[date], step: int = 1) -> int:
     """The most dates in a row that are each ``step`` days after the one before."""
-    best = run = 0
-    previous: date | None = None
+    return max((length for length, _, _ in streak_runs(days, step)), default=0)
+
+
+def streak_runs(days: Iterable[date], step: int) -> Iterable[tuple[int, date, date]]:
+    start = end = None
+    length = 0
     for day in sorted(set(days)):
-        run = run + 1 if previous is not None and (day - previous).days == step else 1
-        best = max(best, run)
-        previous = day
-    return best
+        if end is None or (day - end).days != step:
+            if start is not None and end is not None:
+                yield length, start, end
+            start = day
+            length = 0
+        length += 1
+        end = day
+    if start is not None and end is not None:
+        yield length, start, end
+
+
+def streak_details(
+    days: Iterable[date], unit: StreakUnit, step: int, active_since: date
+) -> BorderStreak:
+    streak = BorderStreak(unit=unit)
+    for length, start, end in streak_runs(days, step):
+        streak.current = length
+        streak.current_start = start
+        streak.current_end = end
+        if length >= streak.best:
+            streak.best = length
+            streak.best_start = start
+            streak.best_end = end
+    if streak.current_end is not None:
+        streak.active = streak.current_end >= active_since
+        if not streak.active:
+            streak.broken_on = streak.current_end + timedelta(days=step)
+    return streak
 
 
 def lift_of(exercise_name: str) -> str | None:
@@ -481,6 +525,7 @@ class Stats:
     values: dict[str, float]
     # (day trained, when it was logged), for every workout and cardio session.
     activity: list[tuple[date, datetime]]
+    streaks: dict[str, BorderStreak] = field(default_factory=dict)
 
 
 def _naive_utc(moment: datetime) -> datetime:
@@ -714,13 +759,29 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
     for day in lifting_days:
         lifting_days_per_week[week_of(day)] += 1
 
+    monday = today - timedelta(days=today.weekday())
+    if today == monday:
+        monday -= timedelta(weeks=1)
+    streaks = {
+        "log_streak": streak_details(
+            [*training_days, *(session.session_date for session in cardio), *weigh_in_days],
+            "days",
+            1,
+            today - timedelta(days=1),
+        ),
+        "monday_streak": streak_details(
+            (day for day in training_days if day.weekday() == 0), "Mondays", 7, monday
+        ),
+        "week_streak": streak_details(
+            (week for week, days in days_per_week.items() if days >= 3),
+            "weeks",
+            7,
+            week_of(today) - timedelta(weeks=1),
+        ),
+    }
     values = {
         "workouts": len(workouts),
-        "log_streak": longest_run(
-            [*training_days, *(session.session_date for session in cardio), *weigh_in_days]
-        ),
-        "monday_streak": longest_run((day for day in training_days if day.weekday() == 0), 7),
-        "week_streak": longest_run((week for week, days in days_per_week.items() if days >= 3), 7),
+        **{metric: streak.best for metric, streak in streaks.items()},
         "early_starts": sum(EARLY_FROM <= start < EARLY_UNTIL for start in starts),
         "late_starts": sum(start >= LATE_FROM or start < EARLY_FROM for start in starts),
         "months_trained": len({day.month for day in training_days}),
@@ -744,7 +805,7 @@ def border_stats(db: Session, user: User, today: date | None = None) -> Stats:
     activity = [(day, created) for day, _, _, created in workouts] + [
         (session.session_date, session.created_at) for session in cardio
     ]
-    return Stats(values, activity)
+    return Stats(values, activity, streaks=streaks)
 
 
 def value_of(border: Border, stats: Stats) -> float:
@@ -809,6 +870,7 @@ def _read(border: Border, stats: Stats, sex: str | None, unit: str, today: date)
         unlocked=is_unlocked(border, stats, sex),
         family=border.family,
         tier=border.tier,
+        streak=stats.streaks.get(border.metric),
     )
     target = border.target_for(sex)
     if target is None:
@@ -819,8 +881,11 @@ def _read(border: Border, stats: Stats, sex: str | None, unit: str, today: date)
     else:
         shown_target = _shown(border, target, unit)
         read.requirement = _requirement(border, _target_text(border, target, unit))
+        progress_value = value_of(border, stats)
+        if read.streak is not None and not read.unlocked:
+            progress_value = read.streak.current if read.streak.active else 0
         read.progress = BorderProgress(
-            current=_shown(border, value_of(border, stats), unit),
+            current=_shown(border, progress_value, unit),
             target=round(shown_target) if measure.weight else shown_target,
             unit=unit if measure.weight else measure.unit,
         )
