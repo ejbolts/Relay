@@ -1,12 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, within } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { AccessibilityInfo, Alert, I18nManager } from 'react-native';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import { formatLastDone } from '../../../../frontend/src/exerciseLastDone';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
 import { apiGet } from '../../data/api';
+import { showMenu } from '../../ui/prompts';
 import { ExerciseDetailScreen } from './ExerciseDetailScreen';
 import { SessionDetailScreen } from './SessionDetailScreen';
 import { TrainingTabScreen } from './TrainingTabScreen';
@@ -38,6 +39,21 @@ const mockWorkout = {
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   Stack: { Screen: () => null },
+}));
+// The account buttons have their own tests; Training only has to show them.
+jest.mock('./TrainingHeaderActions', () => {
+  const { createElement } = jest.requireActual<typeof import('react')>('react');
+  const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
+  return { TrainingHeaderActions: () => createElement(Text, null, 'Header actions') };
+});
+jest.mock('expo-screen-orientation', () => ({
+  lockAsync: jest.fn(async () => undefined),
+  unlockAsync: jest.fn(async () => undefined),
+  OrientationLock: { LANDSCAPE: 'landscape' },
+}));
+jest.mock('../../ui/prompts', () => ({
+  ...jest.requireActual<typeof import('../../ui/prompts')>('../../ui/prompts'),
+  showMenu: jest.fn(),
 }));
 jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: () => mockWorkout }));
 jest.mock('../../data/api', () => ({
@@ -154,6 +170,7 @@ test('Sessions shows the log by week, and a card opens to its sets and repeats t
   await open(<TrainingTabScreen />);
   expect(await screen.findByText('5 workouts logged')).toBeVisible();
   expect(screen.getByRole('header', { name: 'Training' })).toBeVisible();
+  expect(screen.getByText('Header actions')).toBeVisible();
   expect(screen.getByRole('tab', { name: 'Sessions', selected: true })).toBeVisible();
 
   expect(await screen.findByText('This week')).toBeVisible();
@@ -241,6 +258,73 @@ test('going back past the loaded months reads older history', async () => {
   );
 });
 
+/** A swipe of the measured month pager settling on a page (`x` is the raw scroll offset). */
+async function settleCalendar(x: number) {
+  const list = screen.getByTestId('calendar-months');
+  await fireEvent(list, 'momentumScrollEnd', {
+    nativeEvent: {
+      contentOffset: { x, y: 0 },
+      contentSize: { width: 9 * 300, height: 300 },
+      layoutMeasurement: { width: 300, height: 300 },
+    },
+  });
+}
+
+test('the calendar swipes between months, landing on the month it settles on', async () => {
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  await open(<TrainingTabScreen />);
+  await screen.findByText('This week');
+  await fireEvent(screen.getByTestId('calendar-pager'), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 300 } },
+  });
+  expect(screen.getByTestId('calendar-months')).toBeOnTheScreen();
+  expect(screen.getByRole('header', { name: 'November 2026' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Next month' })).toBeDisabled();
+
+  // Nine months, March to November: the first page is the oldest.
+  await settleCalendar(0);
+  expect(screen.getByRole('header', { name: 'March 2026' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Previous month' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Next month' })).toBeEnabled();
+  expect(announce).toHaveBeenLastCalledWith('March 2026');
+  expect(
+    await screen.findByRole('button', { name: `View 1 workout for ${prettyDate('2026-03-02')}` }),
+  ).toBeVisible();
+  // Reaching months before the loaded window reads older history.
+  expect(apiGet).toHaveBeenCalledWith(
+    '/api/workouts/snapshot?start=2026-02-01&end=2026-07-31',
+    expect.anything(),
+  );
+
+  // A day chosen on a page stays chosen after swiping away and back.
+  const day = screen.getByRole('button', {
+    name: `View 1 workout for ${prettyDate('2026-03-02')}`,
+  });
+  await fireEvent.press(day);
+  await settleCalendar(8 * 300);
+  expect(screen.getByRole('header', { name: 'November 2026' })).toBeVisible();
+  await settleCalendar(0);
+  expect(
+    screen.getByRole('button', { name: `View 1 workout for ${prettyDate('2026-03-02')}` }),
+  ).toBeSelected();
+  announce.mockRestore();
+});
+
+test('a right-to-left calendar maps its pages from the right', async () => {
+  jest.replaceProperty(I18nManager, 'isRTL', true);
+  await open(<TrainingTabScreen />);
+  await screen.findByText('This week');
+  await fireEvent(screen.getByTestId('calendar-pager'), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 300 } },
+  });
+  // In RTL the oldest month is the rightmost page.
+  await settleCalendar(8 * 300);
+  expect(screen.getByRole('header', { name: 'March 2026' })).toBeVisible();
+  await settleCalendar(0);
+  expect(screen.getByRole('header', { name: 'November 2026' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Next month' })).toBeDisabled();
+});
+
 test('Show earlier weeks skips empty weeks, reading older months to reach the next workout', async () => {
   await open(<TrainingTabScreen />);
   await screen.findByText('This week');
@@ -312,13 +396,33 @@ test('Cardio shows the week, its sessions and zone goals, and opens its editors'
 
   await fireEvent.press(screen.getByRole('button', { name: 'Log session' }));
   expect(mockRouter.push).toHaveBeenCalledWith('/cardio/log');
+  await fireEvent.press(screen.getByRole('button', { name: 'Import screenshot' }));
+  const [, choices] = jest.mocked(showMenu).mock.calls[0];
+  choices.find(({ label }) => label === 'Take photo')?.onPress();
+  expect(mockRouter.push).toHaveBeenCalledWith({
+    pathname: '/cardio/log',
+    params: { import: 'camera' },
+  });
   await fireEvent.press(screen.getByRole('button', { name: 'Edit zones' }));
   expect(mockRouter.push).toHaveBeenCalledWith('/cardio/zones');
 });
 
 test('an exercise shows its progress, personal bests and sessions', async () => {
   await open(<ExerciseDetailScreen exerciseId="bench" />);
-  expect(await screen.findByText('Personal bests')).toBeVisible();
+  expect(await screen.findByLabelText('Personal bests')).toBeVisible();
+  // The chart opens full screen in landscape, and turning back is released on Exit.
+  await fireEvent.press(
+    screen.getByRole('button', { name: 'View Bench Press Est. 1RM full screen in landscape' }),
+  );
+  const exit = await screen.findByRole('button', { name: 'Exit full-screen Bench Press Est. 1RM' });
+  expect(jest.requireMock('expo-screen-orientation').lockAsync).toHaveBeenCalledWith('landscape');
+  await fireEvent.press(exit);
+  await waitFor(() =>
+    expect(jest.requireMock('expo-screen-orientation').unlockAsync).toHaveBeenCalled(),
+  );
+  expect(
+    screen.queryByRole('button', { name: 'Exit full-screen Bench Press Est. 1RM' }),
+  ).not.toBeOnTheScreen();
   // Dates follow the device's locale ("21 Nov" or "Nov 21"), as on the web.
   const lastDone = formatLastDone('2026-11-21', '2026-11-22');
   expect(screen.getByText(`Chest · Barbell · 2 sessions · Last done ${lastDone}`)).toBeVisible();

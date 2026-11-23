@@ -21,7 +21,7 @@ import { localDate } from '../../../../frontend/src/utils';
 import { formatWeightNumber, weightFromKg } from '../../../../frontend/src/weightUnits';
 import { apiSend } from '../../data/api';
 import { queryKeys, useExercises, useWeightUnit } from '../../data/queries';
-import { Button, Card } from '../../ui/components';
+import { Button, Card, IconButton } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
 import { showToast } from '../../ui/Toast';
@@ -39,7 +39,7 @@ const PAGE = 20;
 
 /** Exercises: the strength exercise library, searchable and filtered as on the web. */
 export function ExercisesSection() {
-  const { colors, radius, type } = useTheme();
+  const { colors, radius, scheme, type } = useTheme();
   const router = useRouter();
   const unit = useWeightUnit();
   const client = useQueryClient();
@@ -70,6 +70,7 @@ export function ExercisesSection() {
   const [shown, setShown] = useState(PAGE);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [searchFocused, setSearchFocused] = useState(false);
   // The exercise just created, told apart from an existing one picked from the suggestions.
   const created = useRef<string | null>(null);
   const muscles = useMemo(() => exerciseLibraryMuscles(strength), [strength]);
@@ -122,65 +123,70 @@ export function ExercisesSection() {
   return (
     <View style={{ gap: 14 }}>
       <View style={styles.toolbar}>
+        {/* The web's library toolbar: a raised search field, the options button and an accent +. */}
         <View
-          style={[styles.search, { backgroundColor: colors.surface2, borderRadius: radius.md }]}
+          style={[
+            styles.search,
+            {
+              backgroundColor: colors.surface,
+              borderColor: searchFocused ? colors.accent : colors.lineStrong,
+            },
+          ]}
         >
-          <Icon name="search" size={16} color={colors.muted} />
+          <Icon name="search" size={17} color={colors.muted} />
           <TextInput
             accessibilityLabel="Search exercises"
             placeholder="Search exercises"
             placeholderTextColor={colors.muted}
+            selectionColor={colors.accent}
+            cursorColor={colors.accent}
+            keyboardAppearance={scheme}
             value={query}
             onChangeText={(text) => changed(() => setQuery(text))}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
             returnKeyType="search"
             autoCorrect={false}
-            clearButtonMode="while-editing"
             style={[type.body, styles.input, { color: colors.text }]}
           />
           {!!query && (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Clear search"
-              hitSlop={8}
+              hitSlop={10}
               onPress={() => changed(() => setQuery(''))}
             >
-              <Icon name="close" size={14} color={colors.muted} />
+              <Icon name="close" size={15} color={colors.muted} />
             </Pressable>
           )}
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            equipment ? 'Exercise list options, equipment filtered' : 'Exercise list options'
-          }
-          onPress={() => setOptionsOpen(true)}
-          style={({ pressed }) => [
-            styles.optionsButton,
-            {
-              backgroundColor: equipment ? colors.accentSoft : colors.surface2,
-              borderRadius: radius.md,
-            },
-            pressed && { opacity: 0.6 },
-          ]}
-        >
-          <Icon
-            name={trainingIcons.options}
-            size={18}
-            color={equipment ? colors.accentText : colors.text}
+        <View>
+          <IconButton
+            icon={trainingIcons.options}
+            accessibilityLabel={
+              equipment ? 'Exercise list options, equipment filtered' : 'Exercise list options'
+            }
+            onPress={() => setOptionsOpen(true)}
+            style={[
+              styles.toolButton,
+              { backgroundColor: colors.surface2, borderColor: colors.lineStrong },
+            ]}
           />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
+          {/* A filter is on, as the web's dot on the options button. */}
+          {!!equipment && (
+            <View
+              pointerEvents="none"
+              style={[styles.optionsDot, { backgroundColor: colors.accent }]}
+            />
+          )}
+        </View>
+        <IconButton
+          icon="plus"
+          accent
           accessibilityLabel="Add exercise"
           onPress={() => setCreating(true)}
-          style={({ pressed }) => [
-            styles.optionsButton,
-            { backgroundColor: colors.surface2, borderRadius: radius.md },
-            pressed && { opacity: 0.6 },
-          ]}
-        >
-          <Icon name="plus" size={18} color={colors.text} />
-        </Pressable>
+          style={styles.toolButton}
+        />
       </View>
       <ScrollView
         horizontal
@@ -408,16 +414,25 @@ function ExerciseRow({
           {initials}
         </Text>
       </View>
+      {/* Long names and details wrap onto a second line, as on the web, instead of cutting off. */}
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]} numberOfLines={1}>
+        <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]} numberOfLines={2}>
           {exercise.name}
         </Text>
-        <Text style={[type.caption, { color: colors.secondary }]} numberOfLines={1}>
+        <Text style={[type.caption, { color: colors.muted }]} numberOfLines={2}>
           {meta}
         </Text>
       </View>
       <Sparkline summary={summary} />
       <View style={styles.value}>
+        {summary?.latest_estimated_1rm != null && (
+          <Text
+            accessibilityLabel="Estimated one-rep max"
+            style={[type.caption, { color: colors.muted, fontSize: 11 }]}
+          >
+            e1RM
+          </Text>
+        )}
         <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>
           {summary?.latest_estimated_1rm == null
             ? '—'
@@ -473,22 +488,20 @@ function Sparkline({ summary }: { summary: ExerciseLibrarySummary | undefined })
 }
 
 const styles = StyleSheet.create({
-  toolbar: { flexDirection: 'row', gap: 8 },
+  toolbar: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   search: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    minHeight: 42,
+    gap: 10,
+    paddingHorizontal: 13,
+    minHeight: 46,
+    borderWidth: 1,
+    borderRadius: 13,
   },
-  input: { flex: 1, paddingVertical: 8 },
-  optionsButton: {
-    width: 42,
-    height: 42,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  input: { flex: 1, paddingVertical: 10 },
+  toolButton: { width: 46, height: 46, borderRadius: 13 },
+  optionsDot: { position: 'absolute', top: 7, right: 7, width: 7, height: 7, borderRadius: 4 },
   chips: { gap: 8, paddingRight: 8 },
   list: { paddingVertical: 4, gap: 0 },
   row: {
@@ -506,7 +519,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   spark: { width: 44, height: 22 },
-  value: { alignItems: 'flex-end', minWidth: 64 },
+  value: { alignItems: 'flex-end', minWidth: 64, gap: 1 },
   equipment: { overflow: 'hidden' },
   option: {
     flexDirection: 'row',

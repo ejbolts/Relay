@@ -6,6 +6,7 @@ import { Screen } from '../../ui/components';
 import { CardioSection } from './CardioSection';
 import { ExercisesSection } from './ExercisesSection';
 import { Segmented } from './parts';
+import { TrainingHeaderActions } from './TrainingHeaderActions';
 import { SessionsSection } from './SessionsSection';
 import { useTrainingHistory } from './trainingQueries';
 
@@ -45,6 +46,8 @@ export function TrainingTabScreen({
       eyebrow={
         history.loading ? undefined : `${total} ${total === 1 ? 'workout' : 'workouts'} logged`
       }
+      // The bell, your profile and Settings, as on every main tab of the web.
+      actions={<TrainingHeaderActions />}
       refreshing={refreshing}
       onRefresh={() => {
         setRefreshing(true);

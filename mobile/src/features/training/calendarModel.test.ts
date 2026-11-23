@@ -1,5 +1,14 @@
 import { builtinTypeColors, DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
-import { calendarBounds, calendarMonthView, ringSegments, shiftMonth } from './calendarModel';
+import {
+  calendarBounds,
+  calendarMonthView,
+  entriesByMonth,
+  monthsBetween,
+  monthViews,
+  settledPage,
+  ringSegments,
+  shiftMonth,
+} from './calendarModel';
 import { chartModel, nearestPoint } from './ProgressChart';
 import { dashboard } from './trainingFixtures';
 
@@ -52,6 +61,11 @@ test('outlines the split’s planned and missed days, a mixed day in each of its
 test('pages months across year ends', () => {
   expect(shiftMonth('2026-01', -1)).toBe('2025-12');
   expect(shiftMonth('2026-12', 1)).toBe('2027-01');
+});
+
+test('lists the month pager’s pages, oldest first, across a year end', () => {
+  expect(monthsBetween('2025-11', '2026-02')).toEqual(['2025-11', '2025-12', '2026-01', '2026-02']);
+  expect(monthsBetween('2026-11', '2026-11')).toEqual(['2026-11']);
 });
 
 test('reaches from the oldest workout to this month', () => {
@@ -114,4 +128,47 @@ test('lays out the progress chart and finds the session under a finger', () => {
   expect([...model.records]).toEqual([0, 2]);
   expect(nearestPoint(model.coords, model.coords[1].x + 5)).toBe(1);
   expect(chartModel([], 300, 200)).toBeNull();
+});
+
+test('reads a settled page from the scroll offset, measured from the right in RTL', () => {
+  const event = (x: number) => ({
+    contentOffset: { x },
+    contentSize: { width: 1200 },
+    layoutMeasurement: { width: 300 },
+  });
+  expect(settledPage(event(0), false, 4)).toBe(0);
+  expect(settledPage(event(900), false, 4)).toBe(3);
+  expect(settledPage(event(610), false, 4)).toBe(2);
+  // Right to left: the first page sits at the far right.
+  expect(settledPage(event(900), true, 4)).toBe(0);
+  expect(settledPage(event(0), true, 4)).toBe(3);
+  expect(settledPage({ ...event(0), layoutMeasurement: { width: 0 } }, false, 4)).toBe(0);
+});
+
+test('groups history by month once and builds each month view once', () => {
+  const byMonth = entriesByMonth(dashboard.heatmap);
+  const months = [...byMonth.keys()];
+  expect(months.length).toBeGreaterThan(0);
+  for (const [month, entries] of byMonth)
+    expect(entries.every((entry) => entry.workout_date.startsWith(month))).toBe(true);
+  const viewFor = monthViews({
+    byMonth,
+    types: DEFAULT_WORKOUT_TYPES,
+    categoryColors: builtinTypeColors(DEFAULT_WORKOUT_TYPES),
+    hidden: new Set(),
+    weekStartDay: 1,
+    today: '2026-11-22',
+  });
+  expect(viewFor(months[0])).toBe(viewFor(months[0]));
+  expect(viewFor(months[0])).toEqual(
+    calendarMonthView({
+      month: months[0],
+      entries: dashboard.heatmap,
+      types: DEFAULT_WORKOUT_TYPES,
+      categoryColors: builtinTypeColors(DEFAULT_WORKOUT_TYPES),
+      hidden: new Set(),
+      weekStartDay: 1,
+      today: '2026-11-22',
+    }),
+  );
 });
