@@ -1,5 +1,6 @@
 import {
   extendInactiveWorkoutFinishAt,
+  inactiveWorkoutEndAt,
   inactiveWorkoutFinishAt,
 } from '../../../../frontend/src/activeWorkoutTimeout';
 import { setKindUpdate, type SetKind } from '../../../../frontend/src/setFieldValues';
@@ -12,6 +13,7 @@ import type {
   WorkoutType,
 } from '../../../../frontend/src/types';
 import { mergeUniqueById, reorder } from '../../../../frontend/src/utils';
+import { loggedSetCount } from '../../../../frontend/src/workoutAutoSave';
 import { workoutNameForCategory } from '../../../../frontend/src/workoutCategory';
 import type { WeightUnit } from '../../../../frontend/src/weightUnits';
 import type { ActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
@@ -222,8 +224,13 @@ export function loggerFromDraft(
   };
 }
 
-/** Records activity, which pushes back when a forgotten workout counts as finished. */
+/**
+ * Records activity, which pushes back when a forgotten workout counts as finished. Past that
+ * cutoff, a workout with logged sets waits for the inactive-workout prompt instead, as on the web:
+ * the change still applies, but only Resume carries the workout on.
+ */
 export function withActivity(state: LoggerState, now: number): LoggerState {
+  if (isInactive(state, now)) return state;
   return {
     ...state,
     lastActiveAt: now,
@@ -232,6 +239,25 @@ export function withActivity(state: LoggerState, now: number): LoggerState {
         ? inactiveWorkoutFinishAt(state.startedAt, now)
         : extendInactiveWorkoutFinishAt(state.inactiveFinishAt, now),
   };
+}
+
+/** Left running past its cutoff with sets logged: it asks to be saved, resumed or discarded. */
+export function isInactive(state: LoggerState, now: number): boolean {
+  return now >= state.inactiveFinishAt && loggedSetCount(state.movements) > 0;
+}
+
+/** Resume from the inactive-workout prompt: the workout carries on from now. */
+export function continueWorkout(state: LoggerState, now: number): LoggerState {
+  return {
+    ...state,
+    lastActiveAt: now,
+    inactiveFinishAt: inactiveWorkoutFinishAt(state.startedAt, now),
+  };
+}
+
+/** A workout left running ends at its last activity, not at the cutoff that noticed it. */
+export function inactiveEndAt(state: LoggerState): number {
+  return inactiveWorkoutEndAt(state.startedAt, state.lastActiveAt, state.inactiveFinishAt);
 }
 
 export function selectedType(state: LoggerState, types: WorkoutType[]): WorkoutType {
@@ -278,13 +304,15 @@ export function workoutIdentity(state: LoggerState, types: WorkoutType[]) {
   return liveWorkoutIdentity(finishState(state, types, false));
 }
 
+/** Whether the workout can be saved now; `endAt` ends a workout left running at that time. */
 export function checkFinish(
   state: LoggerState,
   types: WorkoutType[],
   typesLoading: boolean,
   now: number,
+  endAt?: number,
 ): WorkoutFinishCheck {
-  return checkWorkoutFinish(finishState(state, types, typesLoading), undefined, now);
+  return checkWorkoutFinish(finishState(state, types, typesLoading), endAt, now);
 }
 
 export function finishInput(

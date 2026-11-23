@@ -40,3 +40,27 @@ export function extendInactiveWorkoutFinishAt(currentFinishAt: number, activityA
   if (activityAt >= currentFinishAt) return currentFinishAt;
   return Math.max(currentFinishAt, activityAt + RECENT_WORKOUT_ACTIVITY_MS);
 }
+
+function startedLabel(at: number): string {
+  return new Date(at).toLocaleString(undefined, {
+    weekday: 'short',
+    day: 'numeric',
+    month: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+/**
+ * When a workout left running started and ended, as its prompt says them: the end time alone on
+ * the day it started, or with its own day after midnight.
+ */
+export function inactiveWorkoutTimes(startedAt: number, endedAt: number) {
+  return {
+    started: startedLabel(startedAt),
+    ended:
+      new Date(endedAt).toDateString() !== new Date(startedAt).toDateString()
+        ? startedLabel(endedAt)
+        : new Date(endedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }),
+  };
+}

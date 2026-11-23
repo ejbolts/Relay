@@ -18,6 +18,7 @@ export interface HistoryBaselines {
 export const loggerKeys = {
   baselines: (before: string) => ['workouts', 'baselines', before] as const,
   trainingBlocks: ['training-blocks'] as const,
+  autoSave: ['workout-auto-save'] as const,
 };
 
 /**
@@ -57,6 +58,16 @@ export function useTrainingBlocks() {
   return useQuery({
     queryKey: loggerKeys.trainingBlocks,
     queryFn: ({ signal }) => apiGet<TrainingBlocks>('/api/training-blocks', signal),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** How long an unfinished workout runs before it counts as left running; null keeps 3 hours. */
+export function useWorkoutAutoSave() {
+  return useQuery({
+    queryKey: loggerKeys.autoSave,
+    queryFn: ({ signal }) =>
+      apiGet<{ after_minutes: number | null }>('/api/workout-auto-save', signal),
     staleTime: 5 * 60_000,
   });
 }

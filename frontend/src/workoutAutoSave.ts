@@ -53,3 +53,15 @@ export function workoutSetForAutoSave(
 ): DraftSetForAutoSave {
   return isWorkoutSetAutoSavable(kind, set) ? { ...set, completed: true } : set;
 }
+
+/** Sets a workout has logged, ticked or entered by hand, which an inactive workout would save. */
+export function loggedSetCount(
+  movements: { exercise: { kind: ExerciseKind }; sets: DraftSetForAutoSave[] }[],
+): number {
+  return movements.reduce(
+    (total, movement) =>
+      total +
+      movement.sets.filter((item) => isWorkoutSetAutoSavable(movement.exercise.kind, item)).length,
+    0,
+  );
+}

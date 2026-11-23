@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useUpNext } from '../../data/queries';
 import { Icon, type IconName } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { RefusedSaveCard } from './RefusedSaveCard';
 import { useWorkout, type StartChoice } from './WorkoutProvider';
 
 interface Option {
@@ -13,7 +14,10 @@ interface Option {
   choice: StartChoice;
 }
 
-/** The web's Start menu as a native sheet: Cardio, Up next (when there is one) and Empty. */
+/**
+ * The web's Start menu as a native sheet: Cardio, Up next (when there is one) and Empty, below
+ * any finished workout the server refused, which waits here for review.
+ */
 export function StartSheet() {
   const workout = useWorkout();
   const upNext = useUpNext();
@@ -32,6 +36,14 @@ export function StartSheet() {
 
   const sheet = (
     <View style={[styles.sheet, { backgroundColor: colors.surface }]}>
+      {workout.refused.map((save) => (
+        <RefusedSaveCard
+          key={save.key}
+          save={save}
+          onReview={() => workout.review(save.key)}
+          onDiscard={() => workout.discardRefused(save.key)}
+        />
+      ))}
       <Text accessibilityRole="header" style={[type.title, { color: colors.text }]}>
         Start a workout
       </Text>

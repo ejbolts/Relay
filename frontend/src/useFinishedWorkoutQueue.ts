@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError, isWorkoutConflict } from './api';
-import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
 import { isClientOutdated } from './clientVersion';
 import {
   finishedSaveFailure,
   finishedSaveRetryDelayMs,
   moveDraftToFinishedQueue,
+  rebasedFinishedWorkout,
+  reviewedFinishedWorkout,
 } from './finishedWorkoutSend';
 import {
   addFinishedWorkout,
@@ -236,14 +237,7 @@ export function useFinishedWorkoutQueue(
   function review(key: string): ActiveWorkoutDraft | null {
     const finished = readFinishedWorkouts().find((item) => finishedWorkoutKey(item) === key);
     if (!finished || !(key in refusalsRef.current) || readActiveWorkoutDraft()) return null;
-    const { pendingSave, ...draft } = finished;
-    const now = Date.now();
-    const restored: ActiveWorkoutDraft = {
-      ...draft,
-      durationOverrideMinutes: pendingSave.payload.duration_minutes,
-      lastActiveAt: now,
-      inactiveFinishAt: inactiveWorkoutFinishAt(draft.startedAt, now),
-    };
+    const restored = reviewedFinishedWorkout(finished, Date.now());
     if (!writeActiveWorkoutDraft(restored)) {
       setRefusal(
         key,
@@ -278,14 +272,7 @@ export function useFinishedWorkoutQueue(
       );
       return false;
     }
-    const rebased: FinishedWorkout = {
-      ...finished,
-      resumingWorkoutRevision: revision,
-      pendingSave: {
-        ...finished.pendingSave,
-        payload: { ...finished.pendingSave.payload, base_revision: revision },
-      },
-    };
+    const rebased = rebasedFinishedWorkout(finished, revision);
     if (!addFinishedWorkout(rebased)) return false;
     setRefusal(key, null);
     reload();

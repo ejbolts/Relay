@@ -13,12 +13,22 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { AppState } from 'react-native';
+import { Alert, AppState } from 'react-native';
 import {
+  inactiveWorkoutFinishAt,
+  inactiveWorkoutTimes,
+  setInactiveWorkoutLimitMinutes,
+} from '../../../../frontend/src/activeWorkoutTimeout';
+import {
+  finishedWorkoutKey,
   readFinishedWorkouts,
+  removeFinishedWorkout,
   type FinishedWorkout,
 } from '../../../../frontend/src/finishedWorkoutQueue';
-import { moveDraftToFinishedQueue } from '../../../../frontend/src/finishedWorkoutSend';
+import {
+  moveDraftToFinishedQueue,
+  reviewedFinishedWorkout,
+} from '../../../../frontend/src/finishedWorkoutSend';
 import { buildFinishSummary, type FinishSummary } from '../../../../frontend/src/finishSummary';
 import { readStoredRestTimer, writeStoredRestTimer } from '../../../../frontend/src/liveRestTimer';
 import { nextSetAfterRest } from '../../../../frontend/src/restComplete';
@@ -35,6 +45,7 @@ import type {
 } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import type { WeightUnit } from '../../../../frontend/src/weightUnits';
+import { loggedSetCount } from '../../../../frontend/src/workoutAutoSave';
 import {
   clearActiveWorkoutDraft,
   isExpiredEmptyWorkoutDraft,
@@ -66,7 +77,10 @@ import {
   addSet as addSetRule,
   checkFinish,
   chooseWorkoutType,
+  continueWorkout,
   finishInput,
+  inactiveEndAt,
+  isInactive,
   loggerFromDraft,
   loggerToDraft,
   setCounts,
@@ -78,7 +92,7 @@ import {
   type LoggerContext,
   type LoggerState,
 } from './loggerState';
-import { useHistoryBaselines } from './loggerQueries';
+import { useHistoryBaselines, useWorkoutAutoSave } from './loggerQueries';
 import { forgetOfflineQueries, saveOfflineQueries, seedOfflineQueries } from './offlineQueries';
 import { askForRestAlerts, syncRestAlert } from './restAlerts';
 import {
@@ -110,6 +124,17 @@ export type StartChoice =
       type?: WorkoutType | null;
     };
 
+/** A finished workout the server refused to save, waiting to be reviewed or discarded. */
+export interface RefusedSave {
+  key: string;
+  name: string;
+  durationMinutes: number | null;
+  /** Why the server refused it. */
+  message: string;
+  /** Changes to a saved workout that was resumed, rather than a new workout. */
+  resumed: boolean;
+}
+
 /** What the rest of the app may know about the workout in progress. */
 export interface LiveWorkout {
   name: string;
@@ -133,6 +158,12 @@ export interface WorkoutApi {
   discard: () => void;
   /** Finished workouts stored on this phone until the server confirms them. */
   queue: QueueStatus;
+  /** Finished workouts the server refused, oldest first. */
+  refused: RefusedSave[];
+  /** Reopens a refused workout in the logger to change and finish again. */
+  review: (key: string) => void;
+  /** Drops a refused workout that has not synced. */
+  discardRefused: (key: string) => void;
 }
 
 /** The workout just finished, shown in the logger sheet until it is closed. */
@@ -175,8 +206,11 @@ export interface LoggerApi {
     ticked: number;
     unticked: number;
   };
-  /** Queues the workout for saving (offline too) and shows its summary. */
-  finish: () => FinishResult;
+  /**
+   * Queues the workout for saving (offline too) and shows its summary. `endAt` ends a workout
+   * left running at its last activity.
+   */
+  finish: (endAt?: number) => FinishResult;
   closeFinished: () => void;
 }
 
@@ -234,6 +268,9 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       openStartMenu: () => router.push('/start-workout'),
       discard: () => undefined,
       queue: EMPTY_QUEUE,
+      refused: [],
+      review: () => undefined,
+      discardRefused: () => undefined,
     }),
     [router],
   );
@@ -321,6 +358,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const preferences = useTrainingPreferences();
   const upNext = useUpNext();
   const historyBaselines = useHistoryBaselines();
+  const autoSaveMinutes = useWorkoutAutoSave().data?.after_minutes;
   const history = useMemo(() => historyQuery.data ?? [], [historyQuery.data]);
   const types = typesQuery.data ?? DEFAULT_WORKOUT_TYPES;
   // Only a first load in progress holds up Finish; offline, the saved or built-in types apply.
@@ -458,6 +496,9 @@ const WorkoutEngine = memo(function WorkoutEngine({
   // Finished workouts send until the server confirms them, retrying when the connection or the
   // app comes back.
   const senderRef = useRef<FinishedQueueSender | null>(null);
+  const refusalsSeen = useRef<Record<string, string>>({});
+  const finishedSessionRef = useRef<string | null>(null);
+  const reviewRef = useRef<(key: string) => void>(() => undefined);
   useEffect(() => {
     const sender = new FinishedQueueSender({
       storage: deviceStorage,
@@ -495,7 +536,21 @@ const WorkoutEngine = memo(function WorkoutEngine({
           )
           .catch(() => undefined);
       },
-      onChange: setQueue,
+      onChange: (next) => {
+        // A newly refused workout says so, unless its summary is already showing why.
+        for (const key of Object.keys(next.refusals)) {
+          if (key in refusalsSeen.current || key === finishedSessionRef.current) continue;
+          const item = readFinishedWorkouts(deviceStorage).find(
+            (entry) => finishedWorkoutKey(entry) === key,
+          );
+          showToast(`${item?.pendingSave.payload.name ?? 'A workout'} wasn't saved`, {
+            label: 'Review',
+            run: () => reviewRef.current(key),
+          });
+        }
+        refusalsSeen.current = next.refusals;
+        setQueue(next);
+      },
     });
     senderRef.current = sender;
     // The app feeds onlineManager from NetInfo (src/data/queryClient.ts).
@@ -691,41 +746,222 @@ const WorkoutEngine = memo(function WorkoutEngine({
     };
   }, [types, typesLoading]);
 
-  const finish = useCallback((): FinishResult => {
-    const current = loggerRef.current;
-    if (!current) return { ok: false, message: 'No workout in progress.' };
-    const now = Date.now();
-    const check = checkFinish(current, types, typesLoading, now);
-    if (check.kind !== 'ready')
-      return {
-        ok: false,
-        message:
-          check.kind === 'blocked'
-            ? check.message
-            : `Choose a machine for every set of ${check.exercise}.`,
-      };
-    const payload = finishInput(current, types, check);
-    const failed = queueFinishedWorkout(current, payload, user.id, now);
-    if (failed) return { ok: false, message: failed };
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    setFinished({
-      sessionId: current.clientSessionId,
-      summary: buildFinishSummary(payload, allExercises, history, now),
-      payload,
-      savedId: null,
-      records: null,
-    });
-    commitRest(NO_REST);
-    writeJson(DRAFT_OWNER_KEY, null);
-    loggerRef.current = null;
-    setLogger(null);
-    addedSetKeys.current.clear();
-    senderRef.current?.wake();
-    setQueue(senderRef.current?.status() ?? EMPTY_QUEUE);
-    return { ok: true };
-  }, [types, typesLoading, user.id, allExercises, history, commitRest]);
+  const finish = useCallback(
+    (endAt?: number): FinishResult => {
+      const current = loggerRef.current;
+      if (!current) return { ok: false, message: 'No workout in progress.' };
+      const now = Date.now();
+      const check = checkFinish(current, types, typesLoading, now, endAt);
+      if (check.kind !== 'ready')
+        return {
+          ok: false,
+          message:
+            check.kind === 'blocked'
+              ? check.message
+              : `Choose a machine for every set of ${check.exercise}.`,
+        };
+      const payload = finishInput(current, types, check);
+      const failed = queueFinishedWorkout(current, payload, user.id, now);
+      if (failed) return { ok: false, message: failed };
+      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      finishedSessionRef.current = current.clientSessionId;
+      setFinished({
+        sessionId: current.clientSessionId,
+        summary: buildFinishSummary(payload, allExercises, history, now),
+        payload,
+        savedId: null,
+        records: null,
+      });
+      commitRest(NO_REST);
+      writeJson(DRAFT_OWNER_KEY, null);
+      loggerRef.current = null;
+      setLogger(null);
+      addedSetKeys.current.clear();
+      senderRef.current?.wake();
+      setQueue(senderRef.current?.status() ?? EMPTY_QUEUE);
+      return { ok: true };
+    },
+    [types, typesLoading, user.id, allExercises, history, commitRest],
+  );
 
-  const closeFinished = useCallback(() => setFinished(null), []);
+  const closeFinished = useCallback(() => {
+    finishedSessionRef.current = null;
+    setFinished(null);
+  }, []);
+
+  // The account's auto-save time replaces the three-hour cutoff, as on the web; a change moves
+  // the cutoff of the workout in progress too.
+  const appliedAutoSave = useRef<number | null>(null);
+  useEffect(() => {
+    if (autoSaveMinutes === undefined || autoSaveMinutes === appliedAutoSave.current) return;
+    appliedAutoSave.current = autoSaveMinutes;
+    setInactiveWorkoutLimitMinutes(autoSaveMinutes);
+    const current = loggerRef.current;
+    if (current && !isInactive(current, Date.now()))
+      commit({
+        ...current,
+        inactiveFinishAt: inactiveWorkoutFinishAt(current.startedAt, current.lastActiveAt),
+      });
+  }, [autoSaveMinutes, commit]);
+
+  // A workout left running past its cutoff with sets logged is never saved unasked: it asks
+  // whether to save it (ending at its last activity), resume it or discard it.
+  const promptOpen = useRef(false);
+  const askAgain = useRef(() => undefined as void);
+  const checkInactive = useCallback(() => {
+    const current = loggerRef.current;
+    if (!current || promptOpen.current || !isInactive(current, Date.now())) return;
+    promptOpen.current = true;
+    const close = () => {
+      promptOpen.current = false;
+    };
+    const resume = () => {
+      const latest = loggerRef.current;
+      if (latest) commit(continueWorkout(latest, Date.now()));
+    };
+    const endedAt = inactiveEndAt(current);
+    const times = inactiveWorkoutTimes(current.startedAt, endedAt);
+    const sets = loggedSetCount(current.movements);
+    Alert.alert(
+      'Unfinished workout',
+      `${workoutIdentity(current, types).name}\nStarted ${times.started} · ended ${times.ended} · ${sets} ${sets === 1 ? 'set' : 'sets'} logged`,
+      [
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () =>
+            Alert.alert(
+              'Discard this workout?',
+              'Your active workout, sets, and notes will be permanently removed. This cannot be undone.',
+              [
+                {
+                  text: 'Keep workout',
+                  style: 'cancel',
+                  onPress: () => {
+                    close();
+                    askAgain.current();
+                  },
+                },
+                {
+                  text: 'Discard workout',
+                  style: 'destructive',
+                  onPress: () => {
+                    close();
+                    discard();
+                  },
+                },
+              ],
+              { cancelable: false },
+            ),
+        },
+        {
+          text: 'Resume',
+          onPress: () => {
+            close();
+            resume();
+            router.push('/workout');
+          },
+        },
+        {
+          text: 'Save workout',
+          onPress: () => {
+            close();
+            const result = finish(endedAt);
+            if (result.ok) {
+              router.push('/workout');
+              return;
+            }
+            // Whatever blocked the save is explained on the workout.
+            resume();
+            router.push('/workout');
+            Alert.alert("Can't finish yet", result.message);
+          },
+        },
+      ],
+      {
+        cancelable: true,
+        onDismiss: () => {
+          close();
+          resume();
+        },
+      },
+    );
+  }, [commit, discard, finish, router, types]);
+  useLayoutEffect(() => {
+    askAgain.current = checkInactive;
+  }, [checkInactive]);
+  useEffect(() => {
+    if (!logger) return;
+    checkInactive();
+    const timer = setInterval(checkInactive, 30_000);
+    const app = AppState.addEventListener('change', (state) => {
+      if (state === 'active') checkInactive();
+    });
+    return () => {
+      clearInterval(timer);
+      app?.remove();
+    };
+  }, [logger, checkInactive]);
+
+  // Refused saves wait for review: reopened in the logger to change and finish again, or dropped.
+  const refused = useMemo<RefusedSave[]>(() => {
+    const keys = Object.keys(queue.refusals);
+    if (!keys.length) return [];
+    return readFinishedWorkouts(deviceStorage).flatMap((item) => {
+      const key = finishedWorkoutKey(item);
+      return key in queue.refusals
+        ? [
+            {
+              key,
+              name: item.pendingSave.payload.name,
+              durationMinutes: item.pendingSave.payload.duration_minutes,
+              message: queue.refusals[key],
+              resumed: item.pendingSave.workoutId !== null,
+            },
+          ]
+        : [];
+    });
+  }, [queue.refusals]);
+
+  const review = useCallback(
+    (key: string) => {
+      if (loggerRef.current) {
+        showToast('Finish your current workout to review this one.');
+        return;
+      }
+      const item = readFinishedWorkouts(deviceStorage).find(
+        (entry) => finishedWorkoutKey(entry) === key,
+      );
+      if (!item || !(key in (senderRef.current?.status().refusals ?? {}))) return;
+      const draft = reviewedFinishedWorkout(item, Date.now());
+      const state = loggerFromDraft(draft, allExercises);
+      if (!state) {
+        showToast('This workout can only be reviewed on the web for now.');
+        return;
+      }
+      // Stored as the live workout before it leaves the queue, so it is never lost in between.
+      if (!writeActiveWorkoutDraft(draft, deviceStorage)) {
+        showToast('Could not open the workout for review. Free some storage and try again.');
+        return;
+      }
+      removeFinishedWorkout(key, deviceStorage);
+      senderRef.current?.forget(key);
+      closeFinished();
+      addedSetKeys.current.clear();
+      commit(state);
+      commitRest(NO_REST);
+      router.push('/workout');
+    },
+    [allExercises, closeFinished, commit, commitRest, router],
+  );
+  useLayoutEffect(() => {
+    reviewRef.current = review;
+  }, [review]);
+
+  const discardRefused = useCallback((key: string) => {
+    removeFinishedWorkout(key, deviceStorage);
+    senderRef.current?.forget(key);
+  }, []);
   const getState = useCallback(() => loggerRef.current, []);
 
   const identityName = logger ? workoutIdentity(logger, types).name : null;
@@ -744,8 +980,18 @@ const WorkoutEngine = memo(function WorkoutEngine({
   );
 
   const workoutApi = useMemo<WorkoutApi>(
-    () => ({ live, start, open, openStartMenu, discard, queue }),
-    [live, start, open, openStartMenu, discard, queue],
+    () => ({
+      live,
+      start,
+      open,
+      openStartMenu,
+      discard,
+      queue,
+      refused,
+      review,
+      discardRefused,
+    }),
+    [live, start, open, openStartMenu, discard, queue, refused, review, discardRefused],
   );
   const loggerApi = useMemo<LoggerApi>(
     () => ({

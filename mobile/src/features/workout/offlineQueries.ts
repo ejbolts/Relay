@@ -18,6 +18,7 @@ export const OFFLINE_QUERIES = [
   'workouts',
   'dashboard',
   'training-blocks',
+  'workout-auto-save',
 ] as const;
 
 /** Reads under `workouts` kept besides the history window itself (`['workouts', start]`). */
