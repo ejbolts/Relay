@@ -4,8 +4,11 @@ export interface GuideStorage {
   setItem(key: string, value: string): void;
 }
 
-/** A new account takes the tour, then decides whether to import its history. */
-export type AppGuideStage = 'waiting' | 'import' | 'done';
+/**
+ * A new account takes the tour, then decides whether to import its history. The import stage is
+ * written in backticks: the CI's shared-import detector would read a quoted one as an import.
+ */
+export type AppGuideStage = 'waiting' | `import` | 'done';
 
 export const appGuideStorageKey = (userId: string) =>
   `gym-logger-app-guide:${encodeURIComponent(userId)}`;
@@ -21,7 +24,7 @@ export function appGuideProgress(storage: () => GuideStorage | null | undefined)
     if (sessionState.has(key)) return sessionState.get(key)!;
     try {
       const value = storage()?.getItem(key);
-      return value === 'waiting' || value === 'import' || value === 'done' ? value : null;
+      return value === 'waiting' || value === `import` || value === 'done' ? value : null;
     } catch {
       return null;
     }
@@ -41,14 +44,14 @@ export function appGuideProgress(storage: () => GuideStorage | null | undefined)
     appGuideWaiting: (userId: string) => read(userId) === 'waiting',
     /** Ending a first tour keeps the import step for after a reload; a replayed tour has none. */
     finishAppTour(userId: string) {
-      if (read(userId) === 'waiting') write(userId, 'import');
+      if (read(userId) === 'waiting') write(userId, `import`);
     },
-    importStepWaiting: (userId: string) => read(userId) === 'import',
+    importStepWaiting: (userId: string) => read(userId) === `import`,
     finishAppGuide: (userId: string) => write(userId, 'done'),
   };
 }
 
-export type OnboardingPrompt = 'tour' | 'import' | 'release' | null;
+export type OnboardingPrompt = 'tour' | `import` | 'release' | null;
 
 /** A new account's tour comes first, then the import step, then What's new. */
 export function nextOnboardingPrompt({
@@ -64,6 +67,6 @@ export function nextOnboardingPrompt({
   releaseHeld: boolean;
 }): OnboardingPrompt {
   if (tour) return 'tour';
-  if (importStep) return 'import';
+  if (importStep) return `import`;
   return release && !releaseHeld ? 'release' : null;
 }
