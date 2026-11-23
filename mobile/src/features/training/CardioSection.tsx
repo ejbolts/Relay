@@ -30,6 +30,7 @@ import { refreshTraining, useWeightUnit } from '../../data/queries';
 import { Button, Card, CardHeader, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { CardioAllStats } from '../cardio/CardioAllStats';
 import { deleteCardioEntry } from '../cardio/cardioData';
@@ -62,7 +63,35 @@ export function CardioSection() {
     );
   return (
     <View style={{ gap: 20 }}>
-      <Button label="Log session" icon="plus" onPress={() => router.push('/cardio/log')} />
+      {/* The web's two actions, side by side: log by hand, or read a watch screenshot. */}
+      <View style={styles.actions}>
+        <Button
+          label="Log session"
+          icon="plus"
+          style={styles.action}
+          onPress={() => router.push('/cardio/log')}
+        />
+        <Button
+          label="Import screenshot"
+          variant="secondary"
+          icon={{ sf: 'camera', md: 'photo-camera' }}
+          style={styles.action}
+          onPress={() =>
+            showMenu('Import screenshot', [
+              {
+                label: 'Choose screenshot',
+                onPress: () =>
+                  router.push({ pathname: '/cardio/log', params: { import: 'library' } }),
+              },
+              {
+                label: 'Take photo',
+                onPress: () =>
+                  router.push({ pathname: '/cardio/log', params: { import: 'camera' } }),
+              },
+            ])
+          }
+        />
+      </View>
       <CardioTrend overview={overview.data} />
       <CardioHistory overview={overview.data} />
       <ZoneGoals overview={overview.data} />
@@ -71,7 +100,7 @@ export function CardioSection() {
 }
 
 function CardioTrend({ overview }: { overview: CardioOverview }) {
-  const { colors, radius, type } = useTheme();
+  const { colors, type } = useTheme();
   const [metricKey, setMetricKey] = useState<CardioTrendMetricKey>('time');
   const [selectedStart, setSelectedStart] = useState<string | null>(null);
   const [distanceKey, setDistanceKey] = useState<string | null>(null);
@@ -110,9 +139,11 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
         </ScrollView>
       )}
       <View accessibilityLiveRegion="polite" style={{ gap: 2 }}>
-        <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
-          {selected.start === overview.current_week.week_start ? 'This week' : 'Week'} ·{' '}
-          {shortDay(selected.start)} – {shortDay(selected.end)}
+        <Text style={[type.caption, styles.kicker, { color: colors.muted }]}>
+          {(
+            `${selected.start === overview.current_week.week_start ? 'This week' : 'Week'} · ` +
+            `${shortDay(selected.start)} – ${shortDay(selected.end)}`
+          ).toUpperCase()}
         </Text>
         <Text style={[type.largeTitle, type.number, { color: colors.text }]}>
           {value === null ? '—' : formatCardioAmount(value)}
@@ -147,19 +178,23 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
               }}
               style={styles.barColumn}
             >
-              <View
-                style={[
-                  styles.track,
-                  { backgroundColor: colors.surface2, borderRadius: radius.sm },
-                ]}
-              >
+              {/* The web's bars: grey weeks and the chosen one in accent, on a baseline. */}
+              <View style={[styles.track, { borderBottomColor: colors.line }]}>
                 <View
-                  style={{
-                    height: `${Math.max(3, ((amount ?? 0) / maximum) * 100)}%`,
-                    borderRadius: radius.sm,
-                    backgroundColor:
-                      amount === null ? colors.deemph : active ? colors.accent : colors.accentSoft,
-                  }}
+                  style={[
+                    styles.bar,
+                    amount === null
+                      ? {
+                          height: '4%',
+                          borderWidth: 1,
+                          borderStyle: 'dashed',
+                          borderColor: colors.muted,
+                        }
+                      : {
+                          height: `${Math.max(3, (amount / maximum) * 100)}%`,
+                          backgroundColor: active ? colors.accent : colors.deemph,
+                        },
+                  ]}
                 />
               </View>
               <Text
@@ -195,9 +230,9 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
 }
 
 function WeekStat({ label, value }: { label: string; value: string }) {
-  const { colors, type } = useTheme();
+  const { colors, radius, type } = useTheme();
   return (
-    <View style={{ flex: 1, gap: 2 }}>
+    <View style={[styles.weekStat, { backgroundColor: colors.surface2, borderRadius: radius.md }]}>
       <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
         {label}
       </Text>
@@ -468,15 +503,21 @@ function ZoneGoals({ overview }: { overview: CardioOverview }) {
 }
 
 const styles = StyleSheet.create({
-  bars: { flexDirection: 'row', gap: 6, height: 120, alignItems: 'flex-end' },
-  barColumn: { flex: 1, alignItems: 'center', gap: 4, height: '100%' },
+  actions: { flexDirection: 'row', gap: 10 },
+  action: { flex: 1, paddingHorizontal: 10 },
+  kicker: { fontWeight: '600', letterSpacing: 0.6 },
+  bars: { flexDirection: 'row', gap: 4, height: 136, alignItems: 'flex-end' },
+  barColumn: { flex: 1, alignItems: 'center', gap: 6, height: '100%' },
   track: {
     flex: 1,
     width: '100%',
+    alignItems: 'center',
     justifyContent: 'flex-end',
-    overflow: 'hidden',
+    borderBottomWidth: 1,
   },
-  weekStats: { flexDirection: 'row', gap: 12 },
+  bar: { width: '65%', borderTopLeftRadius: 5, borderTopRightRadius: 5 },
+  weekStats: { flexDirection: 'row', gap: 8 },
+  weekStat: { flex: 1, gap: 4, paddingHorizontal: 11, paddingVertical: 10 },
   weekHeader: {
     flexDirection: 'row',
     alignItems: 'center',

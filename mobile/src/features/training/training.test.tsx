@@ -7,6 +7,7 @@ import { prettyDate } from '../../../../frontend/src/appShared';
 import { formatLastDone } from '../../../../frontend/src/exerciseLastDone';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
 import { apiGet } from '../../data/api';
+import { showMenu } from '../../ui/prompts';
 import { ExerciseDetailScreen } from './ExerciseDetailScreen';
 import { SessionDetailScreen } from './SessionDetailScreen';
 import { TrainingTabScreen } from './TrainingTabScreen';
@@ -45,6 +46,10 @@ jest.mock('../home/HomeHeaderActions', () => {
   const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
   return { HomeHeaderActions: () => createElement(Text, null, 'Header actions') };
 });
+jest.mock('../../ui/prompts', () => ({
+  ...jest.requireActual<typeof import('../../ui/prompts')>('../../ui/prompts'),
+  showMenu: jest.fn(),
+}));
 jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: () => mockWorkout }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
@@ -319,6 +324,13 @@ test('Cardio shows the week, its sessions and zone goals, and opens its editors'
 
   await fireEvent.press(screen.getByRole('button', { name: 'Log session' }));
   expect(mockRouter.push).toHaveBeenCalledWith('/cardio/log');
+  await fireEvent.press(screen.getByRole('button', { name: 'Import screenshot' }));
+  const [, choices] = jest.mocked(showMenu).mock.calls[0];
+  choices.find(({ label }) => label === 'Take photo')?.onPress();
+  expect(mockRouter.push).toHaveBeenCalledWith({
+    pathname: '/cardio/log',
+    params: { import: 'camera' },
+  });
   await fireEvent.press(screen.getByRole('button', { name: 'Edit zones' }));
   expect(mockRouter.push).toHaveBeenCalledWith('/cardio/zones');
 });

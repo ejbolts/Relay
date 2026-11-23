@@ -1,5 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useState } from 'react';
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import {
   CARDIO_DURATION,
@@ -37,13 +38,18 @@ import {
 } from './CardioFields';
 import { useCardioWrite } from './useCardioWrite';
 
+/** Cardio's "Import screenshot" opens this screen straight into the picker it chose. */
+export type CardioImportSource = 'camera' | 'library';
+
 export function CardioLogScreen() {
   const exerciseQuery = useExercises();
+  const { import: source } = useLocalSearchParams<{ import?: string }>();
   return (
     <CardioPage title="Log cardio session">
       {exerciseQuery.data ? (
         <CardioLogForm
           exercises={exerciseQuery.data.filter((exercise) => exercise.kind === 'cardio')}
+          startImport={source === 'camera' || source === 'library' ? source : undefined}
         />
       ) : exerciseQuery.isError ? (
         <ErrorState
@@ -87,7 +93,15 @@ export function CardioEditScreen({ sessionId }: { sessionId: string }) {
   );
 }
 
-function CardioLogForm({ exercises, session }: { exercises: Exercise[]; session?: CardioSession }) {
+function CardioLogForm({
+  exercises,
+  session,
+  startImport,
+}: {
+  exercises: Exercise[];
+  session?: CardioSession;
+  startImport?: CardioImportSource;
+}) {
   const { colors, type } = useTheme();
   const [initial] = useState(() =>
     session
@@ -113,7 +127,17 @@ function CardioLogForm({ exercises, session }: { exercises: Exercise[]; session?
   const metricErrors = checked ? cardioMetricErrors(metrics, activityName) : {};
   const busy = picking || scanning || saving;
 
-  async function importScreenshot(source: 'camera' | 'library') {
+  // Opened from Cardio's Import screenshot: go straight to the picker, once.
+  const [autoImport] = useState(startImport);
+  useEffect(() => {
+    if (!autoImport) return;
+    const timer = setTimeout(() => void importScreenshot(autoImport), 0);
+    return () => clearTimeout(timer);
+    // Only on opening: the picker is not offered again when the form changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoImport]);
+
+  async function importScreenshot(source: CardioImportSource) {
     if (busy) return;
     setPicking(true);
     setScanError(null);

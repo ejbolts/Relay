@@ -33,12 +33,13 @@ jest.mock('../../data/queries', () => ({
 }));
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
-  useLocalSearchParams: () => ({ id: 'session-1' }),
+  useLocalSearchParams: () => mockParams,
   useNavigation: () => ({ isFocused: () => true }),
   useRouter: () => mockRouter,
 }));
 
 const mockRouter = { back: jest.fn(), push: jest.fn() };
+let mockParams: Record<string, string> = { id: 'session-1' };
 const exercise = { id: 'treadmill', name: 'Incline Treadmill Walking', kind: 'cardio' };
 const session = {
   id: 'session-1',
@@ -52,6 +53,7 @@ let client: QueryClient;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockParams = { id: 'session-1' };
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   jest
     .mocked(apiGet)
@@ -65,6 +67,18 @@ afterEach(() => client.clear());
 async function open(component: ReactElement) {
   await render(<QueryClientProvider client={client}>{component}</QueryClientProvider>);
 }
+
+it('opens straight into the screenshot picker from Cardio’s Import screenshot', async () => {
+  mockParams = { import: 'library' };
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: true,
+    assets: null,
+  });
+  await open(<CardioLogScreen />);
+  await waitFor(() => expect(ImagePicker.launchImageLibraryAsync).toHaveBeenCalledTimes(1));
+  expect(showMenu).not.toHaveBeenCalled();
+  expect(apiSend).not.toHaveBeenCalled();
+});
 
 it('reviews a picked screenshot before writing and prevents an invalid session', async () => {
   jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
