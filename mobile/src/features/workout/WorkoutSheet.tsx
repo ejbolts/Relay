@@ -847,6 +847,7 @@ function WorkoutDetails({
     >
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel="Workout details"
         accessibilityState={{ expanded: open }}
         onPress={() => {
           haptics.selection();

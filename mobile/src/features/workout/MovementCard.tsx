@@ -663,172 +663,178 @@ function SetRow({
       )}
     >
       <View style={{ backgroundColor: colors.surface }}>
-        <View style={[styles.row, { backgroundColor: rowColor, borderRadius: radius.md }]}>
-          <MenuButton
-            accessibilityLabel={`Set ${number} type: ${kindLabel ?? 'Working set'}`}
-            title={`Set ${number}${kindLabel ? ` · ${kindLabel}` : ''}`}
-            items={setMenu}
-            trigger={{ text: label, color: /^\d+$/.test(label) ? colors.text : colors.accentText }}
-            width={34}
-            height={36}
-            fill={rowColor}
-            cornerRadius={radius.sm}
-            style={[styles.setColumn, styles.setBadge, { borderRadius: radius.sm }]}
-          >
-            <Text
-              style={[
-                type.callout,
-                type.number,
-                {
-                  fontWeight: '700',
-                  color: /^\d+$/.test(label) ? colors.text : colors.accentText,
-                },
+        {/* The tint covers the set and its details, such as the bodyweight ratio, as on the web. */}
+        <View style={{ backgroundColor: rowColor, borderRadius: radius.md }}>
+          <View style={styles.row}>
+            <MenuButton
+              accessibilityLabel={`Set ${number} type: ${kindLabel ?? 'Working set'}`}
+              title={`Set ${number}${kindLabel ? ` · ${kindLabel}` : ''}`}
+              items={setMenu}
+              trigger={{
+                text: label,
+                color: /^\d+$/.test(label) ? colors.text : colors.accentText,
+              }}
+              width={34}
+              height={36}
+              fill={rowColor}
+              cornerRadius={radius.sm}
+              style={[styles.setColumn, styles.setBadge, { borderRadius: radius.sm }]}
+            >
+              <Text
+                style={[
+                  type.callout,
+                  type.number,
+                  {
+                    fontWeight: '700',
+                    color: /^\d+$/.test(label) ? colors.text : colors.accentText,
+                  },
+                ]}
+              >
+                {label}
+              </Text>
+            </MenuButton>
+            {cardio ? (
+              <>
+                <View style={styles.valueColumn}>
+                  <NumberField
+                    ref={firstField}
+                    label={`Duration minutes for set ${number}`}
+                    placeholder={minutesFormat(ghost?.duration_seconds ?? null)}
+                    value={item.duration_seconds}
+                    format={minutesFormat}
+                    parse={minutesParse}
+                    onChange={(duration_seconds) => update({ duration_seconds })}
+                    suggested={suggested}
+                    done={item.completed}
+                  />
+                </View>
+                <View style={styles.valueColumn}>
+                  <NumberField
+                    ref={secondField}
+                    label={`Distance kilometres for set ${number}`}
+                    placeholder={formatPlain(ghost?.distance_km ?? null)}
+                    value={item.distance_km}
+                    format={formatPlain}
+                    parse={parseDecimal}
+                    onChange={(distance_km) => update({ distance_km })}
+                    suggested={suggested}
+                    done={item.completed}
+                  />
+                </View>
+              </>
+            ) : (
+              <>
+                <View style={styles.valueColumn}>
+                  <NumberField
+                    ref={firstField}
+                    label={`Weight ${weightUnit === 'lb' ? 'pounds' : 'kilograms'} for set ${number}`}
+                    placeholder={weightFormat(ghost?.weight_kg ?? null)}
+                    value={item.weight_kg}
+                    format={weightFormat}
+                    parse={weightParse}
+                    onChange={(weight_kg) => update({ weight_kg })}
+                    suggested={suggested}
+                    done={item.completed}
+                    onSubmitEditing={() => secondField.current?.focus()}
+                  />
+                </View>
+                <View style={styles.valueColumn}>
+                  <NumberField
+                    ref={secondField}
+                    label={`Repetitions for set ${number}`}
+                    placeholder={formatPlain(ghost?.reps ?? null)}
+                    keyboardType="number-pad"
+                    value={item.reps}
+                    format={formatPlain}
+                    parse={parseWhole}
+                    onChange={(reps) => update({ reps })}
+                    suggested={suggested}
+                    done={item.completed}
+                  />
+                </View>
+              </>
+            )}
+            <MenuButton
+              accessibilityLabel={
+                item.rpe !== null ? `RPE ${item.rpe} for set ${number}` : `RPE for set ${number}`
+              }
+              title={`RPE · set ${number}`}
+              items={rpeItems}
+              trigger={{ text: rpeText, color: rpeInk }}
+              width={44}
+              height={38}
+              fill={rowColor}
+              cornerRadius={radius.sm}
+              style={[styles.rpeColumn, styles.rpe]}
+            >
+              <Text style={[type.callout, type.number, { color: rpeInk, fontWeight: '600' }]}>
+                {rpeText}
+              </Text>
+            </MenuButton>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                item.completed ? `Mark set ${number} incomplete` : `Complete set ${number}`
+              }
+              accessibilityState={{ checked: item.completed }}
+              hitSlop={4}
+              onPress={() => {
+                haptics.selection();
+                complete();
+              }}
+              style={({ pressed }) => [
+                styles.checkColumn,
+                styles.check,
+                item.completed
+                  ? { backgroundColor: colors.good, borderColor: colors.good }
+                  : { backgroundColor: colors.surface, borderColor: colors.lineStrong },
+                pressed && styles.pressed,
               ]}
             >
-              {label}
-            </Text>
-          </MenuButton>
-          {cardio ? (
-            <>
-              <View style={styles.valueColumn}>
-                <NumberField
-                  ref={firstField}
-                  label={`Duration minutes for set ${number}`}
-                  placeholder={minutesFormat(ghost?.duration_seconds ?? null)}
-                  value={item.duration_seconds}
-                  format={minutesFormat}
-                  parse={minutesParse}
-                  onChange={(duration_seconds) => update({ duration_seconds })}
-                  suggested={suggested}
-                  done={item.completed}
-                />
-              </View>
-              <View style={styles.valueColumn}>
-                <NumberField
-                  ref={secondField}
-                  label={`Distance kilometres for set ${number}`}
-                  placeholder={formatPlain(ghost?.distance_km ?? null)}
-                  value={item.distance_km}
-                  format={formatPlain}
-                  parse={parseDecimal}
-                  onChange={(distance_km) => update({ distance_km })}
-                  suggested={suggested}
-                  done={item.completed}
-                />
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.valueColumn}>
-                <NumberField
-                  ref={firstField}
-                  label={`Weight ${weightUnit === 'lb' ? 'pounds' : 'kilograms'} for set ${number}`}
-                  placeholder={weightFormat(ghost?.weight_kg ?? null)}
-                  value={item.weight_kg}
-                  format={weightFormat}
-                  parse={weightParse}
-                  onChange={(weight_kg) => update({ weight_kg })}
-                  suggested={suggested}
-                  done={item.completed}
-                  onSubmitEditing={() => secondField.current?.focus()}
-                />
-              </View>
-              <View style={styles.valueColumn}>
-                <NumberField
-                  ref={secondField}
-                  label={`Repetitions for set ${number}`}
-                  placeholder={formatPlain(ghost?.reps ?? null)}
-                  keyboardType="number-pad"
-                  value={item.reps}
-                  format={formatPlain}
-                  parse={parseWhole}
-                  onChange={(reps) => update({ reps })}
-                  suggested={suggested}
-                  done={item.completed}
-                />
-              </View>
-            </>
-          )}
-          <MenuButton
-            accessibilityLabel={
-              item.rpe !== null ? `RPE ${item.rpe} for set ${number}` : `RPE for set ${number}`
-            }
-            title={`RPE · set ${number}`}
-            items={rpeItems}
-            trigger={{ text: rpeText, color: rpeInk }}
-            width={44}
-            height={38}
-            fill={rowColor}
-            cornerRadius={radius.sm}
-            style={[styles.rpeColumn, styles.rpe]}
-          >
-            <Text style={[type.callout, type.number, { color: rpeInk, fontWeight: '600' }]}>
-              {rpeText}
-            </Text>
-          </MenuButton>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={
-              item.completed ? `Mark set ${number} incomplete` : `Complete set ${number}`
-            }
-            accessibilityState={{ checked: item.completed }}
-            hitSlop={4}
-            onPress={() => {
-              haptics.selection();
-              complete();
-            }}
-            style={({ pressed }) => [
-              styles.checkColumn,
-              styles.check,
-              item.completed
-                ? { backgroundColor: colors.good, borderColor: colors.good }
-                : { backgroundColor: colors.surface, borderColor: colors.lineStrong },
-              pressed && styles.pressed,
-            ]}
-          >
-            <Icon
-              name="check"
-              size={18}
-              color={item.completed ? colors.onAccent : colors.secondary}
-            />
-          </Pressable>
-        </View>
-        <SetDetails
-          item={item}
-          number={number}
-          records={records}
-          ratio={ratio}
-          machine={
-            machines
-              ? item.machine_photo_id
-                ? (machineNames.get(item.machine_photo_id) ?? 'Machine')
-                : item.completed
-                  ? null
-                  : undefined
-              : undefined
-          }
-          onEditNote={editNote}
-        />
-        {cardio && (
-          <CardioExtras
+              <Icon
+                name="check"
+                size={18}
+                color={item.completed ? colors.onAccent : colors.secondary}
+              />
+            </Pressable>
+          </View>
+          <SetDetails
             item={item}
             number={number}
-            open={extrasOpen}
-            treadmill={/treadmill/i.test(movement.exercise.equipment ?? movement.exercise.name)}
-            onToggle={() => setExtrasOpen((value) => !value)}
-            update={update}
+            records={records}
+            ratio={ratio}
+            machine={
+              machines
+                ? item.machine_photo_id
+                  ? (machineNames.get(item.machine_photo_id) ?? 'Machine')
+                  : item.completed
+                    ? null
+                    : undefined
+                : undefined
+            }
+            onEditNote={editNote}
           />
-        )}
-        {cardio && (
-          <View style={{ paddingLeft: 40 }}>
-            <CardioSetImport
+          {cardio && (
+            <CardioExtras
+              item={item}
               number={number}
-              done={item.completed}
-              // A scanned screenshot is the finished set, so it is logged, as on the web.
-              onScanned={(values) => update({ ...values, completed: true })}
+              open={extrasOpen}
+              treadmill={/treadmill/i.test(movement.exercise.equipment ?? movement.exercise.name)}
+              onToggle={() => setExtrasOpen((value) => !value)}
+              update={update}
             />
-          </View>
-        )}
+          )}
+          {cardio && (
+            <View style={{ paddingLeft: 40 }}>
+              <CardioSetImport
+                number={number}
+                done={item.completed}
+                // A scanned screenshot is the finished set, so it is logged, as on the web.
+                onScanned={(values) => update({ ...values, completed: true })}
+              />
+            </View>
+          )}
+        </View>
       </View>
     </ReanimatedSwipeable>
   );
