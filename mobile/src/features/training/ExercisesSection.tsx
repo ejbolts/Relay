@@ -523,19 +523,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    minHeight: 60,
-    paddingVertical: 8,
   },
   rowMain: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
+    minHeight: 60,
+    paddingVertical: 8,
   },
   rowStats: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+    minHeight: 60,
+    paddingVertical: 8,
   },
   initials: {
     width: 38,

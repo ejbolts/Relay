@@ -1,6 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
+  AccessibilityInfo,
   FlatList,
+  Keyboard,
   Modal,
   Platform,
   Pressable,
@@ -8,6 +10,7 @@ import {
   Text,
   TextInput,
   View,
+  type TextInputInstance,
 } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -100,6 +103,9 @@ export function ExercisePicker({
   const [creating, setCreating] = useState<{ name: string; category: WorkoutCategory | '' } | null>(
     null,
   );
+  const searchRef = useRef<TextInputInstance>(null);
+  const helpTriggersRef = useRef<Record<string, ComponentRef<typeof Pressable> | null>>({});
+  const activeHelpTriggerIdRef = useRef<string | null>(null);
   const swap = mode === 'swap';
   const { colors, type, radius } = useTheme();
   const insets = useSafeAreaInsets();
@@ -140,12 +146,30 @@ export function ExercisePicker({
     );
   }, [available, query, recentIds]);
 
+  const openHelp = (exercise: Exercise) => {
+    searchRef.current?.blur();
+    Keyboard.dismiss();
+    activeHelpTriggerIdRef.current = exercise.id;
+    setHelpExercise(exercise);
+  };
+  const closeHelp = () => {
+    const triggerId = activeHelpTriggerIdRef.current;
+    activeHelpTriggerIdRef.current = null;
+    setHelpExercise(null);
+    if (triggerId) {
+      requestAnimationFrame(() => {
+        const trigger = helpTriggersRef.current[triggerId];
+        if (trigger) AccessibilityInfo.sendAccessibilityEvent(trigger, 'focus');
+      });
+    }
+  };
   const close = () => {
     setQuery('');
     setBodyPart('all');
     setCustomOnly(false);
     setEquipment('');
     setSelected([]);
+    activeHelpTriggerIdRef.current = null;
     setHelpExercise(null);
     setMachineChoices({});
     setOpenMachinesId(null);
@@ -198,9 +222,11 @@ export function ExercisePicker({
       visible={visible}
       animationType="slide"
       presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
-      onRequestClose={() => (helpExercise ? setHelpExercise(null) : close())}
+      onRequestClose={() => (helpExercise ? closeHelp() : close())}
     >
       <View
+        accessibilityElementsHidden={!!helpExercise}
+        importantForAccessibility={helpExercise ? 'no-hide-descendants' : 'auto'}
         style={[
           styles.page,
           {
@@ -260,6 +286,7 @@ export function ExercisePicker({
         >
           <Icon name="search" size={16} color={colors.muted} />
           <TextInput
+            ref={searchRef}
             value={query}
             onChangeText={setQuery}
             placeholder="Search exercises"
@@ -448,7 +475,14 @@ export function ExercisePicker({
                       )}
                     </View>
                   </Pressable>
-                  <ExerciseMuscleHelpButton exercise={item} onPress={() => setHelpExercise(item)} />
+                  <ExerciseMuscleHelpButton
+                    ref={(node) => {
+                      if (node) helpTriggersRef.current[item.id] = node;
+                      else delete helpTriggersRef.current[item.id];
+                    }}
+                    exercise={item}
+                    onPress={() => openHelp(item)}
+                  />
                   {machines.length > 0 && (
                     <Pressable
                       accessibilityRole="button"
@@ -477,8 +511,8 @@ export function ExercisePicker({
                     <Pressable
                       accessible={false}
                       disabled={added}
-                      hitSlop={8}
                       onPress={() => toggle(item)}
+                      style={styles.tickTouch}
                     >
                       <View
                         style={[
@@ -559,11 +593,7 @@ export function ExercisePicker({
           onClose={() => setCreating(null)}
         />
       )}
-      <ExerciseMuscleHelpSheet
-        exercise={helpExercise}
-        inline
-        onClose={() => setHelpExercise(null)}
-      />
+      <ExerciseMuscleHelpSheet exercise={helpExercise} inline onClose={closeHelp} />
     </Modal>
   );
 }
@@ -659,7 +689,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 10,
     paddingHorizontal: 16,
-    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowSelect: {
@@ -667,6 +696,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+    minHeight: 64,
+    paddingVertical: 10,
+  },
+  tickTouch: {
+    width: 44,
+    height: 44,
+    marginRight: -10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tick: {
     width: 24,

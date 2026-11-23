@@ -8,9 +8,8 @@ import {
   isCardioExercise,
   partialSetsEnabledForWeek,
   selectPartialSetWeek,
-  weekStartDayFromPreference,
 } from './exercisePartialSets';
-import { addDays, weekStartFor } from './trainingSummary';
+import { addDays, weekStartDayOf, weekStartFor } from './trainingSummary';
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import { localDate } from './utils';
 import type { Exercise } from './types';
@@ -35,7 +34,7 @@ export function ExerciseMuscleHelp({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { preferences } = useTrainingPreferences();
-  const weekStartDay = weekStartDayFromPreference(preferences?.week_start);
+  const weekStartDay = weekStartDayOf(preferences?.week_start);
   const today = localDate();
   const currentWeek = weekStartFor(today, weekStartDay);
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);

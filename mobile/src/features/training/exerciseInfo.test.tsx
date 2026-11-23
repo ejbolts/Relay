@@ -1,11 +1,15 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { partialSetsEnabledForWeek } from '../../../../frontend/src/exercisePartialSets';
-import type { Exercise, LiftRanking } from '../../../../frontend/src/types';
-import { apiGet, apiSend } from '../../data/api';
+import type { Exercise, LiftRanking, TrainingPreferences } from '../../../../frontend/src/types';
+import { ApiError, apiGet, apiSend } from '../../data/api';
+import { queryKeys } from '../../data/queries';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
+import { socialKeys } from '../social/socialQueries';
 import { ExerciseDetailScreen } from './ExerciseDetailScreen';
+import { exerciseInfoKeys, syncLiftLeaderboardsForSharing } from './exerciseInfoQueries';
 import { ExerciseMuscleHelpSheet } from './ExerciseMuscleHelp';
 import { ExercisesSection } from './ExercisesSection';
 import { LiftLeaderboardCard } from './LiftLeaderboardCard';
@@ -43,8 +47,12 @@ jest.mock('../../ui/DateField', () => {
   const { createElement } = jest.requireActual<typeof import('react')>('react');
   const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
   return {
-    DateField: (props: { label: string; value: string }) =>
-      createElement(Text, { accessibilityLabel: props.label }, props.value),
+    DateField: (props: { label: string; value: string; disabled?: boolean }) =>
+      createElement(
+        Text,
+        { accessibilityLabel: props.label, accessibilityState: { disabled: !!props.disabled } },
+        props.value,
+      ),
   };
 });
 jest.mock('../../ui/MenuButton', () => {
@@ -177,6 +185,7 @@ afterAll(() => jest.useRealTimers());
 beforeEach(() => {
   jest.clearAllMocks();
   jest.mocked(apiSend).mockReset();
+  onlineManager.setOnline(true);
   responses = {
     '/api/exercises': [benchWithCredits, squat, running],
     '/api/training-preferences': preferences,
@@ -204,7 +213,10 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => client.clear());
+afterEach(() => {
+  onlineManager.setOnline(true);
+  client.clear();
+});
 
 describe('muscle set credits (?) dialog', () => {
   test('opens from an exercise list row without navigating, browses weeks and saves partial sets', async () => {
@@ -270,11 +282,113 @@ describe('muscle set credits (?) dialog', () => {
     expect(screen.getByText('Off')).toBeVisible();
   });
 
-  test('shows an error alert when saving partial sets fails', async () => {
-    jest.mocked(apiSend).mockRejectedValueOnce(new Error('offline'));
+  test('disables week selection and saving while preferences load, and re-snaps if week_start changes', async () => {
+    // TODAY is Sunday 2026-11-22: a Sunday-start account must not send Monday 2026-11-16 while
+    // training preferences are still pending.
+    let resolvePreferences!: (value: TrainingPreferences) => void;
+    jest.mocked(apiGet).mockImplementation(async (path: string) => {
+      if (path === '/api/training-preferences') {
+        return new Promise<TrainingPreferences>((resolve) => {
+          resolvePreferences = resolve;
+        }) as never;
+      }
+      if (!(path in responses)) throw new Error(`Unexpected request ${path}`);
+      return responses[path] as never;
+    });
+
+    await open(<ExerciseMuscleHelpSheet exercise={benchWithCredits} onClose={jest.fn()} />);
+    await screen.findByLabelText('Count partial sets');
+
+    expect(screen.getByRole('button', { name: 'Previous partial-set week' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Next partial-set week' })).toBeDisabled();
+    expect(screen.getByLabelText('Partial-set week')).toBeDisabled();
+
+    await act(async () => {
+      fireEvent(screen.getByLabelText('Count partial sets'), 'valueChange', true);
+    });
+    expect(apiSend).not.toHaveBeenCalled();
+
+    // Once Sunday preferences arrive, the week snaps to Sunday 2026-11-22 and saving enables.
+    await act(async () => {
+      resolvePreferences({ ...preferences, week_start: 'sunday' });
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText('Partial-set week')).toHaveTextContent('2026-11-22'),
+    );
+    expect(screen.getByRole('button', { name: 'Previous partial-set week' })).toBeEnabled();
+    expect(screen.getByLabelText('Partial-set week')).toBeEnabled();
+
+    // Stepping back one week gives Sunday 2026-11-15; if week_start changes to Monday while open,
+    // the picked week re-snaps to Monday 2026-11-09.
+    await fireEvent.press(screen.getByRole('button', { name: 'Previous partial-set week' }));
+    expect(screen.getByLabelText('Partial-set week')).toHaveTextContent('2026-11-15');
+    await act(async () => {
+      client.setQueryData<TrainingPreferences>(queryKeys.trainingPreferences, {
+        ...preferences,
+        week_start: 'monday',
+      });
+    });
+    await waitFor(() =>
+      expect(screen.getByLabelText('Partial-set week')).toHaveTextContent('2026-11-09'),
+    );
+  });
+
+  test('drops a deferred PATCH reply after a sign-out and sign-in without touching the new cache', async () => {
+    let resolvePatch!: (value: Exercise) => void;
+    jest.mocked(apiSend).mockImplementationOnce(
+      () =>
+        new Promise<Exercise>((resolve) => {
+          resolvePatch = resolve;
+        }) as never,
+    );
+
+    await open(<ExerciseMuscleHelpSheet exercise={benchWithCredits} onClose={jest.fn()} />);
+    await waitFor(() => expect(screen.getByLabelText('Count partial sets')).toBeEnabled());
+
+    await act(async () => {
+      fireEvent(screen.getByLabelText('Count partial sets'), 'valueChange', true);
+    });
+    expect(apiSend).toHaveBeenCalledTimes(1);
+
+    // Simulate signing out and signing back in with fresher exercise data in the new session.
+    nextSessionEpoch();
+    const freshBench: Exercise = { ...benchWithCredits, is_favorite: true };
+    client.setQueryData<Exercise[]>(queryKeys.exercises, [freshBench, squat, running]);
+    const invalidateSpy = jest.spyOn(client, 'invalidateQueries');
+
+    // The old session's PATCH resolves with stale data (is_favorite: false).
+    await act(async () => {
+      resolvePatch({ ...benchWithCredits, is_favorite: false, partial_sets_enabled: true });
+    });
+
+    const cached = client.getQueryData<Exercise[]>(queryKeys.exercises);
+    expect(cached?.find((item) => item.id === 'bench')?.is_favorite).toBe(true);
+    expect(invalidateSpy).not.toHaveBeenCalled();
+  });
+
+  test('shows an error alert when saving partial sets fails and saves cleanly on retry', async () => {
+    const savedBench: Exercise = {
+      ...benchWithCredits,
+      partial_sets_enabled: true,
+      partial_set_weeks: [
+        ...(benchWithCredits.partial_set_weeks ?? []).filter(
+          (item) => item.week_start !== '2026-11-16',
+        ),
+        { week_start: '2026-11-16', enabled: true },
+      ],
+    };
+    jest
+      .mocked(apiSend)
+      .mockRejectedValueOnce(new Error('offline'))
+      .mockImplementationOnce(async () => {
+        responses['/api/exercises'] = [savedBench, squat, running];
+        return savedBench as never;
+      });
+
     await open(<ExerciseDetailScreen exerciseId="bench" />);
     const help = await screen.findByRole('button', { name: 'Muscle set credits for Bench Press' });
     await fireEvent.press(help);
+    await waitFor(() => expect(screen.getByLabelText('Partial-set week')).toBeEnabled());
 
     await act(async () => {
       fireEvent(screen.getByLabelText('Count partial sets'), 'valueChange', true);
@@ -282,6 +396,14 @@ describe('muscle set credits (?) dialog', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Could not save partial sets. Try again.',
     );
+
+    // Retrying clears the error alert and saves the partial-set choice.
+    await act(async () => {
+      fireEvent(screen.getByLabelText('Count partial sets'), 'valueChange', true);
+    });
+    expect(await screen.findByText('0.5 sets')).toBeVisible();
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(apiSend).toHaveBeenCalledTimes(2);
   });
 
   test('explains cardio exercises and exercises with no credits', async () => {
@@ -334,19 +456,48 @@ describe("friends' lift ranking", () => {
     expect(within(card).getByText('Sam Chen')).toBeVisible();
   });
 
-  test('hides when the leaderboard is empty or fails to load', async () => {
-    responses['/api/sharing/lifts/bench'] = { entries: [] };
-    const view = await open(<LiftLeaderboardCard exerciseId="bench" />);
-    await waitFor(() =>
-      expect(apiGet).toHaveBeenCalledWith('/api/sharing/lifts/bench', expect.anything()),
-    );
+  test('hides a previously loaded ranking when offline, on a 403 refetch, and when sharing turns Private', async () => {
+    await open(<LiftLeaderboardCard exerciseId="bench" />);
+    expect(await screen.findByLabelText('Friends')).toBeVisible();
+    expect(screen.getByText('Sam Chen')).toBeVisible();
+
+    // Going offline immediately suppresses stale cached entries.
+    await act(async () => {
+      onlineManager.setOnline(false);
+    });
     expect(screen.queryByLabelText('Friends')).toBeNull();
 
-    jest.mocked(apiGet).mockRejectedValueOnce(new Error('sharing_required'));
-    await view.rerender(withProviders(<LiftLeaderboardCard exerciseId="other" />));
-    await waitFor(() =>
-      expect(apiGet).toHaveBeenCalledWith('/api/sharing/lifts/other', expect.anything()),
-    );
+    // Returning online restores the card until a refetch fails with 403 sharing_required on the same key.
+    await act(async () => {
+      onlineManager.setOnline(true);
+    });
+    expect(await screen.findByLabelText('Friends')).toBeVisible();
+
+    let rejectLeaderboard = true;
+    jest.mocked(apiGet).mockImplementation(async (path: string) => {
+      if (path === '/api/sharing/lifts/bench' && rejectLeaderboard) {
+        throw new ApiError(403, 'Sharing required', 'sharing_required');
+      }
+      if (!(path in responses)) throw new Error(`Unexpected request ${path}`);
+      return responses[path] as never;
+    });
+    await act(async () => {
+      await client.refetchQueries({ queryKey: exerciseInfoKeys.liftLeaderboard('bench') });
+    });
+    await waitFor(() => expect(screen.queryByLabelText('Friends')).toBeNull());
+
+    // Recovering online with a successful refetch shows it again; switching sharing to Private removes it.
+    rejectLeaderboard = false;
+    await act(async () => {
+      await client.refetchQueries({ queryKey: exerciseInfoKeys.liftLeaderboard('bench') });
+    });
+    expect(await screen.findByLabelText('Friends')).toBeVisible();
+
+    await act(async () => {
+      client.setQueryData(socialKeys.choices, { visibility: 'private' });
+      syncLiftLeaderboardsForSharing(client, 'private');
+    });
     expect(screen.queryByLabelText('Friends')).toBeNull();
+    expect(client.getQueryData(exerciseInfoKeys.liftLeaderboard('bench'))).toBeUndefined();
   });
 });

@@ -5,7 +5,6 @@ import {
   isCardioExercise,
   partialSetsEnabledForWeek,
   selectPartialSetWeek,
-  weekStartDayFromPreference,
 } from './exercisePartialSets';
 import type { Exercise } from './types';
 
@@ -46,13 +45,6 @@ describe('exercisePartialSets', () => {
     });
     expect(fallback.direct).toEqual([{ muscle_name: 'Biceps', sets: 1 }]);
     expect(fallback.partial).toEqual([]);
-  });
-
-  it('maps week_start preferences to JS weekday numbers', () => {
-    expect(weekStartDayFromPreference('sunday')).toBe(0);
-    expect(weekStartDayFromPreference('saturday')).toBe(6);
-    expect(weekStartDayFromPreference('monday')).toBe(1);
-    expect(weekStartDayFromPreference(undefined)).toBe(1);
   });
 
   it('snaps picked dates to their week start and ignores future or empty dates', () => {

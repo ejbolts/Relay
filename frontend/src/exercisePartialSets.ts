@@ -1,6 +1,6 @@
 // Package-free, so the native app can share it (see AGENTS.md "Web and mobile parity").
 import { weekStartFor } from './trainingSummary';
-import type { Exercise, TrainingPreferences } from './types';
+import type { Exercise } from './types';
 
 export interface MuscleSetCredit {
   muscle_name: string;
@@ -35,13 +35,6 @@ export function exerciseMuscleCredits(
     direct: credits.filter((credit) => credit.sets >= 1),
     partial: credits.filter((credit) => credit.sets > 0 && credit.sets < 1),
   };
-}
-
-/** The JS weekday (0 = Sunday, 1 = Monday, 6 = Saturday) for the user's week-start preference. */
-export function weekStartDayFromPreference(
-  weekStart?: TrainingPreferences['week_start'] | null,
-): 0 | 1 | 6 {
-  return weekStart === 'sunday' ? 0 : weekStart === 'saturday' ? 6 : 1;
 }
 
 /** Snaps a chosen date to its training week start, ignoring empty or future dates. */

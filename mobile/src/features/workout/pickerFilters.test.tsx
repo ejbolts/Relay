@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
-import { Platform } from 'react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { AccessibilityInfo, Keyboard, Platform } from 'react-native';
 import type { Exercise } from '../../../../frontend/src/types';
 import { PromptHost } from '../../ui/prompts';
 import { ExercisePicker } from './ExercisePicker';
@@ -108,7 +108,11 @@ test('Custom in the Equipment menu filters to custom exercises and swaps cleanly
   expect(screen.getByRole('checkbox', { name: 'Custom Dumbbell Curl' })).toBeVisible();
 });
 
-test('the (?) button opens muscle set credits without selecting the exercise', async () => {
+test('the (?) button opens muscle set credits without selecting the exercise and traps accessibility focus', async () => {
+  const dismissSpy = jest.spyOn(Keyboard, 'dismiss');
+  const focusSpy = jest
+    .spyOn(AccessibilityInfo, 'sendAccessibilityEvent')
+    .mockImplementation(() => undefined);
   const benchCredits: Exercise = {
     ...bench,
     default_muscle_set_credits: [
@@ -118,13 +122,32 @@ test('the (?) button opens muscle set credits without selecting the exercise', a
   };
   await openPicker([benchCredits, press]);
   await fireEvent.press(screen.getByRole('button', { name: 'Muscle set credits for Bench Press' }));
+  expect(dismissSpy).toHaveBeenCalled();
   expect(screen.getByText('MUSCLE SET CREDITS')).toBeVisible();
   expect(screen.getByText('Pectorals')).toBeVisible();
   expect(screen.getByText('1 set')).toBeVisible();
   expect(screen.getByText('Triceps')).toBeVisible();
   expect(screen.getByText('0.5 sets')).toBeVisible();
-  expect(screen.getByRole('checkbox', { name: 'Bench Press' })).not.toBeChecked();
+  // Screen-reader focus moves to the sheet's title.
+  await waitFor(() => expect(focusSpy).toHaveBeenCalledWith(expect.anything(), 'focus'));
+  const titleNode = focusSpy.mock.calls[0][0] as unknown as { props: { children: unknown } };
+  expect(titleNode.props.children).toBe('Bench Press');
+  focusSpy.mockClear();
+  // While the inline credits overlay is open, picker controls are hidden from assistive tech.
+  expect(screen.queryByRole('checkbox', { name: 'Bench Press' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Add' })).toBeNull();
 
   await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
   expect(screen.queryByText('MUSCLE SET CREDITS')).toBeNull();
+  // Closing restores picker controls to assistive tech and leaves Bench Press unselected.
+  expect(screen.getByRole('checkbox', { name: 'Bench Press' })).not.toBeChecked();
+  expect(screen.getByRole('button', { name: 'Add' })).toBeVisible();
+  // Focus returns to the (?) that opened the sheet.
+  await waitFor(() => expect(focusSpy).toHaveBeenCalledWith(expect.anything(), 'focus'));
+  const triggerNode = focusSpy.mock.calls[0][0] as unknown as {
+    props: { accessibilityLabel?: string };
+  };
+  expect(triggerNode.props.accessibilityLabel).toBe('Muscle set credits for Bench Press');
+  dismissSpy.mockRestore();
+  focusSpy.mockRestore();
 });

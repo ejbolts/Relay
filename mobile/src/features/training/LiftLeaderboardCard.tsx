@@ -6,26 +6,33 @@ import {
   liftRankingName,
   liftRankingRowLabel,
 } from '../../../../frontend/src/liftRanking';
+import { waitingForNetwork } from '../../data/offline';
 import { useWeightUnit } from '../../data/queries';
 import { Card, CardHeader } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { useTheme } from '../../ui/theme';
 import { socialRoutes } from '../social/navigation';
-import { useLiftLeaderboard } from './exerciseInfoQueries';
+import { useIsOnline, useLiftLeaderboard, useSharingPrivate } from './exerciseInfoQueries';
 import { Divider } from './parts';
 
 /**
  * One of your lifts, ranked against the friends who have logged it, matching the web's
- * LiftLeaderboardCard. Hidden while loading, when empty or when sharing is off/offline.
+ * LiftLeaderboardCard. Hidden while loading, offline, when sharing is off, when empty or when a
+ * fetch/refetch fails.
  */
 export function LiftLeaderboardCard({ exerciseId }: { exerciseId: string }) {
   const { colors, type } = useTheme();
   const unit = useWeightUnit();
   const router = useRouter();
-  const entries = useLiftLeaderboard(exerciseId).data;
+  const online = useIsOnline();
+  const sharingPrivate = useSharingPrivate();
+  const query = useLiftLeaderboard(exerciseId, online && !sharingPrivate);
+  const entries = query.data;
 
-  if (!entries?.length) return null;
+  if (!online || sharingPrivate || waitingForNetwork(query) || query.isError || !entries?.length) {
+    return null;
+  }
 
   return (
     <Card accessibilityLabel="Friends">

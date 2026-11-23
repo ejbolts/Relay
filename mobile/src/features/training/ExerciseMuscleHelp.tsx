@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentRef, type Ref } from 'react';
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   exerciseMuscleCredits,
@@ -8,9 +8,8 @@ import {
   isCardioExercise,
   partialSetsEnabledForWeek,
   selectPartialSetWeek,
-  weekStartDayFromPreference,
 } from '../../../../frontend/src/exercisePartialSets';
-import { addDays, weekStartFor } from '../../../../frontend/src/trainingSummary';
+import { addDays, weekStartDayOf, weekStartFor } from '../../../../frontend/src/trainingSummary';
 import type { Exercise } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { useExercises, useTrainingPreferences } from '../../data/queries';
@@ -19,6 +18,7 @@ import { DateField } from '../../ui/DateField';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
+import { isToastAccountCurrent, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { updateExercisePartialSets } from './exerciseInfoQueries';
 import { trainingIcons } from './icons';
@@ -32,16 +32,20 @@ export function ExerciseMuscleHelpButton({
   exercise,
   onPress,
   variant = 'row',
+  ref,
 }: {
   exercise: Pick<Exercise, 'name'>;
   onPress: () => void;
   /** `header` matches ExerciseOptionsMenu's circular pill in the detail navigation bar. */
   variant?: 'row' | 'header';
+  /** Trigger node ref, used by the inline picker overlay to restore screen-reader focus on close. */
+  ref?: Ref<ComponentRef<typeof Pressable>>;
 }) {
   const { colors } = useTheme();
   const header = variant === 'header';
   return (
     <Pressable
+      ref={ref}
       accessibilityRole="button"
       accessibilityLabel={`Muscle set credits for ${exercise.name}`}
       onPress={() => {
@@ -99,31 +103,54 @@ function ExerciseMuscleHelpContent({
   const insets = useSafeAreaInsets();
   const client = useQueryClient();
   const exercises = useExercises().data;
-  const preferences = useTrainingPreferences().data;
+  const preferencesQuery = useTrainingPreferences();
+  const preferencesReady = preferencesQuery.data !== undefined;
   const ownedExercise = exercises?.find((item) => item.id === passedExercise.id);
   const exercise = ownedExercise ?? passedExercise;
 
-  const weekStartDay = weekStartDayFromPreference(preferences?.week_start);
+  const weekStartDay = weekStartDayOf(preferencesQuery.data?.week_start);
   const today = localDate();
   const currentWeek = weekStartFor(today, weekStartDay);
-  const [pickedWeek, setPickedWeek] = useState<string | null>(null);
+  const [pickedWeek, setPickedWeek] = useState<{ date: string; weekStartDay: number } | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const inlineTitleRef = useRef<ComponentRef<typeof Text>>(null);
 
-  const selectedWeek = pickedWeek ?? currentWeek;
+  useEffect(() => {
+    if (!inline) return;
+    // Move screen-reader focus into the overlay once it has laid out.
+    const frame = requestAnimationFrame(() => {
+      if (inlineTitleRef.current) {
+        AccessibilityInfo.sendAccessibilityEvent(inlineTitleRef.current, 'focus');
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [inline, exercise.id]);
+
+  // If the account's week-start preference changes while the sheet is open, re-snap any picked
+  // week to the new week start (clamped to currentWeek).
+  const selectedWeek = (() => {
+    if (!pickedWeek) return currentWeek;
+    if (pickedWeek.weekStartDay === weekStartDay) return pickedWeek.date;
+    const resnapped = weekStartFor(pickedWeek.date, weekStartDay);
+    return resnapped > currentWeek ? currentWeek : resnapped;
+  })();
+
   const cardio = isCardioExercise(exercise);
   const { credits, direct, partial } = exerciseMuscleCredits(exercise);
   const partialEnabled = partialSetsEnabledForWeek(exercise, selectedWeek);
-  const nextWeekDisabled = saving || selectedWeek >= currentWeek;
+  const controlsDisabled = saving || !preferencesReady;
+  const nextWeekDisabled = controlsDisabled || selectedWeek >= currentWeek;
 
   async function togglePartialSets() {
-    if (!ownedExercise || saving) return;
+    if (!ownedExercise || !preferencesReady || saving) return;
+    const account = toastAccount();
     setSaving(true);
     setError(null);
     try {
-      await updateExercisePartialSets(client, exercise.id, !partialEnabled, selectedWeek);
+      await updateExercisePartialSets(client, exercise.id, !partialEnabled, selectedWeek, account);
     } catch {
-      setError('Could not save partial sets. Try again.');
+      if (isToastAccountCurrent(account)) setError('Could not save partial sets. Try again.');
     } finally {
       setSaving(false);
     }
@@ -154,11 +181,11 @@ function ExerciseMuscleHelpContent({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Previous partial-set week"
-                accessibilityState={{ disabled: saving }}
-                disabled={saving}
+                accessibilityState={{ disabled: controlsDisabled }}
+                disabled={controlsDisabled}
                 onPress={() => {
                   haptics.selection();
-                  setPickedWeek(addDays(selectedWeek, -7));
+                  setPickedWeek({ date: addDays(selectedWeek, -7), weekStartDay });
                   setError(null);
                 }}
                 style={({ pressed }) => [
@@ -168,8 +195,8 @@ function ExerciseMuscleHelpContent({
                     borderColor: colors.lineStrong,
                     borderRadius: radius.sm,
                   },
-                  pressed && !saving && { opacity: 0.7 },
-                  saving && { opacity: 0.4 },
+                  pressed && !controlsDisabled && { opacity: 0.7 },
+                  controlsDisabled && { opacity: 0.4 },
                 ]}
               >
                 <Icon name="chevronLeft" size={18} color={colors.text} />
@@ -181,7 +208,7 @@ function ExerciseMuscleHelpContent({
                 disabled={nextWeekDisabled}
                 onPress={() => {
                   haptics.selection();
-                  setPickedWeek(addDays(selectedWeek, 7));
+                  setPickedWeek({ date: addDays(selectedWeek, 7), weekStartDay });
                   setError(null);
                 }}
                 style={({ pressed }) => [
@@ -203,10 +230,10 @@ function ExerciseMuscleHelpContent({
             label="Partial-set week"
             value={selectedWeek}
             max={today}
-            disabled={saving}
+            disabled={controlsDisabled}
             onChange={(date) => {
               const next = selectPartialSetWeek(date, today, weekStartDay);
-              if (next) setPickedWeek(next);
+              if (next) setPickedWeek({ date: next, weekStartDay });
               setError(null);
             }}
           />
@@ -218,7 +245,7 @@ function ExerciseMuscleHelpContent({
             <Switch
               accessibilityLabel="Count partial sets"
               value={partialEnabled}
-              disabled={saving}
+              disabled={controlsDisabled}
               onChange={() => void togglePartialSets()}
             />
           </View>
@@ -312,7 +339,11 @@ function ExerciseMuscleHelpContent({
   }
 
   return (
-    <View style={[StyleSheet.absoluteFill, styles.inlineBackdrop]}>
+    <View
+      accessibilityViewIsModal
+      importantForAccessibility="yes"
+      style={[StyleSheet.absoluteFill, styles.inlineBackdrop]}
+    >
       <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={onClose} />
       <View
         style={[styles.inlineCard, { backgroundColor: colors.surface, marginTop: insets.top + 48 }]}
@@ -328,7 +359,11 @@ function ExerciseMuscleHelpContent({
           <View style={styles.inlineHeader}>
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={[type.eyebrow, { color: colors.accentText }]}>MUSCLE SET CREDITS</Text>
-              <Text accessibilityRole="header" style={[type.title, { color: colors.text }]}>
+              <Text
+                ref={inlineTitleRef}
+                accessibilityRole="header"
+                style={[type.title, { color: colors.text }]}
+              >
                 {exercise.name}
               </Text>
             </View>
