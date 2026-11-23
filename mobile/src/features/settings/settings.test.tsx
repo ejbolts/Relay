@@ -159,14 +159,32 @@ async function pickMenu(label: string) {
 }
 
 describe('Settings', () => {
-  it('applies the saved accent and lets the user restore Automatic', async () => {
+  it('applies the saved accent, mode and style through the visual selectors', async () => {
     await show(<AppearanceScreen />);
-    await fireEvent.press(screen.getByRole('button', { name: 'Accent colour, Blue' }));
-    await pickMenu('Emerald');
-    expect(screen.getByRole('button', { name: 'Accent colour, Emerald' })).toBeVisible();
-    await fireEvent.press(screen.getByRole('button', { name: 'Accent colour, Emerald' }));
-    await pickMenu('Blue');
-    expect(screen.getByRole('button', { name: 'Appearance, Automatic' })).toBeVisible();
+    const emerald = screen.getByRole('radio', { name: 'Emerald, Forest green' });
+    await fireEvent.press(emerald);
+    expect(emerald).toBeChecked();
+    const dark = screen.getByRole('radio', { name: 'Dark' });
+    await fireEvent.press(dark);
+    expect(dark).toBeChecked();
+    const oled = screen.getByRole('radio', { name: 'OLED' });
+    await fireEvent.press(oled);
+    expect(oled).toBeChecked();
+    await fireEvent.press(screen.getByRole('radio', { name: 'Blue, Original' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Automatic' }));
+    expect(screen.getByRole('radio', { name: 'Automatic' })).toBeChecked();
+  });
+
+  it('filters settings by keyword from the search bar and opens matching subpages', async () => {
+    await show(<SettingsScreen />);
+    const search = await screen.findByLabelText('Search settings and profile');
+    await fireEvent.changeText(search, 'theme');
+    await fireEvent.press(screen.getByRole('button', { name: 'Theme and motion' }));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/settings/appearance');
+    await fireEvent.changeText(search, 'timer');
+    expect(screen.getByLabelText('Rest timer')).toBeTruthy();
+    await fireEvent.changeText(search, 'zzzzzz');
+    expect(screen.getByText('No settings found. Try “timer” or “username”.')).toBeVisible();
   });
 
   it('saves each bodyweight default independently', async () => {
