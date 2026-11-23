@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { AccessibilityInfo, Platform } from 'react-native';
+import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ToastHost, showToast } from './Toast';
+import { ToastHost, isToastAccountCurrent, showToast, toastAccount } from './Toast';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../testing/memoryKvStore'));
 
@@ -123,5 +123,65 @@ it('holds while focused even after a press is cancelled, then resumes', async ()
   expect(undo()).not.toBeNull();
   await fireEvent(button, 'blur');
   await act(async () => jest.advanceTimersByTime(8100));
+  expect(undo()).toBeNull();
+});
+
+it('drops a toast from work that started under another account', async () => {
+  const { rerender } = await render(host());
+  const account = toastAccount();
+  expect(isToastAccountCurrent(account)).toBe(true);
+  mockStatus = { kind: 'signed-in', user: { id: 'b' } };
+  await rerender(host());
+  expect(isToastAccountCurrent(account)).toBe(false);
+  const late = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+  await act(async () => showToast('Friend request sent', late, { account }));
+  expect(screen.queryByText('Friend request sent')).toBeNull();
+  expect(late.onDismiss).not.toHaveBeenCalled();
+});
+
+it('never lets an old timer or Undo finish the toast that replaced it', async () => {
+  await render(host());
+  const first = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+  const second = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+  await act(async () => showToast('First', first));
+  await act(async () => jest.advanceTimersByTime(7900));
+  // The first toast's timer comes due in the same batch that replaces it.
+  await act(async () => {
+    showToast('Second', second);
+    jest.advanceTimersByTime(200);
+  });
+  expect(first.onDismiss).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('Second')).toBeOnTheScreen();
+  expect(second.onDismiss).not.toHaveBeenCalled();
+
+  // A tap on the old Undo arriving with a newer toast doesn't undo the newer one.
+  const third = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+  const oldUndo = screen.getByRole('button', { name: 'Undo' });
+  let pressed: Promise<unknown> = Promise.resolve();
+  await act(async () => {
+    showToast('Third', third);
+    // The press handler runs at once, before React swaps the controls.
+    pressed = fireEvent.press(oldUndo);
+  });
+  await pressed;
+  expect(third.run).not.toHaveBeenCalled();
+  expect(screen.getByText('Third')).toBeOnTheScreen();
+  expect(second.run).not.toHaveBeenCalled();
+  expect(second.onDismiss).toHaveBeenCalledTimes(1);
+});
+
+it('settles an action toast when the app goes to the background', async () => {
+  let onChange: (state: string) => void = () => undefined;
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+    onChange = listener as (state: string) => void;
+    return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+  });
+  await render(host());
+  const removal = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+  await act(async () => showToast('Goal removed', removal));
+  await act(async () => onChange('inactive'));
+  expect(removal.onDismiss).not.toHaveBeenCalled();
+  await act(async () => onChange('background'));
+  expect(removal.onDismiss).toHaveBeenCalledTimes(1);
   expect(undo()).toBeNull();
 });
