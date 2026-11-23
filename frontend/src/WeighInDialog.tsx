@@ -4,32 +4,12 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import type { BodyMeasurement } from './types';
 import { localDate } from './utils';
 import { WeightInput } from './WeightInput';
-import { formatWeight, weightInputValue } from './weightUnits';
+import { weightInputValue } from './weightUnits';
+import type { BodyCheckInPayload } from './bodyCheckInUndo';
+import { IMPORTED_BODYWEIGHT_NOTE, weighInDraft, weighInPayload } from './bodyCheckInForm';
 
-/** The note a CSV import leaves on a check-in; editing the check-in drops it. */
-export const IMPORTED_BODYWEIGHT_NOTE = 'Imported from workout CSV.';
-
-export interface WeighInPayload {
-  measurement_date: string;
-  weight_kg: number;
-  body_fat_pct: number | null;
-  notes: string | null;
-}
-
-interface Draft {
-  weight: number | null;
-  bodyFat: string;
-  notes: string;
-}
-
-/** The fields for a day: its saved check-in, so saving changes it instead of wiping it. */
-function weighInDraft(entry: BodyMeasurement | undefined): Draft {
-  return {
-    weight: entry?.weight_kg ?? null,
-    bodyFat: entry?.body_fat_pct == null ? '' : String(entry.body_fat_pct),
-    notes: entry?.notes && entry.notes !== IMPORTED_BODYWEIGHT_NOTE ? entry.notes : '',
-  };
-}
+export { IMPORTED_BODYWEIGHT_NOTE };
+export type WeighInPayload = BodyCheckInPayload;
 
 /**
  * Logs a weigh-in for today, or for another chosen day. It opens on today each time, and a day
@@ -61,20 +41,15 @@ export function WeighInDialog({
   }
 
   async function submit() {
-    const weight = draft.weight;
-    if (weight === null || !Number.isFinite(weight) || weight <= 0 || weight > 500) {
-      setError(`Enter a body weight above 0 and up to ${formatWeight(500, weightUnit)}.`);
+    const checked = weighInPayload(date, draft, weightUnit);
+    if (checked.error !== null) {
+      setError(checked.error);
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      await onSave({
-        measurement_date: date,
-        weight_kg: weight,
-        body_fat_pct: draft.bodyFat ? Number(draft.bodyFat) : null,
-        notes: draft.notes.trim() || null,
-      });
+      await onSave(checked.payload);
       onClose();
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Could not save this measurement.');

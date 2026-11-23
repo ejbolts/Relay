@@ -56,3 +56,26 @@ export function calendarLegendTypes(days: HeatmapDay[], types: WorkoutType[]): W
     ...[...present.values()].filter((type) => !types.some((item) => item.id === type.id)),
   ];
 }
+
+/** The colour a new workout type starts with. */
+export const NEW_WORKOUT_TYPE_COLOR = '#a855f7';
+
+/**
+ * Why a new or renamed workout type's name can't be used, or null. Names are unique per
+ * account, removed types included; `renamingId` is the type being renamed.
+ */
+export function workoutTypeNameError(
+  name: string,
+  types: WorkoutType[],
+  renamingId?: string,
+): string | null {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 40) return 'Enter a workout type name of 1–40 characters.';
+  const duplicate = types.find(
+    (type) => type.id !== renamingId && type.name.toLowerCase() === trimmed.toLowerCase(),
+  );
+  if (!duplicate) return null;
+  return duplicate.archived
+    ? 'That workout type already exists in Removed types. Restore it below.'
+    : 'That workout type already exists. Choose a different name.';
+}

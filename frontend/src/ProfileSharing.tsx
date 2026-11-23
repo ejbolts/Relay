@@ -3,117 +3,28 @@ import { api } from './api';
 import { authErrorMessage } from './authForm';
 import { CollapsibleSection } from './CollapsibleSection';
 import { HelpPopup } from './HelpPopup';
-import { liveWorkoutReport, type PresenceStatus } from './presence';
+import { liveWorkoutReport } from './presence';
 import { PresenceAvatar } from './PresenceAvatar';
 import { VISIBILITY_LABELS } from './sharedProfileDisplay';
 import { useToast } from './Toast';
 import { useUserSession } from './userContext';
+import {
+  ALWAYS_SHARED,
+  choicesFrom,
+  LIVE_OPTIONS,
+  livePreview,
+  PRIVATE_DEFAULTS,
+  savesAtOnce,
+  SHARING_CHOICES_SAVED,
+  SHARING_NEVER,
+  SHARING_OPTIONS,
+  VISIBILITY_CONFIRM,
+  VISIBILITY_OPTIONS,
+  VISIBILITY_SAVED,
+  visibilityPending as isVisibilityPending,
+  withVisibility,
+} from './sharingChoices';
 import type { ProfileVisibility, SharingChoices, SharingSettings } from './types';
-
-type OptionalChoice = Exclude<keyof SharingChoices, 'visibility'>;
-type LiveChoice = 'share_online_status' | 'share_live_workouts';
-
-const VISIBILITY_OPTIONS: Array<{ value: ProfileVisibility; description: string }> = [
-  { value: 'private', description: 'Only you. You cannot see or add other members.' },
-  {
-    value: 'followers',
-    description: 'Your friends. Others see only your name and photo.',
-  },
-  {
-    value: 'public',
-    description: 'Every member who shares. Friends still need your approval.',
-  },
-];
-
-const ALWAYS_SHARED = [
-  {
-    label: 'Workouts + cardio',
-    description: 'Exercises, sets, dates and durations, plus cardio time, distance and heart rate',
-  },
-  { label: 'Profile photo', description: 'Shown with your name, even before you become friends' },
-];
-
-const SHARING_OPTIONS: Array<{ key: OptionalChoice; label: string; description: string }> = [
-  {
-    key: 'share_machine_photos',
-    label: 'Machine photos',
-    description: 'Photos pinned to exercises in your shared workouts',
-  },
-  {
-    key: 'share_body_weight',
-    label: 'Body weight',
-    description: 'Weigh-ins, body fat and body weight logged with sets',
-  },
-  {
-    key: 'share_body_sizes',
-    label: 'Body measurements',
-    description: 'Neck, chest, waist, arm and leg measurements',
-  },
-  {
-    key: 'share_goals',
-    label: 'Goals',
-    description: 'Your body-weight goal and weekly Zone 2 cardio target',
-  },
-  {
-    key: 'share_notes',
-    label: 'Notes',
-    description: 'Workout, exercise, set and cardio notes, including saved video links',
-  },
-];
-
-const VISIBILITY_SAVED: Record<ProfileVisibility, string> = {
-  private: 'Your profile is private. Nobody else can see it.',
-  followers: 'Your profile is shared with your friends.',
-  public: 'Your profile is public to every member who shares.',
-};
-
-const VISIBILITY_CONFIRM: Record<ProfileVisibility, string> = {
-  private: 'Make my profile private',
-  followers: 'Make my profile friends only',
-  public: 'Make my profile public',
-};
-
-const LIVE_OPTIONS: Array<{ key: LiveChoice; label: string }> = [
-  { key: 'share_online_status', label: 'Online status' },
-  { key: 'share_live_workouts', label: 'Live workouts' },
-];
-
-const PRIVATE_DEFAULTS: SharingChoices = {
-  visibility: 'private',
-  share_notes: false,
-  share_body_weight: false,
-  share_body_sizes: false,
-  share_goals: false,
-  share_machine_photos: false,
-  share_online_status: true,
-  share_live_workouts: true,
-};
-
-function choicesFrom(settings: SharingSettings): SharingChoices {
-  return {
-    visibility: settings.visibility,
-    share_notes: settings.share_notes,
-    share_body_weight: settings.share_body_weight,
-    // Missing from a server that predates the choice.
-    share_body_sizes: settings.share_body_sizes ?? false,
-    share_goals: settings.share_goals,
-    share_machine_photos: settings.share_machine_photos,
-    share_online_status: settings.share_online_status,
-    share_live_workouts: settings.share_live_workouts,
-  };
-}
-
-/** What friends would see right now with these choices: this device's workout, or online. */
-function livePreview(choices: SharingChoices): { status: PresenceStatus; text: string } {
-  const workout = choices.visibility === 'private' ? null : liveWorkoutReport();
-  if (workout && choices.share_live_workouts) {
-    return { status: { kind: 'workout', workout }, text: `Working out · ${workout.name}` };
-  }
-  if (choices.visibility !== 'private' && choices.share_online_status) {
-    return { status: { kind: 'online' }, text: 'Active now' };
-  }
-  return { status: null, text: 'No live activity' };
-}
 
 function Spinner() {
   return <span className="auth-spinner" aria-hidden="true" />;
@@ -171,15 +82,14 @@ export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
 
   // A new visibility stays a draft until its confirm button is pressed; reselecting the saved
   // one cancels it. Share toggles save at once while sharing with no visibility change pending.
-  const visibilityPending = saved !== null && draft.visibility !== saved.visibility;
+  const visibilityPending = isVisibilityPending(saved, draft);
 
   function changeVisibility(visibility: ProfileVisibility) {
-    if (sharing && visibility === saved.visibility) setDraft(choicesFrom(saved));
-    else setDraft({ ...draft, visibility });
+    setDraft(withVisibility(saved, draft, visibility));
   }
 
   function toggle(next: SharingChoices) {
-    if (sharing && !visibilityPending) void save(next, 'Sharing choices saved.');
+    if (savesAtOnce(saved, draft)) void save(next, SHARING_CHOICES_SAVED);
     else setDraft(next);
   }
 
@@ -333,9 +243,7 @@ export function ProfileSharingPanel({ onSaved }: { onSaved?: () => void }) {
             ))}
             <LivePreview choices={draft} user={user} />
           </CollapsibleSection>
-          <small className="sharing-never">
-            Shared accounts can be found by username. Your videos and sample data are never shared.
-          </small>
+          <small className="sharing-never">{SHARING_NEVER}</small>
           {error && (
             <p className="inline-error" role="alert">
               {error}
@@ -354,7 +262,7 @@ function LivePreview({
   choices: SharingChoices;
   user: ReturnType<typeof useUserSession>['user'];
 }) {
-  const { status, text } = livePreview(choices);
+  const { status, text } = livePreview(choices, liveWorkoutReport());
   return (
     <div className="sharing-live-preview">
       <span className="sharing-live-preview-label">Friends see you as</span>

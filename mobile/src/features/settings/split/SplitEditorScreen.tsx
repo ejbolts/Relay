@@ -1,0 +1,912 @@
+import { useQueryClient } from '@tanstack/react-query';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { useMemo, useRef, useState, type ComponentRef } from 'react';
+import {
+  ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import {
+  REP_RANGE_PRESETS,
+  repRangeKey,
+  repRangeLabel,
+} from '../../../../../frontend/src/repProgression';
+import {
+  atPlannedMinimum,
+  canAddSplitDay,
+  canPlanMore,
+  legacySplitRoutine,
+  MAX_PLANNED_EXERCISES,
+  moveSplitDay,
+  newRoutineMovement,
+  planFewer,
+  planMore,
+  plannedMinutes,
+  routineFromTemplate,
+  routineSaveError,
+  splitDayContribution,
+  splitDayCount,
+  splitDayName,
+  splitDaySummary,
+  splitFailure,
+  splitTypeNameError,
+  swapPlannedExercise,
+  withSplitDayType,
+} from '../../../../../frontend/src/splitEditing';
+import {
+  describeVolumeRow,
+  exerciseMuscles,
+  splitVolumeRows,
+  TARGET_MARKS,
+  volumeRowValue,
+  type VolumeRow,
+} from '../../../../../frontend/src/splitTargets';
+import type {
+  Exercise,
+  RepRange,
+  Routine,
+  RoutineDay,
+  RoutineMovement,
+  TrainingSplit,
+  WorkoutType,
+} from '../../../../../frontend/src/types';
+import { localDate } from '../../../../../frontend/src/utils';
+import { NEW_WORKOUT_TYPE_COLOR } from '../../../../../frontend/src/workoutTypes';
+import {
+  useExercises,
+  useTrainingPreferences,
+  useWorkoutHistory,
+  useWorkoutTypes,
+} from '../../../data/queries';
+import { Button, Card, errorMessage, ErrorState, Loading } from '../../../ui/components';
+import { Icon, type IconPair } from '../../../ui/Icon';
+import { promptText, showMenu } from '../../../ui/prompts';
+import { showToast } from '../../../ui/Toast';
+import { useTheme, type Palette } from '../../../ui/theme';
+import { ExercisePicker } from '../../workout/ExercisePicker';
+import { settingsIcons } from '../icons';
+import {
+  refreshSplits,
+  saveRoutine,
+  useCardioGoal,
+  useRoutines,
+  useTrainingSplit,
+  useWorkoutTypeActions,
+} from '../settingsData';
+import { DateStepper, StepButton } from './SplitParts';
+
+/**
+ * Creates or edits a split, as the web's split editor: its name, the days of its cycle with their
+ * workout types and planned exercises, and, for the active split, when it starts and whether it
+ * is on. Opened with `id` (a saved split) or `template` (a new one).
+ */
+export function SplitEditorScreen() {
+  const params = useLocalSearchParams<{ id?: string; template?: string }>();
+  const routines = useRoutines();
+  const split = useTrainingSplit();
+  const types = useWorkoutTypes();
+  if (routines.isPending || split.isPending || types.isPlaceholderData)
+    return <Loading label="Loading split" />;
+  const error = routines.error ?? split.error ?? types.error;
+  if (error)
+    return (
+      <ErrorState
+        message={errorMessage(error)}
+        onRetry={() => {
+          void routines.refetch();
+          void split.refetch();
+          void types.refetch();
+        }}
+      />
+    );
+  const allTypes = types.data ?? [];
+  const current = split.data ?? null;
+  const routine = params.id
+    ? params.id === 'current-split'
+      ? legacySplitRoutine(current, allTypes)
+      : (routines.data?.find((item) => item.id === params.id) ?? null)
+    : routineFromTemplate(params.template ?? 'custom', allTypes);
+  if (!routine)
+    return (
+      <ErrorState
+        message="This split is no longer saved."
+        onRetry={() => void routines.refetch()}
+      />
+    );
+  const schedule =
+    routine.id && (routine.id === 'current-split' || routine.id === current?.routine_id)
+      ? (current ?? undefined)
+      : undefined;
+  return (
+    <Editor
+      key={routine.id || params.template}
+      routine={JSON.parse(JSON.stringify(routine)) as Routine}
+      schedule={schedule}
+      types={allTypes}
+    />
+  );
+}
+
+type Picking = { day: number; replace?: number };
+
+function Editor({
+  routine,
+  schedule,
+  types,
+}: {
+  routine: Routine;
+  schedule?: TrainingSplit;
+  types: WorkoutType[];
+}) {
+  const router = useRouter();
+  const client = useQueryClient();
+  const { colors, type, radius } = useTheme();
+  const exercises = useExercises();
+  const history = useWorkoutHistory();
+  const preferences = useTrainingPreferences().data;
+  const cardioGoal = useCardioGoal().data ?? null;
+  const typeActions = useWorkoutTypeActions();
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  const [value, setValue] = useState(routine);
+  const [startDate, setStartDate] = useState(schedule?.start_date ?? localDate());
+  const [enabled, setEnabled] = useState(schedule?.enabled ?? false);
+  const [openDay, setOpenDay] = useState<number | null>(() => {
+    const first = routine.days.findIndex((item) => item.workout_type_id);
+    return first < 0 ? 0 : first;
+  });
+  const [selected, setSelected] = useState<string | null>(null);
+  const [validation, setValidation] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [picking, setPicking] = useState<Picking | null>(null);
+
+  const library = useMemo(() => exercises.data ?? [], [exercises.data]);
+  // The library's copies carry the latest muscle credits.
+  const creditDays = useMemo(() => {
+    const latest = new Map(library.map((item) => [item.id, item]));
+    return value.days.map((item) => ({
+      ...item,
+      movements: item.movements.map((m) => ({
+        ...m,
+        exercise: latest.get(m.exercise_id) ?? m.exercise,
+      })),
+    }));
+  }, [library, value.days]);
+  const recentIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const workout of history.data ?? [])
+      for (const movement of workout.movements)
+        if (!ids.includes(movement.exercise.id)) ids.push(movement.exercise.id);
+    return ids;
+  }, [history.data]);
+  const volume = splitVolumeRows(
+    creditDays,
+    preferences?.weekly_muscle_set_goal ?? 10,
+    preferences?.weekly_muscle_set_goals,
+    cardioGoal,
+  );
+  const canSave = !saving && !typeActions.create.isPending && !exercises.error;
+
+  const setDay = (index: number, next: RoutineDay) =>
+    setValue((current) => ({
+      ...current,
+      days: current.days.map((item, i) => (i === index ? next : item)),
+    }));
+  function addDay(next: RoutineDay) {
+    setValue((current) => ({ ...current, days: [...current.days, next] }));
+    setOpenDay(value.days.length);
+  }
+  function move(index: number, direction: -1 | 1) {
+    setValue((current) => ({ ...current, days: moveSplitDay(current.days, index, direction) }));
+    setOpenDay(index + direction);
+  }
+  function fail(message: string) {
+    setValidation(message);
+    scroll.current?.scrollTo({ y: 0, animated: true });
+  }
+
+  async function save() {
+    if (!canSave) return;
+    const invalid = routineSaveError(value, types);
+    if (invalid) {
+      fail(invalid);
+      return;
+    }
+    setValidation(null);
+    setSaving(true);
+    try {
+      await saveRoutine(
+        value,
+        schedule
+          ? { start_date: startDate, enabled, progression: schedule.progression ?? 'workouts' }
+          : undefined,
+      );
+      void refreshSplits(client);
+      showToast('Split saved.');
+      router.back();
+    } catch (reason) {
+      setSaving(false);
+      fail(splitFailure(reason));
+    }
+  }
+
+  function newType() {
+    promptText({
+      title: 'New workout type',
+      value: '',
+      placeholder: 'e.g. Full body A',
+      submitLabel: 'Add type',
+      onSubmit: (name) => {
+        if (!name.trim()) return;
+        const taken = splitTypeNameError(name, types);
+        if (taken) {
+          fail(taken);
+          return;
+        }
+        setValidation(null);
+        typeActions.create.mutate(
+          { name: name.trim().slice(0, 40), color: NEW_WORKOUT_TYPE_COLOR },
+          {
+            onSuccess: (created) => {
+              if (canAddSplitDay(value.days))
+                addDay({ workout_type_id: created.id, workout_type: created, movements: [] });
+            },
+            onError: (reason) => fail(splitFailure(reason)),
+          },
+        );
+      },
+    });
+  }
+
+  function addPicked(picked: Exercise[]) {
+    if (!picking) return;
+    const day = value.days[picking.day];
+    if (picking.replace !== undefined) {
+      const replacement = picked[0];
+      const index = picking.replace;
+      if (replacement)
+        setDay(picking.day, {
+          ...day,
+          movements: day.movements.map((m, i) =>
+            i === index ? swapPlannedExercise(m, replacement) : m,
+          ),
+        });
+      return;
+    }
+    const room = MAX_PLANNED_EXERCISES - day.movements.length;
+    setDay(picking.day, {
+      ...day,
+      movements: [...day.movements, ...picked.slice(0, room).map(newRoutineMovement)],
+    });
+  }
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    >
+      <Stack.Screen
+        options={{
+          title: routine.id ? 'Edit split' : 'New split',
+          headerRight: () =>
+            saving ? (
+              <ActivityIndicator color={colors.accentText} />
+            ) : (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Save split"
+                accessibilityState={{ disabled: !canSave }}
+                disabled={!canSave}
+                hitSlop={8}
+                onPress={() => void save()}
+              >
+                <Text
+                  style={[
+                    type.body,
+                    { color: colors.accentText, fontWeight: '600', opacity: canSave ? 1 : 0.4 },
+                  ]}
+                >
+                  Save
+                </Text>
+              </Pressable>
+            ),
+        }}
+      />
+      <ScrollView
+        ref={scroll}
+        style={{ flex: 1, backgroundColor: colors.page }}
+        contentInsetAdjustmentBehavior="automatic"
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={styles.page}
+      >
+        <TextInput
+          accessibilityLabel="Split name"
+          value={value.name}
+          onChangeText={(name) => setValue((current) => ({ ...current, name }))}
+          maxLength={40}
+          editable={!saving}
+          placeholder="Split name"
+          placeholderTextColor={colors.muted}
+          returnKeyType="done"
+          style={[
+            type.title,
+            styles.name,
+            { color: colors.text, backgroundColor: colors.surface, borderRadius: radius.lg },
+          ]}
+        />
+        {schedule && (
+          <View
+            style={{
+              backgroundColor: colors.surface,
+              borderRadius: radius.lg,
+              borderColor: colors.line,
+              borderWidth: StyleSheet.hairlineWidth,
+            }}
+          >
+            <DateStepper
+              label="Starts"
+              date={startDate}
+              onChange={setStartDate}
+              disabled={saving}
+            />
+            <View style={[styles.separator, { backgroundColor: colors.lineStrong }]} />
+            <View style={styles.switchRow}>
+              <Text style={[type.body, { color: colors.text, flex: 1 }]}>Active</Text>
+              <Switch
+                accessibilityLabel="Active"
+                value={enabled}
+                disabled={saving}
+                onValueChange={setEnabled}
+                trackColor={{ true: colors.good, false: colors.surface3 }}
+                thumbColor={Platform.OS === 'android' ? '#ffffff' : undefined}
+                ios_backgroundColor={colors.surface3}
+              />
+            </View>
+          </View>
+        )}
+        {exercises.error && (
+          <ErrorState
+            message={errorMessage(exercises.error)}
+            onRetry={() => void exercises.refetch()}
+          />
+        )}
+        {!!validation && (
+          <Text accessibilityRole="alert" style={[type.callout, { color: colors.danger }]}>
+            {validation}
+          </Text>
+        )}
+        <VolumeCard volume={volume} selected={selected} onSelect={setSelected} />
+        <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
+          Cycle · {splitDayCount(value.days)}
+        </Text>
+        {value.days.map((item, index) => (
+          <DayCard
+            key={index}
+            index={index}
+            day={item}
+            creditDay={creditDays[index]}
+            count={value.days.length}
+            open={openDay === index}
+            selected={selected}
+            types={types}
+            disabled={saving}
+            onToggle={() => setOpenDay(openDay === index ? null : index)}
+            onChange={(next) => setDay(index, next)}
+            onMove={(direction) => move(index, direction)}
+            onRemove={() => {
+              setValue((current) => ({
+                ...current,
+                days: current.days.filter((_, i) => i !== index),
+              }));
+              setOpenDay(null);
+            }}
+            onAddExercises={() => setPicking({ day: index })}
+            onReplace={(movement) => setPicking({ day: index, replace: movement })}
+            canAddExercises={library.length > 0}
+          />
+        ))}
+        <View style={styles.addDays}>
+          <Button
+            label="Add workout day"
+            icon="plus"
+            variant="secondary"
+            disabled={saving || !canAddSplitDay(value.days)}
+            onPress={() => {
+              const first = types.find((item) => !item.archived);
+              if (first) addDay({ workout_type_id: first.id, workout_type: first, movements: [] });
+            }}
+            style={{ flex: 1 }}
+          />
+          <Button
+            label="Add rest day"
+            icon="plus"
+            variant="secondary"
+            disabled={saving || !canAddSplitDay(value.days)}
+            onPress={() => addDay({ workout_type_id: null, workout_type: null, movements: [] })}
+            style={{ flex: 1 }}
+          />
+        </View>
+        <Button
+          label={typeActions.create.isPending ? 'Adding…' : 'New workout type'}
+          icon={settingsIcons.types}
+          variant="link"
+          disabled={saving || typeActions.create.isPending}
+          onPress={newType}
+        />
+      </ScrollView>
+      <ExercisePicker
+        visible={!!picking}
+        exercises={library}
+        recentIds={recentIds}
+        addedIds={
+          new Set(picking ? value.days[picking.day]?.movements.map((m) => m.exercise_id) : [])
+        }
+        onAdd={addPicked}
+        onClose={() => setPicking(null)}
+      />
+    </KeyboardAvoidingView>
+  );
+}
+
+function statusColour(colors: Palette, status: VolumeRow['status']) {
+  return status === 'met'
+    ? colors.good
+    : status === 'close'
+      ? colors.gold
+      : status === 'under'
+        ? colors.danger
+        : colors.muted;
+}
+
+/** Planned weekly sets per muscle and cardio minutes against the account's goals. */
+function VolumeCard({
+  volume,
+  selected,
+  onSelect,
+}: {
+  volume: ReturnType<typeof splitVolumeRows>;
+  selected: string | null;
+  onSelect: (key: string | null) => void;
+}) {
+  const { colors, type } = useTheme();
+  const rows = [...volume.rows, ...(volume.cardio ? [volume.cardio] : [])];
+  return (
+    <Card>
+      <View style={styles.volumeHeader}>
+        <Text accessibilityRole="header" style={[type.headline, { color: colors.text, flex: 1 }]}>
+          Weekly volume
+        </Text>
+        {volume.goals > 0 && (
+          <Text style={[type.footnote, { color: colors.secondary }]}>
+            {volume.met === volume.goals ? `${TARGET_MARKS.met} ` : ''}
+            {volume.met} of {volume.goals} on target
+          </Text>
+        )}
+      </View>
+      {rows.length === 0 ? (
+        <Text style={[type.callout, { color: colors.muted }]}>No exercises yet</Text>
+      ) : (
+        rows.map((row) => {
+          const scale = (row.goal ?? row.value) * 1.6 || 1;
+          const on = selected === row.key;
+          const tint = statusColour(colors, row.status);
+          return (
+            <Pressable
+              key={row.key}
+              accessibilityRole="button"
+              accessibilityLabel={describeVolumeRow(row)}
+              accessibilityState={{ selected: on }}
+              onPress={() => onSelect(on ? null : row.key)}
+              style={[styles.volumeRow, on && { backgroundColor: colors.accentSoft }]}
+            >
+              <Text style={[styles.mark, { color: tint }]}>
+                {row.status ? TARGET_MARKS[row.status] : '·'}
+              </Text>
+              <Text style={[type.footnote, { color: colors.text, width: 96 }]} numberOfLines={1}>
+                {row.name}
+              </Text>
+              <View style={[styles.track, { backgroundColor: colors.surface3 }]}>
+                <View
+                  style={[
+                    styles.fill,
+                    {
+                      width: `${Math.min(100, (row.value / scale) * 100)}%`,
+                      backgroundColor: tint,
+                    },
+                  ]}
+                />
+                {row.goal != null && (
+                  <View
+                    style={[
+                      styles.goal,
+                      { left: `${(row.goal / scale) * 100}%`, backgroundColor: colors.text },
+                    ]}
+                  />
+                )}
+              </View>
+              <Text
+                style={[
+                  type.footnote,
+                  type.number,
+                  styles.volumeValue,
+                  { color: colors.secondary },
+                ]}
+              >
+                {volumeRowValue(row)}
+                {row.unit === 'min' ? `${row.goal != null ? ` / ${row.goal}` : ''} min` : ''}
+              </Text>
+            </Pressable>
+          );
+        })
+      )}
+    </Card>
+  );
+}
+
+function DayCard({
+  index,
+  day,
+  creditDay,
+  count,
+  open,
+  selected,
+  types,
+  disabled,
+  canAddExercises,
+  onToggle,
+  onChange,
+  onMove,
+  onRemove,
+  onAddExercises,
+  onReplace,
+}: {
+  index: number;
+  day: RoutineDay;
+  creditDay: RoutineDay;
+  count: number;
+  open: boolean;
+  selected: string | null;
+  types: WorkoutType[];
+  disabled: boolean;
+  canAddExercises: boolean;
+  onToggle: () => void;
+  onChange: (day: RoutineDay) => void;
+  onMove: (direction: -1 | 1) => void;
+  onRemove: () => void;
+  onAddExercises: () => void;
+  onReplace: (movement: number) => void;
+}) {
+  const { colors, type, radius } = useTheme();
+  const contribution = splitDayContribution(creditDay, selected);
+  const label = `Day ${index + 1}`;
+  const colour = day.workout_type?.color ?? colors.deemph;
+  const chooseType = () =>
+    showMenu(`${label} workout type`, [
+      {
+        label: day.workout_type_id === null ? 'Rest ✓' : 'Rest',
+        onPress: () => onChange(withSplitDayType(day, null)),
+      },
+      ...types
+        .filter((item) => !item.archived || item.id === day.workout_type_id)
+        .map((item) => ({
+          label: `${item.name}${item.archived ? ' (removed)' : ''}${item.id === day.workout_type_id ? ' ✓' : ''}`,
+          onPress: () => onChange(withSplitDayType(day, item)),
+        })),
+    ]);
+  const movement = (i: number, next: RoutineMovement | null) =>
+    onChange({
+      ...day,
+      movements: day.movements.flatMap((item, at) => (at !== i ? [item] : next ? [next] : [])),
+    });
+  return (
+    <View
+      style={[
+        styles.day,
+        {
+          backgroundColor: colors.surface,
+          borderRadius: radius.lg,
+          borderColor: colors.line,
+          opacity: selected && !contribution ? 0.5 : 1,
+        },
+      ]}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        accessibilityLabel={`${label} · ${splitDayName(day)}, ${splitDaySummary(day)}`}
+        onPress={onToggle}
+        style={styles.dayHeader}
+      >
+        <View style={[styles.dayBar, { backgroundColor: colour }]} />
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[type.callout, { color: colors.text, fontWeight: '700' }]}>
+            {label} · {splitDayName(day)}
+          </Text>
+          <Text style={[type.footnote, { color: colors.muted }]}>{splitDaySummary(day)}</Text>
+        </View>
+        {contribution && (
+          <Text
+            style={[type.footnote, type.number, { color: colors.accentText, fontWeight: '700' }]}
+          >
+            {contribution}
+          </Text>
+        )}
+        <Icon name={open ? 'chevronUp' : 'chevronDown'} size={14} color={colors.muted} />
+      </Pressable>
+      {open && (
+        <View style={styles.dayBody}>
+          <View style={styles.dayTools}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`${label} workout type: ${splitDayName(day)}`}
+              disabled={disabled}
+              onPress={chooseType}
+              style={[
+                styles.typeButton,
+                { backgroundColor: colors.surface2, borderRadius: radius.md },
+              ]}
+            >
+              <View style={[styles.typeDot, { backgroundColor: colour }]} />
+              <Text
+                style={[type.callout, { color: colors.text, fontWeight: '600' }]}
+                numberOfLines={1}
+              >
+                {splitDayName(day)}
+              </Text>
+              <Icon name="chevronDown" size={12} color={colors.muted} />
+            </Pressable>
+            <View style={{ flex: 1 }} />
+            <MoveButton
+              icon={settingsIcons.up}
+              label={`Move day ${index + 1} earlier`}
+              disabled={disabled || index === 0}
+              onPress={() => onMove(-1)}
+            />
+            <MoveButton
+              icon={settingsIcons.down}
+              label={`Move day ${index + 1} later`}
+              disabled={disabled || index === count - 1}
+              onPress={() => onMove(1)}
+            />
+            <StepButton
+              icon="close"
+              label={`Remove day ${index + 1}`}
+              disabled={disabled || count === 1}
+              onPress={onRemove}
+            />
+          </View>
+          {day.movements.map((item, i) => (
+            <PlannedExercise
+              key={`${i}-${item.exercise_id}`}
+              movement={item}
+              muscles={exerciseMuscles(creditDay.movements[i]?.exercise ?? item.exercise)}
+              target={`day ${index + 1}`}
+              disabled={disabled}
+              onChange={(next) => movement(i, next)}
+              onReplace={() => onReplace(i)}
+            />
+          ))}
+          {!!day.workout_type_id && (
+            <Button
+              label="Add exercise"
+              icon="plus"
+              variant="link"
+              disabled={
+                disabled || !canAddExercises || day.movements.length >= MAX_PLANNED_EXERCISES
+              }
+              onPress={onAddExercises}
+              style={{ alignSelf: 'flex-start' }}
+            />
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function MoveButton({
+  icon,
+  label,
+  disabled,
+  onPress,
+}: {
+  icon: IconPair;
+  label: string;
+  disabled: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      hitSlop={4}
+      onPress={onPress}
+      style={[
+        styles.stepButton,
+        { backgroundColor: colors.surface2 },
+        disabled && { opacity: 0.35 },
+      ]}
+    >
+      <Icon name={icon} size={14} color={colors.text} />
+    </Pressable>
+  );
+}
+
+function PlannedExercise({
+  movement,
+  muscles,
+  target,
+  disabled,
+  onChange,
+  onReplace,
+}: {
+  movement: RoutineMovement;
+  muscles: string;
+  target: string;
+  disabled: boolean;
+  onChange: (movement: RoutineMovement | null) => void;
+  onReplace: () => void;
+}) {
+  const { colors, type, radius } = useTheme();
+  const name = movement.exercise.name;
+  const cardio = movement.exercise.kind === 'cardio';
+  const atMinimum = atPlannedMinimum(movement);
+  const ranges: RepRange[] = [
+    ...REP_RANGE_PRESETS,
+    // A range saved elsewhere that is not one of the usual choices.
+    ...(movement.rep_range &&
+    !REP_RANGE_PRESETS.some((range) => repRangeKey(range) === repRangeKey(movement.rep_range))
+      ? [movement.rep_range]
+      : []),
+  ];
+  const current = repRangeKey(movement.rep_range);
+  const chooseReps = () =>
+    showMenu(`Rep range for ${name}`, [
+      {
+        label: current ? 'Any' : 'Any ✓',
+        onPress: () => onChange({ ...movement, rep_range: null }),
+      },
+      ...ranges.map((range) => ({
+        label: `${repRangeLabel(range)}${repRangeKey(range) === current ? ' ✓' : ''}`,
+        onPress: () => onChange({ ...movement, rep_range: range }),
+      })),
+    ]);
+  return (
+    <View style={[styles.planned, { backgroundColor: colors.surface2, borderRadius: radius.md }]}>
+      <View style={{ flex: 1, gap: 2 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${name} on ${target}. Options`}
+          disabled={disabled}
+          onPress={() =>
+            showMenu(name, [
+              { label: 'Replace exercise', onPress: onReplace },
+              { label: `Remove from ${target}`, destructive: true, onPress: () => onChange(null) },
+            ])
+          }
+          style={{ gap: 2 }}
+        >
+          <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]} numberOfLines={2}>
+            {name}
+          </Text>
+          {!!muscles && (
+            <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
+              {muscles}
+            </Text>
+          )}
+        </Pressable>
+        {!cardio && (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Rep range for ${name} on ${target}: ${movement.rep_range ? repRangeLabel(movement.rep_range) : 'Any'}`}
+            disabled={disabled}
+            hitSlop={6}
+            onPress={chooseReps}
+            style={styles.reps}
+          >
+            <Text style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}>
+              Reps {movement.rep_range ? repRangeLabel(movement.rep_range) : 'Any'}
+            </Text>
+            <Icon name="chevronDown" size={10} color={colors.accentText} />
+          </Pressable>
+        )}
+      </View>
+      <View style={styles.stepper}>
+        <StepButton
+          icon={atMinimum ? 'close' : 'minus'}
+          label={
+            atMinimum
+              ? `Remove ${name} from ${target}`
+              : cardio
+                ? `5 fewer minutes of ${name} on ${target}`
+                : `One fewer set of ${name} on ${target}`
+          }
+          disabled={disabled}
+          fill={colors.surface}
+          onPress={() => onChange(planFewer(movement))}
+        />
+        <Text
+          accessibilityLabel={
+            cardio ? `${plannedMinutes(movement)} minutes` : `${movement.sets.length} sets`
+          }
+          style={[type.callout, type.number, styles.count, { color: colors.text }]}
+        >
+          {cardio ? `${plannedMinutes(movement)} min` : movement.sets.length}
+        </Text>
+        <StepButton
+          icon="plus"
+          label={
+            cardio
+              ? `5 more minutes of ${name} on ${target}`
+              : `One more set of ${name} on ${target}`
+          }
+          disabled={disabled || !canPlanMore(movement)}
+          fill={colors.surface}
+          onPress={() => onChange(planMore(movement))}
+        />
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  page: { padding: 16, gap: 16, paddingBottom: 56 },
+  name: { paddingHorizontal: 16, paddingVertical: 12 },
+  separator: { height: StyleSheet.hairlineWidth, marginLeft: 16 },
+  switchRow: { flexDirection: 'row', alignItems: 'center', minHeight: 50, paddingHorizontal: 16 },
+  volumeHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  volumeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    minHeight: 30,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+  },
+  mark: { width: 14, textAlign: 'center', fontWeight: '800', fontSize: 13 },
+  track: { flex: 1, height: 8, borderRadius: 4, overflow: 'hidden' },
+  fill: { height: '100%', borderRadius: 4 },
+  goal: { position: 'absolute', top: 0, bottom: 0, width: 2, marginLeft: -1 },
+  volumeValue: { minWidth: 48, textAlign: 'right' },
+  day: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  dayHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
+  dayBar: { width: 5, alignSelf: 'stretch', borderRadius: 3 },
+  dayBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
+  dayTools: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  typeButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    flexShrink: 1,
+  },
+  typeDot: { width: 10, height: 10, borderRadius: 5 },
+  stepButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  planned: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
+  reps: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  stepper: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  count: { minWidth: 44, textAlign: 'center', fontWeight: '700' },
+  addDays: { flexDirection: 'row', gap: 10 },
+});

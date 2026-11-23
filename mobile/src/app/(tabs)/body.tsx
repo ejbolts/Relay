@@ -1,5 +1,3 @@
-import { WebOnlyScreen } from '../../features/placeholder/WebOnlyScreen';
+import { BodyScreen } from '../../features/body/BodyScreen';
 
-export default function Body() {
-  return <WebOnlyScreen title="Body" hash="body" />;
-}
+export default BodyScreen;

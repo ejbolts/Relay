@@ -12,11 +12,31 @@ import { useTrainingHistory } from './trainingQueries';
 /** Training's sections, named as the web's segmented control names them. */
 export const TRAINING_SECTIONS = ['Sessions', 'Exercises', 'Cardio'] as const;
 
-/** The web's Training tab: Sessions, Exercises and Cardio under one header. */
-export function TrainingTabScreen() {
+/** The section names other screens open Training at, such as Home's cardio cards. */
+export type TrainingSection = 'sessions' | 'exercises' | 'cardio';
+const SECTION_PARAMS: readonly TrainingSection[] = ['sessions', 'exercises', 'cardio'];
+
+/**
+ * The web's Training tab: Sessions, Exercises and Cardio under one header. Another screen opens
+ * it at a section with `requestedSection`; each request has its own `requestId`, so asking for
+ * the same section again switches back to it after the person has moved on.
+ */
+export function TrainingTabScreen({
+  requestedSection,
+  requestId,
+}: {
+  requestedSection?: string;
+  requestId?: string;
+} = {}) {
   const client = useQueryClient();
   const history = useTrainingHistory();
-  const [section, setSection] = useState(0);
+  const requested = SECTION_PARAMS.indexOf(requestedSection as TrainingSection);
+  const [section, setSection] = useState(Math.max(requested, 0));
+  const [applied, setApplied] = useState(requestId);
+  if (requestId !== applied) {
+    setApplied(requestId);
+    if (requested >= 0) setSection(requested);
+  }
   const [refreshing, setRefreshing] = useState(false);
   const total = Math.max(history.summary?.total_workouts ?? 0, history.workouts.length);
   return (

@@ -6,6 +6,7 @@ import { Icon } from './Icon';
 import { WorkoutCalendar } from './WorkoutCalendar';
 import { calendarMonths } from './calendarRange';
 import { addDays, parseLocalDate, shortDate } from './trainingSummary';
+import { needsSplitProgress, splitPreviewDayLabel, withSplitProgress } from './splitEditing';
 import { followsWorkouts, splitPreview, splitPreviewLabel } from './trainingSplit';
 import type { TrainingSplit } from './types';
 import { localDate } from './utils';
@@ -78,26 +79,9 @@ export function TrainingSplitEditor({
             void onSaved(updated);
             // Saved routines return no progress or skip, so ask the server. Only those are
             // taken, and only while the same schedule is still shown.
-            if (
-              updated.enabled &&
-              (followsWorkouts(updated) ? updated.next_step == null : updated.shift === undefined)
-            )
+            if (needsSplitProgress(updated))
               void api.getTrainingSplit().then(
-                (fresh) =>
-                  setSplit((shown) =>
-                    shown &&
-                    fresh &&
-                    fresh.routine_id === shown.routine_id &&
-                    fresh.start_date === shown.start_date
-                      ? {
-                          ...shown,
-                          next_step: fresh.next_step,
-                          rest_saved: fresh.rest_saved,
-                          next_date: fresh.next_date,
-                          shift: fresh.shift,
-                        }
-                      : shown,
-                  ),
+                (fresh) => setSplit((shown) => withSplitProgress(shown, fresh)),
                 () => undefined,
               );
           }}
@@ -114,8 +98,7 @@ export function SplitPreview({ split }: { split: TrainingSplit }) {
   const { types } = useWorkoutTypes();
   const typeFor = (id: string | null | undefined) => types.find((t) => t.id === id);
   const colourFor = (id: string | null | undefined) => typeFor(id)?.color ?? 'var(--p-muted)';
-  const labelFor = (id: string | null | undefined) =>
-    id === null ? 'Rest' : id === undefined ? 'Not started' : (typeFor(id)?.name ?? 'Removed type');
+  const labelFor = (id: string | null | undefined) => splitPreviewDayLabel(types, id);
   const today = localDate();
   const firstDay = followsWorkouts(split)
     ? (split.next_date ?? split.start_date)
