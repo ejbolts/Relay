@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -10,7 +10,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import type { MachinePhoto } from '../../../../frontend/src/types';
-import { useAuthorisedImage } from '../../data/authorisedImage';
+import { loadAuthorisedImage, useAuthorisedImage } from '../../data/authorisedImage';
 import { Button } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
@@ -78,7 +78,7 @@ export function MachinePhotoStrip({
         exerciseName={exerciseName}
         onClose={() => setViewing(null)}
         onShowHistory={
-          onFilterMachine && viewing && viewing.id !== machineFilterId
+          onFilterMachine && viewing && !isMachine(viewing, machineFilterId)
             ? () => {
                 setViewing(null);
                 onFilterMachine({ photo: viewing, exerciseName });
@@ -158,15 +158,18 @@ function MachineDetail({
   photo: MachinePhoto;
   onShowHistory?: () => void;
 }) {
-  const { colors, radius } = useTheme();
+  const { colors, radius, type } = useTheme();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
   const images = photo.images?.length ? photo.images : [photo];
   const [index, setIndex] = useState(0);
   const [fullScreen, setFullScreen] = useState(false);
   const image = images[Math.min(index, images.length - 1)];
-  const full = useAuthorisedImage(image.full_url);
+  // One loader for the sheet and the full-screen viewer; the thumbnail stands in meanwhile.
+  const [attempt, setAttempt] = useState(0);
+  const full = useLoadedImage(image.full_url, attempt);
   const thumb = useAuthorisedImage(image.thumbnail_url);
-  const shown = full ?? thumb;
+  const shown = full.uri ?? thumb;
+  const unavailable = full.status === 'failed' && !thumb;
   const caption = photo.caption || 'Machine';
   // As wide as the sheet allows, in the photo's own shape, no taller than half the screen.
   const width = Math.min(screenWidth - 40, 560);
@@ -189,10 +192,26 @@ function MachineDetail({
       >
         {shown ? (
           <Image source={{ uri: shown }} style={StyleSheet.absoluteFill} resizeMode="contain" />
+        ) : unavailable ? (
+          <View style={styles.unavailable}>
+            <Icon name={{ sf: 'photo', md: 'photo' }} size={22} color={colors.muted} />
+            <Text style={[type.footnote, { color: colors.muted, textAlign: 'center' }]}>
+              Photo not loaded
+            </Text>
+          </View>
         ) : (
-          <ActivityIndicator color={colors.muted} />
+          <ActivityIndicator accessibilityLabel="Loading photo" color={colors.muted} />
         )}
       </Pressable>
+      {unavailable && (
+        <Button
+          label="Try again"
+          variant="secondary"
+          size="small"
+          align="center"
+          onPress={() => setAttempt(attempt + 1)}
+        />
+      )}
       {images.length > 1 && (
         <ScrollView
           horizontal
@@ -237,6 +256,34 @@ function MachineDetail({
       )}
     </View>
   );
+}
+
+/** Whether `photo` is the machine `machineId` names, by its own id or a merged photo's. */
+function isMachine(photo: MachinePhoto, machineId: string | null) {
+  return (
+    !!machineId &&
+    (photo.id === machineId || !!photo.images?.some((image) => image.id === machineId))
+  );
+}
+
+type LoadedImage = { status: 'loading' | 'ready' | 'failed'; uri: string | null };
+
+/** An authorised image, telling a failed load from one still loading; a new attempt retries. */
+function useLoadedImage(url: string, attempt: number): LoadedImage {
+  const key = `${attempt}:${url}`;
+  const [loaded, setLoaded] = useState<{ key: string; uri: string | null } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    // A failed load isn't remembered by the loader, so another attempt asks again.
+    void loadAuthorisedImage(url).then((uri) => {
+      if (!cancelled) setLoaded({ key, uri });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [key, url]);
+  if (loaded?.key !== key) return { status: 'loading', uri: null };
+  return loaded.uri ? { status: 'ready', uri: loaded.uri } : { status: 'failed', uri: null };
 }
 
 function GalleryThumb({
@@ -295,6 +342,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   photo: { alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
+  unavailable: { alignItems: 'center', gap: 6, paddingHorizontal: 24 },
   gallery: { gap: 8 },
   galleryThumb: { width: 56, height: 56, borderWidth: 2, overflow: 'hidden' },
 });

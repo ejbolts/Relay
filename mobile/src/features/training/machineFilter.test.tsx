@@ -346,7 +346,7 @@ describe('Filtered by machine', () => {
     expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
   });
 
-  test('pages through a long history, ten workouts at a time', async () => {
+  test("pages through a long history ten workouts at a time, with the web's pager", async () => {
     responses['/api/machine-photos/cybex/workouts'] = Array.from({ length: 12 }, (_, index) => ({
       ...pullOnCybex,
       id: `w-${index}`,
@@ -357,9 +357,47 @@ describe('Filtered by machine', () => {
     expect(await screen.findByText(/· 12 workouts$/)).toBeVisible();
     expect(screen.getByRole('button', { name: /^Session 10/ })).toBeVisible();
     expect(screen.queryByRole('button', { name: /^Session 11/ })).toBeNull();
-    await fireEvent.press(screen.getByRole('button', { name: 'Show more workouts' }));
+    expect(screen.getByRole('button', { name: 'Page 1 of 2' })).toBeSelected();
+    expect(screen.getByRole('button', { name: 'Previous machine workout page' })).toBeDisabled();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Next machine workout page' }));
+    // Only the current page is laid out.
     expect(screen.getByRole('button', { name: /^Session 12/ })).toBeVisible();
-    expect(screen.queryByRole('button', { name: 'Show more workouts' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Session 1,/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Page 2 of 2' })).toBeSelected();
+    expect(screen.getByRole('button', { name: 'Next machine workout page' })).toBeDisabled();
+    await fireEvent.press(screen.getByRole('button', { name: 'Page 1 of 2' }));
+    expect(screen.getByRole('button', { name: /^Session 1,/ })).toBeVisible();
+  });
+
+  test('each workout opens in full, where it can be edited, resumed or given photos', async () => {
+    await open(<MachineWorkoutsScreen photoId="cybex" />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Open Sample upper session' }));
+    expect(mockRouter.push).toHaveBeenCalledWith({
+      pathname: '/training/session/[id]',
+      params: { id: 'w-upper', exercise: 'bench' },
+    });
+  });
+
+  test("a merged photo's id answers as the machine it belongs to", async () => {
+    // The route names Cybex's merged second photo; the catalog lists the surviving machine.
+    responses['/api/machine-photos/cybex-2/workouts'] = [upperOnCybex];
+    await open(<MachineWorkoutsScreen photoId="cybex-2" caption="Old photo" />);
+    expect(await screen.findByRole('header', { name: 'Cybex chest press' })).toBeVisible();
+    await screen.findByText(/^Last used/);
+    await fireEvent.press(screen.getByRole('imagebutton', { name: 'View Cybex chest press' }));
+    // It is already the current filter, so it isn't offered again.
+    expect(screen.queryByRole('button', { name: 'All workouts on this machine' })).toBeNull();
+  });
+
+  test('a photo that fails to load says so and can be tried again', async () => {
+    await open(<MachineWorkoutsScreen photoId="cybex" />);
+    await fireEvent.press(
+      await screen.findByRole('imagebutton', { name: 'View Cybex chest press' }),
+    );
+    // No server here, so the authorised image loader answers with nothing.
+    expect(await screen.findByText('Photo not loaded')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
   });
 
   test("a late answer for the previous account never shows in the next account's list", async () => {

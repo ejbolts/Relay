@@ -15,12 +15,15 @@ export function Sheet({
   title,
   kicker,
   children,
+  keyboardShouldPersistTaps,
 }: {
   visible: boolean;
   onClose: () => void;
   title: string;
   kicker?: string;
   children: ReactNode;
+  /** 'handled' for a sheet with a search field, so the first tap on a result selects it. */
+  keyboardShouldPersistTaps?: 'handled';
 }) {
   const { colors, type } = useTheme();
   const reduced = useReduceMotion();
@@ -59,6 +62,7 @@ export function Sheet({
     <ScrollView
       contentContainerStyle={[styles.body, { paddingBottom: Math.max(insets.bottom, 16) + 20 }]}
       showsVerticalScrollIndicator={false}
+      keyboardShouldPersistTaps={keyboardShouldPersistTaps}
     >
       {header}
       {children}

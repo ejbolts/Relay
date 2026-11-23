@@ -1,8 +1,20 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Image, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useRef, useState } from 'react';
+import {
+  Image,
+  RefreshControl,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type ScrollViewInstance,
+} from 'react-native';
+import { machineAliases } from '../../../../frontend/src/exerciseHistory';
 import { machineDate, timeSince } from '../../../../frontend/src/machineHistory';
 import { LIST_PAGE_SIZE } from '../../../../frontend/src/pagination';
+import { workoutDisplayName } from '../../../../frontend/src/trainingSummary';
+import type { TrackedWorkout } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { useAuthorisedImage } from '../../data/authorisedImage';
 import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
@@ -13,8 +25,10 @@ import { useAllMachinePhotos } from '../workout/loggerQueries';
 import { MachineFilterSheet } from './MachineFilterSheet';
 import { useMachineWorkouts } from './machineQueries';
 import type { MachineFilter } from './MachinePhotos';
-import { Divider, MoreButton } from './parts';
+import { ListPager } from './ListPager';
+import { Divider } from './parts';
 import { RepeatWorkoutButton } from './RepeatWorkoutButton';
+import { trainingKeys } from './trainingQueries';
 import { useTrainingContext } from './useTrainingContext';
 import { WorkoutCard, WorkoutDetails } from './WorkoutCard';
 
@@ -74,22 +88,44 @@ function MachineWorkouts({
   const router = useRouter();
   const context = useTrainingContext();
   const [today] = useState(localDate);
+  const client = useQueryClient();
   const query = useMachineWorkouts(photoId);
-  const machine = useAllMachinePhotos().data?.find((item) => item.id === photoId);
+  const catalog = useAllMachinePhotos().data;
   const workouts = query.data ?? null;
+  // A machine merged into another since this filter was opened answers as the machine it now
+  // belongs to: its photo ids alias the survivor (the shared rule in exerciseHistory.ts).
+  const pinned = useMemo(
+    () => workouts?.flatMap((item) => item.movements.flatMap((m) => m.machine_photos ?? [])) ?? [],
+    [workouts],
+  );
+  const machineId = useMemo(
+    () => machineAliases([...(catalog ?? []), ...pinned]).get(photoId) ?? photoId,
+    [catalog, pinned, photoId],
+  );
+  const machine = catalog?.find((item) => item.id === machineId);
   // The newest workout opens first, as on the web, until another is opened or closed.
   const [chosenOpen, setChosenOpen] = useState<string | null | undefined>(undefined);
   const openId = chosenOpen === undefined ? (workouts?.[0]?.id ?? null) : chosenOpen;
-  const [pages, setPages] = useState(1);
-  const shown = workouts?.slice(0, pages * LIST_PAGE_SIZE) ?? [];
+  // Ten to a page, as the web's pager shows them; only the current page is laid out.
+  const [page, setPage] = useState(1);
+  const pages = Math.max(1, Math.ceil((workouts?.length ?? 0) / LIST_PAGE_SIZE));
+  const currentPage = Math.min(page, pages);
+  const shown =
+    workouts?.slice((currentPage - 1) * LIST_PAGE_SIZE, currentPage * LIST_PAGE_SIZE) ?? [];
+  const scroller = useRef<ScrollViewInstance>(null);
+  const listTop = useRef(0);
   // The machine's exercise is outlined in each workout, as the web targets it.
   const exerciseId =
-    machine?.exercise_id ??
-    workouts
-      ?.flatMap((item) => item.movements)
-      .find((movement) => movement.machine_photos?.some((photo) => photo.id === photoId))?.exercise
-      .id ??
-    null;
+    machine?.exercise_id ?? pinned.find((photo) => photo.id === machineId)?.exercise_id ?? null;
+
+  /** A workout in full, where it can be edited, resumed, shared or given photos. */
+  function openWorkout(workout: TrackedWorkout) {
+    client.setQueryData<TrackedWorkout>(trainingKeys.workout(workout.id), workout);
+    router.push({
+      pathname: '/training/session/[id]',
+      params: { id: workout.id, ...(exerciseId && { exercise: exerciseId }) },
+    });
+  }
 
   const offline = waitingForNetwork(query);
   const error = offline ? OFFLINE_MESSAGE : query.isError ? errorMessage(query.error) : null;
@@ -105,6 +141,7 @@ function MachineWorkouts({
 
   return (
     <ScrollView
+      ref={scroller}
       style={{ flex: 1, backgroundColor: colors.page }}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: space.xxl * 2 }}
@@ -147,7 +184,13 @@ function MachineWorkouts({
       </Card>
 
       {shown.length > 0 && (
-        <View style={{ gap: 8 }} accessibilityLabel="Workouts on this machine">
+        <View
+          style={{ gap: 8 }}
+          accessibilityLabel="Workouts on this machine"
+          onLayout={(event) => {
+            listTop.current = event.nativeEvent.layout.y;
+          }}
+        >
           <View style={styles.listHeader}>
             <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
               On this machine
@@ -176,18 +219,32 @@ function MachineWorkouts({
                       router.push({ pathname: '/training/exercise/[id]', params: { id } })
                     }
                     onFilterMachine={onFilterMachine}
-                    machineFilterId={photoId}
+                    machineFilterId={machineId}
                   />
                   <View style={styles.cardActions}>
+                    <Button
+                      label="Open workout"
+                      accessibilityLabel={`Open ${workoutDisplayName(item)}`}
+                      icon="chevronRight"
+                      variant="secondary"
+                      onPress={() => openWorkout(item)}
+                    />
                     <RepeatWorkoutButton workout={item} unit={context.unit} />
                   </View>
                 </WorkoutCard>
               </View>
             ))}
           </Card>
-          {workouts && shown.length < workouts.length && (
-            <MoreButton label="Show more workouts" onPress={() => setPages(pages + 1)} />
-          )}
+          <ListPager
+            currentPage={currentPage}
+            totalPages={pages}
+            label="machine workout"
+            onPageChange={(next) => {
+              setPage(next);
+              setChosenOpen(null);
+              scroller.current?.scrollTo({ y: Math.max(0, listTop.current - 12) });
+            }}
+          />
         </View>
       )}
     </ScrollView>
@@ -226,5 +283,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
   },
   list: { paddingVertical: 0, gap: 0 },
-  cardActions: { paddingBottom: 16 },
+  cardActions: { paddingBottom: 16, gap: 10 },
 });

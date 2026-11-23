@@ -31,7 +31,13 @@ export function MachineFilterSheet({
   onClose: () => void;
 }) {
   return (
-    <Sheet visible={visible} onClose={onClose} title="Filter by machine" kicker="Sessions">
+    <Sheet
+      visible={visible}
+      onClose={onClose}
+      title="Filter by machine"
+      kicker="Sessions"
+      keyboardShouldPersistTaps="handled"
+    >
       {/* Opened again, the search starts empty. */}
       {visible && <MachineChoices onSelect={onSelect} />}
     </Sheet>
