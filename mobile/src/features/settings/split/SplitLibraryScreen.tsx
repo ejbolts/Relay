@@ -172,16 +172,17 @@ function Library({
       <Stack.Screen
         options={{
           headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <SplitGuide />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="New split"
+                accessibilityState={{ disabled: !typesReady }}
                 disabled={!typesReady}
-                hitSlop={8}
                 onPress={() => edit({ template: 'custom' })}
+                style={styles.headerButton}
               >
-                <Icon name="plus" size={22} color={colors.accentText} />
+                <Icon name="plus" size={22} color={typesReady ? colors.accentText : colors.muted} />
               </Pressable>
             </View>
           ),
@@ -198,12 +199,16 @@ function Library({
             <EmptyState
               icon={settingsIcons.split}
               title="No saved splits"
-              message="Pick a template below or build your own rotation."
-              action={{
-                label: 'New split',
-                icon: 'plus',
-                onPress: () => edit({ template: 'custom' }),
-              }}
+              // Like the header's +, the editor waits for workout types.
+              action={
+                typesReady
+                  ? {
+                      label: 'New split',
+                      icon: 'plus',
+                      onPress: () => edit({ template: 'custom' }),
+                    }
+                  : undefined
+              }
             />
           )}
           {displayed.map((routine) => {
@@ -537,11 +542,12 @@ const styles = StyleSheet.create({
   cardTitle: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
   dividerBlock: { borderTopWidth: 1, paddingTop: 12 },
+  headerButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   disclosure: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    minHeight: 36,
+    minHeight: 44,
     alignSelf: 'flex-start',
   },
   actionsRow: {

@@ -7,32 +7,9 @@ import { SessionProvider } from './SessionProvider';
 import { SignInScreen } from './SignInScreen';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../testing/memoryKvStore'));
-jest.mock('@react-native-segmented-control/segmented-control', () => {
-  const { createElement } = jest.requireActual<typeof import('react')>('react');
-  const { Pressable, Text, View } =
-    jest.requireActual<typeof import('react-native')>('react-native');
-  return function SegmentedControl(props: {
-    values: string[];
-    accessibilityLabel: string;
-    onChange: (event: { nativeEvent: { selectedSegmentIndex: number } }) => void;
-  }) {
-    return createElement(
-      View,
-      { accessibilityLabel: props.accessibilityLabel },
-      props.values.map((value, index) =>
-        createElement(
-          Pressable,
-          {
-            key: value,
-            accessibilityRole: 'tab',
-            onPress: () => props.onChange({ nativeEvent: { selectedSegmentIndex: index } }),
-          },
-          createElement(Text, null, value),
-        ),
-      ),
-    );
-  };
-});
+jest.mock('@react-native-segmented-control/segmented-control', () =>
+  jest.requireActual('../testing/segmentedControlMock'),
+);
 jest.mock('../data/api', () => ({
   ...jest.requireActual<typeof import('../data/api')>('../data/api'),
   apiOrigin: 'https://relay.test',

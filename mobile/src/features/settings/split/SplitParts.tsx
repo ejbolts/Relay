@@ -143,7 +143,7 @@ export function StepButton({
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
-      hitSlop={6}
+      hitSlop={8}
       onPress={onPress}
       style={({ pressed }) => [
         styles.stepButton,
@@ -181,7 +181,7 @@ export function SplitPreview({ split, types }: { split: TrainingSplit; types: Wo
             accessibilityRole="button"
             accessibilityLabel={calendar ? 'Show next 7 days' : 'Show two-month calendar'}
             accessibilityState={{ selected: calendar }}
-            hitSlop={6}
+            hitSlop={8}
             onPress={() => {
               haptics.selection();
               setCalendar(!calendar);
@@ -205,7 +205,7 @@ export function SplitPreview({ split, types }: { split: TrainingSplit; types: Wo
                 accessibilityLabel="Previous preview week"
                 accessibilityState={{ disabled: week === 0 }}
                 disabled={week === 0}
-                hitSlop={6}
+                hitSlop={8}
                 onPress={() => {
                   haptics.selection();
                   setWeek((value) => Math.max(0, value - 1));
@@ -226,7 +226,7 @@ export function SplitPreview({ split, types }: { split: TrainingSplit; types: Wo
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Next preview week"
-                hitSlop={6}
+                hitSlop={8}
                 onPress={() => {
                   haptics.selection();
                   setWeek((value) => value + 1);

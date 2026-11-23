@@ -1,6 +1,6 @@
 import type { Href } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   searchSettings,
   SETTINGS_GROUP_LABELS,
@@ -95,6 +95,20 @@ const PAGE_LABELS: Record<SettingsDestination['page'], string> = {
   dashboard: 'Home',
   admin: 'Admin',
 };
+
+/**
+ * The scroll offset that puts a section at content `y` just below the header. On iOS the page
+ * scrolls under its navigation bar (automatic content insets), so the bar's height comes off.
+ */
+export function sectionScrollOffset(
+  y: number,
+  gap: number,
+  headerHeight: number,
+  os = Platform.OS,
+) {
+  if (os === 'ios') return Math.max(-headerHeight, y - headerHeight - gap);
+  return Math.max(0, y - gap);
+}
 
 /** The web's search results, limited to the places the app has. */
 export function settingsSearchResults(query: string, userId: string, isAdmin: boolean) {

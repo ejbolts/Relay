@@ -54,7 +54,6 @@ export function SignInScreen() {
   const [passwordRevealed, setPasswordRevealed] = useState(false);
   const [passwordFocused, setPasswordFocused] = useState(false);
   const [usernameFocused, setUsernameFocused] = useState(false);
-  const [inviteFocused, setInviteFocused] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -215,21 +214,34 @@ export function SignInScreen() {
                       />
                     )}
                   </View>
-                  <View
-                    style={[
-                      styles.inputBox,
-                      {
-                        backgroundColor: colors.surface2,
-                        borderColor: fieldErrors.username
-                          ? colors.danger
-                          : usernameFocused
-                            ? colors.accent
-                            : colors.lineStrong,
-                        borderRadius: radius.md,
-                      },
-                    ]}
-                  >
-                    {creating && (
+                  {!creating ? (
+                    <TextField
+                      accessibilityLabel="Username"
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      autoComplete="username"
+                      textContentType="username"
+                      editable={!busy}
+                      value={username}
+                      onChangeText={setUsername}
+                      returnKeyType="next"
+                      onSubmitEditing={() => passwordInput.current?.focus()}
+                    />
+                  ) : (
+                    <View
+                      style={[
+                        styles.inputBox,
+                        {
+                          backgroundColor: colors.surface2,
+                          borderColor: fieldErrors.username
+                            ? colors.danger
+                            : usernameFocused
+                              ? colors.accent
+                              : colors.lineStrong,
+                          borderRadius: radius.md,
+                        },
+                      ]}
+                    >
                       <Text
                         aria-hidden
                         style={[
@@ -239,33 +251,32 @@ export function SignInScreen() {
                       >
                         @
                       </Text>
-                    )}
-                    <TextInput
-                      style={[
-                        type.body,
-                        styles.inputInner,
-                        { color: colors.text },
-                        creating && { paddingLeft: 6 },
-                      ]}
-                      accessibilityLabel="Username"
-                      placeholderTextColor={colors.muted}
-                      selectionColor={colors.accent}
-                      cursorColor={colors.accent}
-                      keyboardAppearance={scheme}
-                      autoCapitalize="none"
-                      autoCorrect={false}
-                      autoComplete="username"
-                      textContentType="username"
-                      placeholder={creating ? 'sam.sample' : undefined}
-                      editable={!busy}
-                      value={username}
-                      onChangeText={setUsername}
-                      onFocus={() => setUsernameFocused(true)}
-                      onBlur={() => setUsernameFocused(false)}
-                      returnKeyType="next"
-                      onSubmitEditing={() => passwordInput.current?.focus()}
-                    />
-                  </View>
+                      <TextInput
+                        style={[
+                          type.body,
+                          styles.inputInner,
+                          { color: colors.text, paddingLeft: 6 },
+                        ]}
+                        accessibilityLabel="Username"
+                        placeholderTextColor={colors.muted}
+                        selectionColor={colors.accent}
+                        cursorColor={colors.accent}
+                        keyboardAppearance={scheme}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        autoComplete="username"
+                        textContentType="username"
+                        placeholder="sam.sample"
+                        editable={!busy}
+                        value={username}
+                        onChangeText={setUsername}
+                        onFocus={() => setUsernameFocused(true)}
+                        onBlur={() => setUsernameFocused(false)}
+                        returnKeyType="next"
+                        onSubmitEditing={() => passwordInput.current?.focus()}
+                      />
+                    </View>
+                  )}
                   {!!fieldErrors.username && (
                     <Text accessibilityRole="alert" style={errorStyle}>
                       {fieldErrors.username}
@@ -356,45 +367,19 @@ export function SignInScreen() {
                 {creating && inviteRequired && (
                   <View style={styles.field}>
                     <Text style={labelStyle}>Invite code</Text>
-                    <View
-                      style={[
-                        styles.inputBox,
-                        {
-                          backgroundColor: colors.surface2,
-                          borderColor: fieldErrors.inviteCode
-                            ? colors.danger
-                            : inviteFocused
-                              ? colors.accent
-                              : colors.lineStrong,
-                          borderRadius: radius.md,
-                        },
-                      ]}
-                    >
-                      <TextInput
-                        ref={inviteInput}
-                        style={[type.body, styles.inputInner, { color: colors.text }]}
-                        accessibilityLabel="Invite code"
-                        placeholderTextColor={colors.muted}
-                        selectionColor={colors.accent}
-                        cursorColor={colors.accent}
-                        keyboardAppearance={scheme}
-                        value={inviteCode}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        maxLength={200}
-                        editable={!busy}
-                        onFocus={() => setInviteFocused(true)}
-                        onBlur={() => setInviteFocused(false)}
-                        onChangeText={setInviteCode}
-                        returnKeyType="go"
-                        onSubmitEditing={() => void submit()}
-                      />
-                    </View>
-                    {!!fieldErrors.inviteCode && (
-                      <Text accessibilityRole="alert" style={errorStyle}>
-                        {fieldErrors.inviteCode}
-                      </Text>
-                    )}
+                    <TextField
+                      ref={inviteInput}
+                      accessibilityLabel="Invite code"
+                      value={inviteCode}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      maxLength={200}
+                      editable={!busy}
+                      error={fieldErrors.inviteCode}
+                      onChangeText={setInviteCode}
+                      returnKeyType="go"
+                      onSubmitEditing={() => void submit()}
+                    />
                   </View>
                 )}
 

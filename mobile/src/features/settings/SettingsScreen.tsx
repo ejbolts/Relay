@@ -2,7 +2,8 @@ import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { HeaderHeightContext } from 'expo-router/react-navigation';
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Alert,
   AppState,
@@ -62,6 +63,7 @@ import {
   type Choice,
 } from './SettingsList';
 import {
+  sectionScrollOffset,
   settingsSearchResults,
   SettingsSearchBar,
   SettingsSearchResults,
@@ -90,6 +92,8 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
   const user = useUser();
   const { space } = useTheme();
   const reducedMotion = useReduceMotion();
+  // Optional, so Settings renders outside a navigator in tests.
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const types = useWorkoutTypes();
   const split = useTrainingSplit();
   const save = useSavePreferences();
@@ -132,7 +136,10 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
   function placed(anchor: SettingsAnchor, y: number) {
     if (jump !== anchor) return;
     setJump(null);
-    scroll.current?.scrollTo({ y: Math.max(0, y - space.sm), animated: !reducedMotion });
+    scroll.current?.scrollTo({
+      y: sectionScrollOffset(y, space.sm, headerHeight),
+      animated: !reducedMotion,
+    });
   }
   return (
     <SettingsPage scrollRef={scroll}>
@@ -275,6 +282,7 @@ function SettingsSection({
   const { space } = useTheme();
   return (
     <View
+      testID={`settings-section-${anchor}`}
       style={{ gap: space.xl }}
       onLayout={(event) => onPlaced(anchor, event.nativeEvent.layout.y)}
     >
@@ -624,24 +632,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
     padding: 14,
-  },
-  searchBar: {
-    minHeight: 46,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    borderWidth: 1,
-  },
-  searchInput: {
-    flex: 1,
-    paddingVertical: 10,
-  },
-  clearButton: {
-    minWidth: 32,
-    minHeight: 32,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   number: {
     minWidth: 56,

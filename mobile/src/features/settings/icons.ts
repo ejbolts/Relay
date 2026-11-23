@@ -36,6 +36,4 @@ export const settingsIcons = {
   freshStart: { sf: 'flag', md: 'outlined-flag' },
   tips: { sf: 'lightbulb', md: 'lightbulb-outline' },
   guide: { sf: 'questionmark.circle', md: 'help-outline' },
-  guides: { sf: 'book', md: 'menu-book' },
-  data: { sf: 'arrow.up.arrow.down', md: 'import-export' },
 } satisfies Record<string, IconPair>;

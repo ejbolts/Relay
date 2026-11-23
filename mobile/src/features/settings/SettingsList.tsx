@@ -119,7 +119,7 @@ export function RowIcon({
   destructive,
 }: {
   icon: IconName | IconPair;
-  /** Retained for caller compatibility; Pulse rows follow the active accent theme. */
+  /** @deprecated Ignored: badges follow the accent, as on the web. */
   tint?: string;
   destructive?: boolean;
 }) {
@@ -137,6 +137,10 @@ export function RowIcon({
 interface RowBase {
   label: string;
   icon?: IconName | IconPair;
+  /**
+   * @deprecated Ignored: row badges follow the accent, as on the web. Kept so the Data, Admin and
+   * Guides rows (other streams' files) still compile; remove once they stop passing it.
+   */
   iconTint?: string;
   disabled?: boolean;
 }
