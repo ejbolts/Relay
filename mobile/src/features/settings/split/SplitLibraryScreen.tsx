@@ -193,14 +193,6 @@ function Library({
             <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
               My splits
             </Text>
-            <Button
-              label="New split"
-              icon="plus"
-              variant="link"
-              size="small"
-              disabled={!typesReady}
-              onPress={() => edit({ template: 'custom' })}
-            />
           </View>
           {displayed.length === 0 && (
             <EmptyState

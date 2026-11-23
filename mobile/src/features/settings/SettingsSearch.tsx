@@ -121,7 +121,7 @@ export function SettingsSearchBar({
       style={[
         styles.searchBar,
         {
-          backgroundColor: colors.surfaceRaised,
+          backgroundColor: colors.surface2,
           borderColor: focused ? colors.accent : colors.lineStrong,
           borderRadius: radius.md,
         },
