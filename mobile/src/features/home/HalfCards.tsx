@@ -11,6 +11,7 @@ import {
 import { localDate } from '../../../../frontend/src/utils';
 import { weightFromKg, weightUnitName } from '../../../../frontend/src/weightUnits';
 import { useDashboard, useWeightUnit } from '../../data/queries';
+import { cardSurface } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { trainingRoute } from '../training/routes';
 import { useBodyMeasurements } from '../body/bodyQueries';
@@ -28,17 +29,13 @@ function HalfCard({
   onPress: () => void;
   children: ReactNode;
 }) {
-  const { colors, radius } = useTheme();
+  const { colors } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        { backgroundColor: colors.surface, borderRadius: radius.card, borderColor: colors.line },
-        pressed && { opacity: 0.7 },
-      ]}
+      style={({ pressed }) => [styles.card, cardSurface(colors), pressed && { opacity: 0.7 }]}
     >
       {children}
     </Pressable>
@@ -192,7 +189,7 @@ export function BodyweightTrendCard() {
 }
 
 const styles = StyleSheet.create({
-  card: { flex: 1, minWidth: 0, padding: 14, gap: 6, borderWidth: StyleSheet.hairlineWidth },
+  card: { flex: 1, minWidth: 0, padding: 14, gap: 6 },
   value: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
   ringSingle: { alignItems: 'center', gap: 4, paddingVertical: 4 },
   rings: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },

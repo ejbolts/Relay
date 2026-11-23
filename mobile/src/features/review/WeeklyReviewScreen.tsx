@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -33,9 +32,10 @@ import {
 } from '../../../../frontend/src/weeklyReviewDisplay';
 import { useWeightUnit } from '../../data/queries';
 import { useUser } from '../../session/SessionProvider';
-import { Button, Card } from '../../ui/components';
+import { Button, Card, cardSurface } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { haptics } from '../../ui/haptics';
 import { blockRoutes } from '../blocks/routes';
 import { useTrainingBlocks } from '../blocks/blockQueries';
 import { useBodyGoals } from '../body/bodyQueries';
@@ -71,7 +71,7 @@ export function WeeklyReviewScreen() {
     open();
   };
   const step = (by: number) => {
-    void Haptics.selectionAsync();
+    haptics.selection();
     setWeeksAgo(weeksAgo + by);
   };
 
@@ -206,7 +206,7 @@ function Block({
   return (
     <Card>
       <View style={styles.blockHeader}>
-        <Text accessibilityRole="header" style={[type.headline, { color: colors.text, flex: 1 }]}>
+        <Text accessibilityRole="header" style={[type.cardTitle, { color: colors.text, flex: 1 }]}>
           {title}
         </Text>
         {figure}
@@ -278,7 +278,7 @@ function WeekSummary({
           <View
             key={stat.label}
             accessible
-            style={[styles.stat, { backgroundColor: colors.surface, borderRadius: radius.lg }]}
+            style={[cardSurface(colors), styles.stat, { borderRadius: radius.lg }]}
           >
             <Text style={[type.caption, { color: colors.muted }]}>{stat.label}</Text>
             <Text style={[type.headline, type.number, { color: colors.text }]}>{stat.value}</Text>
@@ -319,6 +319,7 @@ function WeekSummary({
           <Button
             label={`All ${review.recordCount} in Progress`}
             variant="link"
+            style={styles.link}
             onPress={onOpenRecords}
           />
         )}
@@ -405,7 +406,7 @@ function WeekSummary({
         ) : (
           <EmptyLine>{cardioReviewEmptyText(cardio) ?? ''}</EmptyLine>
         )}
-        <Button label="Cardio" variant="link" onPress={onOpenCardio} />
+        <Button label="Cardio" variant="link" style={styles.link} onPress={onOpenCardio} />
       </Block>
 
       <Block
@@ -425,7 +426,7 @@ function WeekSummary({
         }
       >
         {body.averageKg === null && <EmptyLine>No check-ins logged.</EmptyLine>}
-        <Button label="Body" variant="link" onPress={onOpenBody} />
+        <Button label="Body" variant="link" style={styles.link} onPress={onOpenBody} />
       </Block>
     </>
   );
@@ -451,17 +452,27 @@ function RecordRow({
         .filter(Boolean)
         .join(', ')}
       onPress={onPress}
-      style={({ pressed }) => [styles.line, pressed && { opacity: 0.6 }]}
+      // The web's record tile: a raised row with the record's kind and date over its bodyweight.
+      style={({ pressed }) => [
+        styles.line,
+        styles.record,
+        { backgroundColor: colors.surface2 },
+        pressed && { opacity: 0.6 },
+      ]}
     >
-      <Icon name="trophy" size={16} color={colors.gold} />
+      <Icon name="trophy" size={18} color={colors.gold} />
       <View style={{ flex: 1 }}>
         <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]} numberOfLines={1}>
           {name}
         </Text>
-        <Text style={[type.footnote, { color: colors.secondary }]} numberOfLines={2}>
+        <Text style={[type.footnote, { color: colors.secondary }]} numberOfLines={1}>
           {detail.kind} · {detail.date}
-          {detail.bodyweight ? `  ${detail.bodyweight}` : ''}
         </Text>
+        {!!detail.bodyweight && (
+          <Text style={[type.footnote, { color: colors.secondary }]} numberOfLines={1}>
+            {detail.bodyweight}
+          </Text>
+        )}
       </View>
       <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>
         {value}
@@ -520,6 +531,7 @@ function BlockRow({
           <Button
             label={block ? 'Start a new block' : 'Start a block'}
             variant="link"
+            style={styles.link}
             onPress={onStart}
           />
         </>
@@ -535,5 +547,8 @@ const styles = StyleSheet.create({
   stat: { flex: 1, padding: 12, gap: 2 },
   blockHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   line: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  record: { borderRadius: 14, paddingVertical: 10, paddingHorizontal: 12, gap: 12 },
+  // Section links sit at the start, as the web's, not centred like a button.
+  link: { alignSelf: 'flex-start' },
   track: { flex: 1, height: 8, borderRadius: 4, overflow: 'hidden' },
 });

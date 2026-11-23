@@ -30,7 +30,5 @@ export function useUserSession(): UserSession {
   return useContext(UserContext);
 }
 
-/** Video uploads stay available unless the server explicitly says the account cannot upload. */
-export function canUploadVideos(user: User | null): boolean {
-  return user === null || user.can_upload_videos !== false;
-}
+// The rule lives in a pure module the native app shares; re-exported for the web's callers.
+export { canUploadVideos } from './videoAccess';

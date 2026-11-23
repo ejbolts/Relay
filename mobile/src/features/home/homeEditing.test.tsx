@@ -40,10 +40,15 @@ jest.mock('../../ui/MenuButton', () => {
     MenuButton: (props: {
       accessibilityLabel: string;
       items: { label: string; onPress: () => void }[];
+      width: number;
+      height: number;
     }) =>
       createElement(
         View,
-        { accessibilityLabel: props.accessibilityLabel },
+        {
+          accessibilityLabel: props.accessibilityLabel,
+          testID: `menu-${props.width}x${props.height}`,
+        },
         props.items.map((item) =>
           createElement(
             Pressable,
@@ -148,6 +153,14 @@ test('the layout editor moves, hides, adds and resizes cards, then saves the lay
   expect(Object.keys(layout.settings ?? {})).toHaveLength(7);
   expect(showToast).toHaveBeenLastCalledWith('Home layout saved');
   await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+});
+
+test("each row's More menu gets a 44 pt frame around its 38 pt circle", async () => {
+  await show(<HomeLayoutScreen />);
+  await screen.findByRole('button', { name: 'Save Home layout' });
+  const menus = screen.getAllByLabelText(/^More for [^:]+$/);
+  expect(menus.length).toBeGreaterThan(0);
+  expect(screen.getAllByTestId('menu-44x44')).toHaveLength(menus.length);
 });
 
 test("a card's options change in its Customise sheet", async () => {

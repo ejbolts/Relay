@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { Stack, usePreventRemove, useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -25,11 +24,12 @@ import {
   type HomeLayout,
   type HomeSectionId,
 } from '../../../../frontend/src/homeLayout';
-import { Button, ErrorState, errorMessage, Loading } from '../../ui/components';
+import { Button, cardSurface, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon, type IconName, type IconPair } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
+import { haptics } from '../../ui/haptics';
 import { CARD_SETTINGS, CardSettingsForm } from './CardSettings';
 import { useHomeLayout, useSaveHomeLayout } from './homeData';
 import { homeIcons } from './homeIcons';
@@ -60,7 +60,7 @@ export function HomeLayoutScreen() {
 const widthName = (span: number) => (span === 3 ? 'Half width' : span === 2 ? 'Third width' : '');
 
 function Editor({ saved }: { saved: HomeLayout }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type, radius, space } = useTheme();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const save = useSaveHomeLayout();
@@ -94,7 +94,7 @@ function Editor({ saved }: { saved: HomeLayout }) {
   }, [done, router]);
 
   function change(next: HomeLayout) {
-    void Haptics.selectionAsync();
+    haptics.selection();
     setError(null);
     setDraft(next);
   }
@@ -104,7 +104,7 @@ function Editor({ saved }: { saved: HomeLayout }) {
     setError(null);
     try {
       await save.mutateAsync(draft);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       showToast('Home layout saved');
       setDone(true);
     } catch {
@@ -141,8 +141,14 @@ function Editor({ saved }: { saved: HomeLayout }) {
         }}
       />
       <ScrollView
+        // Opaque, so Home never shows along the edge while this screen slides in.
+        style={{ flex: 1, backgroundColor: colors.page }}
         contentInsetAdjustmentBehavior="automatic"
-        contentContainerStyle={{ padding: 16, gap: 20, paddingBottom: insets.bottom + 48 }}
+        contentContainerStyle={{
+          padding: space.gutter,
+          gap: 20,
+          paddingBottom: insets.bottom + 48,
+        }}
       >
         {error && (
           <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
@@ -208,18 +214,26 @@ function Editor({ saved }: { saved: HomeLayout }) {
                     disabled={index === visible.length - 1}
                     onPress={() => change(stepHomeSection(draft, visible, id, 1))}
                   />
-                  <MenuButton
-                    accessibilityLabel={`More for ${title(id)}`}
-                    items={items}
-                    trigger={{ sf: 'ellipsis', color: colors.text, size: 15 }}
-                    width={34}
-                    height={34}
-                    fill={colors.surface2}
-                  >
-                    <View style={[styles.round, { backgroundColor: colors.surface2 }]}>
-                      <Icon name="more" size={18} color={colors.text} />
-                    </View>
-                  </MenuButton>
+                  {/* A 44 pt touch frame around the 38 pt circle. iOS draws its native trigger
+                      over the circle with an almost clear fill, so the whole frame takes taps. */}
+                  <View style={[styles.menuTouch, styles.menuOuter]}>
+                    <View
+                      pointerEvents="none"
+                      style={[styles.round, styles.menuFace, { backgroundColor: colors.surface2 }]}
+                    />
+                    <MenuButton
+                      accessibilityLabel={`More for ${title(id)}`}
+                      items={items}
+                      trigger={{ sf: 'ellipsis', color: colors.text, size: 15 }}
+                      width={TOUCH}
+                      height={TOUCH}
+                      fill={NEARLY_CLEAR}
+                    >
+                      <View style={styles.menuTouch}>
+                        <Icon name="more" size={18} color={colors.text} />
+                      </View>
+                    </MenuButton>
+                  </View>
                 </Row>
               );
             })
@@ -275,7 +289,7 @@ function Editor({ saved }: { saved: HomeLayout }) {
 }
 
 function Group({ title, children }: { title: string; children: ReactNode }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   return (
     <View style={{ gap: 8 }}>
       <Text
@@ -284,7 +298,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
       >
         {title.toUpperCase()}
       </Text>
-      <View style={{ backgroundColor: colors.surface, borderRadius: radius.card }}>{children}</View>
+      <View style={cardSurface(colors)}>{children}</View>
     </View>
   );
 }
@@ -292,12 +306,7 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 function Row({ first, children }: { first: boolean; children: ReactNode }) {
   const { colors } = useTheme();
   return (
-    <View
-      style={[
-        styles.row,
-        !first && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
-      ]}
-    >
+    <View style={[styles.row, !first && { borderTopWidth: 1, borderTopColor: colors.line }]}>
       {children}
     </View>
   );
@@ -339,6 +348,11 @@ function RoundButton({
   );
 }
 
+const ROUND = 38;
+const TOUCH = 44;
+// SwiftUI skips fully clear backgrounds when hit-testing; this one still takes taps.
+const NEARLY_CLEAR = 'rgba(0,0,0,0.01)';
+
 const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
@@ -347,12 +361,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
+  // 38 pt with a 4 pt hit slop: a 46 pt target.
   round: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+    width: ROUND,
+    height: ROUND,
+    borderRadius: ROUND / 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
   empty: { padding: 16 },
+  menuTouch: { width: TOUCH, height: TOUCH, alignItems: 'center', justifyContent: 'center' },
+  menuFace: { position: 'absolute' },
+  // The frame overhangs the circle by 3 pt a side; keep the circles evenly spaced.
+  menuOuter: { marginHorizontal: -(TOUCH - ROUND) / 2 },
 });

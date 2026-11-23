@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -15,6 +14,8 @@ import { useDashboard, useTrainingPreferences } from '../../data/queries';
 import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { haptics } from '../../ui/haptics';
+import { mixColor } from './color';
 import { homeIcons } from './homeIcons';
 import { MuscleContributionSheet } from './MuscleContributionSheet';
 
@@ -43,7 +44,7 @@ export function MuscleSetsCard() {
   });
   const muscle = view.allMuscles.find((item) => item.muscle_group === selected) ?? null;
   const step = (by: number) => {
-    void Haptics.selectionAsync();
+    haptics.selection();
     setWeeksAgo(view.weeksAgo + by);
   };
   const changeColor = {
@@ -114,7 +115,11 @@ export function MuscleSetsCard() {
             {view.previous && (
               <View style={styles.keyItem}>
                 <View
-                  style={[styles.swatch, styles.previousSwatch, { borderColor: colors.muted }]}
+                  style={[
+                    styles.swatch,
+                    styles.previousSwatch,
+                    { borderColor: mixColor(colors.text, colors.surface, 0.32) },
+                  ]}
                 />
                 <Text style={[type.caption, { color: colors.secondary }]}>
                   {muscleWeekName(view.weeksAgo + 1)}
@@ -143,7 +148,7 @@ export function MuscleSetsCard() {
                 >
                   <Text
                     style={[type.footnote, styles.name, { color: colors.text }]}
-                    numberOfLines={1}
+                    numberOfLines={2}
                   >
                     {row.muscle_group}
                   </Text>
@@ -155,7 +160,8 @@ export function MuscleSetsCard() {
                           styles.previousBar,
                           {
                             width: `${(row.previous / view.scale) * 100}%`,
-                            borderColor: colors.muted,
+                            // The web's ink at 32 %: a light outline the week's fill shows through.
+                            borderColor: mixColor(colors.text, colors.surface, 0.32),
                           },
                         ]}
                       />
@@ -219,29 +225,39 @@ export function MuscleSetsCard() {
                 : 'No working sets logged that week.'}
             </Text>
           )}
-          {view.trainedCount > 0 && view.untrained > 0 && (
-            <Text style={[type.caption, { color: colors.muted }]}>
-              {view.untrained} muscles not trained{view.current ? ' yet' : ''}
+          <View style={styles.footnote}>
+            <Text style={[type.caption, { color: colors.muted, flex: 1 }]}>
+              {view.trainedCount > 0 && view.untrained > 0
+                ? `${view.untrained} muscles not trained${view.current ? ' yet' : ''}`
+                : ''}
             </Text>
-          )}
-          <View style={styles.footer}>
-            {view.canExpand ? (
-              <Button
-                label={expanded ? 'Show less' : 'Show more'}
-                icon={expanded ? 'chevronUp' : 'chevronDown'}
-                variant="link"
-                onPress={() => setExpanded((value) => !value)}
-              />
-            ) : (
-              <View />
-            )}
             <Button
               label="Muscle goals"
               icon={homeIcons.target}
               variant="link"
+              size="small"
               onPress={() => router.push('/muscle-goals')}
             />
           </View>
+          {view.canExpand && (
+            // The web's centred toggle, its chevron after the label.
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded }}
+              hitSlop={6}
+              onPress={() => setExpanded((value) => !value)}
+              style={({ pressed }) => [styles.expand, pressed && { opacity: 0.6 }]}
+            >
+              <Text style={[type.footnote, styles.expandLabel, { color: colors.accentText }]}>
+                {expanded ? 'Show less' : 'Show more'}
+              </Text>
+              <Icon
+                name={expanded ? 'chevronUp' : 'chevronDown'}
+                size={16}
+                color={colors.accentText}
+              />
+            </Pressable>
+          )}
         </>
       )}
       <MuscleContributionSheet
@@ -268,7 +284,7 @@ const styles = StyleSheet.create({
   previousSwatch: { borderWidth: 1.5, borderLeftWidth: 0 },
   goalKey: { width: 2, height: 12, borderRadius: 2 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  name: { width: 92 },
+  name: { width: 96, lineHeight: 16 },
   track: { flex: 1, height: 8, justifyContent: 'center' },
   bar: {
     position: 'absolute',
@@ -289,5 +305,13 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   value: { width: 52, alignItems: 'flex-end' },
-  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  footnote: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  expand: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+  },
+  expandLabel: { fontWeight: '600' },
 });

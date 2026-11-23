@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
-import { Alert, Platform } from 'react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { Alert, Platform, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import {
@@ -12,6 +12,7 @@ import {
 import {
   addDays,
   daysBetween,
+  parseLocalDate,
   shortDate,
   weekStartFor,
 } from '../../../../frontend/src/trainingSummary';
@@ -333,6 +334,81 @@ test('the header has the notifications bell, your profile and Settings', async (
     pathname: '/social/profile/[id]',
     params: { id: 'u1' },
   });
+});
+
+const uploads = (value: boolean | undefined) => {
+  const user = mockUser as { can_upload_videos?: boolean };
+  if (value === undefined) delete user.can_upload_videos;
+  else user.can_upload_videos = value;
+};
+
+test('the header has all five buttons in the web order', async () => {
+  uploads(true);
+  try {
+    await open();
+    await screen.findByRole('button', { name: 'Notifications, 3 unread' });
+    const order = [
+      'Edit Home layout',
+      'Video logger',
+      'Notifications, 3 unread',
+      'Profile: Preview',
+      'Settings',
+    ];
+    const labels = screen
+      .getAllByRole('button')
+      .map((button) => button.props.accessibilityLabel as string)
+      .filter((label) => order.includes(label));
+    expect(labels).toEqual(order);
+    await fireEvent.press(screen.getByRole('button', { name: 'Video logger' }));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/videos');
+  } finally {
+    uploads(undefined);
+  }
+});
+
+test('the Video logger follows the upload permission, allowing it when the field is missing', async () => {
+  uploads(false);
+  try {
+    await open();
+    expect(screen.queryByRole('button', { name: 'Video logger' })).toBeNull();
+  } finally {
+    uploads(undefined);
+  }
+  // An older server leaves the field out: uploads stay allowed.
+  await open();
+  expect(screen.getByRole('button', { name: 'Video logger' })).toBeVisible();
+});
+
+test('the date line reads as the web, even where the combined format adds a comma', async () => {
+  // Android's combined weekday-day-month format gives "Tuesday, 24 November".
+  const original = Date.prototype.toLocaleDateString;
+  const format = jest.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(function (
+    this: Date,
+    locale,
+    options,
+  ) {
+    const text = original.call(this, locale, options);
+    return options?.weekday && options.day ? text.replace(/^(\w+) /, '$1, ') : text;
+  });
+  try {
+    await open();
+    const today = parseLocalDate(localDate());
+    const weekday = original.call(today, 'en-GB', { weekday: 'long' });
+    const month = original.call(today, 'en-GB', { month: 'long' });
+    expect(screen.getByText(`${weekday} ${today.getDate()} ${month}`)).toBeVisible();
+    expect(screen.queryByText(`${weekday}, ${today.getDate()} ${month}`)).toBeNull();
+  } finally {
+    format.mockRestore();
+  }
+});
+
+test('large text moves the header buttons to their own row instead of cutting the title', async () => {
+  await open();
+  const title = screen.getByRole('header', { name: 'Home' });
+  const row = title.parent as unknown as { props: { style: unknown } };
+  // The title keeps its own width and the row wraps, so the buttons go below when they don't fit.
+  expect(StyleSheet.flatten(title.props.style)).toMatchObject({ flexShrink: 0, maxWidth: '100%' });
+  expect(StyleSheet.flatten(row.props.style as never)).toMatchObject({ flexWrap: 'wrap' });
 });
 
 test('Edit split opens the split screen', async () => {
@@ -742,6 +818,83 @@ test("today's planned split day opens its plan and starts it", async () => {
     category: 'upper',
     type: expect.objectContaining({ id: 'upper' }),
   });
+});
+
+test('a routine-backed planned day follows the routine after Home refreshes', async () => {
+  onAndroid();
+  const set = {
+    reps: 10,
+    weight_kg: 40,
+    duration_seconds: null,
+    distance_km: null,
+    rest_seconds: null,
+    set_type: 'normal',
+  };
+  const routines = (id: string, name: string) => [
+    {
+      id: 'r1',
+      name: 'Upper / Lower',
+      shared: false,
+      days: [
+        {
+          workout_type_id: 'upper',
+          workout_type: null,
+          movements: [{ exercise_id: id, exercise: exercise(id, name), sets: [set] }],
+        },
+        { workout_type_id: 'lower', workout_type: null, movements: [] },
+        { workout_type_id: null, workout_type: null, movements: [] },
+      ],
+    },
+  ];
+  responses['/api/dashboard'] = dashboard({
+    heatmap: [],
+    training_split: { ...split, routine_id: 'r1' },
+  });
+  responses['/api/routines'] = routines('incline', 'Incline Press');
+  await open();
+  // Home keeps the routine warm, so the day opens with it.
+  await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/routines', expect.anything()));
+  await fireEvent.press(screen.getByRole('button', { name: `${prettyDate(today)}, no workouts` }));
+  expect(await screen.findByText('Incline Press')).toBeVisible();
+
+  // The routine changes on another device; Home's pull to refresh fetches it again.
+  let answer: (value: unknown) => void = () => undefined;
+  responses['/api/routines'] = new Promise((resolve) => (answer = resolve));
+  // The page's scroll view carries the pull-to-refresh control.
+  let page = screen.getByText('Home') as {
+    parent: typeof page | null;
+    props: { refreshControl?: { props: { onRefresh: () => void } } };
+  } | null;
+  while (page && !page.props.refreshControl) page = page.parent;
+  const pull = page!.props.refreshControl!.props.onRefresh;
+  await act(async () => pull());
+  // Until the new copy arrives, Start doesn't use the old one.
+  const start = screen.getByRole('button', { name: 'Start Upper body' });
+  expect(start).toBeDisabled();
+  await fireEvent.press(start);
+  expect(workout.start).not.toHaveBeenCalled();
+
+  await act(async () => answer(routines('fly', 'Cable Fly')));
+  expect(await screen.findByText('Cable Fly')).toBeVisible();
+  expect(screen.queryByText('Incline Press')).toBeNull();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Start Upper body' })).toBeEnabled(),
+  );
+  await fireEvent.press(screen.getByRole('button', { name: 'Start Upper body' }));
+  expect(workout.start).toHaveBeenLastCalledWith(
+    expect.objectContaining({
+      kind: 'template',
+      template: expect.objectContaining({
+        exercises: [expect.objectContaining({ exercise: expect.objectContaining({ id: 'fly' }) })],
+      }),
+    }),
+  );
+});
+
+test('Home only keeps the routines warm while the split follows a routine', async () => {
+  await open();
+  await screen.findByText('Upper body day');
+  expect(apiGet).not.toHaveBeenCalledWith('/api/routines', expect.anything());
 });
 
 test('a day with nothing planned asks before starting a workout dated that day', async () => {

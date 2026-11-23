@@ -9,7 +9,7 @@ export function TrainingHeaderActions() {
   const user = useUser();
   return (
     <AccountHeaderActions
-      notifications={<NotificationsBell size={40} />}
+      notifications={<NotificationsBell />}
       profile={{ user, onPress: () => router.push(socialRoutes.profile(user.id)) }}
     />
   );
