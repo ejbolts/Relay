@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import { prettyDate } from './appShared';
+import { calendarCreatePrompt } from './plannedDay';
 import { PopupDialog } from './PopupDialog';
 import './appDialogs.css';
 
@@ -16,10 +16,11 @@ export function CalendarCreateWorkoutDialog({
   onConfirm: () => void;
 }) {
   const descriptionId = useId();
+  const prompt = calendarCreatePrompt(workoutDate, activeWorkout);
 
   return (
     <PopupDialog
-      title={activeWorkout ? 'Cancel your current workout?' : 'Create a new workout?'}
+      title={prompt.title}
       size="compact"
       className="calendar-create-dialog"
       describedBy={descriptionId}
@@ -27,23 +28,21 @@ export function CalendarCreateWorkoutDialog({
       actions={
         <>
           <button type="button" autoFocus onClick={onCancel}>
-            {activeWorkout ? 'Keep current workout' : 'Cancel'}
+            {prompt.cancel}
           </button>
           <button
             type="button"
-            className={activeWorkout ? 'popup-primary-action is-danger' : 'popup-primary-action'}
+            className={
+              prompt.destructive ? 'popup-primary-action is-danger' : 'popup-primary-action'
+            }
             onClick={onConfirm}
           >
-            {activeWorkout ? 'Cancel & create new' : 'Create workout'}
+            {prompt.confirm}
           </button>
         </>
       }
     >
-      <p id={descriptionId}>
-        {activeWorkout
-          ? `Creating a workout for ${prettyDate(workoutDate)} will discard your current unsaved workout.`
-          : `Start a workout for ${prettyDate(workoutDate)}?`}
-      </p>
+      <p id={descriptionId}>{prompt.message}</p>
     </PopupDialog>
   );
 }

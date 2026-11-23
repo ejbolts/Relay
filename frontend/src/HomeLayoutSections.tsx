@@ -6,6 +6,7 @@ import {
   fillHomeSectionGap,
   homeSectionGaps,
   homeSectionSpans,
+  homeSectionLists,
   moveHomeSection,
   showHomeSectionAfter,
   toggleHomeSection,
@@ -50,8 +51,7 @@ export function HomeLayoutSections({
   customisers?: Partial<Record<HomeSectionId, ReactNode>>;
 }) {
   const holdHandlers = useHomeLongPress(edit ? undefined : onStartEditing);
-  const visible = layout.order.filter((id) => !layout.hidden.includes(id) && sections[id] != null);
-  const hidden = layout.order.filter((id) => layout.hidden.includes(id) && sections[id] != null);
+  const { visible, hidden } = homeSectionLists(layout, (id) => sections[id] != null);
   const spans = homeSectionSpans(visible, layout.widths);
   const gaps = homeSectionGaps(visible, spans);
   const [dragging, setDragging] = useState<HomeSectionId | null>(null);

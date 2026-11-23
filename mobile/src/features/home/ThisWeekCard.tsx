@@ -20,15 +20,16 @@ import { prettyDate } from '../../../../frontend/src/appShared';
 
 /**
  * This week's seven days as large tiles, each naming the workout types trained that day, as on
- * the web. A logged day opens its workouts; the live workout's day reopens the logger.
+ * the web. Every day opens: a logged one its workouts, the others their plan or a new workout
+ * (`onPressDay`); the live workout's day reopens the logger.
  */
 export function ThisWeekCard({
   liveDate,
-  onOpenDay,
+  onPressDay,
   onOpenLive,
 }: {
   liveDate: string | null;
-  onOpenDay: (day: HeatmapDay) => void;
+  onPressDay: (date: string, entry: HeatmapDay | undefined) => void;
   onOpenLive: () => void;
 }) {
   const { colors, type } = useTheme();
@@ -83,9 +84,8 @@ export function ThisWeekCard({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={label}
-                  accessibilityState={{ disabled: !entry && !live, selected: key === today }}
-                  disabled={!entry && !live}
-                  onPress={() => (live ? onOpenLive() : entry && onOpenDay(entry))}
+                  accessibilityState={{ selected: key === today }}
+                  onPress={() => (live ? onOpenLive() : onPressDay(key, entry))}
                   style={({ pressed }) => [
                     styles.day,
                     future

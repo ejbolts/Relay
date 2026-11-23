@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
   activityAverageLabel,
+  bodyCheckInView,
+  homeCheckInMode,
   bodyweightStatCaption,
   bodyweightTrendCaption,
   checkInChange,
@@ -147,5 +149,34 @@ describe('Home cardio goals', () => {
     expect(goals).toEqual([{ zone: 2, ...zone2 }]);
     expect(daysLeft).toBe(3);
     expect(homeCardioGoals(null, '2026-11-20')).toEqual({ goals: [], daysLeft: null });
+  });
+});
+
+describe("the check-in card's modes", () => {
+  it('reads the two-button Combined mode as the one-button card', () => {
+    expect(homeCheckInMode('combined')).toBe('combined-single');
+    expect(homeCheckInMode('fat')).toBe('fat');
+  });
+
+  it('asks for both until today has a weight, then Body fat only saves body fat', () => {
+    const before = bodyCheckInView({ mode: 'fat', todayBodyweight: null, todayBodyFat: null });
+    expect(before).toMatchObject({ mode: 'combined-single', showWeight: true, showFat: true });
+    const after = bodyCheckInView({ mode: 'fat', todayBodyweight: 80, todayBodyFat: null });
+    expect(after).toMatchObject({
+      fatOnly: true,
+      showWeight: false,
+      showFat: true,
+      hasToday: false,
+      saveKind: 'body fat',
+    });
+  });
+
+  it('shows only weight in Weight only, and needs both for Combined to count as logged', () => {
+    expect(
+      bodyCheckInView({ mode: 'weight', todayBodyweight: 80, todayBodyFat: null }),
+    ).toMatchObject({ showWeight: true, showFat: false, hasToday: true, saveKind: 'weight' });
+    expect(
+      bodyCheckInView({ mode: 'combined-single', todayBodyweight: 80, todayBodyFat: null }),
+    ).toMatchObject({ singleButton: true, hasToday: false, saveKind: 'check-in' });
   });
 });

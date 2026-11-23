@@ -1,5 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { categoryForType, nextTrainingDay, plannedDayOn, routineDayFor } from './plannedDay';
+import {
+  calendarCreatePrompt,
+  calendarDayTarget,
+  categoryForType,
+  nextTrainingDay,
+  plannedDayButtons,
+  plannedDayKicker,
+  plannedDayOn,
+  plannedDayStart,
+  plannedDayTitle,
+  plannedStartPlan,
+  routineDayFor,
+} from './plannedDay';
 import type { Routine, TrainingSplit, WorkoutType } from './types';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 
@@ -109,5 +121,124 @@ describe('planned split days', () => {
   it('logs custom types as Other, like the server', () => {
     expect(categoryForType(custom)).toBe('other');
     expect(categoryForType(types.find((type) => type.id === 'lower')!)).toBe('lower');
+  });
+});
+
+describe('the planned-day sheet', () => {
+  const today = '2026-11-19';
+
+  it('opens a logged day, plans today with a split and later days, and asks on past days', () => {
+    expect(calendarDayTarget('2026-11-18', today, true, true)).toBe('logged');
+    expect(calendarDayTarget('2026-11-20', today, false, false)).toBe('planned');
+    expect(calendarDayTarget(today, today, false, true)).toBe('planned');
+    expect(calendarDayTarget(today, today, false, false)).toBe('create');
+    expect(calendarDayTarget('2026-11-18', today, false, true)).toBe('create');
+  });
+
+  it('titles and dates the day', () => {
+    const plan = plannedDayOn(split, today, today, types);
+    expect(plannedDayTitle(plan)).toBe('Upper body day');
+    expect(plannedDayTitle({ kind: 'rest', date: today })).toBe('Rest day');
+    expect(plannedDayTitle({ kind: 'update', date: today })).toBe('Update your split');
+    expect(plannedDayTitle({ kind: 'none', date: today })).toBe('Nothing planned');
+    expect(plannedDayKicker(today, today)).toBe('Today');
+    expect(plannedDayKicker('2026-11-20', today)).toBe(
+      new Date(2026, 10, 20, 12).toLocaleDateString('en-GB', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+      }),
+    );
+  });
+
+  it("starts today's rest day as the next training day, but not a later rest day", () => {
+    const resting = { ...split, next_step: 2 };
+    const rest = plannedDayOn(resting, today, today, types);
+    expect(plannedStartPlan(rest, resting, today, types)).toMatchObject({
+      type: { id: 'upper' },
+    });
+    const laterRest = plannedDayOn(split, '2026-11-21', today, types);
+    expect(plannedStartPlan(laterRest, split, today, types)).toBeNull();
+  });
+
+  it('starts a later training day now and offers an empty workout only today', () => {
+    const later = plannedDayOn(split, '2026-11-20', today, types);
+    const startPlan = plannedStartPlan(later, split, today, types);
+    expect(plannedDayButtons({ plan: later, startPlan, today, activeWorkout: false })).toEqual({
+      resume: false,
+      start: { label: 'Start now', accessibilityLabel: 'Start Lower body now' },
+      empty: null,
+    });
+    const now = plannedDayOn(split, today, today, types);
+    const todayPlan = plannedStartPlan(now, split, today, types);
+    expect(
+      plannedDayButtons({ plan: now, startPlan: todayPlan, today, activeWorkout: false }),
+    ).toEqual({
+      resume: false,
+      start: { label: 'Start Upper body', accessibilityLabel: 'Start Upper body' },
+      empty: { label: 'Empty', compact: true },
+    });
+    const nothing = { kind: 'none' as const, date: today };
+    expect(
+      plannedDayButtons({ plan: nothing, startPlan: null, today, activeWorkout: false }).empty,
+    ).toEqual({ label: 'Start empty workout', compact: false });
+    expect(
+      plannedDayButtons({ plan: now, startPlan: todayPlan, today, activeWorkout: true }),
+    ).toEqual({ resume: true, start: null, empty: null });
+  });
+
+  it("pre-fills the day from the split's routine", () => {
+    const plan = plannedDayOn(split, today, today, types);
+    const startPlan = plannedStartPlan(plan, split, today, types)!;
+    const routine = {
+      id: 'routine',
+      name: 'Upper / Lower',
+      shared: false,
+      days: [
+        {
+          workout_type_id: 'upper',
+          workout_type: null,
+          movements: [
+            {
+              exercise: {
+                id: 'bench',
+                name: 'Bench Press',
+                muscle_group: 'Chest',
+                category: 'strength',
+                kind: 'strength',
+              },
+              sets: 3,
+              reps: 8,
+              weight_kg: 60,
+            },
+          ],
+        },
+      ],
+    } as unknown as Routine;
+    const start = plannedDayStart({
+      startPlan,
+      routine,
+      workouts: [],
+      savedExercises: {},
+      today,
+      weightUnit: 'kg',
+    });
+    expect(start.category).toBe('upper');
+    expect(start.type.id).toBe('upper');
+    expect(start.template?.exercises.map((item) => item.exercise.name)).toEqual(['Bench Press']);
+  });
+
+  it('asks before replacing the live workout', () => {
+    expect(calendarCreatePrompt('2026-11-18', false)).toMatchObject({
+      title: 'Create a new workout?',
+      confirm: 'Create workout',
+      destructive: false,
+    });
+    expect(calendarCreatePrompt('2026-11-18', true)).toMatchObject({
+      title: 'Cancel your current workout?',
+      cancel: 'Keep current workout',
+      confirm: 'Cancel & create new',
+      destructive: true,
+    });
   });
 });
