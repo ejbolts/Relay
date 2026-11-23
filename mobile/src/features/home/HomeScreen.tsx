@@ -5,12 +5,16 @@ import type { HeatmapDay } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { queryKeys } from '../../data/queries';
 import { Screen } from '../../ui/components';
+import { bodyKeys } from '../body/bodyQueries';
 import { useWorkout } from '../workout/WorkoutProvider';
+import { CheckInCard } from './CheckInCard';
 import { ConsistencyCard } from './ConsistencyCard';
 import { DaySheet } from './DaySheet';
+import { HalfCards } from './HalfCards';
 import { MuscleSetsCard } from './MuscleSetsCard';
 import { ProfileCard } from './ProfileCard';
 import { RecordsCard } from './RecordsCard';
+import { StatCards } from './StatCards';
 import { ThisWeekCard } from './ThisWeekCard';
 import { UpNextCard } from './UpNextCard';
 
@@ -22,11 +26,14 @@ const HOME_QUERIES = [
   queryKeys.savedExercises,
   queryKeys.trainingPreferences,
   queryKeys.personalRecords,
+  bodyKeys.measurements,
 ];
 
 /**
- * Home, in the web's default order: Up next, Profile, This week, Consistency (the training
- * calendar), Sets per muscle and Recent records. Each card loads and fails on its own.
+ * Home, in the web's default order: Up next, Profile, the Workouts, Cardio sessions and Body
+ * weight stats, This week, Consistency (the training calendar), Sets per muscle, Cardio zone
+ * goals beside the Bodyweight trend, the Body weight check-in and Recent records. Each card loads
+ * and fails on its own.
  */
 export function HomeScreen() {
   const client = useQueryClient();
@@ -61,9 +68,12 @@ export function HomeScreen() {
       >
         <UpNextCard />
         <ProfileCard />
+        <StatCards />
         <ThisWeekCard liveDate={liveDate} onOpenDay={setDay} onOpenLive={workout.open} />
         <ConsistencyCard liveDate={liveDate} onOpenDay={setDay} onOpenLive={workout.open} />
         <MuscleSetsCard />
+        <HalfCards />
+        <CheckInCard />
         <RecordsCard />
       </Screen>
       <DaySheet day={day} onClose={() => setDay(null)} />

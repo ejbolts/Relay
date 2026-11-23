@@ -1,7 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { addDays, shortDate, weekStartFor } from '../../../../frontend/src/trainingSummary';
+import {
+  addDays,
+  daysBetween,
+  shortDate,
+  weekStartFor,
+} from '../../../../frontend/src/trainingSummary';
 import type {
   DashboardData,
   HeatmapDay,
@@ -24,6 +29,8 @@ jest.mock('../../data/api', () => ({
   apiSend: jest.fn(),
 }));
 jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: jest.fn() }));
+const mockRouter = { navigate: jest.fn() };
+jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
 const mockUser = {
   id: 'u1',
   username: 'preview',
@@ -146,7 +153,15 @@ function dashboard(overrides: Partial<DashboardData> = {}) {
       Calves: 4,
     }),
     weekly_sets_history: [muscleWeek(addDays(monday, -7), { Glutes: 16, Lats: 12 })],
-    zone2: { week_start: monday },
+    zone2: {
+      week_start: monday,
+      week_end: addDays(monday, 6),
+      goal_minutes: 150,
+      completed_minutes: 60,
+      remaining_minutes: 90,
+      percentage: 40,
+      complete: false,
+    },
     ...overrides,
   } as unknown as DashboardData;
 }
@@ -172,6 +187,17 @@ const preferences = {
   weekly_muscle_set_goal: 10,
 } as TrainingPreferences;
 
+const checkIn = (id: string, days: number, weight_kg: number, body_fat_pct: number | null) => ({
+  id,
+  measurement_date: addDays(today, -days),
+  weight_kg,
+  body_fat_pct,
+  notes: null,
+  is_sample: false,
+  created_at: '',
+});
+const measurements = [checkIn('b1', 1, 84.6, 18.4), checkIn('b2', 30, 86.1, 19)];
+
 let responses: Record<string, unknown>;
 const workout = { live: null, start: jest.fn(), open: jest.fn(), openStartMenu: jest.fn() };
 
@@ -184,6 +210,7 @@ beforeEach(() => {
     '/api/workout-type-exercises': [],
     '/api/training-preferences': preferences,
     '/api/personal-records': [record],
+    '/api/body-measurements': measurements,
   };
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     const key = Object.keys(responses).find((prefix) => path.split('?')[0] === prefix);
@@ -376,4 +403,72 @@ test('a failed load shows each card’s error with a retry, never a blank screen
   responses['/api/dashboard'] = dashboard();
   await fireEvent.press(screen.getAllByRole('button', { name: 'Try again' })[0]);
   expect(await screen.findByText('Upper body day')).toBeVisible();
+});
+
+test('the stat cards count this week and open Training or Body', async () => {
+  await open();
+  const workouts = screen.getByRole('button', { name: /^Workouts: / });
+  // One workout in the window, a week ago: none this week, an 8-week average of 0.1.
+  expect(workouts).toHaveAccessibleName('Workouts: 0, 8-wk avg 0.1');
+  await fireEvent.press(workouts);
+  expect(mockRouter.navigate).toHaveBeenLastCalledWith('/training');
+  expect(screen.getByRole('button', { name: /^Cardio sessions: 0/ })).toBeVisible();
+  const body = screen.getByRole('button', { name: 'Body weight: 84.6 kg, −1.5 kg / 4 wk' });
+  await fireEvent.press(body);
+  expect(mockRouter.navigate).toHaveBeenLastCalledWith('/body');
+});
+
+test('Zone 2 and the bodyweight trend sit side by side', async () => {
+  await open();
+  const left = daysBetween(today, addDays(monday, 6)) + 1;
+  expect(
+    screen.getByRole('button', {
+      name: `Zone 2 cardio. 90 min to go · ${left} ${left === 1 ? 'day' : 'days'} left`,
+    }),
+  ).toBeVisible();
+  expect(screen.getByText('60 / 150 min')).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: 'Bodyweight: 84.6 kg. −1.5 kg in 30 days' }),
+  ).toBeVisible();
+});
+
+test('the check-in logs today’s weight and body fat, with Undo', async () => {
+  jest
+    .mocked(apiSend)
+    .mockImplementation(async (path: string, method: string, body?: unknown) =>
+      path === '/api/body-measurements' && method === 'POST'
+        ? { ...checkIn('today', 0, 0, null), ...(body as object) }
+        : path.startsWith('/api/body-measurements/')
+          ? undefined
+          : split,
+    );
+  await open();
+  const card = screen.getByLabelText('Body weight check-in');
+  expect(within(card).getByLabelText('Prior: 84.6 kg; Not logged today')).toBeVisible();
+  await fireEvent.press(within(card).getByRole('button', { name: 'Increase by 0.1 kg' }));
+  await fireEvent.press(within(card).getByRole('button', { name: 'Decrease body fat by 0.1%' }));
+  await fireEvent.press(within(card).getByRole('button', { name: 'Log check-in' }));
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/body-measurements', 'POST', {
+      measurement_date: today,
+      weight_kg: 84.7,
+      body_fat_pct: 18.3,
+      notes: null,
+    }),
+  );
+  expect(await screen.findByText('Check-in saved')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Undo' }));
+  // Today had no check-in, so Undo removes the new one.
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/body-measurements/today', 'DELETE'),
+  );
+});
+
+test('the check-in asks for a weight before saving', async () => {
+  responses['/api/body-measurements'] = [];
+  await open();
+  const card = screen.getByLabelText('Body weight check-in');
+  await fireEvent.press(within(card).getByRole('button', { name: 'Log check-in' }));
+  expect(within(card).getByText('Enter a bodyweight above 0 and up to 500 kg.')).toBeVisible();
+  expect(apiSend).not.toHaveBeenCalled();
 });

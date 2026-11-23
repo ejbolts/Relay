@@ -1,4 +1,3 @@
-import type { CardioGoalCardSettings } from './homeLayout';
 import type { CardioGoalWeek, CardioPreferences, CardioSession } from './types';
 
 export const DEFAULT_CARDIO_PREFERENCES: CardioPreferences = {
@@ -27,10 +26,27 @@ export function cardioZoneNotice(
   return `Zone ${zone} · ${heartRate} bpm average (${range.min_bpm}–${range.max_bpm} bpm). ${credit()}`;
 }
 
-/** The goals a card tracks; a removed goal falls back to every goal. */
-export function trackedCardioGoals(goals: CardioGoalWeek[], settings: CardioGoalCardSettings) {
+/**
+ * The goals a card tracks; a removed goal falls back to every goal. `zone` is the card's setting
+ * (see `CardioGoalCardSettings` in homeLayout.ts): null tracks every goal.
+ */
+export function trackedCardioGoals<Settings extends { zone: number | null }>(
+  goals: CardioGoalWeek[],
+  settings: Settings,
+) {
   const chosen = goals.filter((goal) => goal.zone === settings.zone);
   return chosen.length ? chosen : goals;
+}
+
+/** The line under Home's cardio goal card. */
+export function cardioGoalStatus(goals: CardioGoalWeek[], daysLeft: number | null): string {
+  if (!goals.length) return 'Set a weekly goal in Cardio';
+  if (goals.every((goal) => goal.complete))
+    return goals.length === 1 ? 'Weekly goal reached' : 'All goals reached';
+  if (goals.length > 1)
+    return `${goals.filter((goal) => goal.complete).length} of ${goals.length} goals reached`;
+  const days = daysLeft === null ? '' : ` · ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`;
+  return `${goals[0].remaining_minutes} min to go${days}`;
 }
 
 export interface ZoneDraft {
