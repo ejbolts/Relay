@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import type { ComponentRef, ReactNode, Ref } from 'react';
 import {
   ActivityIndicator,
@@ -13,8 +12,9 @@ import {
   type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { haptics } from './haptics';
 import { Icon, type IconName, type IconPair } from './Icon';
-import { useTheme } from './theme';
+import { useTheme, type Palette } from './theme';
 
 /**
  * A tab's scrolling page with a large title, like the web's page headers. On iOS the scroll view
@@ -47,20 +47,29 @@ export function Screen({
       ref={scrollRef}
       style={{ flex: 1, backgroundColor: colors.page }}
       contentInsetAdjustmentBehavior="automatic"
+      // The web's page: a 14 pt gutter and 12 pt between cards.
       contentContainerStyle={{
-        padding: space.lg,
+        padding: space.gutter,
         paddingTop: top + space.lg,
-        gap: space.lg,
+        gap: space.stack,
         paddingBottom: space.xxl * 2,
       }}
       refreshControl={
-        onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined
+        onRefresh ? (
+          <RefreshControl
+            refreshing={!!refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.muted}
+            colors={[colors.accent]}
+            progressBackgroundColor={colors.surface2}
+          />
+        ) : undefined
       }
     >
-      <View>
+      <View style={styles.pageHeader}>
         {/* The full width, so header buttons never cut it short. */}
         {!!eyebrow && (
-          <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
+          <Text style={[type.footnote, styles.eyebrow, { color: colors.muted }]} numberOfLines={1}>
             {eyebrow}
           </Text>
         )}
@@ -91,6 +100,19 @@ export function Screen({
   );
 }
 
+/** The web's card surface: border, radius and (in Stained dark) its lift. */
+export function cardSurface(colors: Palette): ViewStyle {
+  return {
+    backgroundColor: colors.surface,
+    borderRadius: 20,
+    borderColor: colors.cardBorder,
+    borderWidth: 1,
+    ...(colors.cardShadow && {
+      boxShadow: `inset 0 1px 0 ${colors.accentText}1f, 0 6px 18px rgba(0,0,0,0.4)`,
+    }),
+  };
+}
+
 export function Card({
   children,
   style,
@@ -100,46 +122,95 @@ export function Card({
   style?: StyleProp<ViewStyle>;
   accessibilityLabel?: string;
 }) {
-  const { colors, radius, space } = useTheme();
+  const { colors, space } = useTheme();
   return (
     <View
       accessibilityLabel={accessibilityLabel}
-      style={[
-        {
-          backgroundColor: colors.surface,
-          borderRadius: radius.card,
-          borderColor: colors.line,
-          borderWidth: StyleSheet.hairlineWidth,
-          padding: space.lg,
-          gap: space.md,
-        },
-        style,
-      ]}
+      style={[cardSurface(colors), { padding: space.lg, gap: space.md }, style]}
     >
       {children}
     </View>
   );
 }
 
-export function CardHeader({ title, action }: { title: string; action?: ReactNode }) {
+/**
+ * A card's heading, as the web's .pulse-card-header: the title, and on the right either a short
+ * muted detail ("3 this week", or a good-toned "Logged") or an action.
+ */
+export function CardHeader({
+  title,
+  action,
+  detail,
+  detailTone = 'muted',
+}: {
+  title: string;
+  action?: ReactNode;
+  detail?: string;
+  detailTone?: 'muted' | 'good';
+}) {
   const { colors, type } = useTheme();
   return (
     <View style={styles.cardHeader}>
-      <Text accessibilityRole="header" style={[type.headline, { color: colors.text, flex: 1 }]}>
+      <Text accessibilityRole="header" style={[type.cardTitle, { color: colors.text, flex: 1 }]}>
         {title}
       </Text>
+      {!!detail && (
+        <Text
+          style={[
+            type.caption,
+            detailTone === 'good'
+              ? { color: colors.good, fontWeight: '600' }
+              : { color: colors.muted },
+          ]}
+        >
+          {detail}
+        </Text>
+      )}
       {action}
     </View>
   );
 }
 
-type Variant = 'primary' | 'secondary' | 'link' | 'danger';
+export type ButtonVariant = 'primary' | 'secondary' | 'tonal' | 'link' | 'danger' | 'danger-soft';
+export type ButtonSize = 'small' | 'default' | 'large';
 
+/** The colours of each of the web's button variants (buttons.css). */
+export function buttonColors(colors: Palette, variant: ButtonVariant) {
+  return {
+    primary: { fill: colors.accent, ink: colors.onAccent, border: 'transparent' },
+    secondary: { fill: colors.surface2, ink: colors.text, border: colors.lineStrong },
+    tonal: { fill: colors.accentSoft, ink: colors.accentText, border: 'transparent' },
+    link: { fill: 'transparent', ink: colors.accentText, border: 'transparent' },
+    danger: { fill: colors.dangerFill, ink: colors.onAccent, border: 'transparent' },
+    'danger-soft': {
+      fill: `${hexOnly(colors.danger)}1a`,
+      ink: colors.danger,
+      border: `${hexOnly(colors.danger)}73`,
+    },
+  }[variant];
+}
+
+const hexOnly = (colour: string) => (colour.startsWith('#') ? colour.slice(0, 7) : colour);
+
+const SIZES = {
+  small: { minHeight: 36, radius: 10, padding: 12, font: 13 },
+  default: { minHeight: 44, radius: 12, padding: 16, font: 15 },
+  large: { minHeight: 48, radius: 14, padding: 16, font: 16 },
+};
+
+/**
+ * The web's .pulse-button. Primary is the one main action on a surface; secondary is the default
+ * look elsewhere; tonal a softer accent; danger-soft a reversible red. Small buttons keep a
+ * 44 pt touch target.
+ */
 export function Button({
   label,
   onPress,
   icon,
   variant = 'primary',
+  size = 'default',
+  block,
+  loading,
   disabled,
   accessibilityLabel,
   style,
@@ -147,44 +218,111 @@ export function Button({
   label: string;
   onPress: () => void;
   icon?: IconName | IconPair;
-  variant?: Variant;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  /** Fill the row, as the web's .block. */
+  block?: boolean;
+  /** Shows a spinner in place of the icon and stops presses, for a save in flight. */
+  loading?: boolean;
   disabled?: boolean;
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 }) {
-  const { colors, radius, type } = useTheme();
-  const fill = {
-    primary: colors.accent,
-    secondary: colors.surface2,
-    link: 'transparent',
-    danger: colors.dangerFill,
-  }[variant];
-  const ink = {
-    primary: colors.onAccent,
-    secondary: colors.text,
-    link: colors.accentText,
-    danger: colors.onAccent,
-  }[variant];
+  const { colors } = useTheme();
+  const { fill, ink, border } = buttonColors(colors, variant);
+  const link = variant === 'link';
+  const metrics = SIZES[size];
+  const inactive = !!disabled || !!loading;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
-      accessibilityState={{ disabled: !!disabled }}
-      disabled={disabled}
+      accessibilityState={{ disabled: !!disabled, busy: !!loading }}
+      disabled={inactive}
+      hitSlop={link || size === 'small' ? 6 : undefined}
       onPress={() => {
-        if (variant !== 'link') void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        if (!link) haptics.tap();
         onPress();
       }}
       style={({ pressed }) => [
         styles.button,
-        { backgroundColor: fill, borderRadius: radius.md },
-        variant === 'link' && styles.link,
-        (pressed || disabled) && { opacity: disabled ? 0.45 : 0.7 },
+        {
+          minHeight: metrics.minHeight,
+          paddingHorizontal: metrics.padding,
+          backgroundColor: fill,
+          borderColor: border,
+          borderRadius: metrics.radius,
+        },
+        link && styles.link,
+        block && styles.block,
+        pressed && !inactive && { opacity: 0.7, transform: [{ scale: 0.98 }] },
+        disabled && { opacity: 0.45 },
         style,
       ]}
     >
-      {icon && <Icon name={icon} size={16} color={ink} />}
-      <Text style={[type.callout, { color: ink, fontWeight: '600' }]}>{label}</Text>
+      {loading ? (
+        <ActivityIndicator size="small" color={ink} />
+      ) : (
+        icon && <Icon name={icon} size={size === 'small' ? 14 : 16} color={ink} />
+      )}
+      <Text
+        style={{
+          color: ink,
+          fontSize: metrics.font,
+          fontWeight: '600',
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** A square icon button, as the web's .icon-button-pulse beside a page title. */
+export function IconButton({
+  icon,
+  accessibilityLabel,
+  onPress,
+  accent,
+  pressed: on,
+  disabled,
+  style,
+}: {
+  icon: IconName | IconPair;
+  accessibilityLabel: string;
+  onPress: () => void;
+  /** The filled accent look, for a page's main action. */
+  accent?: boolean;
+  /** A toggle that is on (aria-pressed). */
+  pressed?: boolean;
+  disabled?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useTheme();
+  const ink = accent ? colors.onAccent : on ? colors.accentText : colors.secondary;
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel}
+      accessibilityState={{ disabled: !!disabled, ...(on !== undefined && { selected: on }) }}
+      disabled={disabled}
+      hitSlop={2}
+      onPress={() => {
+        haptics.tap();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.iconButton,
+        {
+          backgroundColor: accent ? colors.accent : colors.surface,
+          borderColor: accent ? 'transparent' : on ? colors.accent : colors.line,
+        },
+        pressed && { opacity: 0.7 },
+        disabled && { opacity: 0.45 },
+        style,
+      ]}
+    >
+      <Icon name={icon} size={18} color={ink} />
     </Pressable>
   );
 }
@@ -203,10 +341,57 @@ export function ErrorState({ message, onRetry }: { message: string; onRetry: () 
   const { colors, type } = useTheme();
   return (
     <View style={[styles.center, { gap: 12 }]}>
-      <Text accessibilityRole="alert" style={[type.callout, { color: colors.secondary }]}>
+      <Text
+        accessibilityRole="alert"
+        style={[type.callout, { color: colors.secondary, textAlign: 'center' }]}
+      >
         {message}
       </Text>
-      <Button label="Try again" variant="secondary" onPress={onRetry} />
+      <Button label="Try again" variant="secondary" size="small" onPress={onRetry} />
+    </View>
+  );
+}
+
+/**
+ * Nothing here yet, as the web's .empty-state: a dashed outline, an accent icon badge, a short
+ * title and an optional line and action.
+ */
+export function EmptyState({
+  icon,
+  title,
+  message,
+  action,
+  style,
+}: {
+  icon?: IconName | IconPair;
+  title: string;
+  message?: string;
+  action?: { label: string; onPress: () => void; icon?: IconName | IconPair };
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors, type } = useTheme();
+  return (
+    <View style={[styles.empty, { borderColor: colors.lineStrong }, style]}>
+      {icon && (
+        <View style={[styles.emptyBadge, { backgroundColor: colors.accentSoft }]}>
+          <Icon name={icon} size={22} color={colors.accentText} />
+        </View>
+      )}
+      <Text style={[type.cardTitle, { color: colors.text, textAlign: 'center' }]}>{title}</Text>
+      {!!message && (
+        <Text style={[type.footnote, { color: colors.muted, textAlign: 'center', lineHeight: 19 }]}>
+          {message}
+        </Text>
+      )}
+      {action && (
+        <Button
+          label={action.label}
+          icon={action.icon}
+          size="small"
+          onPress={action.onPress}
+          style={{ marginTop: 6 }}
+        />
+      )}
     </View>
   );
 }
@@ -217,16 +402,44 @@ export function errorMessage(error: unknown) {
 
 const styles = StyleSheet.create({
   statusBand: { position: 'absolute', top: 0, left: 0, right: 0 },
+  // The web's .page-header: a little inset from the cards, with room below before the first.
+  pageHeader: { paddingHorizontal: 6, paddingBottom: 4 },
+  eyebrow: { fontWeight: '500', marginBottom: 2 },
   header: { flexDirection: 'row', alignItems: 'flex-end', gap: 12 },
   cardHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   button: {
-    minHeight: 46,
-    paddingHorizontal: 16,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  link: { minHeight: 32, paddingHorizontal: 4 },
+  link: { minHeight: 32, paddingHorizontal: 4, borderWidth: 0 },
+  block: { alignSelf: 'stretch' },
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   center: { padding: 24, alignItems: 'center', justifyContent: 'center' },
+  empty: {
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderRadius: 20,
+    paddingVertical: 28,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    gap: 6,
+  },
+  emptyBadge: {
+    width: 45,
+    height: 45,
+    borderRadius: 23,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
 });
