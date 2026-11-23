@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { api, isConnectionFailure } from './api';
-import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
 import {
   ACTIVE_WORKOUT_SYNC_KEY,
   REMOTE_WORKOUT_APPLIED,
   SHARED_WORKOUT_CHANGED,
 } from './activeWorkoutEvents';
 import { readFinishedWorkouts, FINISHED_WORKOUTS_CHANGE_EVENT } from './finishedWorkoutQueue';
+import {
+  ActiveWorkoutSynchronizer as SharedSynchronizer,
+  draftSignature,
+  type SharedWorkoutSnapshot,
+  type SyncDependencies,
+  type WorkoutSyncConflict,
+  type WorkoutSyncStatus,
+} from './activeWorkoutSynchronizer';
 import type { WorkoutInput } from './types';
 import { workoutAutoSaveMinutes } from './workoutAutoSaveChoice';
 import {
@@ -19,25 +26,21 @@ import {
   type ActiveWorkoutDraft,
 } from './workoutDraft';
 
-export interface SharedWorkoutSnapshot {
-  revision: number;
-  draft: ActiveWorkoutDraft | null;
-}
-export type WorkoutSyncStatus = 'synced' | 'syncing' | 'offline' | 'conflict';
-export interface WorkoutSyncConflict {
-  local: ActiveWorkoutDraft | null;
-  remote: SharedWorkoutSnapshot;
-}
+export { draftSignature };
+export type { SharedWorkoutSnapshot, WorkoutSyncConflict, WorkoutSyncStatus };
 
-/** Object order and persistence-only timestamps must not produce edits or sync loops. */
-export function draftSignature(value: ActiveWorkoutDraft | null): string {
-  return JSON.stringify(value, (key, item: unknown) => {
-    if (key === 'updatedAt') return undefined;
-    if (item && typeof item === 'object' && !Array.isArray(item)) {
-      return Object.fromEntries(Object.entries(item).sort(([a], [b]) => a.localeCompare(b)));
-    }
-    return item;
-  });
+/** The shared synchronizer with this browser's connection check and session ids. */
+export class ActiveWorkoutSynchronizer extends SharedSynchronizer {
+  constructor(
+    deps: Omit<SyncDependencies, 'connectionFailure' | 'newId'> &
+      Partial<Pick<SyncDependencies, 'connectionFailure' | 'newId'>>,
+    base: SharedWorkoutSnapshot | null = null,
+  ) {
+    super(
+      { connectionFailure: isConnectionFailure, newId: () => crypto.randomUUID(), ...deps },
+      base,
+    );
+  }
 }
 
 // The finished workout the logger would save at the current draft's cutoff, for auto-save.
@@ -59,211 +62,6 @@ export function preparedWorkoutAutoSave(draft: ActiveWorkoutDraft | null): Worko
 function withAutoSave<T extends { draft: ActiveWorkoutDraft | null }>(change: T) {
   const autoSave = preparedWorkoutAutoSave(change.draft);
   return autoSave ? { ...change, autoSave } : change;
-}
-
-interface SyncDependencies {
-  read: () => Promise<SharedWorkoutSnapshot>;
-  put: (
-    change: SharedWorkoutSnapshot & { base: ActiveWorkoutDraft | null; replace?: boolean },
-  ) => Promise<SharedWorkoutSnapshot & { conflict: boolean }>;
-  local: () => ActiveWorkoutDraft | null;
-  apply: (draft: ActiveWorkoutDraft | null) => boolean;
-  saveBase: (base: SharedWorkoutSnapshot) => void;
-  queued: (sessionId: string | undefined) => boolean;
-  changed: (
-    status: WorkoutSyncStatus,
-    conflict: WorkoutSyncConflict | null,
-    error: string | null,
-  ) => void;
-}
-
-/** One request at a time; keep the acknowledged base durable for offline three-way merging. */
-export class ActiveWorkoutSynchronizer {
-  private base: SharedWorkoutSnapshot | null;
-  private running: Promise<void> | null = null;
-  private again = false;
-  private stopped = false;
-  private conflict: WorkoutSyncConflict | null = null;
-  private replacement: SharedWorkoutSnapshot | null = null;
-  private connectionFailure = false;
-  status: WorkoutSyncStatus = 'syncing';
-
-  constructor(
-    private deps: SyncDependencies,
-    base: SharedWorkoutSnapshot | null = null,
-  ) {
-    this.base = base;
-  }
-
-  stop() {
-    this.stopped = true;
-  }
-
-  private report(status: WorkoutSyncStatus, error: string | null = null) {
-    this.status = status;
-    this.deps.changed(status, this.conflict, error);
-  }
-
-  private remember(base: SharedWorkoutSnapshot) {
-    this.base = base;
-    this.deps.saveBase(base);
-  }
-
-  private accept(remote: SharedWorkoutSnapshot) {
-    if (!this.deps.apply(remote.draft))
-      throw new Error('Could not store the synced workout on this device.');
-    this.remember(remote);
-  }
-
-  sync(): Promise<void> {
-    if (this.stopped) return Promise.resolve();
-    this.again = true;
-    if (this.running) return this.running;
-    this.running = this.drain().finally(() => {
-      this.running = null;
-    });
-    return this.running;
-  }
-
-  private async drain() {
-    try {
-      while (this.again && !this.stopped) {
-        this.again = false;
-        if (this.conflict && !this.replacement) {
-          // Refresh the comparison without replacing either device's edits.
-          const remote = await this.deps.read();
-          if (this.stopped) return;
-          this.conflict = { local: this.deps.local(), remote };
-          this.report('conflict');
-          return;
-        }
-        this.report('syncing');
-        if (!this.base) {
-          const remote = await this.deps.read();
-          if (this.stopped) return;
-          const local = this.deps.local();
-          if (!local && this.deps.queued(remote.draft?.clientSessionId)) this.remember(remote);
-          else if (!local) this.accept(remote);
-          else if (!remote.draft || draftSignature(local) === draftSignature(remote.draft))
-            this.remember(remote);
-          else {
-            this.conflict = { local, remote };
-            this.report('conflict');
-            return;
-          }
-        }
-        const base = this.base!;
-        // The completion queue owns a finished draft until the save succeeds or needs review.
-        if (this.deps.queued(base.draft?.clientSessionId)) {
-          const remote = await this.deps.read();
-          if (this.stopped) return;
-          if (remote.draft?.clientSessionId === base.draft?.clientSessionId) {
-            this.report('synced');
-            return;
-          }
-          this.remember(remote);
-          this.again = true;
-          continue;
-        }
-        const sent = this.deps.local();
-        if (sent?.pendingSave) return;
-        if (!this.replacement && draftSignature(sent) === draftSignature(base.draft)) {
-          const remote = await this.deps.read();
-          if (this.stopped) return;
-          if (draftSignature(this.deps.local()) !== draftSignature(sent)) {
-            this.again = true;
-            continue;
-          }
-          this.accept(remote);
-          this.report('synced');
-          continue;
-        }
-        const replacing = this.replacement;
-        this.replacement = null;
-        const response = await this.deps.put({
-          revision: (replacing ?? base).revision,
-          base: (replacing ?? base).draft,
-          draft: sent,
-          ...(replacing && { replace: true }),
-        });
-        if (this.stopped) return;
-        if (response.conflict) {
-          this.conflict = { local: this.deps.local(), remote: response };
-          this.report('conflict');
-          return;
-        }
-        this.conflict = null;
-        if (draftSignature(this.deps.local()) === draftSignature(sent)) {
-          this.accept(response);
-          this.report('synced');
-        } else {
-          // New keystrokes arrived during the request. Merge those against exactly what was
-          // sent, so the next server merge retains remote changes without rolling back input.
-          this.remember({ revision: response.revision, draft: sent });
-          this.again = true;
-        }
-      }
-    } catch (reason) {
-      this.connectionFailure = isConnectionFailure(reason);
-      if (!this.stopped)
-        this.report('offline', reason instanceof Error ? reason.message : 'Workout sync failed.');
-    }
-  }
-
-  async resolve(useLocal: boolean) {
-    const conflict = this.conflict;
-    if (!conflict) return;
-    if (!useLocal) {
-      this.accept(conflict.remote);
-      this.conflict = null;
-      this.report('synced');
-    } else {
-      const local = this.deps.local();
-      if (local && local.clientSessionId !== conflict.remote.draft?.clientSessionId) {
-        // Keeping an ended workout explicitly creates a new session; never revive its old id.
-        const now = Date.now();
-        if (
-          !this.deps.apply({
-            ...local,
-            clientSessionId: crypto.randomUUID(),
-            lastActiveAt: now,
-            inactiveFinishAt: inactiveWorkoutFinishAt(local.startedAt, now),
-            updatedAt: now,
-          })
-        )
-          return;
-      }
-      this.replacement = conflict.remote;
-      this.conflict = null;
-    }
-    await this.sync();
-  }
-
-  async finishFields(): Promise<{
-    active_workout_revision?: number;
-    active_workout_session_id?: string;
-  }> {
-    const before = this.deps.local();
-    await this.sync();
-    if (this.conflict) throw new Error('Resolve the workout sync conflict before finishing.');
-    if (draftSignature(before) !== draftSignature(this.deps.local())) {
-      throw new Error(
-        'Workout updated from another device. Review the latest sets, then finish again.',
-      );
-    }
-    if (this.status === 'offline' && this.connectionFailure) {
-      // A queued offline completion still uses its last known revision. A concurrent edit
-      // will be refused when it reconnects, with the finished copy retained for review.
-    } else if (this.status !== 'synced') {
-      throw new Error('Could not sync the workout. Try again before finishing.');
-    }
-    return this.base?.draft?.clientSessionId === before?.clientSessionId && this.base?.revision
-      ? {
-          active_workout_revision: this.base.revision,
-          active_workout_session_id: before?.clientSessionId,
-        }
-      : {};
-  }
 }
 
 let currentSync: ActiveWorkoutSynchronizer | null = null;

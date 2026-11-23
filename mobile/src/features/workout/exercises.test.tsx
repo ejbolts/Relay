@@ -324,21 +324,19 @@ describe('machines', () => {
   });
 
   it('a new movement starts on the machine its last session used, shown on its card', async () => {
-    jest
-      .mocked(apiGet)
-      .mockImplementation(async (path: string) =>
-        path.endsWith('/machine-photos/last-used')
-          ? machineHistory.movements[0].machine_photos
-          : path.includes('/machine-photos')
-            ? [
-                {
-                  ...machineHistory.movements[0].machine_photos[0],
-                  workout_count: 1,
-                  last_used_date: '2026-11-18',
-                },
-              ]
-            : [],
-      );
+    jest.mocked(apiGet).mockImplementation(async (path: string) =>
+      path.endsWith('/machine-photos/last-used')
+        ? machineHistory.movements[0].machine_photos
+        : path.includes('/machine-photos')
+          ? [
+              {
+                ...machineHistory.movements[0].machine_photos[0],
+                workout_count: 1,
+                last_used_date: '2026-11-18',
+              },
+            ]
+          : [],
+    );
     await openLogger();
     expect(await screen.findByRole('button', { name: 'Machine: Cybex' })).toBeVisible();
     expect(readActiveWorkoutDraft(deviceStorage)?.movements[0].machinePhotoIds).toEqual(['cybex']);

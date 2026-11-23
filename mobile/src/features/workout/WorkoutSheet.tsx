@@ -73,6 +73,7 @@ import { MovementCard, type MovementActions } from './MovementCard';
 import { RestBar } from './RestBar';
 import { MachineSheet } from './MachineSheet';
 import { SwapSheet } from './SwapSheet';
+import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { restMenuItems } from './restChoices';
 import { useElapsed } from './useElapsed';
@@ -86,6 +87,9 @@ export function WorkoutSheet() {
   const logger = useLogger();
   const router = useRouter();
   const { colors } = useTheme();
+  const { hostSyncConflict } = useWorkout();
+  // The page sheet covers the app's own sync choice, so it shows here while the logger is open.
+  useEffect(() => hostSyncConflict(), [hostSyncConflict]);
   const closeFinished = logger?.closeFinished;
   // Leaving the summary (Done or dragging the sheet away) clears it.
   useEffect(() => () => closeFinished?.(), [closeFinished]);
@@ -97,6 +101,8 @@ export function WorkoutSheet() {
   return (
     <View style={[styles.page, { backgroundColor: colors.page }]}>
       {content}
+      <SyncConflictButton bottom={logger?.rest.timer || logger?.rest.done ? 112 : 32} />
+      <SyncConflictSheet />
       <ToastHost bottom={logger?.rest.timer || logger?.rest.done ? 104 : 24} />
       <PromptHost />
     </View>
@@ -444,10 +450,10 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
 
   function finish() {
     const { blocker, ticked: done, unticked } = logger.checkFinish();
-    const run = () => {
-      const result = logger.finish();
-      if (!result.ok) Alert.alert("Can't finish yet", result.message);
-    };
+    const run = () =>
+      void logger.finish().then((result) => {
+        if (!result.ok) Alert.alert("Can't finish yet", result.message);
+      });
     if (blocker) {
       Alert.alert("Can't finish yet", blocker, [{ text: 'Keep working out' }]);
       return;
