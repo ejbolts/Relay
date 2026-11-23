@@ -42,6 +42,8 @@ interface Goal {
 const PAD = { top: 12, right: 12, bottom: 26, left: 40 };
 const HEIGHT = 200;
 const DAY_MS = 86_400_000;
+/** About the day readout's height, to keep it off the point it describes. */
+const TOOLTIP_HEIGHT = 84;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /**
@@ -354,7 +356,7 @@ function TrendPlot({
   const activePoint = active !== null ? points[active] : null;
   const activeCoord = active !== null && model ? model.coords[active] : null;
   const tooltipLeft = activeCoord
-    ? Math.min(Math.max(activeCoord.x - 74, 4), Math.max(width - 152, 4))
+    ? Math.min(Math.max(activeCoord.x - 80, 4), Math.max(width - 164, 4))
     : 0;
   const goalCoords =
     goal && model
@@ -541,7 +543,10 @@ function TrendPlot({
               styles.tooltip,
               {
                 left: tooltipLeft,
-                top: Math.max(activeCoord.y - 68, 0),
+                top:
+                  activeCoord.y >= TOOLTIP_HEIGHT + 12
+                    ? activeCoord.y - TOOLTIP_HEIGHT - 12
+                    : activeCoord.y + 12,
                 backgroundColor: colors.surface,
                 borderColor: colors.lineStrong,
                 borderRadius: radius.sm,
@@ -569,10 +574,13 @@ function TrendPlot({
                 : `${activePoint.value.toFixed(1)} ${unit}`}
             </Text>
             <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
-              {showFat
-                ? 'Body fat'
-                : `7-day average${activePoint.detail ? ` · ${activePoint.detail}` : ''}`}
+              {showFat ? 'Body fat' : '7-day average'}
             </Text>
+            {!showFat && !!activePoint.detail && (
+              <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
+                {activePoint.detail}
+              </Text>
+            )}
           </View>
         )}
       </View>
@@ -697,7 +705,7 @@ const styles = StyleSheet.create({
   seriesSegmented: { width: 190 },
   tooltip: {
     position: 'absolute',
-    width: 148,
+    width: 160,
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderWidth: 1,
