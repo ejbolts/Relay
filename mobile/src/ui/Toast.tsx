@@ -79,6 +79,15 @@ export function toastAccount() {
 }
 
 /**
+ * The session key for a signed-in user, the same one `toastAccount()` gives once the hosts have
+ * caught up with that sign-in. For work started by the signed-in user's own code (an effect keyed
+ * on the user) that can run before the hosts record the new session.
+ */
+export function toastAccountFor(userId: string | number) {
+  return accountKey(`user:${userId}`);
+}
+
+/**
  * Whether `account` (from `toastAccount()`) is still the session; check before late writes. The
  * session number is read live, so this is false as soon as a session ends, before any screen
  * has re-rendered.

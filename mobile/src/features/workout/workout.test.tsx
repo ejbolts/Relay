@@ -266,6 +266,34 @@ test('a workout survives the app closing, finishes offline and saves once back o
   expect(readFinishedWorkouts(deviceStorage)).toEqual([]);
 });
 
+test('a workout saved after the app was offline says so to its own account', async () => {
+  // Signed in and finished straight away, before the toast hosts have seen anything else.
+  jest.mocked(apiSend).mockRejectedValue(new Error('Could not reach Relay.'));
+  await open(<WorkoutSheet />);
+  const { start } = await captureWorkout();
+  await act(async () => start({ kind: 'up-next' }));
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Complete set 1' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Finish workout' }));
+  await waitFor(() => expect(screen.getByText('Waiting to sync')).toBeVisible());
+
+  // Back online a while later: the save reaches the server and the toast says so.
+  jest.mocked(apiSend).mockImplementation(async () => ({ id: 'saved-1' }) as TrackedWorkout);
+  const later = Date.now() + 11_000;
+  const clock = jest.spyOn(Date, 'now').mockImplementation(() => later);
+  try {
+    await act(async () => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+    });
+    await waitFor(() => expect(screen.getByText('Saved')).toBeVisible());
+    expect(await screen.findByText('Workout saved')).toBeOnTheScreen();
+  } finally {
+    clock.mockRestore();
+  }
+  expect(readFinishedWorkouts(deviceStorage)).toEqual([]);
+});
+
 /** Renders a probe next to the screen to reach the workout API. */
 async function captureWorkout() {
   const captured: { api: ReturnType<typeof useWorkout> | null } = { api: null };

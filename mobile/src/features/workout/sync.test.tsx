@@ -50,6 +50,7 @@ jest.mock('../../ui/Toast', () => ({
   showToast: jest.fn(),
   ToastHost: () => null,
   toastAccount: () => 'u1',
+  toastAccountFor: () => 'u1',
   isToastAccountCurrent: () => true,
 }));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));

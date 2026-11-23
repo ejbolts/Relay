@@ -44,6 +44,7 @@ jest.mock('../../ui/Toast', () => ({
   showToast: jest.fn(),
   ToastHost: () => null,
   toastAccount: () => 'u1',
+  toastAccountFor: () => 'u1',
   isToastAccountCurrent: () => true,
 }));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
@@ -186,7 +187,7 @@ test('workout notes in the details card come back with the restored workout', as
   await fireEvent.press(screen.getByRole('button', { name: 'Workout details' }));
   await fireEvent.changeText(screen.getByLabelText('Workout notes'), 'Short on time');
   expect(readActiveWorkoutDraft(deviceStorage)?.notes).toBe('Short on time');
-  first.unmount();
+  await first.unmount();
   client.clear();
   await openLogger(false);
   expect(screen.getByRole('button', { name: 'Workout details' })).toHaveProp(
