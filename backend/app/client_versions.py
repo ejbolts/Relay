@@ -24,6 +24,7 @@ from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 CLIENT_VERSION_HEADER = "X-Relay-Version"
+NATIVE_CLIENT_HEADER = "X-Relay-Client"
 
 # Raise only for a release that removes or changes something older apps still send or read.
 # It must not exceed the deployed frontend/release.json version. Leave None otherwise: the
@@ -71,6 +72,15 @@ def normalized_version(value: str | None) -> str | None:
     """The header value when it is a plain release version, so it is safe to store."""
     parsed = parse_version(value)
     return ".".join(map(str, parsed)) if parsed else None
+
+
+def normalized_native_client(value: str | None) -> str | None:
+    """A native platform and build version for reporting, independent of API compatibility."""
+    platform, _, version = (value or "").strip().partition("/")
+    if platform not in {"android", "ios"}:
+        return None
+    parsed = normalized_version(version)
+    return f"{platform}/{parsed}" if parsed is not None else None
 
 
 def is_older(client: str | None, release: str) -> bool:

@@ -69,8 +69,9 @@ import type { WorkoutDraftSet } from '../../../../frontend/src/workoutMovements'
 import type { WorkoutPause } from '../../../../frontend/src/workoutPause';
 import { templateDraftMovements } from '../../../../frontend/src/workoutStartMovements';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
-import { ApiError, apiGet, apiSend } from '../../data/api';
+import { ApiError, apiGet, apiSend, currentUser } from '../../data/api';
 import { deviceStorage, newId, readJson, writeJson } from '../../data/deviceStorage';
+import { connectLivePresence } from '../../data/livePresence';
 import {
   queryKeys,
   refreshTraining,
@@ -84,6 +85,7 @@ import {
 } from '../../data/queries';
 import { useOptionalSession } from '../../session/SessionProvider';
 import { showToast, ToastHost } from '../../ui/Toast';
+import { refreshFriendPresence, updateFriendPresence } from '../social/socialQueries';
 import { FinishedQueueSender, type QueueStatus } from './finishedQueueSender';
 import {
   addSet as addSetRule,
@@ -510,6 +512,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
 
   // Every stored change reaches the other devices shortly after, as the web's sync does.
   const syncRef = useRef<ActiveWorkoutSynchronizer | null>(null);
+  const presenceRef = useRef<ReturnType<typeof connectLivePresence> | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const scheduleSync = useCallback(() => {
     clearTimeout(syncTimer.current);
@@ -1151,7 +1154,26 @@ const WorkoutEngine = memo(function WorkoutEngine({
     );
     syncRef.current = sync;
     void sync.sync();
-    // Without the web's live connection, the phone checks the shared copy every 15 s while open.
+    const presence = connectLivePresence({
+      readWorkout: () => readActiveWorkoutDraft(deviceStorage),
+      onOpen: () => {
+        void sync.sync();
+        refreshFriendPresence(client);
+      },
+      onActiveWorkout: () => void sync.sync(),
+      onFriendPresence: (event) => updateFriendPresence(client, event),
+      // The session provider observes 401s in the query cache.
+      onSignedOut: () =>
+        void client
+          .fetchQuery({
+            queryKey: ['live-session-check', user.id],
+            queryFn: ({ signal }) => currentUser(signal),
+            retry: false,
+          })
+          .catch(() => undefined),
+    });
+    presenceRef.current = presence;
+    // Keep pulling periodically in case the socket is down or silently drops an event.
     const timer = setInterval(() => {
       if (AppState.currentState === 'active') void sync.sync();
     }, 15_000);
@@ -1162,6 +1184,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
       if (online) void sync.sync();
     });
     return () => {
+      presence.stop();
+      presenceRef.current = null;
       sync.stop();
       syncRef.current = null;
       clearInterval(timer);
@@ -1169,7 +1193,10 @@ const WorkoutEngine = memo(function WorkoutEngine({
       app?.remove();
       net();
     };
-  }, [user.id]);
+  }, [client, user.id]);
+  useEffect(() => {
+    presenceRef.current?.report();
+  }, [logger, waiting]);
   const resolveSync = useCallback((useLocal: boolean) => {
     void syncRef.current?.resolve(useLocal);
   }, []);

@@ -42,6 +42,12 @@ from .auth import (
     utc_now,
     verify_password,
 )
+from .client_versions import (
+    CLIENT_VERSION_HEADER,
+    NATIVE_CLIENT_HEADER,
+    normalized_native_client,
+    normalized_version,
+)
 from .config import Settings
 from .database import get_db
 from .errors import api_error
@@ -552,7 +558,18 @@ def login(
     user.password_reset_requested_at = None
     # Likewise, they found their username.
     user.username_reminder_requested_at = None
-    token = create_user_session(db, user, settings, request.headers.get("user-agent"))
+    token = create_user_session(
+        db,
+        user,
+        settings,
+        request.headers.get("user-agent"),
+        client_version=normalized_version(request.headers.get(CLIENT_VERSION_HEADER)),
+        native_client=(
+            normalized_native_client(request.headers.get(NATIVE_CLIENT_HEADER))
+            if payload.session == "token"
+            else None
+        ),
+    )
     report_workout_revision(response, db, user.id)
     read = user_to_read(db, user, settings).model_dump()
     if payload.session == "token":

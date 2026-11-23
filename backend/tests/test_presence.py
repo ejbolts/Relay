@@ -2,7 +2,7 @@ import asyncio
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from conftest import register_user
+from conftest import TEST_PASSWORD, register_user
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 from starlette.websockets import WebSocketDisconnect
@@ -205,6 +205,36 @@ def test_presence_socket_requires_a_signed_in_same_origin_window(client):
         with client.websocket_connect(SOCKET, headers={"origin": "https://evil.example"}):
             pass
     signed_out.close()
+
+
+def test_bearer_socket_reports_friend_presence_and_receives_workout_invalidations(
+    client, other_client
+):
+    befriend(client, other_client)
+    with TestClient(client.app) as native:
+        login = native.post(
+            "/api/auth/login",
+            json={
+                "username": other_client.user["username"],
+                "password": TEST_PASSWORD,
+                "session": "token",
+            },
+        )
+        assert login.status_code == 200 and not native.cookies
+        headers = {
+            "authorization": f"Bearer {login.json()['session_token']}",
+            "origin": "http://testserver",
+        }
+        with (
+            client.websocket_connect(SOCKET) as viewer,
+            native.websocket_connect(SOCKET, headers=headers) as phone,
+        ):
+            phone.send_json(report(workout=live()))
+            assert viewer.receive_json()["presence"]["workout"]["name"] == "Push day"
+            hub.active_workout_changed(other_client.user["id"])
+            assert phone.receive_json() == {"type": "active_workout"}
+            phone.send_json(report())
+            assert viewer.receive_json()["presence"]["workout"] is None
 
 
 def test_malformed_reports_are_ignored(client, other_client):
