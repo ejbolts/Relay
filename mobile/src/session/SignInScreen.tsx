@@ -84,7 +84,7 @@ export function SignInScreen() {
         const fields = registrationFields(values);
         const created = await registerAccount(fields);
         // A new account takes the quick tour on its first Home, as on the web.
-        queueAppTour(created.id);
+        if (created?.id) queueAppTour(created.id);
         try {
           await signIn(fields.username, password);
         } catch {

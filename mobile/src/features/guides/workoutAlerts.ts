@@ -51,7 +51,8 @@ export function useInactiveWorkoutAlert() {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       if (response.notification.request.content.data?.kind === 'inactive-workout') open();
     });
-    return () => subscription.remove();
+    // Test environments stand in an object without remove.
+    return () => subscription?.remove?.();
   }, [open]);
 }
 
