@@ -30,7 +30,7 @@ import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { settingsIcons } from './icons';
-import { ProfilePhoto } from './ProfilePhoto';
+import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { removeProfilePhoto, updateProfile, uploadProfilePhoto } from './settingsData';
 import { Row, Section, SettingsPage } from './SettingsList';
 

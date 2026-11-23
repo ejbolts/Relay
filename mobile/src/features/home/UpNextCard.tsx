@@ -1,10 +1,10 @@
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { splitSkipMessage, splitSkipMove } from '../../../../frontend/src/splitSkip';
 import { latestTopSets, shortDate, upNextSetLabel } from '../../../../frontend/src/trainingSummary';
 import { localDate } from '../../../../frontend/src/utils';
-import { apiOrigin } from '../../data/api';
 import { useDashboard, useUpNext, useWeightUnit, useWorkoutHistory } from '../../data/queries';
 import { Button, Card, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
@@ -19,6 +19,7 @@ const SHOWN_EXERCISES = 6;
 /** Home's first card, as on the web: the suggested session and the buttons that start it. */
 export function UpNextCard() {
   const { colors, type, space } = useTheme();
+  const router = useRouter();
   const today = localDate();
   const workout = useWorkout();
   const upNext = useUpNext();
@@ -93,9 +94,6 @@ export function UpNextCard() {
     });
   }
 
-  const editSplit = () => {
-    if (apiOrigin) void Linking.openURL(`${apiOrigin.replace(/\/$/, '')}/#split`);
-  };
   const dotColor =
     recommendation && !isRestDay && !needsSplitUpdate
       ? (upNext.type?.color ?? categoryColors[recommendation.category])
@@ -146,18 +144,16 @@ export function UpNextCard() {
             <Text style={[type.footnote, styles.linkText, { color: colors.accentText }]}>Skip</Text>
           </Pressable>
         )}
-        {!!apiOrigin && (
-          <Pressable
-            accessibilityRole="link"
-            hitSlop={8}
-            onPress={editSplit}
-            style={({ pressed }) => [styles.link, pressed && styles.dim]}
-          >
-            <Text style={[type.footnote, styles.linkText, { color: colors.accentText }]}>
-              {recommendation?.split_name ? 'Edit split' : 'Set up split'}
-            </Text>
-          </Pressable>
-        )}
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={() => router.push('/split')}
+          style={({ pressed }) => [styles.link, pressed && styles.dim]}
+        >
+          <Text style={[type.footnote, styles.linkText, { color: colors.accentText }]}>
+            {recommendation?.split_name ? 'Edit split' : 'Set up split'}
+          </Text>
+        </Pressable>
       </View>
       <View style={[styles.row, { alignItems: 'baseline' }]}>
         <Text

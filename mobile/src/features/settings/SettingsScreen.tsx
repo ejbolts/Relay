@@ -24,6 +24,7 @@ import {
   WEEKLY_GOAL_ERROR,
   WEIGHT_UNIT_CHOICES,
 } from '../../../../frontend/src/trainingSettings';
+import { VISIBILITY_LABELS } from '../../../../frontend/src/sharedProfileDisplay';
 import type { TrainingPreferences } from '../../../../frontend/src/types';
 import { formatSeconds } from '../../../../frontend/src/utils';
 import { apiOrigin, ApiError } from '../../data/api';
@@ -31,11 +32,12 @@ import { useTrainingPreferences, useWorkoutTypes } from '../../data/queries';
 import { useSession, useUser } from '../../session/SessionProvider';
 import { errorMessage, ErrorState, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
+import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
+import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { settingsIcons } from './icons';
-import { ProfilePhoto } from './ProfilePhoto';
 import {
   useAutoSave,
   useSaveAutoSave,
@@ -347,6 +349,7 @@ function AccountSection() {
   const user = useUser();
   const { signOut } = useSession();
   const workout = useWorkout();
+  const sharing = useSharingChoices().data;
   const [busy, setBusy] = useState<'device' | 'everywhere' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const unsynced = !!workout.live || workout.queue.waiting > 0;
@@ -402,6 +405,13 @@ function AccountSection() {
   return (
     <>
       <Section title="Account">
+        <Row
+          label="Profile sharing"
+          icon={settingsIcons.people}
+          iconTint="#6366f1"
+          value={sharing ? VISIBILITY_LABELS[sharing.visibility] : undefined}
+          onPress={() => router.push(socialRoutes.sharing)}
+        />
         <Row
           label="Change password"
           icon={settingsIcons.password}

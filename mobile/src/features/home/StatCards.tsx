@@ -12,6 +12,7 @@ import { localDate } from '../../../../frontend/src/utils';
 import { weightFromKg } from '../../../../frontend/src/weightUnits';
 import { useDashboard, useWeightUnit, useWorkoutHistory } from '../../data/queries';
 import { useTheme } from '../../ui/theme';
+import { trainingRoute } from '../training/routes';
 import { useBodyMeasurements } from '../body/bodyQueries';
 import { SparkBars, Sparkline } from './Sparks';
 
@@ -59,7 +60,7 @@ export function StatCards() {
         label="Workouts"
         value={activity.workoutsThisWeek ?? '–'}
         caption={activityAverageLabel(activity.averageWorkouts, ACTIVITY_WEEKS)}
-        onPress={() => router.navigate('/training')}
+        onPress={() => router.navigate(trainingRoute('sessions'))}
       >
         <SparkBars
           values={activity.workoutHistory}
@@ -70,7 +71,7 @@ export function StatCards() {
         label="Cardio sessions"
         value={activity.cardioSessionsThisWeek ?? '–'}
         caption={activityAverageLabel(activity.averageCardioSessions, ACTIVITY_WEEKS)}
-        onPress={() => router.navigate('/training')}
+        onPress={() => router.navigate(trainingRoute('cardio'))}
       >
         <SparkBars
           values={activity.cardioHistory}

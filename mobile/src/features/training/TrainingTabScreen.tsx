@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { refreshTraining } from '../../data/queries';
 import { Screen } from '../../ui/components';
@@ -12,11 +12,34 @@ import { useTrainingHistory } from './trainingQueries';
 /** Training's sections, named as the web's segmented control names them. */
 export const TRAINING_SECTIONS = ['Sessions', 'Exercises', 'Cardio'] as const;
 
-/** The web's Training tab: Sessions, Exercises and Cardio under one header. */
-export function TrainingTabScreen() {
+/** The section names other screens open Training at, such as Home's cardio cards. */
+export type TrainingSection = 'sessions' | 'exercises' | 'cardio';
+const SECTION_PARAMS: readonly TrainingSection[] = ['sessions', 'exercises', 'cardio'];
+
+/**
+ * The web's Training tab: Sessions, Exercises and Cardio under one header. `requestedSection`
+ * switches to a section when another screen opens Training at it; `onRequestShown` lets the
+ * route clear the request, so opening the same section again switches back to it.
+ */
+export function TrainingTabScreen({
+  requestedSection,
+  onRequestShown,
+}: {
+  requestedSection?: string;
+  onRequestShown?: () => void;
+} = {}) {
   const client = useQueryClient();
   const history = useTrainingHistory();
-  const [section, setSection] = useState(0);
+  const requested = SECTION_PARAMS.indexOf(requestedSection as TrainingSection);
+  const [section, setSection] = useState(Math.max(requested, 0));
+  const [applied, setApplied] = useState(requestedSection);
+  if (requestedSection !== applied) {
+    setApplied(requestedSection);
+    if (requested >= 0) setSection(requested);
+  }
+  useEffect(() => {
+    if (requestedSection) onRequestShown?.();
+  }, [requestedSection, onRequestShown]);
   const [refreshing, setRefreshing] = useState(false);
   const total = Math.max(history.summary?.total_workouts ?? 0, history.workouts.length);
   return (

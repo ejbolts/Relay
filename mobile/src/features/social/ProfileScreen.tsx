@@ -41,7 +41,6 @@ import { useWeightUnit } from '../../data/queries';
 import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
-import { PromptHost } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { Segmented } from '../training/parts';
@@ -117,7 +116,6 @@ export function ProfileScreen({
       >
         {body}
       </ScrollView>
-      <PromptHost />
     </>
   );
 }
@@ -201,6 +199,7 @@ function ConsistencySummary({ consistency }: { consistency: SharedConsistency })
 
 function ProfileHeader({ profile, onBlocked }: { profile: SharedProfile; onBlocked: () => void }) {
   const { colors, type, radius } = useTheme();
+  const router = useRouter();
   const nav = useSocialNavigation();
   const [qrOpen, setQrOpen] = useState(false);
   const memberSince = formatMemberSince(profile.member_since);
@@ -237,6 +236,11 @@ function ProfileHeader({ profile, onBlocked }: { profile: SharedProfile; onBlock
       </View>
       {profile.is_you ? (
         <View style={styles.controls}>
+          <SmallButton
+            label="Edit profile"
+            icon={socialIcons.edit}
+            onPress={() => router.push('/settings/profile')}
+          />
           <SmallButton
             label={`Sharing: ${VISIBILITY_LABELS[profile.visibility]}`}
             icon={socialIcons.people}

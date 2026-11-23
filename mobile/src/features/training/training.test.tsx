@@ -93,7 +93,12 @@ let client: QueryClient;
 function open(children: ReactNode) {
   // No garbage-collection timers, so Jest can exit when the tests finish.
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  return render(
+  return render(withProviders(children));
+}
+
+/** The screen inside the app's providers, sharing the client `open` made. */
+function withProviders(children: ReactNode) {
+  return (
     <SafeAreaProvider
       initialMetrics={{
         frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -101,7 +106,7 @@ function open(children: ReactNode) {
       }}
     >
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    </SafeAreaProvider>,
+    </SafeAreaProvider>
   );
 }
 
@@ -222,6 +227,23 @@ test('Show earlier weeks skips empty weeks, reading older months to reach the ne
   await fireEvent.press(await screen.findByRole('button', { name: 'Show earlier weeks' }));
   expect(await screen.findByRole('button', { name: /^Old push/ })).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Show earlier weeks' })).toBeNull();
+});
+
+test('another screen can open Training at its Cardio section, again after leaving it', async () => {
+  const shown = jest.fn();
+  await open(<TrainingTabScreen requestedSection="cardio" onRequestShown={shown} />);
+  expect(await screen.findByRole('tab', { name: 'Cardio', selected: true })).toBeVisible();
+  expect(shown).toHaveBeenCalledTimes(1);
+
+  // The route clears the request once shown; the next request switches back to Cardio.
+  await screen.rerender(withProviders(<TrainingTabScreen onRequestShown={shown} />));
+  await fireEvent.press(screen.getByRole('tab', { name: 'Sessions' }));
+  expect(screen.getByRole('tab', { name: 'Sessions', selected: true })).toBeVisible();
+  await screen.rerender(
+    withProviders(<TrainingTabScreen requestedSection="cardio" onRequestShown={shown} />),
+  );
+  expect(screen.getByRole('tab', { name: 'Cardio', selected: true })).toBeVisible();
+  expect(shown).toHaveBeenCalledTimes(2);
 });
 
 test('Exercises searches the library and opens an exercise', async () => {
