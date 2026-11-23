@@ -55,6 +55,52 @@ export interface ZoneDraft {
   max: string;
 }
 
+export const CARDIO_ZONE_NUMBERS = [1, 2, 3, 4, 5];
+export const CARDIO_ZONE_BPM = { min: 20, max: 250 };
+export const CARDIO_MAX_HEART_RATE = { min: 100, max: 250 };
+export const CARDIO_GOAL_MINUTES = { min: 1, max: 10_080 };
+
+export function cardioZoneDrafts(preferences: CardioPreferences): ZoneDraft[] {
+  return CARDIO_ZONE_NUMBERS.map((zone) => {
+    const saved = preferences.heart_rate_zones.find((item) => item.zone === zone);
+    return { zone, min: saved?.min_bpm.toString() ?? '', max: saved?.max_bpm.toString() ?? '' };
+  });
+}
+
+export function validCardioInteger(value: number, { min, max }: { min: number; max: number }) {
+  return Number.isInteger(value) && value >= min && value <= max;
+}
+
+export function parseCardioZoneRanges(zones: ZoneDraft[]) {
+  if (zones.every(({ min, max }) => min === '' && max === '')) return [];
+  if (zones.some(({ min, max }) => !min.trim() || !max.trim())) {
+    throw new Error('Enter a minimum and maximum for all five zones.');
+  }
+  const ranges = zones.map(({ zone, min, max }) => ({
+    zone,
+    min_bpm: Number(min),
+    max_bpm: Number(max),
+  }));
+  if (
+    ranges.some(
+      ({ min_bpm, max_bpm }) =>
+        !validCardioInteger(min_bpm, CARDIO_ZONE_BPM) ||
+        !validCardioInteger(max_bpm, CARDIO_ZONE_BPM),
+    )
+  ) {
+    throw new Error('Enter whole heart rates from 20 to 250 bpm.');
+  }
+  if (
+    ranges.some(
+      ({ min_bpm, max_bpm }, index) =>
+        min_bpm > max_bpm || (index > 0 && ranges[index - 1].max_bpm >= min_bpm),
+    )
+  ) {
+    throw new Error('Zone ranges must increase without overlapping.');
+  }
+  return ranges;
+}
+
 /** Share of maximum heart rate where each of the five zones starts, then where zone 5 ends. */
 const ZONE_BANDS = [0.5, 0.6, 0.7, 0.8, 0.9, 1];
 
@@ -95,8 +141,8 @@ export function invalidZoneFields(zones: ZoneDraft[]): Set<string> {
   const invalid = new Set<string>();
   if (!zones.some((zone) => zone.min !== '' || zone.max !== '')) return invalid;
   zones.forEach((zone, index) => {
-    if (zone.min === '') invalid.add(`${zone.zone}:min`);
-    if (zone.max === '') invalid.add(`${zone.zone}:max`);
+    if (!validCardioInteger(Number(zone.min), CARDIO_ZONE_BPM)) invalid.add(`${zone.zone}:min`);
+    if (!validCardioInteger(Number(zone.max), CARDIO_ZONE_BPM)) invalid.add(`${zone.zone}:max`);
     if (zone.min !== '' && zone.max !== '' && Number(zone.min) > Number(zone.max)) {
       invalid.add(`${zone.zone}:min`);
       invalid.add(`${zone.zone}:max`);

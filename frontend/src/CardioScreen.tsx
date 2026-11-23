@@ -9,6 +9,8 @@ import type {
   Exercise,
   PersonalRecord,
 } from './types';
+import { cardioMetricFields, emptyCardioSession, hasCardioMetrics } from './cardioForm';
+import { cardioSessionUpdateFromScan } from './cardioScreenshot';
 import { savedCardioRecordsToast } from './cardioRecords';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { CardioTrendCard } from './CardioTrendCard';
@@ -62,31 +64,8 @@ export function CardioScreen({
 }) {
   const tips = useTips();
   const cardioExercises = exercises.filter((exercise) => exercise.kind === 'cardio');
-  const defaultExercise =
-    cardioExercises.find(
-      (exercise) => exercise.name.toLocaleLowerCase() === 'incline treadmill walking',
-    ) ??
-    cardioExercises[0] ??
-    null;
   const weightUnit = useWeightUnit();
-  const empty: CardioSessionInput = {
-    session_date: localDate(),
-    exercise_id: defaultExercise?.id ?? null,
-    activity_type: defaultExercise?.name ?? '',
-    duration_minutes: 30,
-    calories_kcal: null,
-    average_heart_rate_bpm: null,
-    distance_km: null,
-    average_speed_kph: null,
-    incline_percent: null,
-    average_power_watts: null,
-    average_mets: null,
-    elevation_gain_m: null,
-    intensity: null,
-    zone: null,
-    qualifies_zone2: false,
-    notes: null,
-  };
+  const empty = emptyCardioSession(cardioExercises, localDate());
   const [overview, setOverview] = useState<CardioOverview | null>(null);
   const [zoneSettingsOpen, setZoneSettingsOpen] = useState(false);
   const [draft, setDraft] = useState<CardioSessionInput>(empty);
@@ -159,35 +138,12 @@ export function CardioScreen({
     try {
       const scan = await api.scanCardioScreenshot(file);
       tips.learn('cardio');
-      const scannedExercise = scan.activity_type
-        ? cardioExercises.find(
-            (exercise) =>
-              exercise.name.toLocaleLowerCase() === scan.activity_type?.toLocaleLowerCase(),
-          )
-        : null;
-      setDraft((current) => ({
-        ...current,
-        session_date: scan.session_date ?? current.session_date,
-        exercise_id: scannedExercise?.id ?? current.exercise_id,
-        activity_type: scannedExercise?.name ?? current.activity_type,
-        duration_minutes: scan.duration_minutes ?? current.duration_minutes,
-        calories_kcal: scan.calories_kcal,
-        average_heart_rate_bpm: scan.average_heart_rate_bpm,
-        distance_km: scan.distance_km,
-        average_speed_kph: scan.average_speed_kph,
-        incline_percent: null,
-        average_power_watts: null,
-        average_mets: null,
-        elevation_gain_m: scan.elevation_gain_m ?? null,
-      }));
+      const { update, warning } = cardioSessionUpdateFromScan(scan, cardioExercises);
+      setDraft((current) => ({ ...current, ...update }));
       const scanned = scan.fields_found.join(', ');
-      const activityWarning =
-        scan.activity_type && !scannedExercise
-          ? ` ${scan.activity_type} is not in the activity list, so the current activity was kept.`
-          : '';
       setScanStatus({
-        message: `Scanned ${scanned}.${activityWarning}${scan.warning ? ` ${scan.warning}` : ''} Review the fields below, then add the session.`,
-        warning: Boolean(scan.warning || activityWarning),
+        message: `Scanned ${scanned}.${warning ? ` ${warning}` : ''} Review the fields below, then add the session.`,
+        warning: Boolean(warning),
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not scan that screenshot.');
@@ -410,129 +366,31 @@ export function CardioScreen({
                 }
               />
             </label>
-            <label>
-              Calories burned (kcal)
-              <input
-                type="number"
-                min="0"
-                max="100000"
-                step="1"
-                inputMode="numeric"
-                value={draft.calories_kcal ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, calories_kcal: numberOrNull(event.target.value) })
-                }
-                placeholder="e.g. 350"
-              />
-            </label>
-            <label>
-              Average HR (bpm)
-              <input
-                type="number"
-                min="20"
-                max="250"
-                step="1"
-                inputMode="numeric"
-                value={draft.average_heart_rate_bpm ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_heart_rate_bpm: numberOrNull(event.target.value) })
-                }
-                placeholder="e.g. 142"
-              />
-            </label>
-            <label>
-              Distance (km)
-              <input
-                type="number"
-                min="0"
-                max="10000"
-                step="0.01"
-                inputMode="decimal"
-                value={draft.distance_km ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, distance_km: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            <label>
-              Average speed (km/h)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.average_speed_kph ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_speed_kph: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            <label>
-              Incline (%)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.incline_percent ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, incline_percent: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            {(draft.activity_type.toLocaleLowerCase().includes('cycl') ||
-              draft.activity_type.toLocaleLowerCase().includes('bike')) && (
-              <label>
-                Average power (watts)
-                <input
-                  type="number"
-                  min="1"
-                  max="3000"
-                  step="1"
-                  inputMode="numeric"
-                  value={draft.average_power_watts ?? ''}
-                  onChange={(event) =>
-                    setDraft({ ...draft, average_power_watts: numberOrNull(event.target.value) })
-                  }
-                  placeholder="Optional"
-                />
-              </label>
+            {cardioMetricFields(draft.activity_type).map(
+              ({ key, label, min, max, step, placeholder }) => (
+                <label key={key}>
+                  {key === 'calories_kcal' ? 'Calories burned (kcal)' : label}
+                  <input
+                    type="number"
+                    min={min}
+                    max={max}
+                    step={step}
+                    inputMode={step === 1 ? 'numeric' : 'decimal'}
+                    value={draft[key] ?? ''}
+                    onChange={(event) =>
+                      setDraft({ ...draft, [key]: numberOrNull(event.target.value) })
+                    }
+                    placeholder={
+                      key === 'calories_kcal'
+                        ? 'e.g. 350'
+                        : key === 'average_heart_rate_bpm'
+                          ? 'e.g. 142'
+                          : (placeholder ?? 'Optional')
+                    }
+                  />
+                </label>
+              ),
             )}
-            <label>
-              Elevation gain (m)
-              <input
-                type="number"
-                min="0"
-                max="30000"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.elevation_gain_m ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, elevation_gain_m: numberOrNull(event.target.value) })
-                }
-                placeholder="Auto from incline"
-              />
-            </label>
-            <label>
-              Average MET
-              <input
-                type="number"
-                min="0.1"
-                max="50"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.average_mets ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_mets: numberOrNull(event.target.value) })
-                }
-                placeholder="Auto"
-              />
-            </label>
           </div>
           <p className="cardio-calorie-hint">
             Performance metrics are optional. For calories, prefer your watch or machine’s active
@@ -646,18 +504,7 @@ export function CardioScreen({
                       onClick={() => setMetricSession(session)}
                       aria-label={`Edit performance metrics for ${session.activity_type} on ${session.session_date}`}
                     >
-                      {[
-                        session.calories_kcal,
-                        session.average_heart_rate_bpm,
-                        session.distance_km,
-                        session.average_speed_kph,
-                        session.incline_percent,
-                        session.average_power_watts,
-                        session.average_mets,
-                        session.elevation_gain_m,
-                      ].some((value) => value != null)
-                        ? 'Edit metrics'
-                        : 'Log metrics'}
+                      {hasCardioMetrics(session) ? 'Edit metrics' : 'Log metrics'}
                     </button>
                     <button
                       type="button"

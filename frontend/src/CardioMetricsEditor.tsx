@@ -3,14 +3,12 @@ import type { CardioMetricsInput, CardioSession } from './types';
 import { PopupDialog } from './PopupDialog';
 import { prettyDate } from './appShared';
 
-function optionalNumber(value: string): number | null {
-  return value.trim() === '' ? null : Number(value);
-}
-
-/** What a blank field falls back to: the calculated value when there is one. */
-function autoPlaceholder(estimate: number | null | undefined): string {
-  return estimate == null ? 'Optional' : `Auto · ${estimate.toLocaleString()}`;
-}
+import {
+  cardioMetricAutoPlaceholder,
+  cardioMetricDraft,
+  cardioMetricFields,
+  parseCardioMetrics,
+} from './cardioForm';
 
 export function CardioMetricsEditor({
   session,
@@ -21,14 +19,7 @@ export function CardioMetricsEditor({
   onClose: () => void;
   onSave: (metrics: CardioMetricsInput) => Promise<void>;
 }) {
-  const [calories, setCalories] = useState(session.calories_kcal?.toString() ?? '');
-  const [heartRate, setHeartRate] = useState(session.average_heart_rate_bpm?.toString() ?? '');
-  const [distance, setDistance] = useState(session.distance_km?.toString() ?? '');
-  const [speed, setSpeed] = useState(session.average_speed_kph?.toString() ?? '');
-  const [incline, setIncline] = useState(session.incline_percent?.toString() ?? '');
-  const [power, setPower] = useState(session.average_power_watts?.toString() ?? '');
-  const [mets, setMets] = useState(session.average_mets?.toString() ?? '');
-  const [elevation, setElevation] = useState(session.elevation_gain_m?.toString() ?? '');
+  const [draft, setDraft] = useState(() => cardioMetricDraft(session));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formId = useId();
@@ -57,16 +48,7 @@ export function CardioMetricsEditor({
           setSaving(true);
           setError(null);
           try {
-            await onSave({
-              calories_kcal: optionalNumber(calories),
-              average_heart_rate_bpm: optionalNumber(heartRate),
-              distance_km: optionalNumber(distance),
-              average_speed_kph: optionalNumber(speed),
-              incline_percent: optionalNumber(incline),
-              average_power_watts: optionalNumber(power),
-              average_mets: optionalNumber(mets),
-              elevation_gain_m: optionalNumber(elevation),
-            });
+            await onSave(parseCardioMetrics(draft));
             onClose();
           } catch (reason) {
             setError(reason instanceof Error ? reason.message : 'Could not save cardio metrics.');
@@ -80,107 +62,27 @@ export function CardioMetricsEditor({
           min
         </p>
         <div className="cardio-metric-fields">
-          <label>
-            Calories (kcal)
-            <input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              max="100000"
-              step="1"
-              value={calories}
-              onChange={(event) => setCalories(event.target.value)}
-            />
-          </label>
-          <label>
-            Average HR (bpm)
-            <input
-              type="number"
-              inputMode="numeric"
-              min="20"
-              max="250"
-              step="1"
-              value={heartRate}
-              onChange={(event) => setHeartRate(event.target.value)}
-            />
-          </label>
-          <label>
-            Distance (km)
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max="10000"
-              step="0.01"
-              value={distance}
-              onChange={(event) => setDistance(event.target.value)}
-            />
-          </label>
-          <label>
-            Average speed (km/h)
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max="100"
-              step="0.1"
-              value={speed}
-              onChange={(event) => setSpeed(event.target.value)}
-            />
-          </label>
-          <label>
-            Incline (%)
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max="100"
-              step="0.1"
-              value={incline}
-              onChange={(event) => setIncline(event.target.value)}
-            />
-          </label>
-          {(session.activity_type.toLocaleLowerCase().includes('cycl') ||
-            session.activity_type.toLocaleLowerCase().includes('bike')) && (
-            <label>
-              Average power (watts)
+          {cardioMetricFields(session.activity_type).map(({ key, label, min, max, step }) => (
+            <label key={key}>
+              {label}
               <input
                 type="number"
-                inputMode="numeric"
-                min="1"
-                max="3000"
-                step="1"
-                value={power}
-                onChange={(event) => setPower(event.target.value)}
+                inputMode={step === 1 ? 'numeric' : 'decimal'}
+                min={min}
+                max={max}
+                step={step}
+                value={draft[key]}
+                onChange={(event) => setDraft({ ...draft, [key]: event.target.value })}
+                placeholder={
+                  key === 'elevation_gain_m'
+                    ? cardioMetricAutoPlaceholder(session.estimated_elevation_gain_m)
+                    : key === 'average_mets'
+                      ? cardioMetricAutoPlaceholder(session.estimated_mets)
+                      : undefined
+                }
               />
             </label>
-          )}
-          <label>
-            Elevation gain (m)
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              max="30000"
-              step="0.1"
-              value={elevation}
-              onChange={(event) => setElevation(event.target.value)}
-              placeholder={autoPlaceholder(session.estimated_elevation_gain_m)}
-            />
-          </label>
-          <label>
-            Average MET
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0.1"
-              max="50"
-              step="0.1"
-              value={mets}
-              onChange={(event) => setMets(event.target.value)}
-              placeholder={autoPlaceholder(session.estimated_mets)}
-            />
-          </label>
+          ))}
         </div>
         <p className="cardio-metric-hint">All performance fields are optional.</p>
         {error && <p className="inline-error">{error}</p>}
