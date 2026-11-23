@@ -100,7 +100,7 @@ export function MenuButton({
   );
 }
 
-function menuItems(items: MenuItem[]): ReactNode {
+export function menuItems(items: MenuItem[]): ReactNode {
   return items.map((item, index) =>
     'items' in item ? (
       <Menu key={`${index}-${item.label}`} label={item.label}>
@@ -119,7 +119,7 @@ function menuItems(items: MenuItem[]): ReactNode {
 }
 
 /** The same items for the menu sheet: a submenu opens a second sheet. */
-function sheetOptions(items: MenuItem[]): MenuOption[] {
+export function sheetOptions(items: MenuItem[]): MenuOption[] {
   return items.map((item) =>
     'items' in item
       ? { label: item.label, onPress: () => showMenu(item.label, sheetOptions(item.items)) }
