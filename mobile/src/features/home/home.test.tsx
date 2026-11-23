@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
-import { Alert, Platform } from 'react-native';
+import { Alert, Platform, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import {
@@ -400,6 +400,15 @@ test('the date line reads as the web, even where the combined format adds a comm
   } finally {
     format.mockRestore();
   }
+});
+
+test('large text moves the header buttons to their own row instead of cutting the title', async () => {
+  await open();
+  const title = screen.getByRole('header', { name: 'Home' });
+  const row = title.parent as unknown as { props: { style: unknown } };
+  // The title keeps its own width and the row wraps, so the buttons go below when they don't fit.
+  expect(StyleSheet.flatten(title.props.style)).toMatchObject({ flexShrink: 0, maxWidth: '100%' });
+  expect(StyleSheet.flatten(row.props.style as never)).toMatchObject({ flexWrap: 'wrap' });
 });
 
 test('Edit split opens the split screen', async () => {

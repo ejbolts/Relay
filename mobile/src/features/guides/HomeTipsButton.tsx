@@ -194,15 +194,17 @@ export function HomeTipsButton() {
 }
 
 const styles = StyleSheet.create({
-  pillTouch: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  pillTouch: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  // 22 pt at the default size; grows with large text instead of clipping the count.
   pill: {
-    height: 22,
+    minHeight: 22,
+    paddingVertical: 2,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
     paddingLeft: 6,
     paddingRight: 8,
-    borderRadius: 11,
+    borderRadius: 999,
   },
   pillText: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
   action: {
