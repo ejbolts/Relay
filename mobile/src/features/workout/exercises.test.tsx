@@ -217,6 +217,11 @@ describe('swapping an exercise', () => {
     expect(screen.getByText('No close alternatives')).toBeVisible();
     await fireEvent.press(screen.getByRole('button', { name: 'Browse all exercises' }));
     expect(screen.getByText('Swap exercise')).toBeVisible();
+    // One tap swaps once the saved machines are known to have none for it.
+    await waitFor(() =>
+      expect(apiGet).toHaveBeenCalledWith('/api/machine-photos', expect.anything()),
+    );
+    await act(async () => undefined);
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' }));
     expect(screen.getByText('Swapped from Bench Press')).toBeVisible();
     expect(readActiveWorkoutDraft(deviceStorage)?.movements.map((item) => item.exerciseId)).toEqual(

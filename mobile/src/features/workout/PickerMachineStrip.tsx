@@ -15,6 +15,7 @@ import type { Exercise, MachinePhotoUsage } from '../../../../frontend/src/types
 import { localDate } from '../../../../frontend/src/utils';
 import { useAuthorisedImage } from '../../data/authorisedImage';
 import { Icon } from '../../ui/Icon';
+import { isToastAccountCurrent, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { askForMachinePhoto, uploadMachinePhoto } from './machineMedia';
 
@@ -43,26 +44,33 @@ export function PickerMachineStrip({
   const [today] = useState(localDate);
   const [saving, setSaving] = useState(false);
 
-  const add = () =>
+  // The photo belongs to the account it was started on: nothing is sent, published or shown
+  // once another account (or a new session) has signed in.
+  const add = () => {
+    const account = toastAccount();
     askForMachinePhoto((file, caption) => {
+      if (!isToastAccountCurrent(account)) return;
       setSaving(true);
       void uploadMachinePhoto(exercise.id, file, caption, [])
-        .then((photo) =>
+        .then((photo) => {
+          if (!isToastAccountCurrent(account)) return;
           onAdded({
             ...photo,
             exercise_name: exercise.name,
             workout_count: 0,
             last_used_date: null,
-          }),
-        )
-        .catch((reason) =>
+          });
+        })
+        .catch((reason) => {
+          if (!isToastAccountCurrent(account)) return;
           Alert.alert(
             'Photo not saved',
             reason instanceof Error ? reason.message : 'Could not save the photo.',
-          ),
-        )
+          );
+        })
         .finally(() => setSaving(false));
     });
+  };
 
   return (
     <ScrollView

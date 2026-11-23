@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   FlatList,
   Modal,
   Platform,
@@ -35,7 +36,8 @@ import type {
 import { CATEGORY_LABELS } from '../../../../frontend/src/trainingSummary';
 import { localDate } from '../../../../frontend/src/utils';
 import { supersetGroupName } from '../../../../frontend/src/workoutSupersets';
-import { Button } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
+import { Button, errorMessage } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
@@ -103,7 +105,18 @@ export function ExercisePicker({
   const client = useQueryClient();
   // Swapping offers the replacement's machines too, as the web's Switch exercise picker does.
   const machinesOn = chooseMachines;
-  const allMachines = useAllMachinePhotos(visible && machinesOn).data;
+  const machinesQuery = useAllMachinePhotos(visible && machinesOn);
+  const allMachines = machinesQuery.data;
+  // Until the saved machines are known, a picked replacement can't be swapped on one tap: it may
+  // have machines to choose from.
+  const catalogKnown = !machinesOn || allMachines !== undefined;
+  const catalogProblem = catalogKnown
+    ? null
+    : waitingForNetwork(machinesQuery)
+      ? OFFLINE_MESSAGE
+      : machinesQuery.isError
+        ? errorMessage(machinesQuery.error)
+        : null;
   const savedMachines = useMemo(
     () =>
       machinesOn ? machinesByExercise(allMachines ?? []) : new Map<string, MachinePhotoUsage[]>(),
@@ -112,6 +125,14 @@ export function ExercisePicker({
   // Only choices made here; a picked exercise otherwise starts on its last-used machine.
   const [machineChoices, setMachineChoices] = useState<ExerciseMachineChoices>({});
   const [openMachinesId, setOpenMachinesId] = useState<string | null>(null);
+  // A photo saved after the picker closed, or after another pick, mustn't change the picks.
+  const [session, setSession] = useState(0);
+  const sessionRef = useRef(session);
+  const selectedRef = useRef(selected);
+  useEffect(() => {
+    sessionRef.current = session;
+    selectedRef.current = selected;
+  }, [session, selected]);
   const resolvedChoices = resolveMachineChoices(
     selected.map((exercise) => exercise.id),
     savedMachines,
@@ -142,13 +163,15 @@ export function ExercisePicker({
     setSelected([]);
     setMachineChoices({});
     setOpenMachinesId(null);
+    setSession((current) => current + 1);
     onClose();
   };
   const toggle = (exercise: Exercise) => {
     haptics.selection();
-    // One tap swaps, unless the replacement has saved machines: then it is picked with its
-    // last-used machine and its machines open, and Swap exercise confirms the choice.
-    if (swap && !savedMachines.get(exercise.id)?.length) {
+    // One tap swaps when the replacement is known to have no saved machines. Otherwise it is
+    // picked with its last-used machine and its machines open (once they have loaded), and Swap
+    // exercise confirms the choice.
+    if (swap && catalogKnown && !savedMachines.get(exercise.id)?.length) {
       onAdd([exercise], {});
       close();
       return;
@@ -185,12 +208,19 @@ export function ExercisePicker({
     );
     if (!picked) setSelected((current) => (swap ? [exercise] : [...current, exercise]));
   };
+  /**
+   * A machine photographed from the strip, for the account that took it (the strip checks).
+   * `session` and `selected` here are as they were when the photo was started: the new machine
+   * is picked only if the picker is still open on the same picks.
+   */
   const machineAdded = (exercise: Exercise, photo: MachinePhotoUsage) => {
-    client.setQueryData<MachinePhotoUsage[]>(loggerKeys.allMachines, (current) => [
-      ...(current ?? []),
-      photo,
-    ]);
+    // A cleared list stays empty, to be read again, rather than holding only this machine.
+    client.setQueryData<MachinePhotoUsage[]>(loggerKeys.allMachines, (current) =>
+      current ? [...current, photo] : current,
+    );
     void client.invalidateQueries({ queryKey: loggerKeys.machines(exercise.id) });
+    const ids = (items: Exercise[]) => items.map((item) => item.id).join();
+    if (sessionRef.current !== session || ids(selectedRef.current) !== ids(selected)) return;
     setMachineChoices((current) =>
       swap ? { [exercise.id]: photo.id } : { ...current, [exercise.id]: photo.id },
     );
@@ -512,12 +542,40 @@ export function ExercisePicker({
           <View
             style={[styles.footer, { borderColor: colors.line, paddingBottom: insets.bottom + 10 }]}
           >
+            {!catalogKnown && (
+              <View style={styles.catalogStatus} accessibilityLiveRegion="polite">
+                {catalogProblem ? (
+                  <>
+                    <Text
+                      accessibilityRole="alert"
+                      style={[type.footnote, { color: colors.danger, flex: 1 }]}
+                    >
+                      {catalogProblem}
+                    </Text>
+                    <Button
+                      label="Try again"
+                      variant="secondary"
+                      size="small"
+                      onPress={() => void machinesQuery.refetch()}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <ActivityIndicator color={colors.muted} />
+                    <Text style={[type.footnote, { color: colors.muted, flex: 1 }]}>
+                      Loading machines…
+                    </Text>
+                  </>
+                )}
+              </View>
+            )}
             <Button
-              label="Swap exercise"
+              label={catalogKnown ? 'Swap exercise' : 'Swap without choosing a machine'}
               icon={{ sf: 'arrow.left.arrow.right', md: 'swap-horiz' }}
+              variant={catalogKnown ? 'primary' : 'secondary'}
               block
               onPress={() => {
-                onAdd([selected[0]], resolvedChoices);
+                onAdd([selected[0]], catalogKnown ? resolvedChoices : {});
                 close();
               }}
             />
@@ -665,6 +723,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  catalogStatus: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 10 },
   create: {
     flexDirection: 'row',
     alignItems: 'center',
