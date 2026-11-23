@@ -74,7 +74,7 @@ jest.mock('../../data/queries', () => {
 const user = { id: 'u1', username: 'preview' } as Awaited<ReturnType<typeof currentUser>>;
 let client: QueryClient;
 let saved: WorkoutInput[];
-let alerts: { title: string; message?: string; buttons: AlertButton[] }[];
+let alerts: { title: string; message?: string | null; buttons: AlertButton[] }[];
 
 /** 9:00 local time on 23 November 2026. */
 const nine = new Date(2026, 10, 23, 9, 0).getTime();
@@ -100,7 +100,7 @@ beforeEach(() => {
     return { id: 'saved-1' } as TrackedWorkout;
   });
   jest.spyOn(Alert, 'alert').mockImplementation((title, message, buttons) => {
-    alerts.push({ title, message, buttons: buttons ?? [] });
+    alerts.push({ title: title ?? '', message, buttons: buttons ?? [] });
   });
 });
 afterEach(() => client.clear());
