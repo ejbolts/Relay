@@ -46,7 +46,12 @@ jest.mock('../../ui/prompts', () => ({
   showMenu: jest.fn(),
   PromptHost: () => null,
 }));
-jest.mock('../../ui/Toast', () => ({ showToast: jest.fn(), ToastHost: () => null }));
+jest.mock('../../ui/Toast', () => ({
+  showToast: jest.fn(),
+  ToastHost: () => null,
+  toastAccount: () => 'u1',
+  isToastAccountCurrent: () => true,
+}));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/livePresence', () => ({
   connectLivePresence: jest.fn(() => ({ report: jest.fn(), stop: jest.fn() })),
