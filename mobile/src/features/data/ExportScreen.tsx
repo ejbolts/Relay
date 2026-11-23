@@ -19,7 +19,7 @@ import { Button, errorMessage } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { useBodyMeasurements } from '../body/bodyQueries';
 import { ChoiceRow, Section, SwitchRow, SettingsPage } from '../settings/SettingsList';
-import { downloadFile, exportPaths, shareFiles } from './dataApi';
+import { downloadFiles, exportPaths, shareFiles } from './dataApi';
 import { dataIcons } from './icons';
 
 const TIME_FRAMES = TIME_RANGE_OPTIONS.map((option) => ({
@@ -46,6 +46,15 @@ export function ExportScreen() {
   const bodyweightDates = (measurements.data ?? []).map((item) => item.measurement_date);
   const dates = [...(workouts ? workoutDates : []), ...(bodyweight ? bodyweightDates : [])];
   const range = dateRangeForDates(dates, timeFrame);
+  // A time frame counts back from the latest selected entry, so it needs those dates first;
+  // without them the range would be empty and the export would cover all time.
+  const anchors =
+    timeFrame === 'all'
+      ? []
+      : [...(workouts ? [history, dashboard] : []), ...(bodyweight ? [measurements] : [])];
+  const anchorsFailed = anchors.filter((query) => query.error && query.data === undefined);
+  const anchorsLoading = anchors.some((query) => query.data === undefined && !query.error);
+  const ready = !anchorsLoading && anchorsFailed.length === 0;
 
   function change(apply: () => void) {
     apply();
@@ -53,19 +62,22 @@ export function ExportScreen() {
   }
 
   async function share() {
-    if (busy || (!workouts && !bodyweight)) return;
+    if (busy || !ready || (!workouts && !bodyweight)) return;
     setBusy(true);
     setError(null);
     try {
       const names = exportFileNames(range, localDate());
       const failure = 'Could not export your data. Try again.';
       // Prepare every selected file before sharing, so a failed request creates no partial export.
-      const files = await Promise.all([
-        workouts ? downloadFile(exportPaths.workouts(range), names.workouts, failure) : null,
-        bodyweight ? downloadFile(exportPaths.bodyweight(range), names.bodyweight, failure) : null,
-      ]);
+      const files = await downloadFiles(
+        [
+          ...(workouts ? [{ path: exportPaths.workouts(range), name: names.workouts }] : []),
+          ...(bodyweight ? [{ path: exportPaths.bodyweight(range), name: names.bodyweight }] : []),
+        ],
+        failure,
+      );
       await shareFiles(
-        files.filter((file) => file !== null).map((file) => ({ file, type: 'text/csv' })),
+        files.map((file) => ({ file, type: 'text/csv' })),
         'Export Relay data',
       );
     } catch (caught) {
@@ -120,10 +132,22 @@ export function ExportScreen() {
             {error}
           </Text>
         )}
+        {anchorsFailed.length > 0 && (
+          <>
+            <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
+              Couldn’t load your entries to count this time frame back from.
+            </Text>
+            <Button
+              variant="secondary"
+              label="Try again"
+              onPress={() => anchorsFailed.forEach((query) => void query.refetch())}
+            />
+          </>
+        )}
         <Button
-          label={busy ? 'Preparing…' : 'Share CSV'}
+          label={busy ? 'Preparing…' : anchorsLoading ? 'Loading…' : 'Share CSV'}
           icon={dataIcons.share}
-          disabled={busy || (!workouts && !bodyweight)}
+          disabled={busy || !ready || (!workouts && !bodyweight)}
           onPress={() => void share()}
         />
       </View>
