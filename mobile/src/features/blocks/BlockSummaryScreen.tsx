@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   deloadBlockInput,
   deloadMessage,
@@ -31,6 +31,7 @@ import { Note } from '../training/parts';
 import { createBlock, selectBlock, useBlockSummary, useTrainingBlocks } from './blockQueries';
 import { ChoiceTiles, FieldLabel } from './parts';
 import { haptics } from '../../ui/haptics';
+import { TextField } from '../../ui/controls';
 
 type View_ = 'summary' | 'next' | 'deload';
 
@@ -200,17 +201,12 @@ function BlockSummary({ block, config }: { block: TrainingBlock; config: Trainin
           <>
             <View style={{ gap: 8 }}>
               <FieldLabel>Block name</FieldLabel>
-              <TextInput
+              <TextField
                 accessibilityLabel="Block name"
                 value={name}
                 maxLength={80}
                 editable={!busy}
                 onChangeText={setName}
-                style={[
-                  type.body,
-                  styles.field,
-                  { backgroundColor: colors.surface2, borderRadius: radius.md, color: colors.text },
-                ]}
               />
             </View>
             <ChoiceTiles

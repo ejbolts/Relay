@@ -1,16 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
-import {
-  Alert,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
 import { blockColor } from '../../../../frontend/src/blockColors';
 import {
   blockFormDraft,
@@ -40,6 +31,7 @@ import { BlockColorField } from './BlockColorField';
 import { nativeBlockColor } from './BlockScopeChip';
 import { ChoiceTiles, FieldLabel, HeaderTextButton } from './parts';
 import { haptics } from '../../ui/haptics';
+import { TextField } from '../../ui/controls';
 
 /** Starts a training block, or edits or removes a saved one, as the web's block form. */
 export function BlockFormScreen({ blockId }: { blockId?: string }) {
@@ -56,7 +48,7 @@ export function BlockFormScreen({ blockId }: { blockId?: string }) {
 }
 
 function BlockForm({ config, editing }: { config: TrainingBlocks; editing: TrainingBlock | null }) {
-  const { colors, type, radius, space } = useTheme();
+  const { colors, type, space } = useTheme();
   const router = useRouter();
   const client = useQueryClient();
   const today = localDate();
@@ -145,20 +137,14 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
       >
         <View style={{ gap: 8 }}>
           <FieldLabel>Block name</FieldLabel>
-          <TextInput
+          <TextField
             accessibilityLabel="Block name"
             value={draft.name}
             maxLength={80}
             placeholder="e.g. Winter strength"
-            placeholderTextColor={colors.muted}
             editable={!busy}
             autoFocus={!editing}
             onChangeText={(name) => change({ name })}
-            style={[
-              type.body,
-              styles.field,
-              { backgroundColor: colors.surface2, borderRadius: radius.md, color: colors.text },
-            ]}
           />
         </View>
         <BlockColorField
@@ -218,7 +204,3 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  field: { paddingHorizontal: 12, paddingVertical: 10, minHeight: 44 },
-});
