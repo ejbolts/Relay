@@ -14,6 +14,14 @@ import {
   type ReactNode,
 } from 'react';
 import { Alert, AppState } from 'react-native';
+import { ACTIVE_WORKOUT_SYNC_KEY } from '../../../../frontend/src/activeWorkoutEvents';
+import {
+  ActiveWorkoutSynchronizer,
+  draftSignature,
+  type SharedWorkoutSnapshot,
+  type WorkoutSyncConflict,
+  type WorkoutSyncStatus,
+} from '../../../../frontend/src/activeWorkoutSynchronizer';
 import {
   inactiveWorkoutFinishAt,
   inactiveWorkoutTimes,
@@ -49,6 +57,7 @@ import type { WeightUnit } from '../../../../frontend/src/weightUnits';
 import { loggedSetCount } from '../../../../frontend/src/workoutAutoSave';
 import {
   clearActiveWorkoutDraft,
+  isActiveWorkoutDraft,
   isExpiredEmptyWorkoutDraft,
   readActiveWorkoutDraft,
   writeActiveWorkoutDraft,
@@ -96,6 +105,7 @@ import {
 import { useHistoryBaselines, useWorkoutAutoSave } from './loggerQueries';
 import { forgetOfflineQueries, saveOfflineQueries, seedOfflineQueries } from './offlineQueries';
 import { askForRestAlerts, syncRestAlert } from './restAlerts';
+import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
 import {
   adjustRest as adjustRestRule,
   NO_REST,
@@ -165,6 +175,20 @@ export interface WorkoutApi {
   review: (key: string) => void;
   /** Drops a refused workout that has not synced. */
   discardRefused: (key: string) => void;
+  /** The workout in progress was changed on two devices at once; a choice is needed. */
+  syncConflict: WorkoutSyncConflict | null;
+  /** Whether that choice is showing; closing it leaves a button to bring it back. */
+  syncConflictOpen: boolean;
+  showSyncConflict: (open: boolean) => void;
+  /** Keeps this device's version (true) or the other device's. */
+  resolveSync: (useLocal: boolean) => void;
+  /**
+   * Shows the sync choice inside the calling sheet while it is mounted (a page sheet covers the
+   * app's own). Returns the release.
+   */
+  hostSyncConflict: () => () => void;
+  /** Whether a sheet is showing the sync choice instead of the app. */
+  syncConflictHosted: boolean;
 }
 
 /** The workout just finished, shown in the logger sheet until it is closed. */
@@ -210,10 +234,10 @@ export interface LoggerApi {
     unticked: number;
   };
   /**
-   * Queues the workout for saving (offline too) and shows its summary. `endAt` ends a workout
-   * left running at its last activity.
+   * Agrees the workout with the server's shared copy, then queues it for saving (offline too) and
+   * shows its summary. `endAt` ends a workout left running at its last activity.
    */
-  finish: (endAt?: number) => FinishResult;
+  finish: (endAt?: number) => Promise<FinishResult>;
   closeFinished: () => void;
 }
 
@@ -274,6 +298,12 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       refused: [],
       review: () => undefined,
       discardRefused: () => undefined,
+      syncConflict: null,
+      syncConflictOpen: false,
+      showSyncConflict: () => undefined,
+      resolveSync: () => undefined,
+      hostSyncConflict: () => () => undefined,
+      syncConflictHosted: false,
     }),
     [router],
   );
@@ -283,6 +313,12 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       <LoggerApiContext.Provider value={published?.logger ?? null}>
         {user && <WorkoutEngine key={user.id} user={user} publish={setEngine} />}
         {children}
+        {published && !published.workout.syncConflictHosted && (
+          <>
+            <SyncConflictSheet />
+            <SyncConflictButton />
+          </>
+        )}
         <ToastHost bottom={96} />
       </LoggerApiContext.Provider>
     </WorkoutContext.Provider>
@@ -333,6 +369,20 @@ function queueFinishedWorkout(
   } catch (error) {
     return error instanceof Error ? error.message : 'Could not finish the workout.';
   }
+}
+
+/** The server's shared copy, checked before anything acts on it. */
+function snapshotOf(value: unknown): SharedWorkoutSnapshot {
+  const snapshot = value as Partial<SharedWorkoutSnapshot> | null;
+  if (
+    !snapshot ||
+    typeof snapshot !== 'object' ||
+    !Number.isInteger(snapshot.revision) ||
+    snapshot.revision! < 0 ||
+    (snapshot.draft !== null && typeof snapshot.draft !== 'object')
+  )
+    throw new Error('Relay sent an unexpected workout.');
+  return { revision: snapshot.revision!, draft: snapshot.draft ?? null };
 }
 
 function sameIds(left: Exercise[], right: Exercise[]) {
@@ -405,11 +455,14 @@ const WorkoutEngine = memo(function WorkoutEngine({
     return [...byId.values()];
   }, [draftExercises, fetchedExercises]);
 
-  // A draft naming an exercise the phone had not cached waits for the exercise list.
-  const [waiting, setWaiting] = useState(initial.kind === 'waiting' ? initial.draft : null);
-  if (waiting && fetchedExercises) {
+  // A draft naming an exercise the phone had not cached (restored, or from another device)
+  // waits for the exercise list to load from the server after it arrived.
+  const [waiting, setWaiting] = useState<{ draft: ActiveWorkoutDraft; since: number } | null>(
+    initial.kind === 'waiting' ? { draft: initial.draft, since: 1 } : null,
+  );
+  if (waiting && fetchedExercises && exercisesQuery.dataUpdatedAt >= waiting.since) {
     setWaiting(null);
-    const restored = loggerFromDraft(waiting, allExercises);
+    const restored = loggerFromDraft(waiting.draft, allExercises);
     if (restored) {
       setLogger(restored);
       setRest(restFromStored(readStoredRestTimer(deviceStorage), restored.clientSessionId));
@@ -435,6 +488,22 @@ const WorkoutEngine = memo(function WorkoutEngine({
     setRest(next);
   }, []);
 
+  // Every stored change reaches the other devices shortly after, as the web's sync does.
+  const syncRef = useRef<ActiveWorkoutSynchronizer | null>(null);
+  const syncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const scheduleSync = useCallback(() => {
+    clearTimeout(syncTimer.current);
+    syncTimer.current = setTimeout(() => void syncRef.current?.sync(), 400);
+  }, []);
+
+  const rememberExercises = useCallback((next: LoggerState) => {
+    const used = next.movements.map((movement) => movement.exercise);
+    if (sameIds(used, draftExercisesRef.current)) return;
+    draftExercisesRef.current = used;
+    writeJson(DRAFT_EXERCISES_KEY, used);
+    setDraftExercises(used);
+  }, []);
+
   /** Stores the live workout synchronously, then shows it. */
   const commit = useCallback(
     (next: LoggerState | null) => {
@@ -446,19 +515,15 @@ const WorkoutEngine = memo(function WorkoutEngine({
           showToast('Could not store this workout on the phone. Keep the app open.');
         }
         writeJson(DRAFT_OWNER_KEY, user.id);
-        const used = next.movements.map((movement) => movement.exercise);
-        if (!sameIds(used, draftExercisesRef.current)) {
-          draftExercisesRef.current = used;
-          writeJson(DRAFT_EXERCISES_KEY, used);
-          setDraftExercises(used);
-        }
+        rememberExercises(next);
       } else {
         clearActiveWorkoutDraft(deviceStorage);
         writeJson(DRAFT_OWNER_KEY, null);
       }
       setLogger(next);
+      scheduleSync();
     },
-    [user.id],
+    [user.id, rememberExercises, scheduleSync],
   );
 
   // A rest that runs out becomes the "rest complete" prompt, with a buzz while the app is open.
@@ -522,6 +587,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
       }),
       onSaved: (workout, item, remaining) => {
         if (remaining === 0) void refreshTraining(client);
+        // The queue no longer owns this session's shared copy.
+        void syncRef.current?.sync();
         setFinished((current) =>
           current && current.sessionId === item.clientSessionId
             ? { ...current, savedId: workout.id }
@@ -749,21 +816,46 @@ const WorkoutEngine = memo(function WorkoutEngine({
     };
   }, [types, typesLoading]);
 
+  const finishing = useRef(false);
   const finish = useCallback(
-    (endAt?: number): FinishResult => {
+    async (endAt?: number): Promise<FinishResult> => {
+      const blocked = (check: ReturnType<typeof checkFinish>) =>
+        check.kind === 'ready'
+          ? null
+          : check.kind === 'blocked'
+            ? check.message
+            : `Choose a machine for every set of ${check.exercise}.`;
+      const before = loggerRef.current;
+      if (!before) return { ok: false, message: 'No workout in progress.' };
+      const precheck = blocked(checkFinish(before, types, typesLoading, Date.now(), endAt));
+      if (precheck) return { ok: false, message: precheck };
+      if (finishing.current) return { ok: false, message: 'This workout is already finishing.' };
+      // The shared copy is brought up to date first, so the save consumes exactly the revision
+      // this phone last agreed with the server. Offline, it saves against the last known one.
+      let shared: Partial<WorkoutInput> = {};
+      finishing.current = true;
+      try {
+        clearTimeout(syncTimer.current);
+        shared = (await syncRef.current?.finishFields()) ?? {};
+      } catch (reason) {
+        return {
+          ok: false,
+          message: reason instanceof Error ? reason.message : 'Could not sync this workout.',
+        };
+      } finally {
+        finishing.current = false;
+      }
       const current = loggerRef.current;
-      if (!current) return { ok: false, message: 'No workout in progress.' };
-      const now = Date.now();
-      const check = checkFinish(current, types, typesLoading, now, endAt);
-      if (check.kind !== 'ready')
+      if (!current || current.clientSessionId !== before.clientSessionId)
         return {
           ok: false,
           message:
-            check.kind === 'blocked'
-              ? check.message
-              : `Choose a machine for every set of ${check.exercise}.`,
+            'Workout updated from another device. Review the latest sets, then finish again.',
         };
-      const payload = finishInput(current, types, check);
+      const now = Date.now();
+      const check = checkFinish(current, types, typesLoading, now, endAt);
+      if (check.kind !== 'ready') return { ok: false, message: blocked(check)! };
+      const payload = { ...shared, ...finishInput(current, types, check) };
       const failed = queueFinishedWorkout(current, payload, user.id, now);
       if (failed) return { ok: false, message: failed };
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -782,6 +874,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
       addedSetKeys.current.clear();
       senderRef.current?.wake();
       setQueue(senderRef.current?.status() ?? EMPTY_QUEUE);
+      void syncRef.current?.sync();
       return { ok: true };
     },
     [types, typesLoading, user.id, allExercises, history, commitRest],
@@ -880,15 +973,16 @@ const WorkoutEngine = memo(function WorkoutEngine({
           text: 'Save workout',
           onPress: () => {
             close();
-            const result = finish(endedAt);
-            if (result.ok) {
+            void finish(endedAt).then((result) => {
+              if (result.ok) {
+                router.push('/workout');
+                return;
+              }
+              // Whatever blocked the save is explained on the workout.
+              resume();
               router.push('/workout');
-              return;
-            }
-            // Whatever blocked the save is explained on the workout.
-            resume();
-            router.push('/workout');
-            Alert.alert("Can't finish yet", result.message);
+              Alert.alert("Can't finish yet", result.message);
+            });
           },
         },
       ],
@@ -916,6 +1010,156 @@ const WorkoutEngine = memo(function WorkoutEngine({
       app?.remove();
     };
   }, [logger, checkInactive]);
+
+  // Another device's version of the workout in progress: stored, then shown. A workout that
+  // ended there closes here; one naming an exercise this phone hasn't loaded waits for it.
+  const showRemote = useCallback(
+    (draft: ActiveWorkoutDraft | null) => {
+      const previous = loggerRef.current;
+      if (!draft) {
+        loggerRef.current = null;
+        setLogger(null);
+        if (previous) {
+          commitRest(NO_REST);
+          addedSetKeys.current.clear();
+          showToast('Workout ended on another device');
+        }
+        return;
+      }
+      const state = loggerFromDraft(draft, allExercises);
+      if (!state) {
+        setWaiting({ draft, since: Date.now() });
+        void client.invalidateQueries({ queryKey: queryKeys.exercises });
+        return;
+      }
+      loggerRef.current = state;
+      setLogger(state);
+      rememberExercises(state);
+      if (previous?.clientSessionId !== state.clientSessionId) {
+        addedSetKeys.current.clear();
+        commitRest(NO_REST);
+      }
+    },
+    [allExercises, client, commitRest, rememberExercises],
+  );
+  const applyRemote = useCallback(
+    (draft: ActiveWorkoutDraft | null): boolean => {
+      if (draftSignature(draft) === draftSignature(readActiveWorkoutDraft(deviceStorage)))
+        return true;
+      if (draft && !isActiveWorkoutDraft(draft))
+        throw new Error('This workout needs a newer version of Relay.');
+      if (draft) {
+        if (!writeActiveWorkoutDraft(draft, deviceStorage)) return false;
+        writeJson(DRAFT_OWNER_KEY, user.id);
+      } else {
+        clearActiveWorkoutDraft(deviceStorage);
+        if (readActiveWorkoutDraft(deviceStorage) !== null) return false;
+        writeJson(DRAFT_OWNER_KEY, null);
+      }
+      showRemote(draft);
+      return true;
+    },
+    [showRemote, user.id],
+  );
+  const applyRef = useRef(applyRemote);
+  // With auto-save on, each synced draft carries the workout the server would save at its
+  // cutoff, worked out here as Save in the inactive-workout prompt would (as on the web).
+  const autoSaveFor = useCallback(
+    (draft: ActiveWorkoutDraft | null): WorkoutInput | undefined => {
+      const state = loggerRef.current;
+      if (appliedAutoSave.current === null || !draft || !state) return undefined;
+      if (draftSignature(loggerToDraft(state, 0)) !== draftSignature(draft)) return undefined;
+      const check = checkFinish(state, types, false, Date.now(), inactiveEndAt(state));
+      return check.kind === 'ready' ? finishInput(state, types, check) : undefined;
+    },
+    [types],
+  );
+  const autoSaveRef = useRef(autoSaveFor);
+  useLayoutEffect(() => {
+    applyRef.current = applyRemote;
+    autoSaveRef.current = autoSaveFor;
+  }, [applyRemote, autoSaveFor]);
+
+  const [syncState, setSyncState] = useState<{
+    status: WorkoutSyncStatus;
+    conflict: WorkoutSyncConflict | null;
+  }>({ status: 'syncing', conflict: null });
+  useEffect(() => {
+    const saved = readJson<{ userId?: string; base?: SharedWorkoutSnapshot }>(
+      ACTIVE_WORKOUT_SYNC_KEY,
+    );
+    const base =
+      saved?.userId === user.id &&
+      Number.isInteger(saved.base?.revision) &&
+      saved.base!.revision >= 0 &&
+      (saved.base!.draft === null || isActiveWorkoutDraft(saved.base!.draft))
+        ? saved.base!
+        : null;
+    const sync = new ActiveWorkoutSynchronizer(
+      {
+        read: async () => snapshotOf(await apiGet<unknown>('/api/active-workout')),
+        put: async (change) => {
+          const autoSave = autoSaveRef.current(change.draft);
+          const result = await apiSend<unknown>('/api/active-workout', 'PUT', {
+            ...change,
+            ...(autoSave && { autoSave }),
+          });
+          return {
+            ...snapshotOf(result),
+            conflict: Boolean((result as { conflict?: boolean }).conflict),
+          };
+        },
+        local: () => readActiveWorkoutDraft(deviceStorage),
+        apply: (draft) => applyRef.current(draft),
+        saveBase: (next) => writeJson(ACTIVE_WORKOUT_SYNC_KEY, { userId: user.id, base: next }),
+        queued: (sessionId) =>
+          Boolean(
+            sessionId &&
+            readFinishedWorkouts(deviceStorage).some(
+              (item) => item.pendingSave.userId === user.id && item.clientSessionId === sessionId,
+            ),
+          ),
+        changed: (status, conflict) => setSyncState({ status, conflict }),
+        // Only an answer from Relay itself is a refusal; no answer, or a proxy's, is offline.
+        connectionFailure: (reason) =>
+          !(reason instanceof ApiError) || [502, 503, 504].includes(reason.status),
+        newId,
+      },
+      base,
+    );
+    syncRef.current = sync;
+    void sync.sync();
+    // Without the web's live connection, the phone checks the shared copy every 15 s while open.
+    const timer = setInterval(() => {
+      if (AppState.currentState === 'active') void sync.sync();
+    }, 15_000);
+    const app = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void sync.sync();
+    });
+    const net = onlineManager.subscribe((online) => {
+      if (online) void sync.sync();
+    });
+    return () => {
+      sync.stop();
+      syncRef.current = null;
+      clearInterval(timer);
+      clearTimeout(syncTimer.current);
+      app?.remove();
+      net();
+    };
+  }, [user.id]);
+  const resolveSync = useCallback((useLocal: boolean) => {
+    void syncRef.current?.resolve(useLocal);
+  }, []);
+  // A conflict shows until it is closed; a later one shows again.
+  const [conflictHidden, setConflictHidden] = useState(false);
+  if (!syncState.conflict && conflictHidden) setConflictHidden(false);
+  const showSyncConflict = useCallback((open: boolean) => setConflictHidden(!open), []);
+  const [conflictHosts, setConflictHosts] = useState(0);
+  const hostSyncConflict = useCallback(() => {
+    setConflictHosts((count) => count + 1);
+    return () => setConflictHosts((count) => count - 1);
+  }, []);
 
   // Refused saves wait for review: reopened in the logger to change and finish again, or dropped.
   const refused = useMemo<RefusedSave[]>(() => {
@@ -1004,8 +1248,30 @@ const WorkoutEngine = memo(function WorkoutEngine({
       refused,
       review,
       discardRefused,
+      syncConflict: syncState.conflict,
+      syncConflictOpen: !!syncState.conflict && !conflictHidden,
+      showSyncConflict,
+      resolveSync,
+      hostSyncConflict,
+      syncConflictHosted: conflictHosts > 0,
     }),
-    [live, start, open, openStartMenu, discard, queue, refused, review, discardRefused],
+    [
+      live,
+      start,
+      open,
+      openStartMenu,
+      discard,
+      queue,
+      refused,
+      review,
+      discardRefused,
+      syncState.conflict,
+      conflictHidden,
+      showSyncConflict,
+      resolveSync,
+      hostSyncConflict,
+      conflictHosts,
+    ],
   );
   const loggerApi = useMemo<LoggerApi>(
     () => ({

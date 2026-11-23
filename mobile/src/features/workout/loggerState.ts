@@ -73,6 +73,12 @@ import { effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
  */
 export interface LoggerState {
   clientSessionId: string;
+  /** A saved workout reopened to log more, which Finish saves over; null for a new workout. */
+  resumingWorkoutId: string | null;
+  /** The saved revision the resumed workout was loaded from, sent back as the save's base. */
+  resumingWorkoutRevision?: number;
+  /** The resumed workout's saved duration, which the live time adds to. */
+  previousDurationMinutes: number;
   startedAt: number;
   lastActiveAt: number;
   inactiveFinishAt: number;
@@ -141,6 +147,8 @@ export function startLogger(options: StartOptions, context: LoggerContext): Logg
   }
   return {
     clientSessionId: options.clientSessionId,
+    resumingWorkoutId: null,
+    previousDurationMinutes: 0,
     startedAt: now,
     lastActiveAt: now,
     inactiveFinishAt: inactiveWorkoutFinishAt(now, now),
@@ -170,6 +178,11 @@ export function loggerToDraft(state: LoggerState, now: number): ActiveWorkoutDra
     version: 1,
     clientSessionId: state.clientSessionId,
     startedAt: state.startedAt,
+    ...(state.resumingWorkoutId && {
+      resumingWorkoutId: state.resumingWorkoutId,
+      resumingWorkoutRevision: state.resumingWorkoutRevision,
+      previousDurationMinutes: state.previousDurationMinutes,
+    }),
     updatedAt: now,
     lastActiveAt: state.lastActiveAt,
     inactiveFinishAt: state.inactiveFinishAt,
@@ -202,19 +215,24 @@ export function loggerToDraft(state: LoggerState, now: number): ActiveWorkoutDra
 }
 
 /**
- * The live workout from a stored draft, or null when the draft belongs to a saved workout being
- * resumed (not supported here yet) or names an exercise the phone does not know.
+ * The live workout from a stored draft (a new workout or a resumed one), or null when the draft
+ * is a finished one or names an exercise the phone does not know.
  */
 export function loggerFromDraft(
   draft: ActiveWorkoutDraft,
   exercises: Exercise[],
 ): LoggerState | null {
-  if (!draft.clientSessionId || draft.resumingWorkoutId || draft.pendingSave) return null;
+  if (!draft.clientSessionId || draft.pendingSave) return null;
   const movements = restoreWorkoutDraftMovements(draft.movements, exercises);
   if (!movements) return null;
   const lastActiveAt = Math.max(draft.startedAt, draft.lastActiveAt ?? draft.updatedAt);
   return {
     clientSessionId: draft.clientSessionId,
+    resumingWorkoutId: draft.resumingWorkoutId ?? null,
+    ...(draft.resumingWorkoutRevision !== undefined && {
+      resumingWorkoutRevision: draft.resumingWorkoutRevision,
+    }),
+    previousDurationMinutes: draft.resumingWorkoutId ? (draft.previousDurationMinutes ?? 0) : 0,
     startedAt: draft.startedAt,
     lastActiveAt,
     inactiveFinishAt:
@@ -275,7 +293,7 @@ export function selectedType(state: LoggerState, types: WorkoutType[]): WorkoutT
   );
 }
 
-/** What the shared finish rules read, for a live (never an edited) workout. */
+/** What the shared finish rules read, for a live or resumed (never an edited) workout. */
 export function finishState(
   state: LoggerState,
   types: WorkoutType[],
@@ -293,16 +311,16 @@ export function finishState(
     types,
     typesLoading,
     editing: false,
-    resumedWorkoutId: null,
+    resumedWorkoutId: state.resumingWorkoutId,
     startedAt: state.startedAt,
-    previousDurationMinutes: 0,
+    previousDurationMinutes: state.previousDurationMinutes,
     durationOverrideMinutes: state.durationOverrideMinutes,
     pause: state.pause,
     editedDurationMinutes: 0,
     startTime: '',
     endTime: '',
     clientSessionId: state.clientSessionId,
-    baseRevision: undefined,
+    baseRevision: state.resumingWorkoutRevision,
     workoutDate: state.workoutDate,
     notes: state.notes,
   };
