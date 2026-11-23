@@ -48,8 +48,9 @@ function useGoalRemoval() {
   const start = useCallback(
     (goal: BodyWeightGoal) => {
       const account = toastAccount();
-      if (!pendingActions.add('goal', goal.id, account)) return;
-      const done = () => pendingActions.remove('goal', goal.id, account);
+      const token = pendingActions.add('goal', goal.id, account);
+      if (!token) return;
+      const done = () => pendingActions.remove(token);
       showToast(
         'Goal removed',
         {
@@ -57,7 +58,19 @@ function useGoalRemoval() {
           run: done,
           onDismiss: () =>
             void bodyGoalApi.remove(goal.id).then(
-              () => void client.invalidateQueries({ queryKey: bodyKeys.goals }).finally(done),
+              () => {
+                // A session that has ended keeps nothing of this; its cache is already gone.
+                if (isToastAccountCurrent(account)) {
+                  // Deleted for certain: drop it from the cache before the pending mark goes, so
+                  // a refresh that fails can't show it again.
+                  client.setQueryData<BodyWeightGoal[]>(bodyKeys.goals, (cached) =>
+                    cached?.filter((entry) => entry.id !== goal.id),
+                  );
+                }
+                done();
+                if (isToastAccountCurrent(account))
+                  void client.invalidateQueries({ queryKey: bodyKeys.goals });
+              },
               () => {
                 done();
                 showToast('Could not remove this goal. It has been restored.', undefined, {

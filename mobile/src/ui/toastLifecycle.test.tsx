@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { AccessibilityInfo, AppState, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { nextSessionEpoch } from '../session/sessionEpoch';
+import { pendingActions } from './pendingActions';
 import { ToastHost, isToastAccountCurrent, showToast, toastAccount } from './Toast';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../testing/memoryKvStore'));
@@ -184,4 +186,43 @@ it('settles an action toast when the app goes to the background', async () => {
   await act(async () => onChange('background'));
   expect(removal.onDismiss).toHaveBeenCalledTimes(1);
   expect(undo()).toBeNull();
+});
+
+it('drops an old toast and its callbacks when the same account signs in again', async () => {
+  const { rerender } = await render(host());
+  const account = toastAccount();
+  const removal = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+  await act(async () => showToast('Goal removed', removal, { account }));
+  expect(undo()).not.toBeNull();
+  // A signs out and back in: a new session of the same account.
+  nextSessionEpoch();
+  mockStatus = { kind: 'signed-out' };
+  await rerender(host());
+  nextSessionEpoch();
+  mockStatus = { kind: 'signed-in', user: { id: 'a' } };
+  await rerender(host());
+  expect(undo()).toBeNull();
+  expect(isToastAccountCurrent(account)).toBe(false);
+  await act(async () => jest.advanceTimersByTime(20000));
+  expect(removal.run).not.toHaveBeenCalled();
+  expect(removal.onDismiss).not.toHaveBeenCalled();
+  // Late work from the old session shows nothing in the new one.
+  await act(async () => showToast('Friend request sent', removal, { account }));
+  expect(screen.queryByText('Friend request sent')).toBeNull();
+});
+
+it('lets only its own token clear a pending removal', () => {
+  const account = toastAccount();
+  const first = pendingActions.add('friend', 'casey', account);
+  expect(first).not.toBeNull();
+  expect(pendingActions.add('friend', 'casey', account)).toBeNull();
+  pendingActions.remove(first!);
+  const second = pendingActions.add('friend', 'casey', account);
+  expect(second).not.toBeNull();
+  // The first removal's late completion arrives: the newer one stays pending.
+  pendingActions.remove(first!);
+  expect(pendingActions.add('friend', 'casey', account)).toBeNull();
+  pendingActions.remove(second!);
+  expect(pendingActions.add('friend', 'casey', account)).not.toBeNull();
+  pendingActions.clear();
 });

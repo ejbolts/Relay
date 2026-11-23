@@ -465,3 +465,39 @@ describe('Android slider adapter', () => {
     warn.mockRestore();
   });
 });
+
+describe('Slider limits', () => {
+  it('gives a two-value range no native stops and warns that it needs three', async () => {
+    Platform.OS = 'android';
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    await wrap(
+      <Slider accessibilityLabel="Two" value={0} min={0} max={10} step={10} onChange={jest.fn()} />,
+    );
+    expect(mockCompose.slider?.steps).toBe(0);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('needs at least three'));
+    warn.mockRestore();
+  });
+
+  it('draws a disabled track for invalid bounds, passing nothing to the native slider', async () => {
+    Platform.OS = 'android';
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockCompose.slider = undefined;
+    await wrap(
+      <Slider
+        accessibilityLabel="Broken"
+        value={7}
+        min={10}
+        max={5}
+        step={1}
+        onChange={jest.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('compose-slider')).toBeNull();
+    expect(mockCompose.slider).toBeUndefined();
+    expect(screen.getByLabelText('Broken')).toHaveProp(
+      'accessibilityState',
+      expect.objectContaining({ disabled: true }),
+    );
+    warn.mockRestore();
+  });
+});

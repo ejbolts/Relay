@@ -12,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReduceMotion } from '../features/settings/devicePreferences';
 import * as sessionModule from '../session/SessionProvider';
+import { sessionEpoch } from '../session/sessionEpoch';
 import { Icon } from './Icon';
 import { useTheme } from './theme';
 
@@ -61,24 +62,37 @@ export interface ToastOptions {
   account?: string;
 }
 
-// The session every toast host is showing toasts for: the signed-in account, or the signed-out
-// state. Kept here so async work can capture it when it starts and check it when it ends.
-let currentAccount = 'none';
+// The session every toast host is showing toasts for: the signed-in account (or the signed-out
+// state) and the session number SessionProvider moves on every sign-in and sign-out. The number
+// tells a new session of the same account (A, signed out, A again) from the old one. Kept here so
+// async work can capture it when it starts and check it when it ends.
+let currentUser = 'none';
+let lastAccount = accountKey(currentUser);
+
+function accountKey(user: string) {
+  return `${user}#${sessionEpoch()}`;
+}
 
 /** The current session, to capture before starting work that may end in a toast. */
 export function toastAccount() {
-  return currentAccount;
+  return accountKey(currentUser);
 }
 
-/** Whether `account` (from `toastAccount()`) is still the session; check before late writes. */
+/**
+ * Whether `account` (from `toastAccount()`) is still the session; check before late writes. The
+ * session number is read live, so this is false as soon as a session ends, before any screen
+ * has re-rendered.
+ */
 export function isToastAccountCurrent(account: string) {
-  return account === currentAccount;
+  return account === toastAccount();
 }
 
 /** Called by the hosts when the session changes. */
-function setToastAccount(account: string) {
-  if (account === currentAccount) return;
-  currentAccount = account;
+function setToastAccount(user: string) {
+  currentUser = user;
+  const account = toastAccount();
+  if (account === lastAccount) return;
+  lastAccount = account;
   accountListeners.forEach((listener) => listener(account));
 }
 const accountListeners = new Set<(account: string) => void>();
@@ -108,7 +122,7 @@ export function toastAnnouncement(message: string, action?: ToastAction) {
 
 export function showToast(message: string, action?: ToastAction, options: ToastOptions = {}) {
   // Work from another session has nothing to say here, and nothing to undo.
-  if (options.account !== undefined && options.account !== currentAccount) return;
+  if (options.account !== undefined && !isToastAccountCurrent(options.account)) return;
   const toast: Toast = {
     id: ++nextId,
     message,
@@ -144,8 +158,8 @@ const useSessionStatus: () => SessionStatus | undefined =
     ? () => sessionModule.useOptionalSession()?.status
     : () => undefined;
 
-/** The session a toast belongs to: the signed-in account, or the signed-out state. */
-function useAccountKey() {
+/** Who the session is: the signed-in account, or the signed-out state. */
+function useSessionUser() {
   const status = useSessionStatus();
   if (!status) return 'none';
   return status.kind === 'signed-in' ? `user:${status.user.id}` : status.kind;
@@ -160,7 +174,9 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
   const insets = useSafeAreaInsets();
   const { colors, type, radius, scheme } = useTheme();
   const reduced = useReduceMotion();
-  const account = useAccountKey();
+  const user = useSessionUser();
+  // The session number moves with every sign-in and sign-out, which always re-render the hosts.
+  const account = accountKey(user);
   const [shown] = useState(() => new Animated.Value(0));
   // The web's timer bar along the bottom edge, shrinking until the toast clears.
   const [left] = useState(() => new Animated.Value(1));
@@ -222,10 +238,10 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
   // A different account (or signing out) drops the toast without running anything.
   useEffect(() => {
     accountRef.current = account;
-    setToastAccount(account);
+    setToastAccount(user);
     const showing = current.current;
     if (showing && showing.account !== account) endRef.current(showing.id, 'dropped');
-  }, [account]);
+  }, [account, user]);
 
   // Leaving the app settles an action toast, so work the person saw happen (a removal) is sent
   // while the app can still send it, rather than lost if the system ends the app in the
