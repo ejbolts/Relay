@@ -111,6 +111,7 @@ export function ProfileConsistencyCard({
         types={view.legend}
         categoryColors={categoryColors}
         hidden={hidden}
+        minTargetHeight={44}
         onToggle={(id) =>
           setHidden((current) => {
             const next = new Set(current);

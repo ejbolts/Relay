@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
+  formatSharedBodyWeightChartValue,
   sharedBodyWeightChartPoints,
   sharedBodyWeightGoalPath,
 } from '../../../../../frontend/src/sharedBodyWeightChart';
@@ -105,6 +106,7 @@ export function ProfileBodyWeightCard({
               active={active}
               onSelect={setSelected}
               lineColor={colors.accent}
+              formatValue={(value) => formatSharedBodyWeightChartValue(value, unit)}
               seriesLabel="Body weight"
               accessibilityLabel={`Body weight over the last ${BODY_WEIGHT_CHART_DAYS} days`}
             />

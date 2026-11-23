@@ -13,12 +13,15 @@ import type {
   SharedProfileSummary,
   WorkoutType,
 } from '../../../../../frontend/src/types';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../../data/offline';
 import { useWeightUnit } from '../../../data/queries';
 import { useUser } from '../../../session/SessionProvider';
-import { Button, Card, CardHeader } from '../../../ui/components';
+import { Button, Card, CardHeader, ErrorState } from '../../../ui/components';
 import { haptics } from '../../../ui/haptics';
+import { Sheet } from '../../../ui/Sheet';
 import { useTheme } from '../../../ui/theme';
 import { Avatar } from '../Avatar';
+import { accessRevoked } from '../socialApi';
 import { useSharedLifts } from '../socialQueries';
 import { LiftPickerSheet } from './LiftPickerSheet';
 import { ProfileWorkoutsSheet } from './ProfileWorkoutsSheet';
@@ -44,13 +47,15 @@ export function HeadToHeadCard({
   const unit = useWeightUnit();
   const user = useUser();
   const query = useSharedLifts(member.id, true);
-  const lifts = query.data?.lifts ?? null;
+  // Refused by the server: hide what was cached at once; the profile above locks itself.
+  const revoked = accessRevoked(query.error);
+  const lifts = revoked ? null : (query.data?.lifts ?? null);
+  const offline = waitingForNetwork(query);
   const [selected, setSelected] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
   // While the sheet is open, keep the lifts shown before opening, then commit on close.
   const [held, setHeld] = useState<string[] | null>(null);
   const [activeLift, setActiveLift] = useState<{ exerciseId: string; name: string } | null>(null);
-
   const byId = useMemo(
     () => new Map((lifts ?? []).map((lift) => [lift.exercise_id, lift])),
     [lifts],
@@ -62,8 +67,8 @@ export function HeadToHeadCard({
     [chosen, member.display_name],
   );
 
-  // The comparison is an extra: if the server cannot answer it, hide the card.
-  if (query.isError && !lifts) return null;
+  // The comparison is an extra: hide immediately if access was revoked or the endpoint fails.
+  if (revoked || (query.isError && !lifts)) return null;
 
   return (
     <Card accessibilityLabel="Head to head">
@@ -234,6 +239,20 @@ export function HeadToHeadCard({
         />
       )}
 
+      {picking && !lifts && offline && (
+        <Sheet
+          visible
+          allowSwipeDismissal
+          title="Lifts to compare"
+          onClose={() => {
+            setHeld(null);
+            setPicking(false);
+          }}
+        >
+          <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void query.refetch()} />
+        </Sheet>
+      )}
+
       <ProfileWorkoutsSheet
         visible={!!activeLift}
         profileId={member.id}
@@ -310,7 +329,7 @@ function LiftRow({
               style={[
                 styles.barSegment,
                 {
-                  flex: Math.max(share, 1),
+                  flex: share,
                   backgroundColor: leader === 'you' ? colors.accent : colors.deemph,
                 },
               ]}
@@ -319,7 +338,7 @@ function LiftRow({
               style={[
                 styles.barSegment,
                 {
-                  flex: Math.max(100 - share, 1),
+                  flex: 100 - share,
                   backgroundColor: leader === 'them' ? colors.accent : colors.deemph,
                 },
               ]}

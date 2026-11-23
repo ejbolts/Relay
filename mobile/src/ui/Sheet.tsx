@@ -14,12 +14,15 @@ export function Sheet({
   onClose,
   title,
   kicker,
+  allowSwipeDismissal,
   children,
 }: {
   visible: boolean;
   onClose: () => void;
   title: string;
   kicker?: string;
+  /** Opt-in to iOS swipe-to-dismiss on the native page sheet (calls `onClose`). */
+  allowSwipeDismissal?: boolean;
   children: ReactNode;
 }) {
   const { colors, type } = useTheme();
@@ -68,6 +71,7 @@ export function Sheet({
     <Modal
       visible={visible}
       onRequestClose={onClose}
+      allowSwipeDismissal={allowSwipeDismissal}
       animationType={reduced ? 'none' : ios ? 'slide' : 'fade'}
       presentationStyle={ios ? 'pageSheet' : 'overFullScreen'}
       transparent={!ios}

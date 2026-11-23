@@ -50,6 +50,8 @@ describe('liftComparisonDisplay', () => {
       null,
     ]);
     expect(liftBarShare(squat)).toBeCloseTo((154 / 294) * 100);
+    expect(liftBarShare(lift('Skewed', 1, 200))).toBeCloseTo((1 / 201) * 100);
+    expect(liftBarShare(lift('Zero', 0, 0))).toBeNull();
     expect(liftBarShare(curl)).toBeNull();
 
     const score = headToHeadScore([squat, bench, row, curl, deadlift], 'Sam');

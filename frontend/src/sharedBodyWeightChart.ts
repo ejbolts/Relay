@@ -51,3 +51,8 @@ export function sharedBodyWeightChartPoints(
     value: weightFromKg(point.value, weightUnit),
   }));
 }
+
+/** Formats a charted profile body-weight value like web's TrendChart (e.g. "78 kg", "76.5 kg"). */
+export function formatSharedBodyWeightChartValue(value: number, weightUnit: WeightUnit): string {
+  return `${Number(value.toFixed(1)).toLocaleString('en-GB')} ${weightUnit}`;
+}

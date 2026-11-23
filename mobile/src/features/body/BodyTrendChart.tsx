@@ -303,6 +303,7 @@ export function TrendPlot({
   seriesLabel,
   accessibilityLabel,
   lineColor,
+  formatValue,
 }: {
   points: Point[];
   dots?: Point[];
@@ -319,6 +320,8 @@ export function TrendPlot({
   accessibilityLabel?: string;
   /** Overrides the trend line colour (defaults to `colors.text`). */
   lineColor?: string;
+  /** Optional point value formatter (defaults to fixed 1-decimal display for Body). */
+  formatValue?: (value: number) => string;
 }) {
   const { colors, type, radius } = useTheme();
   const [width, setWidth] = useState(0);
@@ -358,9 +361,15 @@ export function TrendPlot({
     accessibilityLabel ??
     (showFat ? 'Body fat percentage' : 'Bodyweight, 7-day average over daily weigh-ins');
   const shown = active ?? (points.length ? points.length - 1 : null);
+  const formatPointValue = (value: number) =>
+    formatValue
+      ? formatValue(value)
+      : showFat
+        ? `${value.toFixed(1)}%`
+        : `${value.toFixed(1)} ${unit}`;
   const reading = (index: number) => {
     const point = points[index];
-    const value = showFat ? `${point.value.toFixed(1)}%` : `${point.value.toFixed(1)} ${unit}`;
+    const value = formatPointValue(point.value);
     if (seriesLabel) return `${shortDate(point.date)}, ${value}`;
     return showFat
       ? `${shortDate(point.date)}, ${value}`
@@ -591,9 +600,7 @@ export function TrendPlot({
               {shortDate(activePoint.date)}
             </Text>
             <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>
-              {showFat
-                ? `${activePoint.value.toFixed(1)}%`
-                : `${activePoint.value.toFixed(1)} ${unit}`}
+              {formatPointValue(activePoint.value)}
             </Text>
             <Text style={[type.caption, { color: colors.muted }]}>
               {seriesLabel ?? (showFat ? 'Body fat' : '7-day average')}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
+import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   FlatList,
   Modal,
@@ -25,13 +25,12 @@ import type { LiftComparison, SharedProfileSummary } from '../../../../../fronte
 import { useWeightUnit } from '../../../data/queries';
 import { haptics } from '../../../ui/haptics';
 import { Icon } from '../../../ui/Icon';
+import { isToastAccountCurrent, showToast, toastAccount, ToastHost } from '../../../ui/Toast';
 import { useTheme } from '../../../ui/theme';
 import { useReduceMotion } from '../../settings/devicePreferences';
 import { Avatar } from '../Avatar';
 
 type Member = Pick<SharedProfileSummary, 'id' | 'display_name' | 'profile_photo_url'>;
-
-const UNDO_MS = 5000;
 
 /**
  * Search your exercises and tick up to 20 lifts to compare with a member, with both of your
@@ -61,9 +60,11 @@ export function LiftPickerSheet({
   const reduced = useReduceMotion();
   const ios = Platform.OS === 'ios';
   const inputRef = useRef<TextInputInstance>(null);
+  const undoOfferRef = useRef(0);
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
-  const [cleared, setCleared] = useState<{ lifts: string[]; serial: number } | null>(null);
+  const [undoActive, setUndoActive] = useState(false);
+  const [toastKey, setToastKey] = useState(0);
   // Fixed order while the sheet is open, matching the web's LiftPicker.
   const [ordered] = useState(() => orderLiftsForPicker(lifts, selected));
   const shown = useMemo(
@@ -72,11 +73,10 @@ export function LiftPickerSheet({
   );
   const full = selected.length >= MAX_HEAD_TO_HEAD_LIFTS;
 
-  useEffect(() => {
-    if (!cleared) return;
-    const timer = setTimeout(() => setCleared(null), UNDO_MS);
-    return () => clearTimeout(timer);
-  }, [cleared]);
+  const handleClose = () => {
+    undoOfferRef.current += 1;
+    onClose();
+  };
 
   const content = (
     <View style={[styles.sheetBody, { paddingBottom: Math.max(insets.bottom, 12) }]}>
@@ -87,7 +87,7 @@ export function LiftPickerSheet({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Close"
-          onPress={onClose}
+          onPress={handleClose}
           style={styles.closeTouch}
         >
           {({ pressed }) => (
@@ -157,8 +157,31 @@ export function LiftPickerSheet({
           disabled={selected.length === 0}
           onPress={() => {
             haptics.selection();
-            setCleared((current) => ({ lifts: selected, serial: (current?.serial ?? 0) + 1 }));
+            const previous = selected;
+            const account = toastAccount();
+            const offer = ++undoOfferRef.current;
+            setUndoActive(true);
             onChange([]);
+            showToast(
+              'Lifts cleared',
+              {
+                label: 'Undo',
+                run: () => {
+                  if (undoOfferRef.current !== offer || !isToastAccountCurrent(account)) return;
+                  undoOfferRef.current += 1;
+                  setUndoActive(false);
+                  haptics.selection();
+                  onChange(previous);
+                },
+                onDismiss: () => {
+                  if (undoOfferRef.current === offer) {
+                    undoOfferRef.current += 1;
+                    setUndoActive(false);
+                  }
+                },
+              },
+              { account },
+            );
           }}
           style={styles.unselectButton}
         >
@@ -204,7 +227,11 @@ export function LiftPickerSheet({
               disabled={disabled}
               onPress={() => {
                 haptics.selection();
-                setCleared(null);
+                undoOfferRef.current += 1;
+                if (undoActive) {
+                  setUndoActive(false);
+                  setToastKey((current) => current + 1);
+                }
                 onChange((current) => toggleLiftSelection(current, item.exercise_id));
               }}
               style={({ pressed }) => [
@@ -273,52 +300,16 @@ export function LiftPickerSheet({
           );
         }}
       />
-
-      {cleared && (
-        <View
-          style={[
-            styles.undoBar,
-            {
-              backgroundColor: colors.surface2,
-              borderColor: colors.lineStrong,
-              borderRadius: radius.toast,
-              shadowColor: colors.shadow,
-            },
-          ]}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Lifts cleared. Dismiss"
-            onPress={() => setCleared(null)}
-            style={styles.undoMessage}
-          >
-            <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]}>
-              Lifts cleared
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Undo"
-            onPress={() => {
-              haptics.selection();
-              onChange(cleared.lifts);
-              setCleared(null);
-            }}
-            style={styles.undoAction}
-          >
-            <Text style={[type.callout, { color: colors.accentText, fontWeight: '700' }]}>
-              Undo
-            </Text>
-          </Pressable>
-        </View>
-      )}
     </View>
   );
+
+  const sheetToast = <ToastHost key={toastKey} bottom={16} />;
 
   return (
     <Modal
       visible={visible}
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
+      allowSwipeDismissal
       animationType={reduced ? 'none' : ios ? 'slide' : 'fade'}
       presentationStyle={ios ? 'pageSheet' : 'overFullScreen'}
       transparent={!ios}
@@ -326,10 +317,13 @@ export function LiftPickerSheet({
       navigationBarTranslucent={!ios}
     >
       {ios ? (
-        <View style={{ flex: 1, backgroundColor: colors.surface }}>{content}</View>
+        <View style={{ flex: 1, backgroundColor: colors.surface }}>
+          {content}
+          {sheetToast}
+        </View>
       ) : (
         <View style={styles.backdrop}>
-          <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={onClose} />
+          <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={handleClose} />
           <View
             style={[
               styles.androidCard,
@@ -338,6 +332,7 @@ export function LiftPickerSheet({
           >
             <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
             {content}
+            {sheetToast}
           </View>
         </View>
       )}
@@ -414,7 +409,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   searchInput: { flex: 1, minWidth: 0, minHeight: 44, paddingVertical: 0 },
-  clearButton: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
+  clearButton: {
+    width: 44,
+    height: 44,
+    marginRight: -10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -446,18 +447,4 @@ const styles = StyleSheet.create({
   copy: { flex: 1, minWidth: 0, gap: 2 },
   preview: { alignItems: 'flex-end', gap: 4 },
   bestRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  undoBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    paddingLeft: 14,
-    paddingRight: 8,
-    minHeight: 48,
-    elevation: 4,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-  },
-  undoMessage: { flex: 1, justifyContent: 'center', minHeight: 44 },
-  undoAction: { paddingHorizontal: 12, minHeight: 44, justifyContent: 'center' },
 });

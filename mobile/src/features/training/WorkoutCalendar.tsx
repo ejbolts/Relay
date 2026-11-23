@@ -363,11 +363,14 @@ export function CalendarLegend({
   categoryColors,
   hidden,
   onToggle,
+  minTargetHeight,
 }: {
   types: WorkoutType[];
   categoryColors: WorkoutTypeColors;
   hidden: ReadonlySet<string>;
   onToggle: (id: string) => void;
+  /** Optional minimum touch-target height for chips (Training keeps its compact 32 pt layout). */
+  minTargetHeight?: number;
 }) {
   const { colors, type } = useTheme();
   if (!types.length) return null;
@@ -385,7 +388,11 @@ export function CalendarLegend({
               haptics.selection();
               onToggle(item.id);
             }}
-            style={({ pressed }) => [styles.legendItem, pressed && { opacity: 0.6 }]}
+            style={({ pressed }) => [
+              styles.legendItem,
+              minTargetHeight ? { minHeight: minTargetHeight, minWidth: minTargetHeight } : null,
+              pressed && { opacity: 0.6 },
+            ]}
           >
             <View
               style={[

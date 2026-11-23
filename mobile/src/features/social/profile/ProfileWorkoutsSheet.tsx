@@ -11,6 +11,7 @@ import { useTheme } from '../../../ui/theme';
 import { workoutColor } from '../../training/useTrainingContext';
 import { WorkoutCard, WorkoutDetails } from '../../training/WorkoutCard';
 import { useSocialNavigation } from '../navigation';
+import { accessRevoked } from '../socialApi';
 import { sharedWorkoutList, useSharedWorkouts } from '../socialQueries';
 
 /**
@@ -39,16 +40,34 @@ export function ProfileWorkoutsSheet({
   const { colors, type } = useTheme();
   const nav = useSocialNavigation();
   const unit = useWeightUnit();
-  const [openId, setOpenId] = useState<string | null>(null);
+  const filterKey = `${profileId}:${date ?? ''}:${exerciseId ?? ''}`;
+  // A lone workout opens by default for each day or lift; a tap to collapse or open wins.
+  const [choice, setChoice] = useState<{ key: string; openId: string | null } | null>(null);
   const query = useSharedWorkouts(profileId, { date, exerciseId, enabled: visible });
-  const { workouts, records } = sharedWorkoutList(query.data);
+  // Refused by the server: show none of the cached workouts; the profile behind locks itself.
+  const revoked = accessRevoked(query.error);
+  const { workouts, records } = revoked
+    ? { workouts: [], records: [] }
+    : sharedWorkoutList(query.data);
   const recordCounts = recordCountsByWorkout(records);
   const thisYear = new Date().getFullYear().toString();
   const offline = waitingForNetwork(query);
-  const expandedId = workouts.length === 1 ? workouts[0].id : openId;
+  const explicit = choice?.key === filterKey ? choice : null;
+  const expandedId = explicit ? explicit.openId : workouts.length === 1 ? workouts[0].id : null;
+
+  const handleClose = () => {
+    setChoice(null);
+    onClose();
+  };
 
   return (
-    <Sheet visible={visible} onClose={onClose} kicker={kicker} title={title}>
+    <Sheet
+      visible={visible}
+      allowSwipeDismissal
+      onClose={handleClose}
+      kicker={kicker}
+      title={title}
+    >
       {offline ? (
         <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void query.refetch()} />
       ) : query.isPending ? (
@@ -77,7 +96,12 @@ export function ProfileWorkoutsSheet({
                 records={recordCounts.get(workout.id) ?? 0}
                 open={expandedId === workout.id}
                 showYear={workout.workout_date.slice(0, 4) !== thisYear}
-                onToggle={() => setOpenId(expandedId === workout.id ? null : workout.id)}
+                onToggle={() =>
+                  setChoice({
+                    key: filterKey,
+                    openId: expandedId === workout.id ? null : workout.id,
+                  })
+                }
               >
                 <WorkoutDetails
                   workout={workout}
@@ -91,7 +115,7 @@ export function ProfileWorkoutsSheet({
                     variant="secondary"
                     size="small"
                     onPress={() => {
-                      onClose();
+                      handleClose();
                       nav.openWorkout({
                         id: workout.id,
                         memberId: profileId,
@@ -110,7 +134,7 @@ export function ProfileWorkoutsSheet({
           {errorMessage(query.error)}
         </Text>
       )}
-      {query.hasNextPage && (
+      {query.hasNextPage && !revoked && (
         <Button
           label={query.isFetchingNextPage ? 'Loading…' : 'Show older workouts'}
           variant="secondary"

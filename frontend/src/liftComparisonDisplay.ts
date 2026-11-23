@@ -37,7 +37,7 @@ function liftCount(lifts: number): string {
 export function liftBarShare(lift: LiftComparison): number | null {
   if (!lift.yours || !lift.theirs) return null;
   const total = lift.yours.estimated_1rm + lift.theirs.estimated_1rm;
-  if (total <= 0) return 50;
+  if (total <= 0) return null;
   return (lift.yours.estimated_1rm / total) * 100;
 }
 

@@ -6,8 +6,10 @@ import {
   useQuery,
   useQueryClient,
   type InfiniteData,
+  type Query,
   type QueryClient,
 } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useIsFocused } from 'expo-router';
 import type { FriendPresenceEvent } from '../../../../frontend/src/presenceProtocol';
 import { SHARED_WORKOUT_PAGE_SIZE } from '../../../../frontend/src/sharedProfileDisplay';
@@ -16,6 +18,7 @@ import type {
   FriendConnections,
   FriendFeed,
   PersonalRecord,
+  SharedProfile,
   SharedWorkoutKind,
   SharedWorkoutPage,
   Timeline,
@@ -26,7 +29,7 @@ import type {
   WorkoutReactions,
 } from '../../../../frontend/src/types';
 import { ApiError } from '../../data/api';
-import { socialApi } from './socialApi';
+import { accessRevoked, socialApi } from './socialApi';
 
 /** Every Social query sits under `social`, so a friendship change refreshes all of them. */
 export const socialKeys = {
@@ -161,8 +164,78 @@ export function useSharedProfile(id: string) {
   return useQuery(sharedProfileQuery(id));
 }
 
+/** Member data under a profile's key: their lifts, workouts and anything else loaded for it. */
+function isMemberData(query: Query) {
+  const [root, scope, id] = query.queryKey;
+  return (
+    root === 'social' && scope === 'profile' && typeof id === 'string' && query.queryKey.length > 3
+  );
+}
+
+/**
+ * Whether the server has said this member is off limits: their profile is unavailable, locked or
+ * friends-only now, or one of their requests was just refused.
+ */
+function memberLocked(client: QueryClient, id: string) {
+  const cache = client.getQueryCache();
+  const profile = cache.find<SharedProfile>({ queryKey: socialKeys.profile(id), exact: true });
+  if (profile && (accessRevoked(profile.state.error) || profile.state.data?.can_view === false))
+    return true;
+  return cache
+    .findAll({ queryKey: socialKeys.profile(id) })
+    .some((query) => isMemberData(query) && accessRevoked(query.state.error));
+}
+
+/** Drops a locked member's data that nothing on screen is using. */
+function dropLockedMemberData(client: QueryClient, id: string) {
+  if (!memberLocked(client, id)) return;
+  const cache = client.getQueryCache();
+  for (const query of cache.findAll({ queryKey: socialKeys.profile(id) })) {
+    if (isMemberData(query) && !query.isActive()) cache.remove(query);
+  }
+}
+
+const watchedClients = new WeakSet<QueryClient>();
+
+/**
+ * When the server refuses a member's lifts or workouts (`403 friend_required`, `404
+ * profile_not_found` or `403 sharing_required`), revalidates their profile so its locked or
+ * unavailable state takes over, and evicts their cached data as soon as no screen is using it.
+ * A screen still showing a refused query hides its data itself (`accessRevoked(query.error)`).
+ * Transient failures keep the cache.
+ */
+export function watchMemberAccess(client: QueryClient) {
+  if (watchedClients.has(client)) return;
+  watchedClients.add(client);
+  client.getQueryCache().subscribe((event) => {
+    const id = event.query.queryKey[2];
+    if (event.query.queryKey[0] !== 'social' || event.query.queryKey[1] !== 'profile') return;
+    if (typeof id !== 'string') return;
+    if (event.type === 'updated') {
+      if (event.action.type !== 'error' && event.action.type !== 'success') return;
+      if (
+        event.action.type === 'error' &&
+        isMemberData(event.query) &&
+        accessRevoked(event.action.error)
+      ) {
+        void client.invalidateQueries({ queryKey: socialKeys.profile(id), exact: true });
+      }
+    } else if (event.type !== 'observerRemoved' && event.type !== 'observerOptionsUpdated') {
+      return;
+    }
+    // After the cache has finished this change, so a removal never interrupts it.
+    setTimeout(() => dropLockedMemberData(client, id), 0);
+  });
+}
+
+function useMemberAccessWatch() {
+  const client = useQueryClient();
+  useEffect(() => watchMemberAccess(client), [client]);
+}
+
 /** Your best lifts beside a member's; fails silently on profiles or servers without it. */
 export function useSharedLifts(id: string, enabled: boolean) {
+  useMemberAccessWatch();
   return useQuery({
     queryKey: socialKeys.lifts(id),
     queryFn: ({ signal }) => socialApi.lifts(id, signal),
@@ -204,6 +277,7 @@ export function useSharedWorkouts(
     enabled,
   }: { kind?: SharedWorkoutKind; date?: string; exerciseId?: string; enabled: boolean },
 ) {
+  useMemberAccessWatch();
   return useInfiniteQuery({ ...sharedWorkoutsQuery(id, { kind, date, exerciseId }), enabled });
 }
 

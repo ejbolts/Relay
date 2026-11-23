@@ -34,7 +34,7 @@ export function ProfileTrainingTimeCard({
 
   return (
     <Card accessibilityLabel="Time trained">
-      <View style={{ gap: 2 }}>
+      <View style={styles.header}>
         <Text style={[type.eyebrow, { color: colors.accentText }]}>ACTIVITY</Text>
         <View style={styles.titleRow}>
           <Text accessibilityRole="header" style={[type.cardTitle, { color: colors.text }]}>
@@ -43,7 +43,6 @@ export function ProfileTrainingTimeCard({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="About time trained"
-            hitSlop={12}
             onPress={() => {
               haptics.tap();
               Alert.alert(TRAINING_TIME_HELP_TITLE, TRAINING_TIME_HELP_BODY);
@@ -98,8 +97,15 @@ export function ProfileTrainingTimeCard({
 }
 
 const styles = StyleSheet.create({
-  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  helpButton: { width: 24, height: 24, alignItems: 'center', justifyContent: 'center' },
+  header: { gap: 0 },
+  titleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+    marginTop: -8,
+    marginBottom: -8,
+  },
+  helpButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   stats: { flexDirection: 'row', gap: 10 },
   statTile: { flex: 1, gap: 4, padding: 12 },
   statValue: { fontSize: 19, fontWeight: '700', letterSpacing: -0.3 },

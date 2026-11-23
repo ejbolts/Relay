@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { sharedBodyWeightChartPoints, sharedBodyWeightGoalPath } from './sharedBodyWeightChart';
+import {
+  formatSharedBodyWeightChartValue,
+  sharedBodyWeightChartPoints,
+  sharedBodyWeightGoalPath,
+} from './sharedBodyWeightChart';
 import type { SharedGoals } from './types';
 
 const ZONE2 = {
@@ -78,5 +82,12 @@ describe('sharedBodyWeightChart', () => {
     expect(points[0].date).toBe('2026-10-01');
     expect(points[0].value).toBeCloseTo(176.37, 1);
     expect(points[1].value).toBeCloseTo(174.16, 1);
+  });
+
+  it('formats charted values without trailing .0 like web TrendChart', () => {
+    expect(formatSharedBodyWeightChartValue(78, 'kg')).toBe('78 kg');
+    expect(formatSharedBodyWeightChartValue(78.0, 'kg')).toBe('78 kg');
+    expect(formatSharedBodyWeightChartValue(76.5, 'kg')).toBe('76.5 kg');
+    expect(formatSharedBodyWeightChartValue(171.96, 'lb')).toBe('172 lb');
   });
 });
