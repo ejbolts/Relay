@@ -7,6 +7,7 @@ import type { TrackedWorkout, User } from '../../../../frontend/src/types';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { GuidesScreen } from './GuidesScreen';
 import { HelpSettings } from './HelpSettings';
+import { AppTourHost } from './AppTourHost';
 import { HomeGuides } from './HomeGuides';
 import { ShareReminderAction } from './ShareReminderAction';
 import { resetTipsForTests, tipsFor } from './tips';
@@ -130,9 +131,19 @@ test('Settings lists the guides, says why Compare machines must wait, and replay
   expect(mockRouter.navigate).toHaveBeenCalledWith('/');
 });
 
+/** Home's header and the root's tour host, as the app mounts them; `home` false is another tab. */
+function Root({ home = true }: { home?: boolean }) {
+  return (
+    <>
+      {home && <HomeGuides />}
+      <AppTourHost />
+    </>
+  );
+}
+
 test('a new account takes the quick tour, which opens each tab it explains', async () => {
   queueAppTour('u1');
-  await show(<HomeGuides />);
+  await show(<Root />);
   // The tour is this visit's one launch prompt, so What's new and the weekly review wait.
   expect(launchPromptOpened('u1')).toBe('onboarding');
   expect(await screen.findByText('Quick tour · 1 of 8')).toBeVisible();
@@ -149,12 +160,12 @@ test('an open tour belongs to its account, and a session ending closes it', asyn
   // Fresh accounts: tour progress is also remembered in memory for the session.
   mockUser.id = 'a1';
   queueAppTour('a1');
-  const first = await show(<HomeGuides />);
+  const first = await show(<Root />);
   expect(await screen.findByText('Quick tour · 1 of 8')).toBeVisible();
   await first.unmount();
   // Another account signs in on this phone while a1's tour was open.
   mockUser.id = 'a2';
-  const second = await show(<HomeGuides />);
+  const second = await show(<Root />);
   expect(screen.queryByText(/Quick tour/)).toBeNull();
   await second.unmount();
   // a1's guide was neither finished nor lost.
@@ -164,8 +175,44 @@ test('an open tour belongs to its account, and a session ending closes it', asyn
   mockUser.id = 'a1';
   startAppTour('a1');
   await act(async () => closeAppTour());
-  await show(<HomeGuides />);
+  await show(<Root />);
   expect(await screen.findByText('Quick tour · 1 of 8')).toBeVisible();
+});
+
+test('the tour stays open and moves on while it shows other tabs', async () => {
+  mockUser.id = 'a3';
+  queueAppTour('a3');
+  const view = await show(<Root />);
+  expect(await screen.findByText('Quick tour · 1 of 8')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+  expect(mockRouter.navigate).toHaveBeenLastCalledWith('/training');
+  // Training is showing: Home's header is no longer mounted, and the tour carries on.
+  await view.rerender(
+    <SafeAreaProvider
+      initialMetrics={{
+        frame: { x: 0, y: 0, width: 390, height: 844 },
+        insets: { top: 0, left: 0, right: 0, bottom: 0 },
+      }}
+    >
+      <Root home={false} />
+    </SafeAreaProvider>,
+  );
+  expect(screen.queryByRole('button', { name: /^Tips/ })).toBeNull();
+  expect(screen.getByText('Your training in one place')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByText('Train alongside friends')).toBeVisible();
+  expect(mockRouter.navigate).toHaveBeenLastCalledWith('/social');
+  for (let step = 6; step <= 8; step++)
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByText('Quick tour · 8 of 8')).toBeVisible();
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/settings');
+  await fireEvent.press(screen.getByRole('button', { name: 'Finish' }));
+  expect(screen.getByText('Thanks for trying Relay!')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'End guide' }));
+  expect(screen.queryByText(/Quick tour|Thanks for trying/)).toBeNull();
+  expect(appTourWaiting('a3')).toBe(false);
 });
 
 test('a tip put away comes back when its reminder is due, once the app returns', async () => {
