@@ -11,6 +11,7 @@ import {
   ALREADY_PROCESSING_CODES,
   moveItem,
   newerSession,
+  PROCESSING_SESSION_STATUSES,
   overallUploadProgress,
   SESSION_POLL_MS,
   sessionRetryLabel,
@@ -55,6 +56,9 @@ const HOLD_REASONS: Partial<Record<Phase, string>> = {
   stopping: 'Wait while the upload stops.',
 };
 const STILL_UPLOADABLE: WorkoutSession['status'][] = ['draft', 'uploading', 'upload_failed'];
+/** The server has started work on the batch (or finished it), so it can't be cancelled. */
+const processingBegan = (status: WorkoutSession['status']) =>
+  PROCESSING_SESSION_STATUSES.includes(status) || status === 'complete' || status === 'failed';
 
 /**
  * The web's videos tab: record or pick each set's video, upload the batch, then follow it while
@@ -143,15 +147,31 @@ function VideoUploader() {
         cancelled = await videoApi.cancel(target.id);
       } catch (reason) {
         if (!check.open()) return false;
-        if (reason instanceof ApiError && reason.code === 'cannot_cancel') {
-          try {
-            follow(await videoApi.get(target.id));
-          } catch {
-            setStep('processing');
-          }
+        if (!(reason instanceof ApiError && reason.code === 'cannot_cancel')) {
+          setMessage(errorMessage(reason));
+          return false;
+        }
+        // Refused: read the session back to see why.
+        let latest: WorkoutSession;
+        try {
+          latest = await videoApi.get(target.id);
+        } catch (readFailure) {
+          if (check.open()) setMessage(errorMessage(readFailure));
+          return false;
+        }
+        if (!check.open()) return false;
+        if (latest.id === target.id && latest.status === 'cancelled') {
+          // An earlier cancel reached the server but its answer was lost: it is cancelled.
+          cancelled = latest;
+        } else if (processingBegan(latest.status)) {
+          follow(latest);
           setMessage('Processing had already started, so this session carries on.');
-        } else setMessage(errorMessage(reason));
-        return false;
+          return false;
+        } else {
+          follow(latest);
+          setMessage(errorMessage(reason));
+          return false;
+        }
       }
       if (!check.open()) return false;
       follow(cancelled);
@@ -174,7 +194,23 @@ function VideoUploader() {
   // and deletes it, and leaves only once the server has confirmed both. While a session is being
   // created or processing is starting, leaving waits.
   const holding = step === 'progress' || phase !== 'idle';
-  const leave = useRef<(() => void) | null>(null);
+  // A leave confirmed by the server, waiting for the screen to stop holding. State, not a ref,
+  // so setting it renders and the effect below runs even when nothing else changes.
+  const [leave, setLeave] = useState<(() => void) | null>(null);
+  // The open Stop and discard question, answered with what was chosen.
+  const stopQuestion = useRef<Promise<'keep' | 'stop'> | null>(null);
+  // The session as last shown, for handlers that run after the screen moved on.
+  const latestSession = useRef<WorkoutSession | null>(null);
+  useEffect(() => {
+    latestSession.current = session;
+  });
+
+  /** Starts processing once any open Stop and discard question has been answered Keep. */
+  async function startWhenAnswered(target: WorkoutSession) {
+    const question = stopQuestion.current;
+    if (question && (await question) === 'stop') return;
+    if (currentPhase() === 'uploading') await beginProcessing(target);
+  }
   usePreventRemove(holding, ({ repeat }) => {
     const reason = HOLD_REASONS[currentPhase()];
     if (reason) {
@@ -186,30 +222,50 @@ function VideoUploader() {
       repeat();
       return;
     }
+    // While the question is open, the batch doesn't start processing even if its last clip
+    // finishes behind it (startWhenAnswered), so Stop and discard never races a start.
+    let answer!: (choice: 'keep' | 'stop') => void;
+    stopQuestion.current = new Promise((resolve) => (answer = resolve));
+    const settle = (choice: 'keep' | 'stop') => {
+      stopQuestion.current = null;
+      answer(choice);
+    };
     Alert.alert(
       'Stop and discard this upload?',
       'Uploading stops, and this session and the clips sent so far are deleted.',
       [
-        { text: 'Keep uploading', style: 'cancel' },
+        { text: 'Keep uploading', style: 'cancel', onPress: () => settle('keep') },
         {
           text: 'Stop and discard',
           style: 'destructive',
           onPress: () => {
+            settle('stop');
+            // Checked again now: the batch may have moved on while the question was open.
+            const latest = latestSession.current;
+            if (
+              currentPhase() === 'starting' ||
+              currentPhase() === 'stopping' ||
+              !latest ||
+              latest.id !== target.id ||
+              !STILL_UPLOADABLE.includes(latest.status)
+            ) {
+              if (latest && processingBegan(latest.status))
+                setMessage('Processing had already started, so this session carries on.');
+              return;
+            }
             void stopAndCancel(target, true).then((done) => {
               // Leaves once the screen no longer holds; otherwise it stays with the reason shown.
-              if (done) leave.current = repeat;
+              if (done) setLeave(() => repeat);
             });
           },
         },
       ],
+      { cancelable: true, onDismiss: () => settle('keep') },
     );
   });
   useEffect(() => {
-    if (holding || !leave.current) return;
-    const go = leave.current;
-    leave.current = null;
-    go();
-  });
+    if (!holding && leave) leave();
+  }, [holding, leave]);
 
   // Signing out unmounts the screen: stop sending this account's clips.
   useEffect(() => {
@@ -385,7 +441,7 @@ function VideoUploader() {
       setStep('progress');
       setPhase('uploading');
       const uploaded = await uploadClips(created, clips);
-      if (uploaded && currentPhase() === 'uploading') await beginProcessing(created);
+      if (uploaded && currentPhase() === 'uploading') await startWhenAnswered(created);
     } catch (reason) {
       if (check.open()) setMessage(errorMessage(reason));
     } finally {
@@ -403,7 +459,7 @@ function VideoUploader() {
     try {
       const failed = clips.filter((clip) => clip.status === 'failed');
       const uploaded = await uploadClips(session, failed);
-      if (uploaded && currentPhase() === 'uploading') await beginProcessing(session);
+      if (uploaded && currentPhase() === 'uploading') await startWhenAnswered(session);
     } finally {
       setBusy(false);
       if (currentPhase() === 'uploading') setPhase('idle');
