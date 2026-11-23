@@ -39,7 +39,7 @@ import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { useTheme } from '../../ui/theme';
-import { ExerciseIcon } from '../social/ExerciseIcon';
+import { ExerciseIcon } from '../../ui/ExerciseIcon';
 import { CreateExerciseSheet } from './CreateExerciseSheet';
 import { loggerKeys, useAllMachinePhotos } from './loggerQueries';
 import { PickerMachineStrip } from './PickerMachineStrip';

@@ -89,7 +89,7 @@ export function WeeklySetsShelf({
               <View
                 style={[
                   styles.gain,
-                  { backgroundColor: met ? `${colors.good}29` : colors.accentSoft },
+                  { backgroundColor: met ? colors.goodSoft : colors.accentSoft },
                 ]}
               >
                 <Text

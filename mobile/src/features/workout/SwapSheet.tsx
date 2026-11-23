@@ -15,7 +15,7 @@ import { localDate } from '../../../../frontend/src/utils';
 import { Button } from '../../ui/components';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
-import { ExerciseIcon } from '../social/ExerciseIcon';
+import { ExerciseIcon } from '../../ui/ExerciseIcon';
 
 const ALL = 'All';
 

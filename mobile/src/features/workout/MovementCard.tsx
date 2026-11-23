@@ -51,7 +51,7 @@ import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { promptText } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
-import { ExerciseIcon } from '../social/ExerciseIcon';
+import { ExerciseIcon } from '../../ui/ExerciseIcon';
 import { restTimesPreference } from '../settings/devicePreferences';
 import { CardioSetImport } from './CardioSetImport';
 import { lastUsedMachines, useMachinePhotos } from './loggerQueries';

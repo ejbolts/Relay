@@ -158,7 +158,7 @@ export function RestBar({
   const next = nextSetAfterRest(state.movements, done.movementKey, weightUnit);
   return (
     <View style={[pill, styles.done]} accessibilityLiveRegion="polite">
-      <View style={[styles.doneMark, { backgroundColor: `${colors.good}24` }]}>
+      <View style={[styles.doneMark, { backgroundColor: colors.goodSoft }]}>
         <Icon name="check" size={16} color={colors.good} />
       </View>
       <View style={{ flex: 1 }}>
