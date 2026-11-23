@@ -3,6 +3,7 @@ import type {
   FriendConnections,
   FriendFeed,
   FriendStatus,
+  LiftComparisons,
   NotificationReadReference,
   SharedProfile,
   SharedProfileSummary,
@@ -45,11 +46,18 @@ export const socialApi = {
     apiGet<SuggestedProfilePage>(`/api/sharing/suggestions?page=${page}`, signal),
   profile: (userId: string, signal?: AbortSignal) =>
     apiGet<SharedProfile>(`/api/sharing/profiles/${id(userId)}`, signal),
+  lifts: (userId: string, signal?: AbortSignal) =>
+    apiGet<LiftComparisons>(`/api/sharing/profiles/${id(userId)}/lifts`, signal),
   workouts: (
     userId: string,
     offset: number,
     limit: number,
-    filters: { kind?: SharedWorkoutKind; start_date?: string; end_date?: string } = {},
+    filters: {
+      kind?: SharedWorkoutKind;
+      exercise_id?: string;
+      start_date?: string;
+      end_date?: string;
+    } = {},
     signal?: AbortSignal,
   ) =>
     apiGet<SharedWorkoutPage>(

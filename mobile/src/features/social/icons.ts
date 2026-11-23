@@ -18,4 +18,5 @@ export const socialIcons = {
   edit: { sf: 'pencil', md: 'edit' },
   waiting: { sf: 'clock', md: 'schedule' },
   addPhoto: { sf: 'photo.badge.plus', md: 'add-photo-alternate' },
+  info: { sf: 'questionmark.circle', md: 'help-outline' },
 } satisfies Record<string, IconPair>;

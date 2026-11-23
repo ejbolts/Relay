@@ -38,8 +38,11 @@ export const socialKeys = {
   search: (term: string) => ['social', 'search', term] as const,
   suggestions: (page: number) => ['social', 'suggestions', page] as const,
   profile: (id: string) => ['social', 'profile', id] as const,
-  workouts: (id: string, kind?: SharedWorkoutKind, date?: string) =>
-    ['social', 'profile', id, 'workouts', kind ?? 'all', date ?? ''] as const,
+  lifts: (id: string) => ['social', 'profile', id, 'lifts'] as const,
+  workouts: (id: string, kind?: SharedWorkoutKind, date?: string, exerciseId?: string) =>
+    exerciseId
+      ? (['social', 'profile', id, 'workouts', kind ?? 'all', date ?? '', exerciseId] as const)
+      : (['social', 'profile', id, 'workouts', kind ?? 'all', date ?? ''] as const),
   workout: (workoutId: string) => ['social', 'workout', workoutId] as const,
   comments: (workoutId: string) => ['social', 'comments', workoutId] as const,
   reactionPeople: (workoutId: string) => ['social', 'reactions', workoutId] as const,
@@ -158,19 +161,29 @@ export function useSharedProfile(id: string) {
   return useQuery(sharedProfileQuery(id));
 }
 
-/** A profile's shared workouts, a page at a time, for one history tab or one day. */
+/** Your best lifts beside a member's; fails silently on profiles or servers without it. */
+export function useSharedLifts(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: socialKeys.lifts(id),
+    queryFn: ({ signal }) => socialApi.lifts(id, signal),
+    enabled,
+    retry: false,
+  });
+}
+
+/** A profile's shared workouts, a page at a time, for one history tab, one day or one lift. */
 export function sharedWorkoutsQuery(
   id: string,
-  { kind, date }: { kind?: SharedWorkoutKind; date?: string } = {},
+  { kind, date, exerciseId }: { kind?: SharedWorkoutKind; date?: string; exerciseId?: string } = {},
 ) {
   return infiniteQueryOptions({
-    queryKey: socialKeys.workouts(id, kind, date),
+    queryKey: socialKeys.workouts(id, kind, date, exerciseId),
     queryFn: ({ pageParam, signal }) =>
       socialApi.workouts(
         id,
         pageParam,
         SHARED_WORKOUT_PAGE_SIZE,
-        { kind, start_date: date, end_date: date },
+        { kind, exercise_id: exerciseId, start_date: date, end_date: date },
         signal,
       ),
     initialPageParam: 0,
@@ -184,9 +197,14 @@ export function sharedWorkoutsQuery(
 
 export function useSharedWorkouts(
   id: string,
-  { kind, date, enabled }: { kind?: SharedWorkoutKind; date?: string; enabled: boolean },
+  {
+    kind,
+    date,
+    exerciseId,
+    enabled,
+  }: { kind?: SharedWorkoutKind; date?: string; exerciseId?: string; enabled: boolean },
 ) {
-  return useInfiniteQuery({ ...sharedWorkoutsQuery(id, { kind, date }), enabled });
+  return useInfiniteQuery({ ...sharedWorkoutsQuery(id, { kind, date, exerciseId }), enabled });
 }
 
 /** Every loaded page of a profile's workouts as one list, with their records and reactions. */
