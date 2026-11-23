@@ -416,6 +416,7 @@ import {
 } from './workoutSets';
 import { restToAdd } from './workoutRestHistory';
 import { movementWithAddedSet } from './workoutSetInsert';
+import { pinnedAfterMerge } from './machinePhotoMerge';
 import { completionRecordDetail, recordTypeLabel } from './recordLabels';
 import {
   checkWorkoutFinish,
@@ -425,10 +426,7 @@ import {
   type WorkoutFinishState,
 } from './workoutFinish';
 import { movementAfterSetUpdate, setUpdateEffects } from './workoutSetUpdate';
-import {
-  suggestedSetsForPickedExercise,
-  templateDraftMovements,
-} from './workoutStartMovements';
+import { suggestedSetsForPickedExercise, templateDraftMovements } from './workoutStartMovements';
 import { workoutNameForCategory } from './workoutCategory';
 import {
   machineSelection,
@@ -7270,11 +7268,7 @@ function MachinePhotoChooser({
             onMerged={(merged, sourceIds) => {
               tips.learn('mergeMachines');
               const sourceSet = new Set(sourceIds);
-              const nextIds = [
-                ...new Set(
-                  selectedIdsRef.current.map((id) => (sourceSet.has(id) ? merged.id : id)),
-                ),
-              ];
+              const nextIds = pinnedAfterMerge(selectedIdsRef.current, merged.id, sourceIds);
               setPhotos((current) => [
                 merged,
                 ...current.filter((photo) => !sourceSet.has(photo.id)),
