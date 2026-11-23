@@ -1,30 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { api } from './api';
+import { APP_NOTICES_WAIT_MS, withAppNotices, type AppNotices } from './appNoticeRules';
 
-/** One-off notices the account has already seen on any device. */
-export interface AppNotices {
-  /** The newest release whose "What's new" has been dismissed. */
-  release_seen: string | null;
-  /** The first day of the latest week whose review has been shown. */
-  weekly_review_seen: string | null;
-}
-
-/** How long sign-in waits for the account's notices before going by this device alone. */
-export const APP_NOTICES_WAIT_MS = 4000;
-
-const versionParts = (version: string) => version.split('.').map((part) => Number(part) || 0);
-
-/** Whether `seen` is `version` or a later release. */
-export function releaseAtLeast(seen: string | null | undefined, version: string): boolean {
-  if (!seen) return false;
-  const left = versionParts(seen);
-  const right = versionParts(version);
-  for (let index = 0; index < Math.max(left.length, right.length); index += 1) {
-    const difference = (left[index] ?? 0) - (right[index] ?? 0);
-    if (difference !== 0) return difference > 0;
-  }
-  return true;
-}
+export { APP_NOTICES_WAIT_MS, releaseAtLeast, type AppNotices } from './appNoticeRules';
 
 export interface AppNoticesState {
   /** True once the account has answered, the request has failed, or the wait has run out. */
@@ -79,11 +57,7 @@ export function useAppNotices(userId: string | null): AppNoticesState {
         previous.userId === userId
           ? {
               ...previous,
-              notices: {
-                release_seen: previous.notices?.release_seen ?? null,
-                weekly_review_seen: previous.notices?.weekly_review_seen ?? null,
-                ...change,
-              },
+              notices: withAppNotices(previous.notices, change),
             }
           : previous,
       );

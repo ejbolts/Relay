@@ -1,10 +1,14 @@
+import type { Release } from './releaseMetadata';
 import type {
   CommentNotice,
   NotificationReadReference,
+  PasswordResetRequest,
   ReactionNotice,
   SharingConnection,
   SharingNotifications,
+  UsernameReminderRequest,
 } from './types';
+import type { WeeklyReviewNotice } from './weeklyReview';
 
 // The notifications bell's social notices (friend requests, accepted requests, reactions and
 // comments): their order, count, read references and wording, shared by the web and the app.
@@ -136,3 +140,89 @@ export function notificationDate(since: string): string {
 /** The inbox's empty message. */
 export const NOTIFICATIONS_EMPTY =
   "You're all caught up. Friend requests, workout reactions, comments and replies appear here.";
+
+/** Every row of the bell's inbox: the app's own notices, then the social ones. */
+export type NotificationRow =
+  | { kind: 'release'; item: Release }
+  | { kind: 'weekly-review'; item: WeeklyReviewNotice }
+  | { kind: 'password-reset'; item: PasswordResetRequest }
+  | { kind: 'username-reminder'; item: UsernameReminderRequest }
+  | SocialNotificationRow;
+
+/** The bell's notices that come from the app rather than from friends. */
+export interface AppNoticeRows {
+  release?: Release;
+  /** The release notice has not been opened yet. */
+  releaseUnread?: boolean;
+  weeklyReview?: WeeklyReviewNotice | null;
+  /** Only loaded for administrators. */
+  resetRequests?: PasswordResetRequest[];
+  /** Only loaded for administrators. */
+  usernameRequests?: UsernameReminderRequest[];
+}
+
+/** The start of the day after the reviewed week, when its review became available. */
+export function weeklyReviewTime(notice: WeeklyReviewNotice): number {
+  const date = new Date(`${notice.weekEnd}T00:00:00`);
+  date.setDate(date.getDate() + 1);
+  return date.getTime();
+}
+
+/**
+ * The whole inbox, newest first. The app's own unread notices stay at the top of the first page,
+ * above newer social rows.
+ */
+export function notificationRows(
+  items: SharingNotifications,
+  {
+    release,
+    releaseUnread = false,
+    weeklyReview,
+    resetRequests = [],
+    usernameRequests = [],
+  }: AppNoticeRows = {},
+): NotificationRow[] {
+  const rows: NotificationRow[] = [
+    ...(release ? [{ kind: 'release' as const, item: release }] : []),
+    ...(weeklyReview ? [{ kind: 'weekly-review' as const, item: weeklyReview }] : []),
+    ...resetRequests.map((item) => ({ kind: 'password-reset' as const, item })),
+    ...usernameRequests.map((item) => ({ kind: 'username-reminder' as const, item })),
+    ...socialNotificationRows(items),
+  ];
+  const timestamp = (row: NotificationRow) => {
+    if (row.kind === 'weekly-review') return weeklyReviewTime(row.item);
+    return noticeTime(
+      row.kind === 'release'
+        ? row.item.date
+        : row.kind === 'password-reset' || row.kind === 'username-reminder'
+          ? row.item.requested_at
+          : row.item.since,
+    );
+  };
+  const pinned = (row: NotificationRow) =>
+    (row.kind === 'release' && releaseUnread) || (row.kind === 'weekly-review' && row.item.unread);
+  return newestFirst(rows, timestamp, pinned);
+}
+
+/**
+ * The bell's count: waiting friend requests and admin requests always count, until they are dealt
+ * with; everything else counts until it has been read.
+ */
+export function notificationCount(
+  items: SharingNotifications | null | undefined,
+  { releaseUnread = false, weeklyReview, resetRequests = [], usernameRequests = [] }: AppNoticeRows,
+): number {
+  return (
+    socialNotificationCount(items) +
+    Number(releaseUnread) +
+    Number(weeklyReview?.unread ?? false) +
+    resetRequests.length +
+    usernameRequests.length
+  );
+}
+
+/** What an administrator's notice says the person asked for, after their name. */
+export const ADMIN_REQUEST_TEXT = {
+  'password-reset': ' asked for a password reset',
+  'username-reminder': ' asked for their username',
+} as const;

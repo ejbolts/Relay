@@ -9,6 +9,7 @@ import {
   prSetCount,
   recentRecords,
   strengthSets,
+  weekStartDayFrom,
   weekStartFor,
   workoutVolumeKg,
 } from './trainingSummary';
@@ -219,4 +220,109 @@ export function weeklyReview(input: WeeklyReviewInput): WeeklyReview {
       checkIns: bodyWeights.length,
     },
   };
+}
+
+/** What every week's review is drawn from, as the popup steps between weeks. */
+export interface WeeklyReviewData {
+  workouts: TrackedWorkout[];
+  records: PersonalRecord[];
+  measurements: BodyMeasurement[];
+  /** Per-muscle sets for the current week followed by earlier weeks, newest first. */
+  muscleWeeks: MuscleSetsWeek[];
+  muscleGoal: number;
+  muscleGoals?: MuscleSetGoals;
+  /** Cardio for the current week then earlier weeks, newest first. */
+  cardioWeeks: CardioWeek[];
+  today: string;
+  weekStartDay: number;
+}
+
+/** Last week's review, as listed in the notifications inbox until the next week begins. */
+export interface WeeklyReviewNotice {
+  /** First day of the reviewed week. */
+  weekStart: string;
+  /** Last day of the reviewed week. */
+  weekEnd: string;
+  /** False once the review popup has been shown for this week. */
+  unread: boolean;
+}
+
+/** The dashboard's weeks of per-muscle sets for the review: this week, then earlier weeks. */
+export function reviewMuscleWeeks(
+  current: MuscleSetsWeek | null | undefined,
+  history: MuscleSetsWeek[] | null | undefined,
+): MuscleSetsWeek[] {
+  return current ? [current, ...(history ?? [])] : [];
+}
+
+export interface LastWeekReview {
+  /** The first day of the current week. */
+  currentStart: string;
+  weekStartDay: number;
+  /** Null until the dashboard has loaded for the current week. */
+  review: WeeklyReview | null;
+  /** The review can open: the person logged something themselves last week. */
+  available: boolean;
+}
+
+/**
+ * The finished week's review, which opens by itself the first time the app is used in a new
+ * week. It waits until the dashboard has loaded for the current week, so a cached older
+ * dashboard is never reviewed as if it were last week's, and is unavailable when the person
+ * logged nothing themselves (sample workouts aside) that week.
+ */
+export function lastWeekReview(
+  input: Omit<WeeklyReviewData, 'weekStartDay'> & {
+    /** Whether the dashboard has loaded. */
+    loaded: boolean;
+    /** The dashboard's current week of sets starts here. */
+    dashboardWeekStart: string | null;
+  },
+): LastWeekReview {
+  const weekStartDay = weekStartDayFrom(input.dashboardWeekStart);
+  const currentStart = weekStartFor(input.today, weekStartDay);
+  const fresh = input.loaded && input.dashboardWeekStart === currentStart;
+  const review = fresh
+    ? weeklyReview({
+        workouts: input.workouts,
+        records: input.records,
+        measurements: input.measurements,
+        muscleWeeks: input.muscleWeeks,
+        muscleGoal: input.muscleGoal,
+        muscleGoals: input.muscleGoals,
+        cardioWeeks: input.cardioWeeks,
+        today: input.today,
+        weekStartDay,
+        weeksAgo: 1,
+      })
+    : null;
+  const lastWeekEnd = addDays(currentStart, -1);
+  const loggedItself =
+    review !== null &&
+    input.workouts.some(
+      (workout) =>
+        !workout.is_sample &&
+        workout.workout_date >= review.weekStart &&
+        workout.workout_date <= lastWeekEnd,
+    );
+  return {
+    currentStart,
+    weekStartDay,
+    review,
+    available: review !== null && loggedItself && reviewHasActivity(review),
+  };
+}
+
+/** The bell's weekly review notice while a review is available, new until it has been seen. */
+export function weeklyReviewNoticeFor(
+  state: Pick<LastWeekReview, 'review' | 'available' | 'currentStart'>,
+  seenWeek: string | null,
+): WeeklyReviewNotice | null {
+  return state.available && state.review
+    ? {
+        weekStart: state.review.weekStart,
+        weekEnd: state.review.weekEnd,
+        unread: seenWeek !== state.currentStart,
+      }
+    : null;
 }

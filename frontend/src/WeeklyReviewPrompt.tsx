@@ -3,8 +3,8 @@ import type { WeeklyReviewData } from './WeeklyReviewBrowser';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { useTrainingPreferences, useWeightUnit } from './trainingPreferencesContext';
 import type { BodyMeasurement, DashboardData, PersonalRecord, TrackedWorkout } from './types';
-import { addDays, weekStartDayFrom, weekStartFor } from './trainingSummary';
-import { reviewHasActivity, weeklyReview } from './weeklyReview';
+import { weeklyReviewShownThisWeek } from './appNoticeRules';
+import { lastWeekReview, weeklyReviewNoticeFor } from './weeklyReview';
 import { markWeeklyReviewShown, weeklyReviewShownFor } from './weeklyReviewPromptState';
 import { WeeklyReviewPopup } from './WeeklyReviewPopup';
 import { onWeeklyReviewRequested, publishWeeklyReviewNotice } from './weeklyReviewNotice';
@@ -55,34 +55,29 @@ export function WeeklyReviewPrompt({
   const muscleGoal = musclePreferences?.weekly_muscle_set_goal ?? 10;
   const muscleGoals = musclePreferences?.weekly_muscle_set_goals;
   const dashboardWeekStart = dashboard?.weekly_sets?.week_start ?? null;
-  const weekStartDay = weekStartDayFrom(dashboardWeekStart);
-  const currentStart = weekStartFor(today, weekStartDay);
   // Read once per account, so the popup stays open after it records that it was shown.
   const shownBefore = useMemo(() => weeklyReviewShownFor(userId), [userId]);
   const [dismissedWeek, setDismissedWeek] = useState<string | null>(null);
   const [seenWeek, setSeenWeek] = useState(shownBefore);
   const [requested, setRequested] = useState(false);
-  const fresh = dashboard !== null && dashboardWeekStart === currentStart;
 
-  const review = useMemo(
+  const lastWeek = useMemo(
     () =>
-      fresh
-        ? weeklyReview({
-            workouts,
-            records,
-            measurements,
-            muscleWeeks,
-            muscleGoal,
-            muscleGoals,
-            cardioWeeks: dashboard.cardio_weeks ?? NO_CARDIO_WEEKS,
-            today,
-            weekStartDay,
-            weeksAgo: 1,
-          })
-        : null,
+      lastWeekReview({
+        loaded: dashboard !== null,
+        dashboardWeekStart,
+        workouts,
+        records,
+        measurements,
+        muscleWeeks,
+        muscleGoal,
+        muscleGoals,
+        cardioWeeks: dashboard?.cardio_weeks ?? NO_CARDIO_WEEKS,
+        today,
+      }),
     [
-      fresh,
       dashboard,
+      dashboardWeekStart,
       workouts,
       records,
       measurements,
@@ -90,21 +85,10 @@ export function WeeklyReviewPrompt({
       muscleGoal,
       muscleGoals,
       today,
-      weekStartDay,
     ],
   );
-  const lastWeekEnd = addDays(currentStart, -1);
-  const loggedItself =
-    review !== null &&
-    workouts.some(
-      (workout) =>
-        !workout.is_sample &&
-        workout.workout_date >= review.weekStart &&
-        workout.workout_date <= lastWeekEnd,
-    );
-  const available = review !== null && loggedItself && reviewHasActivity(review);
-  const shownThisWeek =
-    shownBefore === currentStart || (shownElsewhere !== null && shownElsewhere >= currentStart);
+  const { currentStart, weekStartDay, review, available } = lastWeek;
+  const shownThisWeek = weeklyReviewShownThisWeek(shownBefore, shownElsewhere, currentStart);
   const autoOpen = enabled && available && !shownThisWeek && dismissedWeek !== currentStart;
   // Once it has opened by itself it stays until closed: recording that it was shown makes the
   // account report this week as seen, which must not shut the review that reported it.
@@ -134,15 +118,7 @@ export function WeeklyReviewPrompt({
   useEffect(() => onWeeklyReviewRequested(() => setRequested(true)), []);
 
   useEffect(() => {
-    publishWeeklyReviewNotice(
-      available && review
-        ? {
-            weekStart: review.weekStart,
-            weekEnd: review.weekEnd,
-            unread: seenWeek !== currentStart,
-          }
-        : null,
-    );
+    publishWeeklyReviewNotice(weeklyReviewNoticeFor({ available, review, currentStart }, seenWeek));
   }, [available, review, seenWeek, currentStart]);
 
   useEffect(() => () => publishWeeklyReviewNotice(null), []);
