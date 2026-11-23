@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
-import { Stack, useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { Stack, useLocalSearchParams, usePreventRemove, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import {
@@ -12,7 +12,6 @@ import {
   replaceAccount,
   userDisabledNotice,
   userSexNotice,
-  usernameChangedNotice,
 } from '../../../../frontend/src/adminAccounts';
 import {
   formatBytes,
@@ -33,7 +32,7 @@ import { useAccountGuard, type AccountCheck } from './accountGuard';
 import { AccountTags } from './AccountTags';
 import { adminApi, adminKeys, patchAccount, useAdminActivity, useAdminUsers } from './adminData';
 import { adminIcons } from './icons';
-import { UsernameSheet } from './UsernameSheet';
+import { adminRoutes } from './routes';
 
 const NOT_SET = 'none';
 
@@ -63,6 +62,7 @@ export function AdminAccountScreen() {
 function AccountDetails({ account }: { account: AdminUser }) {
   const me = useUser();
   const client = useQueryClient();
+  const router = useRouter();
   const { colors, type } = useTheme();
   const now = useNow(60_000);
   const guard = useAccountGuard();
@@ -72,7 +72,6 @@ function AccountDetails({ account }: { account: AdminUser }) {
   const [resetting, setResetting] = useState(false);
   // The reset confirmation is open: its answer may still be on its way to the screen.
   const [confirmingReset, setConfirmingReset] = useState(false);
-  const [renaming, setRenaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Shown once while this screen is open, then discarded.
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
@@ -207,25 +206,6 @@ function AccountDetails({ account }: { account: AdminUser }) {
     });
   }
 
-  /** Saves from the username editor, which shows a rejection beside its field. */
-  async function saveUsername(username: string) {
-    if (working.current) return;
-    working.current = true;
-    setBusy(true);
-    const check = guard();
-    try {
-      const updated = await adminApi.setUsername(account.id, username);
-      if (!check.sameSession()) return;
-      replace(updated);
-      if (!check.open()) return;
-      setRenaming(false);
-      showToast(usernameChangedNotice(updated));
-    } finally {
-      working.current = false;
-      setBusy(false);
-    }
-  }
-
   function dismissRequests() {
     void run(async (check) => {
       // The tags clear; the account keeps its place in the list until the next refresh.
@@ -337,7 +317,7 @@ function AccountDetails({ account }: { account: AdminUser }) {
         <Row
           label="Change username"
           disabled={busy}
-          onPress={() => setRenaming(true)}
+          onPress={() => router.push(adminRoutes.username(account.id))}
           chevron={false}
         />
         {(resetAt || usernameAt) && (
@@ -358,12 +338,6 @@ function AccountDetails({ account }: { account: AdminUser }) {
           />
         )}
       </Section>
-      <UsernameSheet
-        account={account}
-        visible={renaming}
-        onClose={() => setRenaming(false)}
-        onSave={saveUsername}
-      />
     </SettingsPage>
   );
 }

@@ -19,6 +19,7 @@ import { showToast } from '../../ui/Toast';
 import { AdminAccountScreen } from './AdminAccountScreen';
 import { AdminScreen } from './AdminScreen';
 import { AdminServerScreen } from './AdminServerScreen';
+import { AdminUsernameScreen } from './AdminUsernameScreen';
 import AdminLayout from '../../app/admin/_layout';
 import { nextSessionEpoch } from '../../session/sessionEpoch';
 import { AdminSettingsSection } from './AdminSettingsSection';
@@ -310,21 +311,8 @@ it('disables an account, changes its username and dismisses its request', async 
   await waitFor(() => expect(showToast).toHaveBeenCalledWith('Riley is disabled and signed out.'));
   expect(await screen.findByRole('button', { name: 'Enable account' })).toBeTruthy();
 
-  // The editor stays open with what was typed and shows why beside the field.
   await fireEvent.press(screen.getByRole('button', { name: 'Change username' }));
-  const field = await screen.findByLabelText('Username');
-  await fireEvent.changeText(field, 'x');
-  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-  expect(await screen.findByRole('alert')).toBeTruthy();
-  expect(screen.getByLabelText('Username').props.value).toBe('x');
-  await fireEvent.changeText(screen.getByLabelText('Username'), 'casey');
-  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-  expect(await screen.findByText('This username is already registered.')).toBeTruthy();
-  expect(screen.getByLabelText('Username').props.value).toBe('casey');
-  await fireEvent.changeText(screen.getByLabelText('Username'), 'Riley.R ');
-  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-  await waitFor(() => expect(showToast).toHaveBeenCalledWith('Riley’s username is now @riley.r.'));
-  await waitFor(() => expect(screen.queryByLabelText('Username')).toBeNull());
+  expect(mockRouter.push).toHaveBeenCalledWith('/admin/username/riley');
 
   await fireEvent.press(screen.getByRole('button', { name: 'Dismiss request' }));
   await waitFor(() =>
@@ -489,19 +477,51 @@ it('never sends a second reset for an account from another copy of its screen', 
   await act(async () => reset.resolve({ temporary_password: 'brisk-otter-42' }));
 });
 
-it('keeps the username editor open while its save is on its way', async () => {
+it('keeps the typed username and its error beside the field until a name saves', async () => {
+  mockParams = { id: 'riley' };
+  jest.mocked(apiSend).mockImplementation(async (_path, _method, body) => {
+    if ((body as { username: string }).username === 'casey')
+      throw new ApiError(409, 'Taken', 'username_taken');
+    return { ...riley, username: 'riley.r' };
+  });
+  await open(<AdminUsernameScreen />);
+  const field = await screen.findByLabelText('Username');
+  await fireEvent.changeText(field, 'x');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  expect(await screen.findByRole('alert')).toBeTruthy();
+  expect(screen.getByLabelText('Username').props.value).toBe('x');
+  expect(apiSend).not.toHaveBeenCalled();
+  await fireEvent.changeText(screen.getByLabelText('Username'), 'casey');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  expect(await screen.findByText('This username is already registered.')).toBeTruthy();
+  expect(screen.getByLabelText('Username').props.value).toBe('casey');
+  expect(mockRouter.back).not.toHaveBeenCalled();
+  await fireEvent.changeText(screen.getByLabelText('Username'), 'Riley.R ');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(showToast).toHaveBeenCalledWith('Riley’s username is now @riley.r.'));
+  await waitFor(() => expect(mockRouter.back).toHaveBeenCalledTimes(1));
+  expect(
+    client.getQueryData<AdminUser[]>(['admin', 'users'])?.find((row) => row.id === 'riley')
+      ?.username,
+  ).toBe('riley.r');
+});
+
+it('holds leaving the username screen while its save is on its way', async () => {
   mockParams = { id: 'riley' };
   const rename = deferred<AdminUser>();
   jest.mocked(apiSend).mockImplementation(() => rename.promise as never);
-  await open(<AdminAccountScreen />);
-  await fireEvent.press(await screen.findByRole('button', { name: 'Change username' }));
-  await fireEvent.changeText(await screen.findByLabelText('Username'), 'casey');
+  await open(<AdminUsernameScreen />);
+  await fireEvent.changeText(await screen.findByLabelText('Username'), 'riley.r');
   await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-  // The sheet's Close (the same path as Android Back and the backdrop) waits for the answer.
-  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
-  expect(screen.getByLabelText('Username')).toBeTruthy();
-  await act(async () => rename.resolve({ ...riley, username: 'casey' }));
-  await waitFor(() => expect(screen.queryByLabelText('Username')).toBeNull());
+  // A second press while the first is on its way sends nothing.
+  await fireEvent.press(screen.getByRole('button', { name: 'Saving…' }));
+  expect(apiSend).toHaveBeenCalledTimes(1);
+  expect(mockPrevent.blocking).toBe(true);
+  await act(async () => mockPrevent.onLeave?.({ repeat: jest.fn() }));
+  expect(showToast).toHaveBeenCalledWith('Wait for the username to save.');
+  await act(async () => rename.resolve({ ...riley, username: 'riley.r' }));
+  await waitFor(() => expect(mockRouter.back).toHaveBeenCalledTimes(1));
+  expect(mockPrevent.blocking).toBe(false);
 });
 
 it('lets leaving go once the temporary password is dismissed', async () => {
