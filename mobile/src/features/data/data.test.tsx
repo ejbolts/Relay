@@ -586,6 +586,23 @@ describe('backups', () => {
     expect(mockFiles.deleted).toContain(zip.uri);
   });
 
+  it('falls back to the multipart upload where the file API may not read the pick', async () => {
+    pick(zip);
+    mockFiles.upload.mockRejectedValueOnce(
+      new Error("Missing 'READ' permission for accessing the file."),
+    );
+    jest.mocked(uploadFile).mockResolvedValueOnce(archive);
+    await renderWith(<DataSection />);
+    await fireEvent.press(screen.getByRole('button', { name: 'Restore backup' }));
+    expect(await screen.findByText('Restore this backup?')).toBeTruthy();
+    expect(uploadFile).toHaveBeenCalledWith(
+      '/api/account-archive/preview',
+      'POST',
+      { uri: zip.uri, name: 'backup.zip', type: 'application/zip' },
+      { failure: 'That backup could not be read.' },
+    );
+  });
+
   it('shows why the server refused a backup', async () => {
     pick(zip);
     mockFiles.upload.mockResolvedValueOnce(

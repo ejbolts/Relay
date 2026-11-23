@@ -173,7 +173,8 @@ export async function shareFiles(files: { file: File; type: string }[], dialogTi
 
 /**
  * Sends a picked file as the multipart `file` field straight from the file (the phone streams it
- * rather than holding it in memory), signed in and with the app's version headers.
+ * rather than holding it in memory), signed in and with the app's version headers. Where the
+ * file API may not read the picked file (Expo Go), it falls back to `uploadFile`.
  */
 async function uploadPicked<T>(path: string, file: PickedFile, failure: string): Promise<T> {
   const origin = serverOrigin();
@@ -186,7 +187,10 @@ async function uploadPicked<T>(path: string, file: PickedFile, failure: string):
       mimeType: file.type,
       headers: await signedInHeaders(origin),
     });
-  } catch {
+  } catch (caught) {
+    // Expo Go lets its file API read only the project's own folders, and the picker's copy sits
+    // outside them; there the file goes through React Native's multipart upload instead.
+    if (/permission/i.test(String(caught))) return uploadFile<T>(path, 'POST', file, { failure });
     throw new Error(UNREACHABLE);
   }
   let body: { error?: { message?: string; code?: string } } | null = null;
