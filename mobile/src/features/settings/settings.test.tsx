@@ -9,6 +9,9 @@ import { ApiError, apiGet, apiSend } from '../../data/api';
 import { queryKeys } from '../../data/queries';
 import { promptText, showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
+import { DeleteAccountScreen, FeedbackScreen } from './AccountActionsScreens';
+import { AppearanceScreen, BodyweightDefaultsScreen } from './PreferenceScreens';
+import { FreshStartsScreen } from './FreshStartsScreen';
 import { EditProfileScreen } from './EditProfileScreen';
 import { PasswordRequiredScreen } from './PasswordRequiredScreen';
 import { SettingsScreen } from './SettingsScreen';
@@ -49,7 +52,11 @@ const mockUser: User = {
   sex: null,
   profile_photo_url: null,
 };
-const mockSession = { signOut: jest.fn(async () => undefined), updateUser: jest.fn() };
+const mockSession = {
+  signOut: jest.fn(async () => undefined),
+  accountDeleted: jest.fn(async () => undefined),
+  updateUser: jest.fn(),
+};
 jest.mock('../../session/SessionProvider', () => ({
   useUser: () => mockUser,
   useSession: () => mockSession,
@@ -152,6 +159,25 @@ async function pickMenu(label: string) {
 }
 
 describe('Settings', () => {
+  it('applies the saved accent and lets the user restore Automatic', async () => {
+    await show(<AppearanceScreen />);
+    await fireEvent.press(screen.getByRole('button', { name: 'Accent colour, Blue' }));
+    await pickMenu('Emerald');
+    expect(screen.getByRole('button', { name: 'Accent colour, Emerald' })).toBeVisible();
+    await fireEvent.press(screen.getByRole('button', { name: 'Accent colour, Emerald' }));
+    await pickMenu('Blue');
+    expect(screen.getByRole('button', { name: 'Appearance, Automatic' })).toBeVisible();
+  });
+
+  it('saves each bodyweight default independently', async () => {
+    await show(<BodyweightDefaultsScreen />);
+    await fireEvent.press(screen.getByRole('button', { name: 'Default statistic, Average' }));
+    await pickMenu('Median');
+    await fireEvent.press(screen.getByRole('button', { name: 'Default duration, 30 days' }));
+    await pickMenu('14 days');
+    expect(screen.getByRole('button', { name: 'Default statistic, Median' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Default duration, 14 days' })).toBeVisible();
+  });
   it('saves a new weight unit, so every weight follows it, and refreshes the totals', async () => {
     await show(<SettingsScreen />);
     const invalidate = jest.spyOn(client, 'invalidateQueries');
@@ -219,6 +245,58 @@ describe('Settings', () => {
   });
 });
 
+test('retries feedback with the same submission id and clears the form after success', async () => {
+  jest
+    .mocked(apiSend)
+    .mockRejectedValueOnce(new Error('Connection lost'))
+    .mockResolvedValueOnce({ id: 'feedback' });
+  await show(<FeedbackScreen />);
+  await fireEvent.changeText(
+    screen.getByLabelText('Your feedback or feature request'),
+    ' Sample feedback ',
+  );
+  const send = () => fireEvent.press(screen.getByRole('button', { name: 'Send feedback' }));
+  await send();
+  expect(await screen.findByText('Connection lost')).toBeVisible();
+  await send();
+  await waitFor(() =>
+    expect(showToast).toHaveBeenCalledWith('Thanks! Your feedback has been sent.'),
+  );
+  expect(jest.mocked(apiSend).mock.calls[0]).toEqual(jest.mocked(apiSend).mock.calls[1]);
+  expect(screen.getByLabelText('Your feedback or feature request')).toHaveProp('value', '');
+});
+
+test('requires explicit confirmation and a password before deleting the account', async () => {
+  await show(<DeleteAccountScreen />);
+  const remove = screen.getByRole('button', { name: 'Permanently delete account' });
+  await fireEvent.changeText(
+    screen.getByLabelText('Confirm with your password'),
+    'sample-password',
+  );
+  expect(remove).toBeDisabled();
+  await fireEvent(screen.getByLabelText('I understand this is permanent'), 'valueChange', true);
+  await fireEvent.press(remove);
+  await waitFor(() => expect(mockSession.accountDeleted).toHaveBeenCalledTimes(1));
+  expect(apiSend).toHaveBeenCalledWith('/api/profile', 'DELETE', { password: 'sample-password' });
+});
+
+test('saves a fresh start to the shared account cache', async () => {
+  responses['/api/training-blocks'] = { blocks: [], fresh_starts: [] };
+  const saved = { blocks: [], fresh_starts: ['2026-11-01'] };
+  jest.mocked(apiSend).mockResolvedValueOnce(saved);
+  await show(<FreshStartsScreen />);
+  const row = await screen.findByRole('button', { name: /Fresh start date/ });
+  await fireEvent.press(row);
+  await act(async () => jest.mocked(promptText).mock.calls.at(-1)![0].onSubmit('2026-11-01'));
+  responses['/api/training-blocks'] = saved;
+  await fireEvent.press(screen.getByRole('button', { name: 'Start fresh' }));
+  await waitFor(() => expect(showToast).toHaveBeenCalledWith('Fresh start saved'));
+  expect(apiSend).toHaveBeenCalledWith('/api/training-blocks/fresh-starts', 'POST', {
+    start_date: '2026-11-01',
+  });
+  expect(screen.getByRole('button', { name: /Remove fresh start.+current/ })).toBeVisible();
+});
+
 describe('Settings links', () => {
   it('shows who sees your profile and opens the sharing choices', async () => {
     await show(<SettingsScreen />);
@@ -226,6 +304,14 @@ describe('Settings links', () => {
     await waitFor(() => expect(within(row).getByText('Friends only')).toBeVisible());
     await fireEvent.press(row);
     expect(mockRouter.push).toHaveBeenLastCalledWith('/social/sharing');
+  });
+
+  it('opens per-muscle goals and heart-rate zones', async () => {
+    await show(<SettingsScreen />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Muscle goals' }));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/muscle-goals');
+    await fireEvent.press(screen.getByRole('button', { name: 'Heart-rate zones' }));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/cardio/zones');
   });
 });
 
@@ -266,9 +352,15 @@ describe('Workout types', () => {
     await show(<WorkoutTypesScreen />);
     await fireEvent.press(await screen.findByRole('button', { name: 'Push options' }));
     expect(jest.mocked(showMenu).mock.calls[0][1].map((item) => item.label)).toEqual([
+      'Edit exercises',
       'Change colour',
       'Remove',
     ]);
+    await pickMenu('Edit exercises');
+    expect(mockRouter.push).toHaveBeenCalledWith({
+      pathname: '/settings/type-exercises',
+      params: { id: 'push' },
+    });
     await fireEvent.press(screen.getByRole('button', { name: 'Arms options' }));
     await pickMenu('Rename');
     jest.mocked(promptText).mock.calls[0][0].onSubmit('Arms & abs');

@@ -4,7 +4,7 @@ import { RoutinePanel } from './RoutinePanel';
 import { useUserSession } from './userContext';
 import { Icon } from './Icon';
 import { WorkoutCalendar } from './WorkoutCalendar';
-import { calendarMonths } from './calendarRange';
+import { splitCalendarMonths } from './splitCalendar';
 import { addDays, parseLocalDate, shortDate } from './trainingSummary';
 import { needsSplitProgress, splitPreviewDayLabel, withSplitProgress } from './splitEditing';
 import {
@@ -115,15 +115,13 @@ export function SplitPreview({ split }: { split: TrainingSplit }) {
     : split.start_date;
   const previewStart = addDays(firstDay > today ? firstDay : today, previewWeek * 7);
   const preview = splitPreview(split, previewStart);
-  const months = calendarView ? calendarMonths(today, 2) : [];
+  const months = calendarView ? splitCalendarMonths(split, today) : [];
   const plannedDays = months.flatMap((month) =>
-    splitPreview(split, month.first, month.cells.filter(Boolean).length)
-      .filter(({ typeId }) => !followsWorkouts(split) || typeId !== undefined)
-      .map((day) => ({
-        date: day.date,
-        label: labelFor(day),
-        colors: day.typeId === undefined ? [] : coloursFor(day.typeIds),
-      })),
+    month.days.map((day) => ({
+      date: day.date,
+      label: labelFor(day),
+      colors: day.typeId === undefined ? [] : coloursFor(day.typeIds),
+    })),
   );
   const monthLabel = (date: string) =>
     parseLocalDate(date).toLocaleDateString('en-AU', { month: 'short', year: 'numeric' });

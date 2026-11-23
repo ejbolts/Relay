@@ -13,6 +13,7 @@ import { recordKindLabel } from './recordLabels';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { MuscleSetsCard } from './MuscleSetsCard';
+import { withMuscleSetGoal } from './muscleGoalEditing';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { formatMemberSince, formatProfileTotal as formatTotal } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
@@ -68,8 +69,7 @@ import {
 } from './weightUnits';
 import { TrainingBlockCardSettingsForm } from './TrainingBlockHomeCard';
 import { TrainingBlockHome } from './TrainingBlockSummary';
-import { WEEKS_BEFORE_FIRST_BLOCK, trainedWeeks } from './trainingBlockSuggestion';
-import { blockOn } from './trainingBlocks';
+import { homeBlockCard } from './trainingBlockHome';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import {
   BodyGoalCard,
@@ -80,10 +80,11 @@ import {
   FriendsWeekCard,
   MuscleFreshnessCard,
 } from './HomeInsightCards';
-import { muscleFreshness } from './homeInsights';
+import { exerciseNameMap, muscleFreshness, spotlightOptions } from './homeInsights';
 import {
   BODY_FAT_RANGE_ERROR,
   activityAverageLabel,
+  bodyCheckInView,
   bodyFatEntry,
   bodyweightStatCaption,
   bodyweightTrendCaption,
@@ -92,6 +93,7 @@ import {
   homeActivityStats,
   homeBodyweightStats,
   homeCardioGoals,
+  homeCheckInMode,
   nudgedBodyFat,
   nudgedBodyweightKg,
   quickCheckInEntry,
@@ -286,22 +288,37 @@ export function TodayScreen({
   /** Saves one muscle's weekly goal from Home; `null` returns it to the default goal. */
   async function saveMuscleGoal(muscle: string, goal: number | null) {
     if (!musclePreferences) throw new Error('Training preferences are still loading. Try again.');
-    const goals = { ...(musclePreferences.weekly_muscle_set_goals ?? {}) };
-    if (goal === null) delete goals[muscle];
-    else goals[muscle] = goal;
     const saved = await api.updateTrainingPreferences({
       ...musclePreferences,
-      weekly_muscle_set_goals: goals,
+      weekly_muscle_set_goals: withMuscleSetGoal(
+        musclePreferences.weekly_muscle_set_goals,
+        muscle,
+        goal,
+      ),
     });
     trainingPreferences.applySaved(saved);
     window.dispatchEvent(new Event('training-preferences-updated'));
   }
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
   const trainingBlocks = useTrainingBlocks();
-  const currentBlock = blockOn(trainingBlocks.config.blocks, today);
-  const blockOfferReady = useMemo(
-    () => trainedWeeks(workouts, weekStartDay) >= WEEKS_BEFORE_FIRST_BLOCK,
-    [workouts, weekStartDay],
+  const blockCard = useMemo(
+    () =>
+      homeBlockCard({
+        blocks: trainingBlocks.config.blocks,
+        loading: trainingBlocks.loading,
+        error: !!trainingBlocks.error,
+        workouts,
+        today,
+        weekStartDay,
+      }),
+    [
+      trainingBlocks.config.blocks,
+      trainingBlocks.loading,
+      trainingBlocks.error,
+      workouts,
+      today,
+      weekStartDay,
+    ],
   );
   const layout = home.editing ? home.draft : home.layout;
   const workoutWeeks = activityCardSettings(layout, 'workouts').weeks;
@@ -353,20 +370,9 @@ export function TodayScreen({
     [measurements, today, weekStartDay],
   );
   const records = recentRecords(personalRecords, 3);
-  const exerciseNames = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const workout of workouts)
-      for (const movement of workout.movements)
-        names.set(movement.exercise.id, movement.exercise.name);
-    for (const exercise of exercises ?? []) names.set(exercise.id, exercise.name);
-    return names;
-  }, [workouts, exercises]);
-  const spotlightOptions = useMemo(
-    () =>
-      (exerciseSummaries ?? [])
-        .filter((item) => item.latest_estimated_1rm != null && exerciseNames.has(item.exercise_id))
-        .sort((a, b) => b.session_count - a.session_count)
-        .map((item) => ({ id: item.exercise_id, name: exerciseNames.get(item.exercise_id)! })),
+  const exerciseNames = useMemo(() => exerciseNameMap(workouts, exercises), [workouts, exercises]);
+  const spotlightChoices = useMemo(
+    () => spotlightOptions(exerciseSummaries ?? [], exerciseNames),
     [exerciseSummaries, exerciseNames],
   );
   const thisWeekSets = muscleSets?.weeklySets ?? data?.weekly_sets;
@@ -592,25 +598,18 @@ export function TodayScreen({
       ) : null,
     // Before the first block, the card offers to start one once there are a few weeks of training
     // to build on; people who don't want it hide it.
-    'training-block':
-      currentBlock ||
-      (!trainingBlocks.loading &&
-        !trainingBlocks.error &&
-        trainingBlocks.config.blocks.length === 0 &&
-        blockOfferReady) ? (
-        <TrainingBlockHome
-          block={currentBlock}
-          config={trainingBlocks.config}
-          today={today}
-          style={
-            homeSectionSettings(home.editing ? home.draft : home.layout, 'training_block').style
-          }
-          onOpen={() => {
-            trainingBlocks.select('current');
-            onOpenProgress();
-          }}
-        />
-      ) : null,
+    'training-block': blockCard ? (
+      <TrainingBlockHome
+        block={blockCard.kind === 'block' ? blockCard.block : null}
+        config={trainingBlocks.config}
+        today={today}
+        style={homeSectionSettings(home.editing ? home.draft : home.layout, 'training_block').style}
+        onOpen={() => {
+          trainingBlocks.select('current');
+          onOpenProgress();
+        }}
+      />
+    ) : null,
     workouts: (
       <button type="button" className="pulse-kpi" onClick={onOpenHistory}>
         <span>Workouts</span>
@@ -695,7 +694,7 @@ export function TodayScreen({
     ),
     'combined-check-in': (
       <DashboardQuickBodyweight
-        mode={checkInMode === 'combined' ? 'combined-single' : checkInMode}
+        mode={homeCheckInMode(checkInMode)}
         latestBodyweight={latest?.weight_kg ?? null}
         todayBodyweight={todayBodyweight}
         todayBodyFat={todayBodyFat}
@@ -909,7 +908,7 @@ export function TodayScreen({
           ),
           'exercise-spotlight': (
             <ExerciseSpotlightSettingsForm
-              options={spotlightOptions}
+              options={spotlightChoices}
               value={homeSectionSettings(home.draft, 'exercise_spotlight')}
               onChange={(change) =>
                 home.change(updateHomeSectionSettings(home.draft, 'exercise_spotlight', change))
@@ -1022,11 +1021,6 @@ export function DashboardQuickBodyweight({
   onSaveBodyFat?: (bodyFat: number) => Promise<UndoBodyweightCheckIn>;
 }) {
   const weightUnit = useWeightUnit();
-  // Body fat is stored on a weigh-in, so until today's weight is in, Body fat only asks for both.
-  const mode: BodyCheckInMode =
-    configuredMode === 'fat' && onSaveBodyFat && todayBodyweight === null
-      ? 'combined-single'
-      : configuredMode;
   const initialWeight = todayBodyweight ?? latestBodyweight;
   const titleId = useId();
   const weightFormId = useId();
@@ -1042,16 +1036,14 @@ export function DashboardQuickBodyweight({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectedWeight = weight;
-  const singleButton = mode === 'combined-single' && !!onSaveBodyFat;
-  const combined = mode === 'combined' || singleButton;
-  const headerSave = singleButton || mode !== 'combined';
-  const fatOnly = mode === 'fat' && !!onSaveBodyFat;
-  const hasToday = fatOnly
-    ? todayBodyFat !== null
-    : singleButton
-      ? todayBodyweight !== null && todayBodyFat !== null
-      : todayBodyweight !== null;
-  const saveKind = fatOnly ? 'body fat' : singleButton ? 'check-in' : 'weight';
+  const { mode, singleButton, combined, headerSave, fatOnly, hasToday, saveKind } = bodyCheckInView(
+    {
+      mode: configuredMode,
+      todayBodyweight,
+      todayBodyFat,
+      canSaveBodyFat: !!onSaveBodyFat,
+    },
+  );
   const saveLabel = saving ? `Saving ${saveKind}` : `${hasToday ? 'Update' : 'Log'} ${saveKind}`;
 
   useEffect(() => {

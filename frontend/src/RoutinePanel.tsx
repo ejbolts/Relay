@@ -1,3 +1,4 @@
+import { SPLIT_GUIDE_COPY } from './splitGuideCopy';
 import {
   useContext,
   useEffect,
@@ -694,7 +695,7 @@ export function RoutinePanel({
             <GuideCoach
               step={{
                 title: 'Pick a start date',
-                body: 'Choose the day your split starts, then tap Use this split.',
+                body: SPLIT_GUIDE_COPY.confirm.body,
                 target: '.routine-use-dialog .popup-primary-action',
               }}
               index={NEW_SPLIT_STEPS - 1}
@@ -782,8 +783,8 @@ function pageGuideStep(
   if (guide.useRoutineId)
     return {
       step: {
-        title: 'Make it your split',
-        body: 'Tap Use split. Up next on Home then follows it, rest days included.',
+        title: SPLIT_GUIDE_COPY.use.title,
+        body: SPLIT_GUIDE_COPY.use.body,
         target: `.routine-card[data-routine-id="${guide.useRoutineId}"] .routine-primary`,
       },
       index: NEW_SPLIT_STEPS - 2,
@@ -804,11 +805,11 @@ function pageGuideStep(
   const rotation = guide.facts.rotation;
   return {
     step: {
-      title: 'Start from a template',
+      title: SPLIT_GUIDE_COPY.template.title,
       body:
         rotation.length >= 2
           ? `Your recent workouts went ${rotation.join(', ')}. Pick the closest template, or New split to build your own.`
-          : 'Pick the template closest to how you train, or New split to build your own.',
+          : SPLIT_GUIDE_COPY.template.body,
       target: '.split-library-templates',
     },
     index: 0,
@@ -1302,8 +1303,8 @@ function RoutineEditor({
   function editorCoachStep(): CoachStep {
     if (guideStep === 'plan')
       return {
-        title: 'Plan your days',
-        body: 'Set each day’s workout type, add rest days, and add exercises with their sets. Starting that workout fills them in.',
+        title: SPLIT_GUIDE_COPY.plan.title,
+        body: SPLIT_GUIDE_COPY.plan.body,
         target: '.routine-day-list',
         next: { disabled: !hasExercises(value), onClick: () => setGuideStep('reps') },
       };
@@ -1311,10 +1312,10 @@ function RoutineEditor({
       const lift = guideFacts?.lift;
       const unit = musclePreferences?.preferred_weight_unit ?? 'kg';
       return {
-        title: 'Give an exercise a rep range',
+        title: SPLIT_GUIDE_COPY.reps.title,
         body: lift
           ? `Choose Reps on an exercise. With 8–12, stay at ${formatWeight(lift.latestTopKg, unit, 1)} on ${lift.name} until every top set reaches 12 reps, then add weight. Relay says which while you log.`
-          : 'Choose Reps on an exercise. With 8–12, stay at a weight until every top set reaches 12 reps, then add weight. Relay says which while you log.',
+          : SPLIT_GUIDE_COPY.reps.body,
         target: '.routine-day.is-open .routine-rep-range',
         next: {
           disabled: !value.days.some((item) => item.movements.some((m) => m.rep_range)),
@@ -1323,10 +1324,10 @@ function RoutineEditor({
       };
     }
     return {
-      title: 'Save your split',
+      title: SPLIT_GUIDE_COPY.save.title,
       body:
         guide?.flow === 'new'
-          ? 'Tap Save. Then you’ll make it your active split.'
+          ? SPLIT_GUIDE_COPY.save.body
           : 'Tap Save. Your next workout shows the target as you log.',
       target: '.routine-editor-save',
     };

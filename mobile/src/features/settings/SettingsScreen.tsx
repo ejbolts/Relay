@@ -37,6 +37,7 @@ import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
+import { restTimerPreference } from './devicePreferences';
 import { settingsIcons } from './icons';
 import {
   useAutoSave,
@@ -80,6 +81,7 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
   const [trainingError, setTrainingError] = useState<string | null>(null);
   // While a change is on its way, show it rather than the saved value.
   const shown = (save.isPending && save.variables) || preferences;
+  const restTimer = restTimerPreference.use();
 
   function change(next: TrainingPreferences, confirmation = 'Training preferences saved.') {
     setTrainingError(null);
@@ -131,10 +133,50 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
           onSave={(goal) => change({ ...preferences, weekly_muscle_set_goal: goal })}
           onInvalid={() => setTrainingError(WEEKLY_GOAL_ERROR)}
         />
-        <ChoiceRow
-          label="Default rest"
+        <Row
+          label="Muscle goals"
+          icon={settingsIcons.goal}
+          iconTint="#16a34a"
+          onPress={() => router.push('/muscle-goals')}
+        />
+        <Row
+          label="Workout types"
+          icon={settingsIcons.types}
+          iconTint="#3b82f6"
+          value={types.data ? String(activeTypes) : null}
+          onPress={() => router.push('/settings/workout-types')}
+        />
+        <Row
+          label="Fresh starts"
+          icon={settingsIcons.freshStart}
+          iconTint="#159487"
+          onPress={() => router.push('/settings/fresh-starts')}
+        />
+        <Row
+          label="Bodyweight chart"
+          icon={settingsIcons.unit}
+          iconTint="#0e8996"
+          onPress={() => router.push('/settings/bodyweight')}
+        />
+        <Row
+          label="Heart-rate zones"
+          icon={settingsIcons.heartRate}
+          iconTint="#e11d48"
+          onPress={() => router.push('/cardio/zones')}
+        />
+      </Section>
+      <Section title="Between sets">
+        <SwitchRow
+          label="Rest timer"
           icon={settingsIcons.rest}
           iconTint="#f59e0b"
+          value={restTimer}
+          onChange={restTimerPreference.set}
+        />
+        {/* Show rest times returns once the logger draws rest times between sets (PARITY.md). */}
+        <ChoiceRow
+          label="Default rest"
+          disabled={save.isPending}
           value={shown.default_rest_seconds ?? NO_REST}
           choices={restChoices}
           onChange={(seconds) =>
@@ -144,15 +186,16 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
             )
           }
         />
-        <Row
-          label="Workout types"
-          icon={settingsIcons.types}
-          iconTint="#3b82f6"
-          value={types.data ? String(activeTypes) : null}
-          onPress={() => router.push('/settings/workout-types')}
-        />
       </Section>
       <SectionError message={trainingError} />
+      <Section title="Appearance">
+        <Row
+          label="Theme and motion"
+          icon={settingsIcons.appearance}
+          iconTint="#8057ba"
+          onPress={() => router.push('/settings/appearance')}
+        />
+      </Section>
       <AutoSaveSection />
       <NotificationsSection />
       <AccountSection />
@@ -451,6 +494,14 @@ function AccountSection() {
           disabled={busy !== null}
           onPress={() => start('everywhere')}
         />
+        <Row
+          label="Delete account"
+          icon="trash"
+          iconTint="#c53b3b"
+          destructive
+          disabled={busy !== null}
+          onPress={() => router.push('/settings/delete-account')}
+        />
       </Section>
       <SectionError message={error} />
     </>
@@ -475,6 +526,18 @@ function AboutSection() {
         icon={settingsIcons.version}
         iconTint="#64748b"
         value={Constants.expoConfig?.version ?? null}
+      />
+      <Row
+        label="Tips"
+        icon={settingsIcons.tips}
+        iconTint="#986414"
+        onPress={() => router.push('/settings/tips')}
+      />
+      <Row
+        label="Send feedback"
+        icon={settingsIcons.feedback}
+        iconTint="#316ba8"
+        onPress={() => router.push('/settings/feedback')}
       />
       {!!apiOrigin && (
         <Row

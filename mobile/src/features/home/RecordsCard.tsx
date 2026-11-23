@@ -1,22 +1,37 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { recordKindLabel } from '../../../../frontend/src/recordLabels';
 import { recentRecords, shortDate } from '../../../../frontend/src/trainingSummary';
 import { formatWeight, recordDisplayValue } from '../../../../frontend/src/weightUnits';
 import { usePersonalRecords, useWeightUnit } from '../../data/queries';
-import { Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
+import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { trainingRoute } from '../training/routes';
 import { homeIcons } from './homeIcons';
 
-/** The newest three PRs, one per set, exercise and record type, as on the web. */
+/**
+ * The newest three PRs, one per set, exercise and record type, as on the web. Progress opens
+ * Training's exercises; a record opens its exercise's progress.
+ */
 export function RecordsCard() {
   const { colors, type } = useTheme();
+  const router = useRouter();
   const records = usePersonalRecords();
   const weightUnit = useWeightUnit();
   const shown = records.data ? recentRecords(records.data, 3) : [];
   return (
     <Card>
-      <CardHeader title="Recent records" />
+      <CardHeader
+        title="Recent records"
+        action={
+          <Button
+            label="Progress"
+            variant="link"
+            onPress={() => router.navigate(trainingRoute('exercises'))}
+          />
+        }
+      />
       {records.isPending ? (
         <Loading label="Loading records" />
       ) : !records.data ? (
@@ -31,18 +46,25 @@ export function RecordsCard() {
                 : null;
             const value = recordDisplayValue(record, weightUnit);
             return (
-              <View
+              <Pressable
                 key={record.id}
-                accessible
+                accessibilityRole="button"
                 accessibilityLabel={[record.exercise_name ?? 'Exercise', detail, bodyweight, value]
                   .filter(Boolean)
                   .join(', ')}
-                style={[
+                onPress={() =>
+                  router.push({
+                    pathname: '/training/exercise/[id]',
+                    params: { id: record.exercise_id },
+                  })
+                }
+                style={({ pressed }) => [
                   styles.row,
                   index > 0 && {
                     borderTopWidth: StyleSheet.hairlineWidth,
                     borderTopColor: colors.line,
                   },
+                  pressed && { opacity: 0.6 },
                 ]}
               >
                 <View style={[styles.icon, { backgroundColor: colors.goldSoft }]}>
@@ -65,7 +87,8 @@ export function RecordsCard() {
                 >
                   {value}
                 </Text>
-              </View>
+                <Icon name="chevronRight" size={12} color={colors.muted} />
+              </Pressable>
             );
           })}
         </View>

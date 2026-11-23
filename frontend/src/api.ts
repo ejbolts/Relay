@@ -115,6 +115,7 @@ import {
   isClientOutdated,
   withClientVersion,
 } from './clientVersion';
+import { workoutTypeExercisesPayload } from './workoutTypeExerciseSettings';
 import type { HomeLayout } from './homeLayout';
 import { localDate } from './utils';
 import {
@@ -1259,14 +1260,7 @@ export const api = {
     request<WorkoutTypeExercises>(`/api/workout-type-exercises/${encodeURIComponent(typeId)}`, {
       method: 'PUT',
       headers: jsonHeaders,
-      body: JSON.stringify({
-        // Always sent, null included, so clearing a range is not read as an older app's save.
-        movements: movements.map(({ exercise_id, sets, rep_range }) => ({
-          exercise_id,
-          sets,
-          rep_range: rep_range ?? null,
-        })),
-      }),
+      body: JSON.stringify(workoutTypeExercisesPayload(movements)),
     }),
   deleteWorkoutType: (id: string) =>
     request<void>(`/api/workout-types/${encodeURIComponent(id)}`, { method: 'DELETE' }),

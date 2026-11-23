@@ -33,14 +33,15 @@ const NO_ENTRIES: HeatmapDay[] = [];
 /**
  * Streak, training days and the weekly average over the last 12 weeks, above the training
  * calendar (newest month first, swipe back for earlier ones) and its legend, as on the web.
+ * Every day opens: a logged one its workouts, the others their plan or a new workout.
  */
 export function ConsistencyCard({
   liveDate,
-  onOpenDay,
+  onPressDay,
   onOpenLive,
 }: {
   liveDate: string | null;
-  onOpenDay: (day: HeatmapDay) => void;
+  onPressDay: (date: string, entry: HeatmapDay | undefined) => void;
   onOpenLive: () => void;
 }) {
   const { colors, type } = useTheme();
@@ -88,7 +89,7 @@ export function ConsistencyCard({
             split={data.training_split}
             weekStartDay={weekStartDayOf(preferences.data?.week_start)}
             liveDate={liveDate}
-            onOpenDay={onOpenDay}
+            onPressDay={onPressDay}
             onOpenLive={onOpenLive}
           />
         </>
@@ -112,14 +113,14 @@ function TrainingCalendar({
   split,
   weekStartDay,
   liveDate,
-  onOpenDay,
+  onPressDay,
   onOpenLive,
 }: {
   entries: HeatmapDay[];
   split: Parameters<typeof splitCalendarDays>[0];
   weekStartDay: number;
   liveDate: string | null;
-  onOpenDay: (day: HeatmapDay) => void;
+  onPressDay: (date: string, entry: HeatmapDay | undefined) => void;
   onOpenLive: () => void;
 }) {
   const { colors, type } = useTheme();
@@ -153,12 +154,9 @@ function TrainingCalendar({
   const open = useCallback(
     (date: string) => {
       if (date === liveDate) onOpenLive();
-      else {
-        const entry = map.get(date);
-        if (entry) onOpenDay(entry);
-      }
+      else onPressDay(date, map.get(date));
     },
-    [liveDate, map, onOpenDay, onOpenLive],
+    [liveDate, map, onPressDay, onOpenLive],
   );
 
   return (
@@ -321,8 +319,7 @@ const CalendarDay = memo(function CalendarDay({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={label}
-        accessibilityState={{ disabled: !entry && !live, selected: isToday }}
-        disabled={!entry && !live}
+        accessibilityState={{ selected: isToday }}
         onPress={() => onPress(date)}
         style={({ pressed }) => [
           styles.day,

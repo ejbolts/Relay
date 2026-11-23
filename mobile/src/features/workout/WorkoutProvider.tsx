@@ -69,8 +69,9 @@ import type { WorkoutDraftSet } from '../../../../frontend/src/workoutMovements'
 import type { WorkoutPause } from '../../../../frontend/src/workoutPause';
 import { templateDraftMovements } from '../../../../frontend/src/workoutStartMovements';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
-import { ApiError, apiGet, apiSend } from '../../data/api';
+import { ApiError, apiGet, apiSend, currentUser } from '../../data/api';
 import { deviceStorage, newId, readJson, writeJson } from '../../data/deviceStorage';
+import { connectLivePresence } from '../../data/livePresence';
 import {
   queryKeys,
   refreshTraining,
@@ -84,6 +85,8 @@ import {
 } from '../../data/queries';
 import { useOptionalSession } from '../../session/SessionProvider';
 import { showToast, ToastHost } from '../../ui/Toast';
+import { restTimerPreference } from '../settings/devicePreferences';
+import { refreshFriendPresence, socialKeys, updateFriendPresence } from '../social/socialQueries';
 import { FinishedQueueSender, type QueueStatus } from './finishedQueueSender';
 import {
   addSet as addSetRule,
@@ -131,7 +134,8 @@ export type StartChoice =
   | { kind: 'cardio' }
   | {
       kind: 'template';
-      template: SessionTemplate;
+      /** Null starts a planned day that has no exercises to suggest yet, keeping its type. */
+      template: SessionTemplate | null;
       name: string;
       /** A planned day's category and type, when it has them. */
       category?: WorkoutCategory | null;
@@ -159,6 +163,8 @@ export interface LiveWorkout {
   /** A resumed workout's saved minutes, which its clock adds to. */
   previousDurationMinutes: number;
   startedAt: number;
+  /** The day it is logged on: today, or the earlier day it was started for. */
+  workoutDate: string;
   pause: WorkoutPause;
   loggedSets: number;
 }
@@ -167,9 +173,10 @@ export interface WorkoutApi {
   live: LiveWorkout | null;
   /**
    * Starts a workout and opens the logger. Ignored while one is already live: use `open`. From
-   * another sheet (the Start menu), pass `replace` so the logger takes that sheet's place.
+   * another sheet (the Start menu), pass `replace` so the logger takes that sheet's place. `date`
+   * logs it on an earlier day, as the web does from an empty calendar day; it starts today without.
    */
-  start: (choice: StartChoice, options?: { replace?: boolean }) => void;
+  start: (choice: StartChoice, options?: { replace?: boolean; date?: string }) => void;
   /** Shows the logger for the live workout. Dismissing the logger only minimises it. */
   open: () => void;
   /** The Start tab: the Start menu, or the logger while a workout is live. */
@@ -504,8 +511,18 @@ const WorkoutEngine = memo(function WorkoutEngine({
     setRest(next);
   }, []);
 
+  // Turning Settings › Rest timer off ends a countdown in progress, as on the web.
+  useEffect(
+    () =>
+      restTimerPreference.subscribe(() => {
+        if (!restTimerPreference.get()) commitRest(NO_REST);
+      }),
+    [commitRest],
+  );
+
   // Every stored change reaches the other devices shortly after, as the web's sync does.
   const syncRef = useRef<ActiveWorkoutSynchronizer | null>(null);
+  const presenceRef = useRef<ReturnType<typeof connectLivePresence> | null>(null);
   const syncTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const scheduleSync = useCallback(() => {
     clearTimeout(syncTimer.current);
@@ -669,6 +686,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
 
   const startRest = useCallback(
     (seconds: number, movementKey: string | null = null) => {
+      // Settings › Rest timer off: logged sets start no countdown, as on the web.
+      if (!restTimerPreference.get()) return;
       void askForRestAlerts();
       commitRest(startRestRule(seconds, movementKey, Date.now(), newId()));
       // A rest started while paused waits for the workout to resume.
@@ -752,9 +771,9 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const open = useCallback(() => router.push('/workout'), [router]);
 
   const start = useCallback(
-    (choice: StartChoice, options?: { replace?: boolean }) => {
+    (choice: StartChoice, options?: { replace?: boolean; date?: string }) => {
       if (!loggerRef.current) {
-        const date = localDate();
+        const date = options?.date ?? localDate();
         let template: SessionTemplate | null = null;
         let startCategory: WorkoutCategory | null = null;
         let startType: WorkoutType | null = null;
@@ -1147,7 +1166,28 @@ const WorkoutEngine = memo(function WorkoutEngine({
     );
     syncRef.current = sync;
     void sync.sync();
-    // Without the web's live connection, the phone checks the shared copy every 15 s while open.
+    const presence = connectLivePresence({
+      readWorkout: () => readActiveWorkoutDraft(deviceStorage),
+      onOpen: () => {
+        void sync.sync();
+        refreshFriendPresence(client);
+      },
+      onActiveWorkout: () => void sync.sync(),
+      onFriendPresence: (event) => updateFriendPresence(client, event),
+      // The bell refreshes at once, as the web's does, instead of on its next check.
+      onNotifications: () => void client.invalidateQueries({ queryKey: socialKeys.notifications }),
+      // The session provider observes 401s in the query cache.
+      onSignedOut: () =>
+        void client
+          .fetchQuery({
+            queryKey: ['live-session-check', user.id],
+            queryFn: ({ signal }) => currentUser(signal),
+            retry: false,
+          })
+          .catch(() => undefined),
+    });
+    presenceRef.current = presence;
+    // Keep pulling periodically in case the socket is down or silently drops an event.
     const timer = setInterval(() => {
       if (AppState.currentState === 'active') void sync.sync();
     }, 15_000);
@@ -1158,6 +1198,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
       if (online) void sync.sync();
     });
     return () => {
+      presence.stop();
+      presenceRef.current = null;
       sync.stop();
       syncRef.current = null;
       clearInterval(timer);
@@ -1165,7 +1207,10 @@ const WorkoutEngine = memo(function WorkoutEngine({
       app?.remove();
       net();
     };
-  }, [user.id]);
+  }, [client, user.id]);
+  useEffect(() => {
+    presenceRef.current?.report();
+  }, [logger, waiting]);
   const resolveSync = useCallback((useLocal: boolean) => {
     void syncRef.current?.resolve(useLocal);
   }, []);
@@ -1293,6 +1338,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
             resumedWorkoutId: logger.resumingWorkoutId,
             previousDurationMinutes: logger.previousDurationMinutes,
             startedAt: logger.startedAt,
+            workoutDate: logger.workoutDate,
             pause: logger.pause,
             loggedSets,
           }

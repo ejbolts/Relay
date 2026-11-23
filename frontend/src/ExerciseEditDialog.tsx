@@ -1,10 +1,9 @@
 import { useId, useMemo, useState, type FormEvent } from 'react';
 import { api } from './api';
+import { cleanExerciseText as clean, exerciseEditChanges } from './exerciseEdit';
 import { equipmentChoices } from './exerciseEquipment';
 import { PopupDialog } from './PopupDialog';
 import type { Exercise } from './types';
-
-const clean = (value: string) => value.trim().replace(/\s+/g, ' ');
 
 /**
  * Edits a custom exercise's name and equipment; its workouts, records and photos follow.
@@ -30,16 +29,11 @@ export function ExerciseEditDialog({
   const equipmentListId = useId();
   const choices = useMemo(() => equipmentChoices(exercises), [exercises]);
   const trimmedName = clean(name);
-  const trimmedEquipment = clean(equipment);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (saving || !trimmedName) return;
-    const changes: { name?: string; equipment?: string | null } = {};
-    if (trimmedName !== exercise.name) changes.name = trimmedName;
-    if (trimmedEquipment !== clean(exercise.equipment ?? '')) {
-      changes.equipment = trimmedEquipment || null;
-    }
+    const changes = exerciseEditChanges(exercise, { name, equipment });
+    if (saving || !changes) return;
     if (!Object.keys(changes).length) {
       onClose();
       return;

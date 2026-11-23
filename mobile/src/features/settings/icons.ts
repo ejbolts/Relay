@@ -6,6 +6,7 @@ export const settingsIcons = {
   unit: { sf: 'scalemass', md: 'scale' },
   week: { sf: 'calendar', md: 'calendar-today' },
   goal: { sf: 'target', md: 'track-changes' },
+  heartRate: { sf: 'heart.text.square', md: 'monitor-heart' },
   rest: { sf: 'timer', md: 'timer' },
   types: { sf: 'paintpalette', md: 'palette' },
   autoSave: { sf: 'tray.and.arrow.down', md: 'save' },
@@ -27,4 +28,9 @@ export const settingsIcons = {
   list: { sf: 'list.bullet', md: 'view-list' },
   people: { sf: 'person.2', md: 'group' },
   restore: { sf: 'arrow.uturn.backward', md: 'restore' },
+  appearance: { sf: 'circle.lefthalf.filled', md: 'brightness-6' },
+  feedback: { sf: 'bubble.left', md: 'chat-bubble-outline' },
+  freshStart: { sf: 'flag', md: 'outlined-flag' },
+  tips: { sf: 'lightbulb', md: 'lightbulb-outline' },
+  guide: { sf: 'questionmark.circle', md: 'help-outline' },
 } satisfies Record<string, IconPair>;

@@ -1,101 +1,88 @@
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { prettyDate } from '../../../../frontend/src/appShared';
 import { sharedBodyweight } from '../../../../frontend/src/relativeStrength';
 import type { HeatmapDay } from '../../../../frontend/src/types';
 import { formatMinutesDuration } from '../../../../frontend/src/utils';
 import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
 import { useWeightUnit } from '../../data/queries';
+import { Button } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { useTypeColors } from './homeData';
-import { prettyDate } from '../../../../frontend/src/appShared';
+import { HomeSheet, useCloseThen } from './HomeSheet';
 
 /**
- * A logged calendar day: its workouts and the sets of each exercise, as the web's day sheet shows
- * them. A native page sheet on iOS; Android draws a bottom sheet over a dimmed backdrop.
+ * A logged calendar day, as the web's day sheet shows it: its workouts and the sets of each
+ * exercise. A workout opens its session in Training, Edit workout opens the editor, and Add
+ * another workout asks to log one more on that date (`onAdd`).
  */
-export function DaySheet({ day, onClose }: { day: HeatmapDay | null; onClose: () => void }) {
-  const ios = Platform.OS === 'ios';
+export function DaySheet({
+  day,
+  onClose,
+  onAdd,
+}: {
+  day: HeatmapDay | null;
+  onClose: () => void;
+  onAdd: (date: string) => void;
+}) {
+  const router = useRouter();
+  const { closeThen, onDismiss } = useCloseThen(onClose);
   return (
-    <Modal
+    <HomeSheet
       visible={!!day}
-      animationType={ios ? 'slide' : 'fade'}
-      presentationStyle={ios ? 'pageSheet' : undefined}
-      transparent={!ios}
-      statusBarTranslucent
-      onRequestClose={onClose}
+      onClose={onClose}
+      onDismiss={onDismiss}
+      kicker="TRAINING DAY"
+      title={day ? prettyDate(day.workout_date) : ''}
     >
-      {day &&
-        (ios ? (
-          <DayContent day={day} onClose={onClose} />
-        ) : (
-          <AndroidSheet day={day} onClose={onClose} />
-        ))}
-    </Modal>
+      {day && (
+        <DayContent
+          day={day}
+          onOpen={(id) =>
+            closeThen(() => router.push({ pathname: '/training/session/[id]', params: { id } }))
+          }
+          onEdit={(id) =>
+            closeThen(() => router.push({ pathname: '/edit-workout/[id]', params: { id } }))
+          }
+          onAdd={() => closeThen(() => onAdd(day.workout_date))}
+        />
+      )}
+    </HomeSheet>
   );
 }
 
-function AndroidSheet({ day, onClose }: { day: HeatmapDay; onClose: () => void }) {
-  const { colors } = useTheme();
-  const insets = useSafeAreaInsets();
-  return (
-    <View style={styles.backdrop}>
-      <Pressable
-        style={StyleSheet.absoluteFill}
-        accessibilityRole="button"
-        accessibilityLabel="Close"
-        onPress={onClose}
-      />
-      <View
-        style={[
-          styles.androidCard,
-          { backgroundColor: colors.surface, paddingBottom: insets.bottom + 8 },
-        ]}
-      >
-        <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
-        <DayContent day={day} onClose={onClose} />
-      </View>
-    </View>
-  );
-}
-
-function DayContent({ day, onClose }: { day: HeatmapDay; onClose: () => void }) {
+function DayContent({
+  day,
+  onOpen,
+  onEdit,
+  onAdd,
+}: {
+  day: HeatmapDay;
+  onOpen: (workoutId: string) => void;
+  onEdit: (workoutId: string) => void;
+  onAdd: () => void;
+}) {
   const { colors, type, radius } = useTheme();
   const weightUnit = useWeightUnit();
   const { types, categoryColors } = useTypeColors();
   return (
-    <ScrollView
-      style={{ backgroundColor: Platform.OS === 'ios' ? colors.surface : 'transparent' }}
-      contentContainerStyle={styles.content}
-    >
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={[type.eyebrow, { color: colors.muted }]}>TRAINING DAY</Text>
-          <Text accessibilityRole="header" style={[type.title, { color: colors.text }]}>
-            {prettyDate(day.workout_date)}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Close"
-          hitSlop={8}
-          onPress={onClose}
-          style={({ pressed }) => [
-            styles.close,
-            { backgroundColor: colors.surface2 },
-            pressed && { opacity: 0.6 },
-          ]}
-        >
-          <Icon name="close" size={18} color={colors.text} />
-        </Pressable>
-      </View>
+    <>
       {day.workouts.map((workout) => {
         const workoutType = effectiveWorkoutType(workout, types);
         const bodyweight = sharedBodyweight(workout.exercises);
         return (
-          <View key={workout.id} style={{ gap: 10 }}>
-            <View style={styles.workoutHead}>
+          <View
+            key={workout.id}
+            style={[styles.workout, { backgroundColor: colors.surface2, borderRadius: radius.lg }]}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${workout.name}`}
+              onPress={() => onOpen(workout.id)}
+              style={({ pressed }) => [styles.workoutHead, pressed && { opacity: 0.6 }]}
+            >
               <View
                 style={[
                   styles.bar,
@@ -114,8 +101,9 @@ function DayContent({ day, onClose }: { day: HeatmapDay; onClose: () => void }) 
                   {bodyweight !== null && ` · at ${formatWeight(bodyweight, weightUnit)} BW`}
                 </Text>
               </View>
-            </View>
-            <View style={{ gap: 8, paddingLeft: 20 }}>
+              <Icon name="chevronRight" size={14} color={colors.muted} />
+            </Pressable>
+            <View style={{ gap: 8, paddingLeft: 18 }}>
               {workout.exercises.map((exercise) => (
                 <View key={exercise.exercise_name} style={styles.exercise}>
                   <Text style={[type.callout, { color: colors.text, flex: 1 }]}>
@@ -130,26 +118,24 @@ function DayContent({ day, onClose }: { day: HeatmapDay; onClose: () => void }) 
                 </View>
               ))}
             </View>
+            <Button
+              label="Edit workout"
+              accessibilityLabel={`Edit ${workout.name}`}
+              icon="edit"
+              variant="secondary"
+              style={{ backgroundColor: colors.surface }}
+              onPress={() => onEdit(workout.id)}
+            />
           </View>
         );
       })}
-    </ScrollView>
+      <Button label="Add another workout" icon="plus" variant="secondary" onPress={onAdd} />
+    </>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.4)' },
-  androidCard: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '85%' },
-  grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, marginTop: 8 },
-  content: { padding: 20, paddingTop: 20, gap: 20 },
-  header: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
-  close: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  workout: { padding: 14, gap: 12 },
   workoutHead: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   bar: { width: 6, alignSelf: 'stretch' },
   exercise: { flexDirection: 'row', alignItems: 'center', gap: 12 },

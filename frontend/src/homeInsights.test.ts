@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
+  bodyGoalChip,
   bodyGoalProgress,
+  distancePeriodName,
   distancePeriodStart,
+  exerciseNameMap,
+  goalDaysLeftLabel,
+  spotlightOptions,
+  weekBoard,
   freshnessLabel,
   freshnessLevel,
   muscleFreshness,
@@ -241,5 +247,74 @@ describe('weekStandings', () => {
     expect(distancePeriodStart('week', '2026-11-17', 1)).toBe('2026-11-16');
     expect(distancePeriodStart('week', '2026-11-17', 0)).toBe('2026-11-15');
     expect(distancePeriodStart('month', '2026-11-17', 1)).toBe('2026-11-01');
+  });
+});
+
+describe('Home insight labels', () => {
+  it('reads progress against a goal as a chip', () => {
+    expect(bodyGoalChip(null, 'kg')).toBeNull();
+    const base = { kind: 'cut', ahead_kg: 0.42, status: null } as never;
+    expect(bodyGoalChip(base, 'kg')).toEqual({ text: '0.4 kg ahead', tone: 'good' });
+    expect(bodyGoalChip({ ...(base as object), ahead_kg: -1 } as never, 'kg')).toEqual({
+      text: '1 kg behind',
+      tone: 'warn',
+    });
+    expect(bodyGoalChip({ ...(base as object), ahead_kg: null } as never, 'kg')?.text).toBe(
+      'On track',
+    );
+    expect(bodyGoalChip({ kind: 'maintain', status: 'in' } as never, 'kg')).toEqual({
+      text: 'In range',
+      tone: 'good',
+    });
+  });
+
+  it('counts down to the target date', () => {
+    expect(goalDaysLeftLabel(3, true)).toBe('Target date passed');
+    expect(goalDaysLeftLabel(0, false)).toBe('Due today');
+    expect(goalDaysLeftLabel(1, false)).toBe('1 day left');
+    expect(goalDaysLeftLabel(13, false)).toBe('13 days left');
+    expect(goalDaysLeftLabel(30, false)).toBe('4 weeks left');
+  });
+
+  it('ranks the week board and says how you stand', () => {
+    const row = (id: string, days: number, is_you = false) => ({
+      id,
+      display_name: id,
+      profile_photo_url: null,
+      is_you,
+      days,
+      recent: 0,
+    });
+    const behind = weekBoard([row('Sam', 4), row('you', 2, true), row('Kai', 2)]);
+    expect(behind.yourRank).toBe(2);
+    expect(behind.rank(2)).toBe(2);
+    expect(behind.summary).toBe('2 days behind Sam');
+    expect(weekBoard([row('you', 3, true), row('Sam', 3)]).summary).toBe('Level with Sam');
+    expect(weekBoard([row('you', 3, true), row('Sam', 2)]).summary).toBe('1 day ahead');
+  });
+
+  it('offers the trained lifts with names, most trained first', () => {
+    const summary = (exercise_id: string, session_count: number, oneRm: number | null) =>
+      ({ exercise_id, session_count, latest_estimated_1rm: oneRm }) as ExerciseLibrarySummary;
+    const names = exerciseNameMap([], [
+      { id: 'squat', name: 'Squat' },
+      { id: 'bench', name: 'Bench' },
+    ] as never);
+    expect(
+      spotlightOptions(
+        [summary('bench', 3, 90), summary('squat', 8, 120), summary('row', 9, 70)],
+        names,
+      ),
+    ).toEqual([
+      { id: 'squat', name: 'Squat' },
+      { id: 'bench', name: 'Bench' },
+    ]);
+  });
+
+  it("names the distance card's period", () => {
+    expect(distancePeriodName('week', '2026-11-19')).toBe('This week');
+    expect(distancePeriodName('month', '2026-11-19')).toBe(
+      new Intl.DateTimeFormat('en-GB', { month: 'long' }).format(new Date('2026-11-19T12:00:00')),
+    );
   });
 });

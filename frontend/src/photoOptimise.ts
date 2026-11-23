@@ -4,37 +4,22 @@
  * re-encoded as JPEG, so they fit the upload limit and send quickly on a gym's mobile signal.
  */
 
-/** Longest side the server stores for a machine photo; anything larger is wasted upload. */
-export const PHOTO_MAX_DIMENSION = 1800;
-const JPEG_QUALITY = 0.85;
-/** A photo this small that already fits is sent untouched rather than re-compressed. */
-const SMALL_ENOUGH_BYTES = 1.5 * 1024 * 1024;
+import {
+  JPEG_QUALITY,
+  jpegFileName,
+  needsOptimising,
+  PHOTO_MAX_DIMENSION,
+  scaledSize,
+} from './photoOptimiseRules';
 
-export function scaledSize(
-  width: number,
-  height: number,
-  maxDimension = PHOTO_MAX_DIMENSION,
-): { width: number; height: number } {
-  const scale = Math.min(1, maxDimension / Math.max(width, height));
-  return {
-    width: Math.max(1, Math.round(width * scale)),
-    height: Math.max(1, Math.round(height * scale)),
-  };
-}
-
-export function needsOptimising(
-  bytes: number,
-  width: number,
-  height: number,
-  maxDimension = PHOTO_MAX_DIMENSION,
-): boolean {
-  return bytes > SMALL_ENOUGH_BYTES || Math.max(width, height) > maxDimension;
-}
-
-export function jpegFileName(name: string): string {
-  const base = name.replace(/\.[^./\\]+$/, '').trim();
-  return `${base || 'machine-photo'}.jpg`;
-}
+// The size rules are shared with the app (see photoOptimiseRules.ts); this adds the browser's
+// decoding and re-encoding.
+export {
+  jpegFileName,
+  needsOptimising,
+  PHOTO_MAX_DIMENSION,
+  scaledSize,
+} from './photoOptimiseRules';
 
 type DecodedImage = { source: CanvasImageSource; width: number; height: number; close(): void };
 

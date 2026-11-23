@@ -15,6 +15,7 @@ import type {
 import { localDate } from '../../../../frontend/src/utils';
 import { apiGet, apiSend } from '../../data/api';
 import { ToastHost } from '../../ui/Toast';
+import { bodyTrendPreference } from '../settings/devicePreferences';
 import { BodyScreen } from './BodyScreen';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
@@ -199,6 +200,18 @@ test('Body shows the latest weight, goal and body fat, the trend and the history
   expect(screen.getAllByText(/^\d check-ins?$/).length).toBeGreaterThan(0);
 });
 
+test('with the median chosen in Settings, the history offers median weeks and months', async () => {
+  bodyTrendPreference.set({ duration: '30d', statistic: 'median' });
+  try {
+    await renderBody();
+    expect(screen.getByRole('tab', { name: 'Median Week' })).toBeVisible();
+    expect(screen.getByRole('tab', { name: 'Median Monthly' })).toBeVisible();
+    expect(screen.queryByRole('tab', { name: 'Avg Week' })).toBeNull();
+  } finally {
+    bodyTrendPreference.set({ duration: '30d', statistic: 'average' });
+  }
+});
+
 test('Log weigh-in fills today’s check-in, steps it and saves it', async () => {
   await renderBody();
   await fireEvent.press(screen.getByRole('button', { name: 'Log weigh-in' }));
@@ -296,7 +309,8 @@ test('a removed goal hides at once, Undo brings it back, and otherwise it is del
 test('a part typed on the figure is saved into today’s measurements', async () => {
   responses['/api/body-sizes'] = [{ ...emptyBodySizeLog(addDays(today, -5)), waist_cm: 82 }];
   await renderBody();
-  await fireEvent(screen.getByLabelText('Measurements on the body'), 'layout', {
+  // Body sizes load separately from the weigh-ins renderBody waits for.
+  await fireEvent(await screen.findByLabelText('Measurements on the body'), 'layout', {
     nativeEvent: { layout: { width: 350, height: 426 } },
   });
   expect(screen.getByRole('button', { name: 'Update waist, 82 cm' })).toBeVisible();

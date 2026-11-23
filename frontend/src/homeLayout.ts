@@ -1,4 +1,5 @@
-import type { IconName } from './Icon';
+// Plain data and rules only: the native app imports this module too. Icon names are checked
+// where the web draws them (HomeLayoutSections).
 
 // In default order. The next workout leads, so starting it needs no scrolling.
 export const HOME_SECTIONS = [
@@ -139,7 +140,7 @@ export const HOME_SECTIONS = [
   id: string;
   title: string;
   description: string;
-  icon: IconName;
+  icon: string;
   size: string;
 }>;
 
@@ -170,6 +171,12 @@ export interface CardioGoalCardSettings {
   style: CardioGoalCardStyle;
 }
 export type TrainingBlockCardStyle = 'progress' | 'timeline' | 'both';
+/** The training block card's designs, in the order Customise offers them. */
+export const TRAINING_BLOCK_CARD_STYLES: { id: TrainingBlockCardStyle; label: string }[] = [
+  { id: 'progress', label: 'Progress' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'both', label: 'Both' },
+];
 export interface TrainingBlockCardSettings {
   style: TrainingBlockCardStyle;
 }
@@ -245,6 +252,66 @@ export function updateHomeSectionSettings<Id extends keyof HomeSectionSettings>(
       [id]: { ...homeSectionSettings(layout, id), ...change },
     },
   };
+}
+
+/** A section's title, description, icon and size. */
+export function homeSection(id: HomeSectionId) {
+  return HOME_SECTIONS.find((section) => section.id === id)!;
+}
+
+/** A copy to edit, with every section's settings filled in so saving keeps them all. */
+export function homeLayoutDraft(layout: HomeLayout): HomeLayout {
+  return {
+    order: [...layout.order],
+    hidden: [...layout.hidden],
+    widths: { ...layout.widths },
+    settings: { ...DEFAULT_HOME_SECTION_SETTINGS, ...layout.settings },
+  };
+}
+
+/**
+ * The sections Home shows, in order, and the hidden ones it could add. `shown` says whether a
+ * section has anything to show on this screen (the training block needs a block, for example).
+ */
+export function homeSectionLists(
+  layout: HomeLayout,
+  shown: (id: HomeSectionId) => boolean = () => true,
+): { visible: HomeSectionId[]; hidden: HomeSectionId[] } {
+  const ids = layout.order.filter(isHomeSectionId).filter(shown);
+  return {
+    visible: ids.filter((id) => !layout.hidden.includes(id)),
+    hidden: ids.filter((id) => layout.hidden.includes(id)),
+  };
+}
+
+/** Home's visible sections grouped into rows of the six-column grid, with each one's span. */
+export function homeSectionRows(
+  ids: HomeSectionId[],
+  widths: HomeSectionWidths = {},
+): { id: HomeSectionId; span: number }[][] {
+  const spans = homeSectionSpans(ids, widths);
+  const rows: { id: HomeSectionId; span: number }[][] = [];
+  let used = 6;
+  ids.forEach((id, index) => {
+    if (used + spans[index] > 6) {
+      rows.push([]);
+      used = 0;
+    }
+    rows.at(-1)!.push({ id, span: spans[index] });
+    used += spans[index];
+  });
+  return rows;
+}
+
+/** Moves a visible section one place earlier (-1) or later (1) among the visible sections. */
+export function stepHomeSection(
+  layout: HomeLayout,
+  visible: HomeSectionId[],
+  id: HomeSectionId,
+  direction: -1 | 1,
+): HomeLayout {
+  const target = visible[visible.indexOf(id) + direction];
+  return target ? moveHomeSection(layout, id, target) : layout;
 }
 
 export function defaultHomeLayout(): HomeLayout {

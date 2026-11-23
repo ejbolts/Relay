@@ -1,8 +1,15 @@
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { calendarWeekdays } from '../../../../../frontend/src/calendarRange';
+import { splitCalendarMonths } from '../../../../../frontend/src/splitCalendar';
 import { splitPreviewDayLabel } from '../../../../../frontend/src/splitEditing';
-import { addDays, parseLocalDate, shortDate } from '../../../../../frontend/src/trainingSummary';
+import {
+  addDays,
+  isoLocalDate,
+  parseLocalDate,
+  shortDate,
+} from '../../../../../frontend/src/trainingSummary';
 import {
   followsWorkouts,
   splitPreview,
@@ -10,8 +17,10 @@ import {
 } from '../../../../../frontend/src/trainingSplit';
 import type { RoutineDay, TrainingSplit, WorkoutType } from '../../../../../frontend/src/types';
 import { localDate } from '../../../../../frontend/src/utils';
+import { useTrainingPreferences } from '../../../data/queries';
 import { Icon } from '../../../ui/Icon';
 import { useTheme } from '../../../ui/theme';
+import { settingsIcons } from '../icons';
 
 /** A split's cycle as a row of coloured pips, rest days hollow. */
 export function SplitPattern({
@@ -114,7 +123,14 @@ export function StepButton({
   disabled,
   fill,
 }: {
-  icon: 'chevronLeft' | 'chevronRight' | 'minus' | 'plus' | 'close';
+  icon:
+    | 'chevronLeft'
+    | 'chevronRight'
+    | 'minus'
+    | 'plus'
+    | 'close'
+    | typeof settingsIcons.calendar
+    | typeof settingsIcons.list;
   label: string;
   onPress: () => void;
   disabled?: boolean;
@@ -145,6 +161,7 @@ export function StepButton({
 export function SplitPreview({ split, types }: { split: TrainingSplit; types: WorkoutType[] }) {
   const { colors, type } = useTheme();
   const [week, setWeek] = useState(0);
+  const [calendar, setCalendar] = useState(false);
   const today = localDate();
   const firstDay = followsWorkouts(split)
     ? (split.next_date ?? split.start_date)
@@ -157,75 +174,212 @@ export function SplitPreview({ split, types }: { split: TrainingSplit; types: Wo
     <View style={{ gap: 10 }}>
       <View style={styles.previewHeader}>
         <Text style={[type.footnote, { color: colors.muted, flex: 1, fontWeight: '600' }]}>
-          {week === 0 ? 'NEXT 7 DAYS' : `${shortDate(start)} – ${shortDate(addDays(start, 6))}`}
+          {calendar
+            ? 'SPLIT CALENDAR'
+            : week === 0
+              ? 'NEXT 7 DAYS'
+              : `${shortDate(start)} – ${shortDate(addDays(start, 6))}`}
         </Text>
         <StepButton
-          icon="chevronLeft"
-          label="Previous preview week"
-          disabled={week === 0}
-          onPress={() => setWeek((value) => Math.max(0, value - 1))}
+          icon={calendar ? settingsIcons.list : settingsIcons.calendar}
+          label={calendar ? 'Show next 7 days' : 'Show two-month calendar'}
+          onPress={() => setCalendar(!calendar)}
         />
-        <StepButton
-          icon="chevronRight"
-          label="Next preview week"
-          onPress={() => setWeek((value) => value + 1)}
-        />
+        {!calendar && (
+          <>
+            <StepButton
+              icon="chevronLeft"
+              label="Previous preview week"
+              disabled={week === 0}
+              onPress={() => setWeek((value) => Math.max(0, value - 1))}
+            />
+            <StepButton
+              icon="chevronRight"
+              label="Next preview week"
+              onPress={() => setWeek((value) => value + 1)}
+            />
+          </>
+        )}
       </View>
-      <View style={styles.previewDays}>
-        {days.map(({ date, typeId, typeIds }) => {
-          const name = splitPreviewDayLabel(types, typeId, typeIds);
-          return (
-            <View
-              key={date}
-              accessible
-              accessibilityLabel={`${dayLabel(date, 'long')}: ${name}`}
-              style={[styles.previewDay, { backgroundColor: colors.surface2 }]}
-            >
-              <Text style={[type.caption, { color: colors.muted }]}>
-                {parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'narrow' })}
-              </Text>
-              <Text
-                style={[
-                  type.callout,
-                  type.number,
-                  { color: date === today ? colors.accentText : colors.text, fontWeight: '700' },
-                ]}
-              >
-                {parseLocalDate(date).getDate()}
-              </Text>
+      {calendar ? (
+        <SplitCalendar split={split} types={types} today={today} />
+      ) : (
+        <View style={styles.previewDays}>
+          {days.map(({ date, typeId, typeIds }) => {
+            const name = splitPreviewDayLabel(types, typeId, typeIds);
+            return (
               <View
-                style={[
-                  styles.previewPip,
-                  typeId
-                    ? {
-                        backgroundColor: colourFor(typeId),
-                        flexDirection: 'row',
-                        overflow: 'hidden',
-                      }
-                    : { borderWidth: 1.5, borderColor: colors.deemph },
-                ]}
+                key={date}
+                accessible
+                accessibilityLabel={`${dayLabel(date, 'long')}: ${name}`}
+                style={[styles.previewDay, { backgroundColor: colors.surface2 }]}
               >
-                {/* A mixed day splits the pip between its types' colours. */}
-                {typeIds.length > 1 &&
-                  typeIds.map((id) => (
-                    <View key={id} style={{ flex: 1, backgroundColor: colourFor(id) }} />
-                  ))}
+                <Text style={[type.caption, { color: colors.muted }]}>
+                  {parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'narrow' })}
+                </Text>
+                <Text
+                  style={[
+                    type.callout,
+                    type.number,
+                    { color: date === today ? colors.accentText : colors.text, fontWeight: '700' },
+                  ]}
+                >
+                  {parseLocalDate(date).getDate()}
+                </Text>
+                <View
+                  style={[
+                    styles.previewPip,
+                    typeId
+                      ? {
+                          backgroundColor: colourFor(typeId),
+                          flexDirection: 'row',
+                          overflow: 'hidden',
+                        }
+                      : { borderWidth: 1.5, borderColor: colors.deemph },
+                  ]}
+                >
+                  {/* A mixed day splits the pip between its types' colours. */}
+                  {typeIds.length > 1 &&
+                    typeIds.map((id) => (
+                      <View key={id} style={{ flex: 1, backgroundColor: colourFor(id) }} />
+                    ))}
+                </View>
+                <Text
+                  numberOfLines={2}
+                  style={[styles.previewLabel, { color: typeId ? colors.secondary : colors.muted }]}
+                >
+                  {splitPreviewLabel(name)}
+                </Text>
               </View>
-              <Text
-                numberOfLines={2}
-                style={[styles.previewLabel, { color: typeId ? colors.secondary : colors.muted }]}
-              >
-                {splitPreviewLabel(name)}
-              </Text>
+            );
+          })}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function SplitCalendar({
+  split,
+  today,
+  types,
+}: {
+  split: TrainingSplit;
+  today: string;
+  types: WorkoutType[];
+}) {
+  const { colors, type, radius } = useTheme();
+  const weekStart = useTrainingPreferences().data?.week_start === 'sunday' ? 0 : 1;
+  const months = splitCalendarMonths(split, today, weekStart);
+  const scale = calendarWeekdays(weekStart);
+  return (
+    <View style={{ gap: 12 }}>
+      {months.map((month) => {
+        const planned = new Map(month.days.map((day) => [day.date, day]));
+        const rows = Array.from({ length: 6 }, (_, index) =>
+          month.cells.slice(index * 7, index * 7 + 7),
+        );
+        return (
+          <View
+            key={month.key}
+            style={{
+              padding: 8,
+              gap: 2,
+              backgroundColor: colors.surface2,
+              borderRadius: radius.md,
+            }}
+          >
+            <Text
+              accessibilityRole="header"
+              style={[type.headline, { color: colors.text, padding: 4 }]}
+            >
+              {month.title}
+            </Text>
+            <View
+              style={styles.calendarRow}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+            >
+              {scale.map((day, index) => (
+                <Text
+                  key={index}
+                  style={[type.caption, { color: colors.muted, textAlign: 'center', flex: 1 }]}
+                >
+                  {day}
+                </Text>
+              ))}
             </View>
-          );
-        })}
-      </View>
+            {rows
+              .filter((row) => row.some(Boolean))
+              .map((row, index) => (
+                <View key={index} style={styles.calendarRow}>
+                  {row.map((cell, column) => {
+                    if (!cell) return <View key={column} style={{ flex: 1 }} />;
+                    const date = isoLocalDate(cell);
+                    const day = planned.get(date);
+                    const id = day?.typeId;
+                    const ids = day?.typeIds ?? [];
+                    const label = splitPreviewDayLabel(types, id, ids);
+                    const colourOf = (typeId: string) =>
+                      types.find((item) => item.id === typeId)?.color ?? colors.deemph;
+                    return (
+                      <View
+                        key={date}
+                        accessible
+                        accessibilityLabel={`${dayLabel(date, 'long')}${id === undefined ? '' : `, ${label}`}`}
+                        style={[
+                          styles.calendarDay,
+                          date === today && {
+                            backgroundColor: colors.accentSoft,
+                            borderRadius: radius.sm,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            type.footnote,
+                            type.number,
+                            { color: date === today ? colors.accentText : colors.text },
+                          ]}
+                        >
+                          {cell.getDate()}
+                        </Text>
+                        <View
+                          style={[
+                            styles.previewPip,
+                            id
+                              ? {
+                                  backgroundColor: colourOf(id),
+                                  flexDirection: 'row',
+                                  overflow: 'hidden',
+                                }
+                              : id === null && { borderWidth: 1.5, borderColor: colors.muted },
+                          ]}
+                        >
+                          {/* A mixed day splits the pip between its types' colours. */}
+                          {ids.length > 1 &&
+                            ids.map((typeId) => (
+                              <View
+                                key={typeId}
+                                style={{ flex: 1, backgroundColor: colourOf(typeId) }}
+                              />
+                            ))}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </View>
+              ))}
+          </View>
+        );
+      })}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  calendarRow: { flexDirection: 'row', gap: 2 },
+  calendarDay: { flex: 1, minHeight: 33, alignItems: 'center', justifyContent: 'center', gap: 3 },
   pattern: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   stepperRow: {
     flexDirection: 'row',

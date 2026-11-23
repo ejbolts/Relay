@@ -10,6 +10,7 @@ import { deviceStorage } from '../../data/deviceStorage';
 import { useUpNext } from '../../data/queries';
 import { SessionProvider } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
+import { restTimerPreference } from '../settings/devicePreferences';
 import { StartSheet } from './StartSheet';
 import { exercises, lastPush, pushDay, types } from './testFixtures';
 import { useWorkout, WorkoutProvider } from './WorkoutProvider';
@@ -154,6 +155,28 @@ test('the Start menu offers Cardio, Up next and Empty, and the logger replaces i
   expect(screen.getByText('Live: Push workout')).toBeVisible();
   expect(mockRouter.replace).toHaveBeenCalledWith('/workout');
   expect(mockRouter.push).not.toHaveBeenCalled();
+});
+
+test('with the rest timer off, a logged set starts no rest, and turning it off ends one', async () => {
+  await open(
+    <>
+      <StartSheet />
+      <WorkoutSheet />
+    </>,
+  );
+  await fireEvent.press(screen.getByRole('button', { name: 'Up next: Push day' }));
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Complete set 1' }));
+  expect(screen.getByRole('button', { name: 'Skip rest' })).toBeVisible();
+  try {
+    await act(async () => restTimerPreference.set(false));
+    expect(screen.queryByRole('button', { name: 'Skip rest' })).toBeNull();
+    expect(screen.queryByLabelText('Rest timer')).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Complete set 2' }));
+    expect(screen.queryByRole('button', { name: 'Skip rest' })).toBeNull();
+  } finally {
+    restTimerPreference.set(true);
+  }
 });
 
 test('logs Up next, starts the rest, and finishes into a saved summary', async () => {

@@ -1032,6 +1032,8 @@ export interface ClientVersionUsage {
   users: number;
   sessions: number;
   last_seen_at: string;
+  /** Native builds within this compatibility release. Older servers omit the breakdown. */
+  native_clients?: { client: string; sessions: number }[];
 }
 
 export interface AuthConfig {

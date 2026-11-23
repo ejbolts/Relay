@@ -1,3 +1,5 @@
+import Constants from 'expo-constants';
+import { Platform } from 'react-native';
 import type { User } from '../../../frontend/src/types';
 import {
   finishSignOut,
@@ -24,7 +26,7 @@ export class ApiError extends Error {
   }
 }
 
-function serverOrigin() {
+export function serverOrigin() {
   const origin = new URL(apiOrigin!);
   const loopback = __DEV__ && ['localhost', '127.0.0.1', '[::1]'].includes(origin.hostname);
   if (
@@ -38,6 +40,18 @@ function serverOrigin() {
     throw new Error('Set a valid HTTPS preview origin for Relay.');
   }
   return origin.origin;
+}
+
+export function clientVersionHeaders(): Record<string, string> {
+  const config = Constants.expoConfig;
+  const version = config?.version;
+  const compatibility: unknown = config?.extra?.relayCompatibilityVersion;
+  return {
+    // Set by app.config.js from the Relay release at bundle time.
+    ...(typeof compatibility === 'string' && { 'X-Relay-Version': compatibility }),
+    ...((Platform.OS === 'ios' || Platform.OS === 'android') &&
+      version && { 'X-Relay-Client': `${Platform.OS}/${version}` }),
+  };
 }
 
 /**
@@ -64,6 +78,7 @@ export async function request<T>(
       ...init,
       headers: {
         ...(init.headers as Record<string, string> | undefined),
+        ...clientVersionHeaders(),
         ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}),
       },
       credentials: 'omit',

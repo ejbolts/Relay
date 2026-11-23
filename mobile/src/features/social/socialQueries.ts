@@ -1,5 +1,7 @@
 import {
+  infiniteQueryOptions,
   keepPreviousData,
+  queryOptions,
   useInfiniteQuery,
   useQuery,
   useQueryClient,
@@ -7,6 +9,7 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import { useIsFocused } from 'expo-router';
+import type { FriendPresenceEvent } from '../../../../frontend/src/presenceProtocol';
 import { SHARED_WORKOUT_PAGE_SIZE } from '../../../../frontend/src/sharedProfileDisplay';
 import type {
   CommentPage,
@@ -18,6 +21,7 @@ import type {
   Timeline,
   TimelineItem,
   TrackedWorkout,
+  WorkoutPhoto,
   WorkoutReactionPage,
   WorkoutReactions,
 } from '../../../../frontend/src/types';
@@ -39,14 +43,45 @@ export const socialKeys = {
   workout: (workoutId: string) => ['social', 'workout', workoutId] as const,
   comments: (workoutId: string) => ['social', 'comments', workoutId] as const,
   reactionPeople: (workoutId: string) => ['social', 'reactions', workoutId] as const,
+  notifications: ['social', 'notifications'] as const,
 };
 
 /** The feed's page size, as the web's. */
 const TIMELINE_PAGE = 10;
 
+export function updateFriendPresence(client: QueryClient, event: FriendPresenceEvent) {
+  const { user_id: id, presence } = event;
+  client.setQueryData<FriendConnections>(
+    socialKeys.friends,
+    (current) =>
+      current && {
+        ...current,
+        friends: current.friends.map((friend) =>
+          friend.id === id ? { ...friend, presence } : friend,
+        ),
+      },
+  );
+  client.setQueriesData<FriendFeed>(
+    { queryKey: ['social', 'feed'] },
+    (current) =>
+      current && {
+        ...current,
+        items: current.items.map((item) =>
+          item.friend.id === id ? { ...item, friend: { ...item.friend, presence } } : item,
+        ),
+      },
+  );
+}
+
+/** Recover any presence changes missed while the socket was closed. */
+export function refreshFriendPresence(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: socialKeys.friends });
+  void client.invalidateQueries({ queryKey: ['social', 'feed'] });
+}
+
 /**
  * Friends, requests, sent requests and blocks. Refreshed every 30 seconds while the screen is in
- * front, as the web does, and whenever the app comes back to the foreground.
+ * front, and whenever the app comes back to the foreground. The socket patches presence directly.
  */
 export function useFriendConnections() {
   const focused = useIsFocused();
@@ -111,19 +146,24 @@ export function useSuggestions(page: number) {
   });
 }
 
-export function useSharedProfile(id: string) {
-  return useQuery({
+/** A shared profile, for its screen and for loading it in the background. */
+export function sharedProfileQuery(id: string) {
+  return queryOptions({
     queryKey: socialKeys.profile(id),
     queryFn: ({ signal }) => socialApi.profile(id, signal),
   });
 }
 
+export function useSharedProfile(id: string) {
+  return useQuery(sharedProfileQuery(id));
+}
+
 /** A profile's shared workouts, a page at a time, for one history tab or one day. */
-export function useSharedWorkouts(
+export function sharedWorkoutsQuery(
   id: string,
-  { kind, date, enabled }: { kind?: SharedWorkoutKind; date?: string; enabled: boolean },
+  { kind, date }: { kind?: SharedWorkoutKind; date?: string } = {},
 ) {
-  return useInfiniteQuery({
+  return infiniteQueryOptions({
     queryKey: socialKeys.workouts(id, kind, date),
     queryFn: ({ pageParam, signal }) =>
       socialApi.workouts(
@@ -139,8 +179,14 @@ export function useSharedWorkouts(
       // Pages stop once the server has nothing new, even if its total disagrees.
       return last.workouts.length && shown < last.total ? shown : undefined;
     },
-    enabled,
   });
+}
+
+export function useSharedWorkouts(
+  id: string,
+  { kind, date, enabled }: { kind?: SharedWorkoutKind; date?: string; enabled: boolean },
+) {
+  return useInfiniteQuery({ ...sharedWorkoutsQuery(id, { kind, date }), enabled });
 }
 
 /** Every loaded page of a profile's workouts as one list, with their records and reactions. */
@@ -318,4 +364,75 @@ export function useSharedWorkout(workoutId: string, memberId: string, date: stri
     // A cached copy has no records or notes the feed leaves out, so read it straight away.
     initialDataUpdatedAt: 0,
   });
+}
+
+/**
+ * The notifications bell's friend requests, accepted requests, reactions and comments. Read every
+ * 30 seconds while Home or Social is in front, as the web does, and when the app comes back.
+ */
+export function useNotifications() {
+  const focused = useIsFocused();
+  return useQuery({
+    queryKey: socialKeys.notifications,
+    queryFn: ({ signal }) => socialApi.notifications(signal),
+    refetchInterval: focused ? 30_000 : false,
+  });
+}
+
+/** Shows a workout's new photos everywhere it appears: Social, profiles and Training. */
+export function showWorkoutPhotos(client: QueryClient, workoutId: string, photos: WorkoutPhoto[]) {
+  const patch = <T extends TrackedWorkout>(workout: T): T =>
+    workout.id === workoutId ? { ...workout, photos } : workout;
+  client.setQueryData<SharedWorkoutData>(socialKeys.workout(workoutId), (data) =>
+    data ? { ...data, workout: patch(data.workout) } : data,
+  );
+  client.setQueryData<InfiniteData<Timeline>>(socialKeys.timeline, (data) =>
+    data
+      ? {
+          ...data,
+          pages: data.pages.map((page) => ({
+            ...page,
+            items: page.items.map((item) => ({ ...item, workout: patch(item.workout) })),
+          })),
+        }
+      : data,
+  );
+  client.setQueriesData<FriendFeed>({ queryKey: ['social', 'feed'] }, (feed) =>
+    feed
+      ? { ...feed, items: feed.items.map((item) => ({ ...item, workout: patch(item.workout) })) }
+      : feed,
+  );
+  client.setQueriesData<InfiniteData<SharedWorkoutPage>>(
+    {
+      predicate: (query) =>
+        query.queryKey[0] === 'social' &&
+        query.queryKey[1] === 'profile' &&
+        query.queryKey[3] === 'workouts',
+    },
+    (data) =>
+      data
+        ? {
+            ...data,
+            pages: data.pages.map((page) => ({ ...page, workouts: page.workouts.map(patch) })),
+          }
+        : data,
+  );
+  // Training's saved workout, history and calendar pages all sit under `workouts`.
+  client.setQueriesData({ queryKey: ['workouts'] }, (data: unknown) => withPhotos(data, patch));
+}
+
+/** A Training query's data with the workout's photos replaced, whatever its shape. */
+function withPhotos(data: unknown, patch: (workout: TrackedWorkout) => TrackedWorkout): unknown {
+  if (!data || typeof data !== 'object') return data;
+  if (Array.isArray(data))
+    return data.map((item) =>
+      item && typeof item === 'object' && 'movements' in item ? patch(item) : item,
+    );
+  const value = data as Record<string, unknown>;
+  if ('movements' in value && 'id' in value) return patch(value as unknown as TrackedWorkout);
+  if (Array.isArray(value.workouts))
+    return { ...value, workouts: withPhotos(value.workouts, patch) };
+  if (Array.isArray(value.pages))
+    return { ...value, pages: value.pages.map((page) => withPhotos(page, patch)) };
+  return data;
 }

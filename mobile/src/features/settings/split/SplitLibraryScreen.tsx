@@ -33,6 +33,7 @@ import {
   useTrainingSplit,
 } from '../settingsData';
 import { SettingsPage } from '../SettingsList';
+import { SplitGuide } from './SplitGuide';
 import { DateStepper, SplitPattern, SplitPreview } from './SplitParts';
 
 /** Your splits, as the web's split page: the library, the active split's week, and templates. */
@@ -158,15 +159,18 @@ function Library({
       <Stack.Screen
         options={{
           headerRight: () => (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="New split"
-              disabled={!typesReady}
-              hitSlop={8}
-              onPress={() => edit({ template: 'custom' })}
-            >
-              <Icon name="plus" size={22} color={colors.accentText} />
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20 }}>
+              <SplitGuide />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="New split"
+                disabled={!typesReady}
+                hitSlop={8}
+                onPress={() => edit({ template: 'custom' })}
+              >
+                <Icon name="plus" size={22} color={colors.accentText} />
+              </Pressable>
+            </View>
           ),
         }}
       />

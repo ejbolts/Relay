@@ -10,6 +10,7 @@ import {
 } from '../../../../frontend/src/workoutDraft';
 import { apiGet, apiSend, currentUser } from '../../data/api';
 import { deviceStorage } from '../../data/deviceStorage';
+import { connectLivePresence } from '../../data/livePresence';
 import { useUpNext } from '../../data/queries';
 import { SessionProvider } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
@@ -47,6 +48,9 @@ jest.mock('../../ui/prompts', () => ({
 }));
 jest.mock('../../ui/Toast', () => ({ showToast: jest.fn(), ToastHost: () => null }));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
+jest.mock('../../data/livePresence', () => ({
+  connectLivePresence: jest.fn(() => ({ report: jest.fn(), stop: jest.fn() })),
+}));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
   apiOrigin: 'https://relay.test',
@@ -232,6 +236,16 @@ test('a workout started on another device opens in the app, and edits here reach
     base: expect.objectContaining({ notes: 'Started on the web' }),
   });
   expect(server.revision).toBe(4);
+});
+
+test('a live invalidation fetches a remote workout without polling or reconnecting', async () => {
+  await openApp();
+  await waitFor(() => expect(connectLivePresence).toHaveBeenCalledTimes(1));
+  const live = jest.mocked(connectLivePresence).mock.calls[0][0];
+  server = { revision: 1, draft: remoteDraft(), refuseNextEdit: false };
+  await act(async () => live.onActiveWorkout());
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  expect(readActiveWorkoutDraft(deviceStorage)?.clientSessionId).toBe(sessionId);
 });
 
 test("another device's change shows up here, and its finish closes the workout", async () => {
