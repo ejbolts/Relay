@@ -1,16 +1,20 @@
+import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import { hasCardioMetrics } from '../../../../frontend/src/cardioForm';
 import {
   CARDIO_HISTORY_FILTERS,
   CARDIO_HISTORY_WEEKS_PER_PAGE,
+  cardioDeletion,
   cardioSessionContextLabel,
+  cardioSessionsPerWorkout,
   cardioSessionEnergy,
   cardioSessionPerformance,
   filterCardioHistory,
+  type CardioDeletion,
   type CardioHistoryFilter,
 } from '../../../../frontend/src/cardioHistory';
 import {
@@ -23,11 +27,14 @@ import {
 import { weekStartDayFrom } from '../../../../frontend/src/trainingSummary';
 import type { CardioOverview, CardioSession } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
-import { useWeightUnit } from '../../data/queries';
-import { Button, Card, CardHeader } from '../../ui/components';
+import { refreshTraining, useWeightUnit } from '../../data/queries';
+import { Button, Card, CardHeader, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { showToast } from '../../ui/Toast';
 import { CardioAllStats } from '../cardio/CardioAllStats';
+import { deleteCardioEntry } from '../cardio/cardioData';
+import { CardioShareSheet } from '../cardio/CardioShareSheet';
 import { trainingIcons } from './icons';
 import { Chip, Divider, MoreButton, Note, Segmented } from './parts';
 import { useCardioOverview } from './trainingQueries';
@@ -206,7 +213,32 @@ function CardioHistory({ overview }: { overview: CardioOverview }) {
   const [filter, setFilter] = useState<CardioHistoryFilter>('all');
   const [weeks, setWeeks] = useState(CARDIO_HISTORY_WEEKS_PER_PAGE);
   const [openId, setOpenId] = useState<string | null>(null);
+  const [sharing, setSharing] = useState<CardioSession | null>(null);
+  const client = useQueryClient();
   const sessions = filterCardioHistory(overview.sessions, filter);
+  // Deleting a session deletes its workout only when that is all the workout holds.
+  const perWorkout = cardioSessionsPerWorkout(overview.sessions);
+  const remove = (session: CardioSession, deletion: CardioDeletion) =>
+    Alert.alert(
+      'Delete session?',
+      `Delete ${session.activity_type} on ${prettyDate(session.session_date)}?`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete session',
+          style: 'destructive',
+          onPress: () =>
+            void deleteCardioEntry(deletion).then(
+              () => {
+                setOpenId(null);
+                void refreshTraining(client);
+                showToast('Session deleted');
+              },
+              (reason) => showToast(errorMessage(reason)),
+            ),
+        },
+      ],
+    );
   const groups = groupCardioHistory(sessions, weekStartDayFrom(overview.current_week.week_start));
   return (
     <Card accessibilityLabel="Cardio history">
@@ -238,6 +270,11 @@ function CardioHistory({ overview }: { overview: CardioOverview }) {
                 session={session}
                 open={openId === session.id}
                 onToggle={() => setOpenId(openId === session.id ? null : session.id)}
+                onShare={() => setSharing(session)}
+                onDelete={(() => {
+                  const deletion = cardioDeletion(session, perWorkout);
+                  return deletion ? () => remove(session, deletion) : undefined;
+                })()}
               />
             </View>
           ))}
@@ -249,6 +286,7 @@ function CardioHistory({ overview }: { overview: CardioOverview }) {
           onPress={() => setWeeks(weeks + CARDIO_HISTORY_WEEKS_PER_PAGE)}
         />
       )}
+      {sharing && <CardioShareSheet session={sharing} onClose={() => setSharing(null)} />}
     </Card>
   );
 }
@@ -257,10 +295,15 @@ function CardioRow({
   session,
   open,
   onToggle,
+  onShare,
+  onDelete,
 }: {
   session: CardioSession;
   open: boolean;
   onToggle: () => void;
+  onShare: () => void;
+  /** Absent for a session inside a workout, which is removed in that workout. */
+  onDelete?: () => void;
 }) {
   const { colors, type } = useTheme();
   const unit = useWeightUnit();
@@ -302,27 +345,44 @@ function CardioRow({
           <Text style={[type.footnote, { color: colors.secondary }]}>
             {cardioSessionPerformance(session)}
           </Text>
-          <Button
-            label={hasCardioMetrics(session) ? 'Edit metrics' : 'Log metrics'}
-            variant="link"
-            onPress={() =>
-              router.push({ pathname: '/cardio/metrics/[id]', params: { id: session.id } })
-            }
-            style={{ alignSelf: 'flex-start' }}
-          />
-          {!!linked && (
+          <View style={styles.rowActions}>
+            <Button label="Share card" variant="link" onPress={onShare} />
             <Button
-              label="Open workout"
+              label={hasCardioMetrics(session) ? 'Edit metrics' : 'Log metrics'}
               variant="link"
               onPress={() =>
-                router.push({
-                  pathname: '/training/session/[id]',
-                  params: { id: linked },
-                })
+                router.push({ pathname: '/cardio/metrics/[id]', params: { id: session.id } })
               }
-              style={{ alignSelf: 'flex-start' }}
             />
-          )}
+            <Button
+              label="Edit"
+              variant="link"
+              accessibilityLabel={
+                linked
+                  ? `Edit ${session.activity_type} on ${session.session_date} in its workout`
+                  : undefined
+              }
+              // A session inside a workout is edited there, as on the web.
+              onPress={() =>
+                linked
+                  ? router.push({ pathname: '/edit-workout/[id]', params: { id: linked } })
+                  : router.push({ pathname: '/cardio/edit/[id]', params: { id: session.id } })
+              }
+            />
+            {!!linked && (
+              <Button
+                label="Open workout"
+                variant="link"
+                onPress={() =>
+                  router.push({
+                    pathname: '/training/session/[id]',
+                    params: { id: linked },
+                  })
+                }
+              />
+            )}
+            {onDelete && <Button label="Delete" variant="link" onPress={onDelete} />}
+          </View>
         </View>
       )}
     </View>
@@ -432,6 +492,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   rowDetail: { paddingLeft: 44, paddingBottom: 12, gap: 4 },
+  rowActions: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 16, rowGap: 2 },
   goal: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   goalTrack: { height: 6, overflow: 'hidden' },
 });

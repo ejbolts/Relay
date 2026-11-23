@@ -102,6 +102,8 @@ function Navigation() {
             <Stack.Screen name="cardio/log" />
             <Stack.Screen name="cardio/metrics/[id]" />
             <Stack.Screen name="cardio/zones" />
+            {/* Mobile batch 4, records stream (B2): editing a standalone cardio session. */}
+            <Stack.Screen name="cardio/edit/[id]" />
           </Stack.Protected>
           <Stack.Protected guard={mustChangePassword}>
             <Stack.Screen name="password-required" />

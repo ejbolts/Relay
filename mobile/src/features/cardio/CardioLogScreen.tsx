@@ -5,13 +5,15 @@ import {
   CARDIO_DURATION,
   cardioMetricDraft,
   cardioMetricErrors,
+  cardioSessionEditInput,
+  cardioSessionPayload,
   emptyCardioSession,
   parseCardioMetrics,
 } from '../../../../frontend/src/cardioForm';
 import { savedCardioRecordsToast } from '../../../../frontend/src/cardioRecords';
 import { cardioSessionUpdateFromScan } from '../../../../frontend/src/cardioScreenshot';
 import { validCardioInteger } from '../../../../frontend/src/cardioZones';
-import type { Exercise } from '../../../../frontend/src/types';
+import type { CardioSession, Exercise } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { useExercises } from '../../data/queries';
 import { Button, Card, CardHeader, ErrorState, Loading, errorMessage } from '../../ui/components';
@@ -19,7 +21,13 @@ import { showMenu } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
 import { DateField } from '../body/DateField';
-import { cardioWorkoutRecords, createCardioSession, scanCardioPhoto } from './cardioData';
+import { useCardioOverview } from '../training/trainingQueries';
+import {
+  cardioWorkoutRecords,
+  createCardioSession,
+  scanCardioPhoto,
+  updateCardioSession,
+} from './cardioData';
 import {
   CardioChoice,
   CardioError,
@@ -49,14 +57,48 @@ export function CardioLogScreen() {
   );
 }
 
-function CardioLogForm({ exercises }: { exercises: Exercise[] }) {
+/**
+ * Edits a session logged on its own, as the web's Edit does for sessions without a workout: its
+ * date, activity, minutes, metrics and notes.
+ */
+export function CardioEditScreen({ sessionId }: { sessionId: string }) {
+  const exerciseQuery = useExercises();
+  const overview = useCardioOverview();
+  const session = overview.data?.sessions.find((item) => item.id === sessionId);
+  const failed = exerciseQuery.isError ? exerciseQuery : overview.isError ? overview : null;
+  return (
+    <CardioPage title="Edit cardio session">
+      {exerciseQuery.data && session ? (
+        <CardioLogForm
+          exercises={exerciseQuery.data.filter((exercise) => exercise.kind === 'cardio')}
+          session={session}
+        />
+      ) : failed ? (
+        <ErrorState message={errorMessage(failed.error)} onRetry={() => void failed.refetch()} />
+      ) : exerciseQuery.data && overview.data ? (
+        <ErrorState
+          message="This session no longer exists."
+          onRetry={() => void overview.refetch()}
+        />
+      ) : (
+        <Loading label="Loading cardio session" />
+      )}
+    </CardioPage>
+  );
+}
+
+function CardioLogForm({ exercises, session }: { exercises: Exercise[]; session?: CardioSession }) {
   const { colors, type } = useTheme();
-  const [initial] = useState(() => emptyCardioSession(exercises, localDate()));
+  const [initial] = useState(() =>
+    session
+      ? cardioSessionEditInput(session, exercises)
+      : emptyCardioSession(exercises, localDate()),
+  );
   const [activityId, setActivityId] = useState(initial.exercise_id);
   const [date, setDate] = useState(initial.session_date);
   const [duration, setDuration] = useState(String(initial.duration_minutes));
   const [metrics, setMetrics] = useState(() => cardioMetricDraft(initial));
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState(initial.notes ?? '');
   const [picking, setPicking] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanError, setScanError] = useState<string | null>(null);
@@ -64,9 +106,11 @@ function CardioLogForm({ exercises }: { exercises: Exercise[] }) {
   const [checked, setChecked] = useState(false);
   const { write, saving, saveError } = useCardioWrite();
   const activity = exercises.find((exercise) => exercise.id === activityId);
+  // An edited session keeps an activity that no longer matches a cardio exercise.
+  const activityName = activity?.name ?? (session ? initial.activity_type : '');
   const minutes = Number(duration);
   const invalidDuration = !validCardioInteger(minutes, CARDIO_DURATION);
-  const metricErrors = checked ? cardioMetricErrors(metrics, activity?.name ?? '') : {};
+  const metricErrors = checked ? cardioMetricErrors(metrics, activityName) : {};
   const busy = picking || scanning || saving;
 
   async function importScreenshot(source: 'camera' | 'library') {
@@ -109,11 +153,31 @@ function CardioLogForm({ exercises }: { exercises: Exercise[] }) {
     setChecked(true);
     if (
       busy ||
-      !activity ||
+      (!activity && !session) ||
       invalidDuration ||
-      Object.keys(cardioMetricErrors(metrics, activity.name)).length
+      Object.keys(cardioMetricErrors(metrics, activityName)).length
     )
       return;
+    if (session) {
+      void write(
+        () =>
+          updateCardioSession(
+            session.id,
+            cardioSessionPayload({
+              ...initial,
+              ...parseCardioMetrics(metrics),
+              session_date: date,
+              exercise_id: activity?.id ?? initial.exercise_id,
+              activity_type: activityName,
+              duration_minutes: minutes,
+              notes: notes.trim() || null,
+            }),
+          ),
+        'Cardio saved',
+      );
+      return;
+    }
+    if (!activity) return;
     void write(
       () =>
         createCardioSession({
@@ -161,7 +225,7 @@ function CardioLogForm({ exercises }: { exercises: Exercise[] }) {
           <Text style={[type.footnote, { color: colors.secondary }]}>Activity</Text>
           <CardioChoice
             label="Choose cardio activity"
-            value={activity?.name ?? (exercises.length ? 'Choose activity' : 'No cardio exercises')}
+            value={activityName || (exercises.length ? 'Choose activity' : 'No cardio exercises')}
             disabled={busy || !exercises.length}
             onPress={() =>
               showMenu(
@@ -173,7 +237,7 @@ function CardioLogForm({ exercises }: { exercises: Exercise[] }) {
               )
             }
           />
-          {checked && !activity && <CardioError message="Choose a cardio exercise." />}
+          {checked && !activity && !session && <CardioError message="Choose a cardio exercise." />}
         </View>
         <CardioField
           label="Minutes"
@@ -187,7 +251,7 @@ function CardioLogForm({ exercises }: { exercises: Exercise[] }) {
       <Card>
         <CardHeader title="Metrics" />
         <CardioMetricFields
-          activity={activity?.name ?? ''}
+          activity={activityName}
           draft={metrics}
           onChange={(key, value) => setMetrics((current) => ({ ...current, [key]: value }))}
           errors={metricErrors}
@@ -203,7 +267,11 @@ function CardioLogForm({ exercises }: { exercises: Exercise[] }) {
         />
       </Card>
       {saveError && <CardioError message={saveError} />}
-      <Button label={saving ? 'Saving…' : 'Add cardio session'} disabled={busy} onPress={save} />
+      <Button
+        label={saving ? 'Saving…' : session ? 'Save changes' : 'Add cardio session'}
+        disabled={busy}
+        onPress={save}
+      />
     </>
   );
 }

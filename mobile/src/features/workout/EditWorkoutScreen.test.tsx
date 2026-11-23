@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { useEffect, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { Alert, Platform } from 'react-native';
 import type { TrackedWorkout, WorkoutInput } from '../../../../frontend/src/types';
 import { apiGet, apiSend, currentUser } from '../../data/api';
