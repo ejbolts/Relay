@@ -19,6 +19,22 @@ import { bodyTrendPreference } from '../settings/devicePreferences';
 import { BodyScreen } from './BodyScreen';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
+// Pinches can't be made in a test; the chart's pinch reaches its handlers through this stand-in.
+const mockPinches: { onUpdate?: (event: { scale: number }) => void; onFinalize?: () => void }[] =
+  [];
+jest.mock('react-native-gesture-handler', () => ({
+  GestureHandlerRootView: ({ children }: { children: unknown }) => children,
+  GestureDetector: ({ children }: { children: unknown }) => children,
+  usePinchGesture: (config: (typeof mockPinches)[number]) => {
+    mockPinches.push(config);
+    return config;
+  },
+}));
+jest.mock('expo-screen-orientation', () => ({
+  lockAsync: jest.fn(async () => undefined),
+  unlockAsync: jest.fn(async () => undefined),
+  OrientationLock: { LANDSCAPE: 'landscape' },
+}));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
   apiOrigin: 'https://relay.test',
@@ -366,4 +382,27 @@ test('the maintenance tip waits for a reached goal and never shows once a range 
   await renderBody('79.6 kg');
   expect(await screen.findByText('Log weigh-in')).toBeVisible();
   expect(screen.queryByLabelText('Quick tip')).toBeNull();
+});
+
+test('pinching the trend changes its range, and it opens full screen in landscape', async () => {
+  await renderBody();
+  const chip = (name: string) => screen.getByRole('button', { name });
+  expect(chip('3 months')).toBeSelected();
+  // Spreading two fingers zooms in to a month; pinching them together zooms out to all time.
+  await act(async () => mockPinches.at(-1)!.onUpdate!({ scale: 2 }));
+  expect(chip('1 month')).toBeSelected();
+  await act(async () => mockPinches.at(-1)!.onUpdate!({ scale: 0.15 }));
+  expect(chip('All time')).toBeSelected();
+  await act(async () => mockPinches.at(-1)!.onFinalize!());
+  expect(chip('All time')).toBeSelected();
+
+  await fireEvent.press(
+    screen.getByRole('button', { name: 'View Bodyweight trend full screen in landscape' }),
+  );
+  const exit = await screen.findByRole('button', { name: 'Exit full-screen Bodyweight trend' });
+  expect(jest.requireMock('expo-screen-orientation').lockAsync).toHaveBeenCalledWith('landscape');
+  await fireEvent.press(exit);
+  await waitFor(() =>
+    expect(jest.requireMock('expo-screen-orientation').unlockAsync).toHaveBeenCalled(),
+  );
 });
