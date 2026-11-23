@@ -27,11 +27,10 @@ import type {
 import { hasRecordedPerformance, latestExerciseSets } from '../../../../frontend/src/workoutSets';
 import { supersetGroupName } from '../../../../frontend/src/workoutSupersets';
 import { Icon } from '../../ui/Icon';
-import { showMenu, type MenuOption } from '../../ui/prompts';
+import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { useTheme } from '../../ui/theme';
 import { formatPlain, NumberField, parseDecimal, parseWhole } from './NumberField';
-
-const REST_CHOICES = [30, 60, 90, 120, 150, 180, 210, 240];
+import { restMenuItems } from './restChoices';
 
 export interface MovementActions {
   updateSet: (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => void;
@@ -305,42 +304,39 @@ function SetRow({
     ]);
   }
 
-  function openSetMenu() {
-    const options: MenuOption[] = cardio
+  // The set pill's menu, built each render so it always reflects the set as it is now.
+  const setMenu: MenuItem[] = [
+    ...(cardio
       ? []
       : SET_KINDS.map((option) => ({
-          label: option.kind === setKindOf(item) ? `${option.label} ✓` : option.label,
+          label: option.label,
+          checked: option.kind === setKindOf(item),
           onPress: () => actions.setKind(movement.key, item.key, option.kind),
-        }));
-    if (!cardio)
-      options.push({
-        label: item.rest_seconds ? `Rest ${formatSeconds(item.rest_seconds)}` : 'Rest time',
-        onPress: () =>
-          showMenu('Rest after this set', [
-            ...REST_CHOICES.map((seconds) => ({
-              label: formatSeconds(seconds),
-              onPress: () => update({ rest_seconds: seconds }),
-            })),
-            { label: 'No rest', onPress: () => update({ rest_seconds: null }) },
-          ]),
-      });
-    if (index > 0)
-      options.push({
-        label: 'Move up',
-        onPress: () => actions.moveSet(movement.key, index, index - 1),
-      });
-    if (index < movement.sets.length - 1)
-      options.push({
-        label: 'Move down',
-        onPress: () => actions.moveSet(movement.key, index, index + 1),
-      });
-    options.push({
+        }))),
+    ...(cardio
+      ? []
+      : [
+          {
+            label: item.rest_seconds ? `Rest ${formatSeconds(item.rest_seconds)}` : 'Rest time',
+            items: restMenuItems({
+              current: item.rest_seconds,
+              onPick: (seconds) => update({ rest_seconds: seconds }),
+              onNone: () => update({ rest_seconds: null }),
+            }),
+          },
+        ]),
+    ...(index > 0
+      ? [{ label: 'Move up', onPress: () => actions.moveSet(movement.key, index, index - 1) }]
+      : []),
+    ...(index < movement.sets.length - 1
+      ? [{ label: 'Move down', onPress: () => actions.moveSet(movement.key, index, index + 1) }]
+      : []),
+    {
       label: 'Delete set',
       destructive: true,
       onPress: () => actions.deleteSet(movement.key, item.key),
-    });
-    showMenu(`Set ${number}${kindLabel ? ` · ${kindLabel}` : ''}`, options);
-  }
+    },
+  ];
 
   // A logged set is tinted green; rows stay opaque so the swipe's Delete never shows through.
   const rowColor = item.completed ? `${colors.good}1F` : 'transparent';
@@ -371,10 +367,15 @@ function SetRow({
     >
       <View style={{ backgroundColor: colors.surface }}>
         <View style={[styles.row, { backgroundColor: rowColor, borderRadius: radius.md }]}>
-          <Pressable
-            accessibilityRole="button"
+          <MenuButton
             accessibilityLabel={`Set ${number} type: ${kindLabel ?? 'Working set'}`}
-            onPress={openSetMenu}
+            title={`Set ${number}${kindLabel ? ` · ${kindLabel}` : ''}`}
+            items={setMenu}
+            trigger={{ text: label, color: /^\d+$/.test(label) ? colors.text : colors.accentText }}
+            width={34}
+            height={36}
+            fill={rowColor}
+            cornerRadius={radius.sm}
             style={[styles.setColumn, styles.setBadge, { borderRadius: radius.sm }]}
           >
             <Text
@@ -389,7 +390,7 @@ function SetRow({
             >
               {label}
             </Text>
-          </Pressable>
+          </MenuButton>
           <Text
             numberOfLines={1}
             style={[type.footnote, type.number, styles.previousColumn, { color: colors.muted }]}
