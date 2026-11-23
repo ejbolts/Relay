@@ -17,6 +17,8 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
+    /** The server's error code, such as `sharing_required`. */
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -81,6 +83,7 @@ export async function request<T>(
     throw new ApiError(
       response.status,
       body?.error?.message ?? 'Relay could not complete this request.',
+      typeof body?.error?.code === 'string' ? body.error.code : undefined,
     );
   }
   return response.status === 204 ? (undefined as T) : response.json();
