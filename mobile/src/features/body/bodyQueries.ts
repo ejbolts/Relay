@@ -9,6 +9,13 @@ import type {
 import { apiGet, apiSend } from '../../data/api';
 import { queryKeys } from '../../data/queries';
 import { trainingKeys } from '../training/trainingQueries';
+import {
+  bodyCheckInQueueActive,
+  deleteBodyCheckIn,
+  fetchBodyMeasurements,
+  localBodyMeasurements,
+  saveBodyCheckIn,
+} from './bodyCheckInQueue';
 
 /**
  * Body's reads, shared with Home's body cards, all under `body` so one refresh updates every
@@ -21,10 +28,14 @@ export const bodyKeys = {
   sizes: ['body', 'sizes'] as const,
 };
 
+/** Check-ins with any still waiting on this phone; the phone's copy fills in while offline. */
 export function useBodyMeasurements() {
   return useQuery({
     queryKey: bodyKeys.measurements,
-    queryFn: ({ signal }) => apiGet<BodyMeasurement[]>('/api/body-measurements', signal),
+    queryFn: ({ signal }) => fetchBodyMeasurements(signal),
+    initialData: () => localBodyMeasurements() ?? undefined,
+    // The copy is old by definition: the query still loads when it can.
+    initialDataUpdatedAt: 0,
   });
 }
 
@@ -54,12 +65,20 @@ export function refreshBodyMeasurements(client: QueryClient) {
   );
 }
 
-/** The check-in calls the web's shared Undo rules use (frontend/src/bodyCheckInUndo.ts). */
+/**
+ * The check-in calls the web's shared Undo rules use (frontend/src/bodyCheckInUndo.ts). As on
+ * the web, saves and deletions go to the phone's queue first and are sent from there.
+ */
 export const bodyCheckInApi: BodyCheckInApi = {
-  saveBodyMeasurement: (payload: BodyCheckInPayload) =>
-    apiSend<BodyMeasurement>('/api/body-measurements', 'POST', payload),
-  deleteBodyMeasurement: (id: string) => apiSend<void>(`/api/body-measurements/${id}`, 'DELETE'),
-  listBodyMeasurements: () => apiGet<BodyMeasurement[]>('/api/body-measurements'),
+  saveBodyMeasurement: async (payload: BodyCheckInPayload) =>
+    bodyCheckInQueueActive()
+      ? saveBodyCheckIn(payload)
+      : apiSend<BodyMeasurement>('/api/body-measurements', 'POST', payload),
+  deleteBodyMeasurement: async (id: string) =>
+    bodyCheckInQueueActive()
+      ? deleteBodyCheckIn(id)
+      : apiSend<void>(`/api/body-measurements/${id}`, 'DELETE'),
+  listBodyMeasurements: async () => localBodyMeasurements() ?? fetchBodyMeasurements(),
 };
 
 export const bodyGoalApi = {

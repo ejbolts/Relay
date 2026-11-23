@@ -6,6 +6,8 @@ import { Appearance, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createQueryClient } from '../data/queryClient';
+// Mobile batch 4, records stream (B2).
+import { BodyCheckInSync } from '../features/body/BodyCheckInSync';
 // W3 (Home): header options for Home's pushed screens.
 import { homeScreenOptions } from '../features/home/routes';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
@@ -56,6 +58,9 @@ function Navigation() {
     <ThemeProvider value={theme}>
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <WorkoutProvider>
+        {/* Mobile batch 4, records stream (B2): sends check-ins saved offline. Before the
+            screens, so their check-in queries start with the signed-in account. */}
+        <BodyCheckInSync />
         <Stack
           screenOptions={{
             headerShown: false,
@@ -102,6 +107,8 @@ function Navigation() {
             <Stack.Screen name="cardio/log" />
             <Stack.Screen name="cardio/metrics/[id]" />
             <Stack.Screen name="cardio/zones" />
+            {/* Mobile batch 4, records stream (B2): editing a standalone cardio session. */}
+            <Stack.Screen name="cardio/edit/[id]" />
           </Stack.Protected>
           <Stack.Protected guard={mustChangePassword}>
             <Stack.Screen name="password-required" />

@@ -97,6 +97,13 @@ export function maintenanceRange(goal: {
     : null;
 }
 
+/** Whether any goal, past or present, has used a maintenance range. */
+export function usedMaintenanceRange(
+  goals: { maintenance_min_kg?: number | null; maintenance_max_kg?: number | null }[],
+): boolean {
+  return goals.some((goal) => maintenanceRange(goal) !== null);
+}
+
 export function bodyGoalTarget(goal: BodyHistoryGoal, unit: WeightUnit, decimals = 2): string {
   const range = maintenanceRange(goal);
   return range

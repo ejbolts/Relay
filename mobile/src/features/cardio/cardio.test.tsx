@@ -6,7 +6,9 @@ import { localDate } from '../../../../frontend/src/utils';
 import { apiGet, apiSend } from '../../data/api';
 import { uploadFile } from '../../data/uploadFile';
 import { showMenu } from '../../ui/prompts';
-import { CardioLogScreen } from './CardioLogScreen';
+import { Alert } from 'react-native';
+import { CardioSection } from '../training/CardioSection';
+import { CardioEditScreen, CardioLogScreen } from './CardioLogScreen';
 import { CardioMetricsScreen } from './CardioMetricsScreen';
 import { CardioZonesScreen } from './CardioZonesScreen';
 
@@ -16,13 +18,27 @@ jest.mock('../../ui/prompts', () => ({ showMenu: jest.fn() }));
 jest.mock('../../ui/Toast', () => ({ showToast: jest.fn() }));
 jest.mock('../body/DateField', () => ({ DateField: () => null }));
 jest.mock('expo-image-picker', () => ({ launchImageLibraryAsync: jest.fn() }));
+jest.mock('./CardioShareSheet', () => {
+  const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    CardioShareSheet: ({ session }: { session: { activity_type: string } }) => (
+      <Text>Sharing {session.activity_type}</Text>
+    ),
+  };
+});
+jest.mock('../../data/queries', () => ({
+  ...jest.requireActual<typeof import('../../data/queries')>('../../data/queries'),
+  useWeightUnit: () => 'kg',
+  refreshTraining: jest.fn(async () => undefined),
+}));
 jest.mock('expo-router', () => ({
   Stack: { Screen: () => null },
   useLocalSearchParams: () => ({ id: 'session-1' }),
   useNavigation: () => ({ isFocused: () => true }),
-  useRouter: () => ({ back: jest.fn() }),
+  useRouter: () => mockRouter,
 }));
 
+const mockRouter = { back: jest.fn(), push: jest.fn() };
 const exercise = { id: 'treadmill', name: 'Incline Treadmill Walking', kind: 'cardio' };
 const session = {
   id: 'session-1',
@@ -160,4 +176,87 @@ it('fills five zones and supports adding a weekly goal for another zone', async 
       ],
     }),
   );
+});
+
+const week = { week_start: '2026-11-16', week_end: '2026-11-22' };
+const overview = (sessions: object[]) => ({
+  sessions,
+  current_week: week,
+  energy_periods: [],
+  goal_weeks: [],
+  cardio_preferences: null,
+});
+const historySession = (id: string, workout: string | null, extra = {}) => ({
+  ...session,
+  id,
+  activity_type: `Row ${id}`,
+  session_date: '2026-11-18',
+  source_workout_id: workout,
+  workout_context: 'pure_cardio',
+  ...extra,
+});
+
+it('edits every field of a session logged on its own', async () => {
+  await open(<CardioEditScreen sessionId="session-1" />);
+  await fireEvent.changeText(await screen.findByLabelText('Minutes'), '40');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
+  await waitFor(() => expect(apiSend).toHaveBeenCalled());
+  const [path, method, body] = jest.mocked(apiSend).mock.calls[0];
+  expect([path, method]).toEqual(['/api/cardio/session-1', 'PUT']);
+  expect(body).toMatchObject({
+    exercise_id: 'treadmill',
+    activity_type: exercise.name,
+    duration_minutes: 40,
+    calories_kcal: 218,
+    average_heart_rate_bpm: 126,
+    zone: null,
+    qualifies_zone2: false,
+  });
+});
+
+it('deletes standalone sessions and lone cardio workouts, and shares a card', async () => {
+  jest
+    .mocked(apiGet)
+    .mockImplementation(async () =>
+      overview([
+        historySession('a', null),
+        historySession('b', 'w1'),
+        historySession('c', 'w2', { workout_context: 'workout_plus_cardio' }),
+      ]),
+    );
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  await open(<CardioSection />);
+  const row = async (name: string) => {
+    await fireEvent.press(await screen.findByRole('button', { name: new RegExp(`^${name},`) }));
+  };
+  await row('Row a');
+  await fireEvent.press(screen.getByRole('button', { name: 'Delete' }));
+  await act(async () =>
+    alert.mock.calls
+      .at(-1)![2]!
+      .find((button) => button.text === 'Delete session')!
+      .onPress?.(),
+  );
+  expect(apiSend).toHaveBeenLastCalledWith('/api/cardio/a', 'DELETE');
+
+  await row('Row b');
+  await fireEvent.press(screen.getByRole('button', { name: 'Delete' }));
+  await act(async () =>
+    alert.mock.calls
+      .at(-1)![2]!
+      .find((button) => button.text === 'Delete session')!
+      .onPress?.(),
+  );
+  expect(apiSend).toHaveBeenLastCalledWith('/api/workouts/w1', 'DELETE');
+
+  // A session inside a strength workout is edited and removed in that workout.
+  await row('Row c');
+  expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: /in its workout$/ }));
+  expect(mockRouter.push).toHaveBeenCalledWith({
+    pathname: '/edit-workout/[id]',
+    params: { id: 'w2' },
+  });
+  await fireEvent.press(screen.getByRole('button', { name: 'Share card' }));
+  expect(screen.getByText('Sharing Row c')).toBeVisible();
 });

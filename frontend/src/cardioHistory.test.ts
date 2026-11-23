@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  cardioDeletion,
+  cardioSessionsPerWorkout,
   cardioSessionContextLabel,
   cardioSessionEnergy,
   cardioSessionPerformance,
@@ -102,5 +104,31 @@ describe('cardio trend selection', () => {
     expect(view.selected.start).toBe('2026-11-09');
     expect(view.value).toBe(20);
     expect(view.metric.unit).toBe('km');
+  });
+});
+
+describe('cardio deletion', () => {
+  const session = (id: string, workout: string | null, context = 'pure_cardio') => ({
+    id,
+    source_workout_id: workout,
+    workout_context: context as 'pure_cardio' | 'workout_plus_cardio',
+  });
+
+  it('deletes a lone cardio-only workout, a standalone session, and nothing inside a workout', () => {
+    const sessions = [
+      session('a', null),
+      session('b', 'w1'),
+      session('c', 'w2'),
+      session('d', 'w2'),
+      session('e', 'w3', 'workout_plus_cardio'),
+    ];
+    const counts = cardioSessionsPerWorkout(sessions);
+    expect(sessions.map((item) => cardioDeletion(item, counts))).toEqual([
+      { kind: 'cardio', id: 'a' },
+      { kind: 'workout', id: 'w1' },
+      null,
+      null,
+      null,
+    ]);
   });
 });

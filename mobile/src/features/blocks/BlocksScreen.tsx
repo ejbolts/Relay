@@ -3,12 +3,10 @@ import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { blockColor } from '../../../../frontend/src/blockColors';
 import {
-  blockYearSegments,
   blocksInYear,
   firstBlockYear,
   joinedDetails,
   lastBlockYear,
-  segmentInYear,
   toggledBlock,
   workoutCountLabel,
 } from '../../../../frontend/src/trainingBlockSegments';
@@ -21,7 +19,6 @@ import {
   weeklyVolumeChange,
 } from '../../../../frontend/src/trainingBlockStats';
 import {
-  MONTHS,
   blockDay,
   blockOn,
   blockProgress,
@@ -36,7 +33,9 @@ import { useTheme } from '../../ui/theme';
 import { Badge, Divider } from '../training/parts';
 import { useBlockSummary, useTrainingBlocks } from './blockQueries';
 import { nativeBlockColor } from './BlockScopeChip';
+import { BlockTimeline } from './BlockTimeline';
 import { blockRoutes } from './routes';
+import { LandscapeButton, LandscapeChartView } from '../body/LandscapeChart';
 
 /**
  * Every training block, one year at a time, as the web's overview: the year's bar, the block in
@@ -50,7 +49,14 @@ export function BlocksScreen() {
   const thisYear = Number(today.slice(0, 4));
   const [year, setYear] = useState(thisYear);
   const [selected, setSelected] = useState<string | null>(null);
+  const [scrollRequest, setScrollRequest] = useState<{ date: string; key: number } | null>(null);
+  const [landscape, setLandscape] = useState(false);
   const config = blocks.data;
+  // The arrows move the timeline to a year; scrolling it moves the year and list along.
+  const goToYear = (next: number) => {
+    setYear(next);
+    setScrollRequest((request) => ({ date: `${next}-01-01`, key: (request?.key ?? 0) + 1 }));
+  };
 
   const header = (
     <Stack.Screen
@@ -122,7 +128,7 @@ export function BlocksScreen() {
                   accessibilityState={{ disabled: shownYear <= first }}
                   disabled={shownYear <= first}
                   hitSlop={8}
-                  onPress={() => setYear(shownYear - 1)}
+                  onPress={() => goToYear(shownYear - 1)}
                   style={{ opacity: shownYear <= first ? 0.3 : 1 }}
                 >
                   <Icon name="chevronLeft" size={18} color={colors.accentText} />
@@ -141,19 +147,23 @@ export function BlocksScreen() {
                   accessibilityState={{ disabled: shownYear >= last }}
                   disabled={shownYear >= last}
                   hitSlop={8}
-                  onPress={() => setYear(shownYear + 1)}
+                  onPress={() => goToYear(shownYear + 1)}
                   style={{ opacity: shownYear >= last ? 0.3 : 1 }}
                 >
                   <Icon name="chevronRight" size={18} color={colors.accentText} />
                 </Pressable>
               </View>
-              <YearBar
+              <BlockTimeline
                 config={config}
-                year={shownYear}
                 today={today}
                 selected={highlighted}
                 onSelect={choose}
+                onCentreYear={setYear}
+                scrollRequest={scrollRequest}
               />
+              <View style={styles.timelineActions}>
+                <LandscapeButton title="Training timeline" onPress={() => setLandscape(true)} />
+              </View>
             </Card>
             {current && !current.end_date && shownYear === thisYear && (
               <View style={{ gap: 8 }}>
@@ -212,81 +222,65 @@ export function BlocksScreen() {
           </>
         )}
       </ScrollView>
+      {config.blocks.length > 0 && (
+        <LandscapeChartView
+          title="Training timeline"
+          visible={landscape}
+          onClose={() => setLandscape(false)}
+        >
+          {(size) => (
+            <View style={{ gap: 10 }}>
+              <BlockTimeline
+                config={config}
+                today={today}
+                selected={highlighted}
+                onSelect={choose}
+                barHeight={Math.max(40, Math.min(120, size.height - 70))}
+              />
+              <SelectedBlockDetail config={config} blockId={highlighted} today={today} />
+            </View>
+          )}
+        </LandscapeChartView>
+      )}
     </>
   );
 }
 
-/** One year of the overview's bar: each block in its colour, the planned rest paler. */
-function YearBar({
+/** The landscape view's line for the chosen block: its colour, name, dates and workouts. */
+function SelectedBlockDetail({
   config,
-  year,
+  blockId,
   today,
-  selected,
-  onSelect,
 }: {
   config: TrainingBlocks;
-  year: number;
+  blockId: string | null;
   today: string;
-  selected: string | null;
-  onSelect: (blockId: string) => void;
 }) {
-  const { colors, type, radius } = useTheme();
-  const segments = blockYearSegments(config, today).flatMap((segment) => {
-    const place = segmentInYear(segment, year);
-    return place ? [{ segment, place }] : [];
-  });
-  // Today's place along the year, when the bar shows this year.
-  const todayLeft =
-    today.slice(0, 4) === String(year)
-      ? segmentInYear({ start: today, end: `${year + 1}-01-01` }, year)?.left
-      : undefined;
+  const { colors, type } = useTheme();
+  const block = config.blocks.find((item) => item.id === blockId);
   return (
-    <View style={{ gap: 4 }}>
-      <View style={[styles.yearBar, { backgroundColor: colors.surface2, borderRadius: radius.sm }]}>
-        {segments.map(({ segment, place }) => {
-          const color = segment.color ? nativeBlockColor(segment.color, colors) : colors.surface3;
-          const block = config.blocks.find((item) => item.id === segment.blockId);
-          const isSelected = !!segment.blockId && segment.blockId === selected;
-          const style = [
-            styles.yearSegment,
-            {
-              left: `${place.left * 100}%`,
-              width: `${place.width * 100}%`,
-              backgroundColor: color,
-              opacity: segment.planned ? 0.35 : 1,
-              borderColor: isSelected ? colors.text : 'transparent',
-            },
-          ] as const;
-          if (!block || segment.planned)
-            return <View key={segment.key} pointerEvents="none" style={style} />;
-          return (
-            <Pressable
-              key={segment.key}
-              accessibilityRole="button"
-              accessibilityLabel={`${block.name}, ${blockRange(block.start_date, block.end_date)}`}
-              accessibilityState={{ selected: isSelected }}
-              onPress={() => onSelect(block.id)}
-              style={style}
-            />
-          );
-        })}
-        {todayLeft !== undefined && (
+    <View style={styles.fullDetail} accessibilityLiveRegion="polite">
+      {block && (
+        <>
           <View
-            pointerEvents="none"
             style={[
-              styles.todayLine,
-              { left: `${todayLeft * 100}%`, backgroundColor: colors.text },
+              styles.dot,
+              {
+                backgroundColor: nativeBlockColor(blockColor(config.blocks, block, today), colors),
+              },
             ]}
           />
-        )}
-      </View>
-      <View style={styles.months} importantForAccessibility="no-hide-descendants">
-        {MONTHS.map((month) => (
-          <Text key={month} style={[type.caption, styles.month, { color: colors.muted }]}>
-            {month.charAt(0)}
+          <Text style={[type.callout, { color: colors.text, fontWeight: '700' }]}>
+            {block.name}
           </Text>
-        ))}
-      </View>
+          <Text style={[type.callout, { color: colors.secondary }]}>
+            {joinedDetails(
+              blockRange(block.start_date, block.end_date),
+              workoutCountLabel(block.workout_count),
+            )}
+          </Text>
+        </>
+      )}
     </View>
   );
 }
@@ -464,11 +458,9 @@ function BlockNowCard({
 
 const styles = StyleSheet.create({
   years: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  yearBar: { height: 28, overflow: 'hidden' },
-  yearSegment: { position: 'absolute', top: 2, bottom: 2, borderRadius: 4, borderWidth: 2 },
-  todayLine: { position: 'absolute', top: 0, bottom: 0, width: 2 },
-  months: { flexDirection: 'row' },
-  month: { flex: 1, textAlign: 'center' },
+  timelineActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: -6 },
+  fullDetail: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
   list: { paddingVertical: 4, gap: 0 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
   rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
@@ -477,7 +469,6 @@ const styles = StyleSheet.create({
   edit: { minHeight: 34, paddingHorizontal: 12 },
   empty: { paddingVertical: 16, textAlign: 'center' },
   nowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
   weeks: { flexDirection: 'row', gap: 3 },
   week: { flex: 1, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
   weekLabel: { fontSize: 9, fontWeight: '700' },

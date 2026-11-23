@@ -13,10 +13,13 @@ import { dateRangeForDates, TIME_RANGE_OPTIONS } from '../../../../frontend/src/
 import { niceTicks, parseLocalDate, shortDate } from '../../../../frontend/src/trainingSummary';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
 import { formatWeight, weightFromKg, type WeightUnit } from '../../../../frontend/src/weightUnits';
+import { GestureDetector, usePinchGesture } from 'react-native-gesture-handler';
 import { useWeightUnit } from '../../data/queries';
 import { Card, CardHeader } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { Chip, Segmented } from '../training/parts';
+import { LandscapeButton, LandscapeChartView } from './LandscapeChart';
+import { useRangePinch } from './rangePinch';
 
 interface Point {
   date: string;
@@ -38,7 +41,13 @@ const HEIGHT = 200;
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Where the line, dots, goal and gridlines sit in a chart `width` wide. */
-function chartModel(points: Point[], dots: Point[], goal: Goal | null, width: number) {
+function chartModel(
+  points: Point[],
+  dots: Point[],
+  goal: Goal | null,
+  width: number,
+  height = HEIGHT,
+) {
   if (!points.length || width <= 0) return null;
   const time = (date: string) => parseLocalDate(date).getTime();
   const times = [...points, ...dots].map((point) => time(point.date));
@@ -52,7 +61,7 @@ function chartModel(points: Point[], dots: Point[], goal: Goal | null, width: nu
   const tMin = Math.min(...times);
   const span = Math.max(Math.max(...times) - tMin, 1);
   const plotWidth = Math.max(width - PAD.left - PAD.right, 10);
-  const plotHeight = HEIGHT - PAD.top - PAD.bottom;
+  const plotHeight = height - PAD.top - PAD.bottom;
   const x = (date: string) =>
     times.length === 1
       ? PAD.left + plotWidth / 2
@@ -91,38 +100,34 @@ export function BodyTrendChart({
   const unit = useWeightUnit();
   const [range, setRange] = useState<BodyTrendRange>('3m');
   const [series, setSeries] = useState<'weight' | 'fat'>('weight');
-  const [width, setWidth] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const hasBodyFat = measurements.some((item) => item.body_fat_pct !== null);
   const showFat = series === 'fat' && hasBodyFat;
   const activeGoal = goals.find((goal) => goal.active) ?? null;
+  const [landscape, setLandscape] = useState(false);
+  const dates = useMemo(() => measurements.map((item) => item.measurement_date), [measurements]);
+  const pinch = useRangePinch(dates, range, (next) => {
+    setRange(next);
+    setSelected(null);
+  });
+  const { pinchStart } = pinch;
 
   const { points, dots, goal } = useMemo(
-    () => trendSeries(measurements, range, showFat, activeGoal, unit),
-    [measurements, range, showFat, activeGoal, unit],
+    () => trendSeries(measurements, range, showFat, activeGoal, unit, pinchStart),
+    [measurements, range, showFat, activeGoal, unit, pinchStart],
   );
-  const model = chartModel(points, dots, goal, width);
+  const title = showFat ? 'Body fat trend' : 'Bodyweight trend';
   const active = selected !== null && selected < points.length ? selected : null;
   const shown = active !== null ? points[active] : points.at(-1);
   const format = (value: number) =>
     showFat ? `${value.toFixed(1)}%` : `${value.toFixed(1)} ${unit}`;
-  const select = (x: number) => {
-    if (!model) return;
-    setSelected(
-      model.coords.reduce(
-        (best, point, index) =>
-          Math.abs(point.x - x) < Math.abs(model.coords[best].x - x) ? index : best,
-        0,
-      ),
-    );
-  };
-  const line = model?.coords
-    .map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`)
-    .join(' ');
 
   return (
     <Card accessibilityLabel="Trend">
-      <CardHeader title="Trend" />
+      <CardHeader
+        title="Trend"
+        action={<LandscapeButton title={title} onPress={() => setLandscape(true)} />}
+      />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -157,23 +162,118 @@ export function BodyTrendChart({
           ? `${shortDate(shown.date)} · ${format(shown.value)}${showFat ? '' : ' avg'}${shown.detail ? ` · ${shown.detail}` : ''}`
           : ' '}
       </Text>
+      <TrendPlot
+        points={points}
+        dots={dots}
+        goal={goal}
+        showFat={showFat}
+        height={HEIGHT}
+        active={active}
+        onSelect={setSelected}
+        pinch={pinch}
+      />
+      <LandscapeChartView title={title} visible={landscape} onClose={() => setLandscape(false)}>
+        {(size) => (
+          <TrendPlot
+            points={points}
+            dots={dots}
+            goal={goal}
+            showFat={showFat}
+            height={size.height}
+            active={active}
+            onSelect={setSelected}
+            pinch={pinch}
+          />
+        )}
+      </LandscapeChartView>
+      <View style={styles.legend} accessibilityLabel="Chart legend">
+        {showFat ? (
+          <Legend
+            kind="line"
+            color={colors.accent}
+            label={`Body fat · ${points.length} ${points.length === 1 ? 'reading' : 'readings'}`}
+          />
+        ) : (
+          <>
+            <Legend kind="dot" color={colors.deemph} label="Daily weigh-in" />
+            <Legend kind="line" color={colors.accent} label="7-day average" />
+            {goal && (
+              <Legend
+                kind="dash"
+                color={colors.good}
+                label={activeGoal ? `Goal ${bodyGoalTarget(activeGoal, unit)}` : 'Goal'}
+              />
+            )}
+          </>
+        )}
+      </View>
+    </Card>
+  );
+}
+
+/**
+ * The chart itself, at a height (the card's, or the landscape view's), touched to show a day and
+ * pinched to change the range.
+ */
+function TrendPlot({
+  points,
+  dots,
+  goal,
+  showFat,
+  height,
+  active,
+  onSelect,
+  pinch,
+}: {
+  points: Point[];
+  dots: Point[];
+  goal: Goal | null;
+  showFat: boolean;
+  height: number;
+  active: number | null;
+  onSelect: (index: number | null) => void;
+  pinch: { onPinch: (scale: number) => void; onPinchEnd: () => void };
+}) {
+  const { colors } = useTheme();
+  const [width, setWidth] = useState(0);
+  const model = chartModel(points, dots, goal, width, height);
+  const select = (x: number) => {
+    if (!model) return;
+    onSelect(
+      model.coords.reduce(
+        (best, point, index) =>
+          Math.abs(point.x - x) < Math.abs(model.coords[best].x - x) ? index : best,
+        0,
+      ),
+    );
+  };
+  const line = model?.coords
+    .map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`)
+    .join(' ');
+  const gesture = usePinchGesture({
+    runOnJS: true,
+    onUpdate: (event) => pinch.onPinch(event.scale),
+    onFinalize: () => pinch.onPinchEnd(),
+  });
+  return (
+    <GestureDetector gesture={gesture}>
       <View
         accessibilityRole="image"
         accessibilityLabel={
           showFat ? 'Body fat percentage' : 'Bodyweight, 7-day average over daily weigh-ins'
         }
-        style={{ height: HEIGHT }}
+        style={{ height }}
         onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
         onStartShouldSetResponder={() => true}
         onMoveShouldSetResponder={() => true}
         onResponderTerminationRequest={() => true}
         // A scroll that started on the chart doesn't leave a day selected.
-        onResponderTerminate={() => setSelected(null)}
+        onResponderTerminate={() => onSelect(null)}
         onResponderGrant={(event) => select(event.nativeEvent.locationX)}
         onResponderMove={(event) => select(event.nativeEvent.locationX)}
       >
         {model && (
-          <Svg width={width} height={HEIGHT}>
+          <Svg width={width} height={height}>
             {model.gridlines.map((grid) => (
               <Line
                 key={grid.value}
@@ -201,7 +301,7 @@ export function BodyTrendChart({
               <SvgText
                 key={`date-${index}`}
                 x={date.x}
-                y={HEIGHT - 6}
+                y={height - 6}
                 fontSize={10}
                 fill={colors.muted}
                 textAnchor={
@@ -259,28 +359,7 @@ export function BodyTrendChart({
           </Svg>
         )}
       </View>
-      <View style={styles.legend} accessibilityLabel="Chart legend">
-        {showFat ? (
-          <Legend
-            kind="line"
-            color={colors.accent}
-            label={`Body fat · ${points.length} ${points.length === 1 ? 'reading' : 'readings'}`}
-          />
-        ) : (
-          <>
-            <Legend kind="dot" color={colors.deemph} label="Daily weigh-in" />
-            <Legend kind="line" color={colors.accent} label="7-day average" />
-            {goal && (
-              <Legend
-                kind="dash"
-                color={colors.good}
-                label={activeGoal ? `Goal ${bodyGoalTarget(activeGoal, unit)}` : 'Goal'}
-              />
-            )}
-          </>
-        )}
-      </View>
-    </Card>
+    </GestureDetector>
   );
 }
 
@@ -291,8 +370,16 @@ function trendSeries(
   showFat: boolean,
   activeGoal: BodyWeightGoal | null,
   unit: WeightUnit,
+  /** While pinching, the chart shows this date onwards instead of the range. */
+  pinchStart?: string,
 ): { points: Point[]; dots: Point[]; goal: Goal | null } {
-  const ordered = filterMeasurementsByRange(measurements, range).slice().reverse();
+  const ordered = (
+    pinchStart
+      ? measurements.filter((item) => item.measurement_date >= pinchStart)
+      : filterMeasurementsByRange(measurements, range)
+  )
+    .slice()
+    .reverse();
   if (showFat) {
     return {
       points: ordered
@@ -302,10 +389,12 @@ function trendSeries(
       goal: null,
     };
   }
-  const start = dateRangeForDates(
-    measurements.map((item) => item.measurement_date),
-    range,
-  ).start_date;
+  const start =
+    pinchStart ??
+    dateRangeForDates(
+      measurements.map((item) => item.measurement_date),
+      range,
+    ).start_date;
   // Clip only the start: a future target date extends the chart so the goal line reaches it.
   const clipped = activeGoal ? clipBodyWeightGoalPath(activeGoal, start) : null;
   const band = activeGoal ? maintenanceRange(activeGoal) : null;

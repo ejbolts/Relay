@@ -16,7 +16,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineAliases } from '../../../../frontend/src/exerciseHistory';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
 import type { Exercise, TrackedWorkout, WorkoutInput } from '../../../../frontend/src/types';
-import { formatMinutesDuration, workoutTimeInputValue } from '../../../../frontend/src/utils';
+import {
+  formatMinutesDuration,
+  workoutDurationMinutes,
+  workoutTimeInputValue,
+} from '../../../../frontend/src/utils';
 import {
   isWorkoutConflictError,
   WORKOUT_CONFLICT_UNSAVED,
@@ -30,6 +34,7 @@ import { Icon } from '../../ui/Icon';
 import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
+import { DateField, TimeField } from '../body/DateField';
 import { useSavedWorkout } from '../training/trainingQueries';
 import { ExercisePicker } from './ExercisePicker';
 import {
@@ -93,6 +98,23 @@ function editState(workout: TrackedWorkout): LoggerState {
     resumingWorkoutId: null,
     previousDurationMinutes: 0,
   };
+}
+
+const pad = (value: number) => String(value).padStart(2, '0');
+
+/**
+ * Times to start from when a workout without them gets some: it ended when it was saved, if that
+ * was on its day, and started its duration earlier.
+ */
+function suggestedTimes(workout: TrackedWorkout, durationMinutes: number) {
+  const saved = new Date(workout.created_at);
+  const sameDay =
+    `${saved.getFullYear()}-${pad(saved.getMonth() + 1)}-${pad(saved.getDate())}` ===
+    workout.workout_date;
+  const end = sameDay ? saved.getHours() * 60 + saved.getMinutes() : 18 * 60;
+  const start = (((end - Math.max(durationMinutes, 1)) % 1440) + 1440) % 1440;
+  const hhmm = (minutes: number) => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+  return { startTime: hhmm(start), endTime: hhmm(end) };
 }
 
 /** Saves the edit, asking what to do whenever another device saved the workout meanwhile. */
@@ -314,6 +336,17 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
     });
   }
 
+  // Recorded start and end times set the duration, as on the web.
+  function editTimes(startTime: string, endTime: string) {
+    setTimes((current) => ({
+      ...current,
+      startTime,
+      endTime,
+      durationMinutes: workoutDurationMinutes(startTime, endTime) ?? current.durationMinutes,
+    }));
+    setDirty(true);
+  }
+
   async function save() {
     if (saving) return;
     const current = stateRef.current;
@@ -436,15 +469,44 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
               );
             }}
           />
+          <View style={styles.timing}>
+            <DateField
+              label="Date"
+              value={state.workoutDate}
+              onChange={(workoutDate) => change((latest) => ({ ...latest, workoutDate }))}
+            />
+            {timeRange ? (
+              <>
+                <TimeField
+                  label="Start time"
+                  value={times.startTime}
+                  onChange={(start) => editTimes(start, times.endTime)}
+                />
+                <TimeField
+                  label="End time"
+                  value={times.endTime}
+                  onChange={(end) => editTimes(times.startTime, end)}
+                />
+              </>
+            ) : null}
+          </View>
           <DetailRow
             label="Duration"
-            value={
-              timeRange
-                ? `${formatMinutesDuration(times.durationMinutes)} · ${timeRange}`
-                : formatMinutesDuration(times.durationMinutes)
-            }
+            value={formatMinutesDuration(times.durationMinutes)}
             // Recorded start and end times set the duration, as on the web.
             onPress={timeRange ? undefined : editDuration}
+          />
+          <Button
+            label={timeRange ? 'Clear start and end times' : 'Add start and end times'}
+            variant="link"
+            onPress={() => {
+              if (timeRange) editTimes('', '');
+              else {
+                const suggested = suggestedTimes(workout, times.durationMinutes);
+                editTimes(suggested.startTime, suggested.endTime);
+              }
+            }}
+            style={{ alignSelf: 'flex-start' }}
           />
           <TextInput
             value={state.notes}
@@ -596,5 +658,6 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  timing: { gap: 8, paddingVertical: 10 },
   notes: { minHeight: 64, paddingVertical: 12, textAlignVertical: 'top' },
 });
