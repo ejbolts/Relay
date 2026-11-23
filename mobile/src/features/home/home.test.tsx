@@ -449,12 +449,12 @@ test('the stat cards count this week and open Training’s sessions or cardio, o
   await fireEvent.press(workouts);
   expect(mockRouter.navigate).toHaveBeenLastCalledWith({
     pathname: '/training',
-    params: { section: 'sessions' },
+    params: { section: 'sessions', request: expect.any(String) },
   });
   await fireEvent.press(screen.getByRole('button', { name: /^Cardio sessions: 0/ }));
   expect(mockRouter.navigate).toHaveBeenLastCalledWith({
     pathname: '/training',
-    params: { section: 'cardio' },
+    params: { section: 'cardio', request: expect.any(String) },
   });
   const body = screen.getByRole('button', { name: 'Body weight: 84.6 kg, −1.5 kg / 4 wk' });
   await fireEvent.press(body);
@@ -472,7 +472,7 @@ test('Zone 2, which opens Training’s cardio, sits beside the bodyweight trend'
   await fireEvent.press(zone2);
   expect(mockRouter.navigate).toHaveBeenLastCalledWith({
     pathname: '/training',
-    params: { section: 'cardio' },
+    params: { section: 'cardio', request: expect.any(String) },
   });
   expect(
     screen.getByRole('button', { name: 'Bodyweight: 84.6 kg. −1.5 kg in 30 days' }),

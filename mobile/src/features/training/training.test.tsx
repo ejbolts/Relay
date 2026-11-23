@@ -230,20 +230,16 @@ test('Show earlier weeks skips empty weeks, reading older months to reach the ne
 });
 
 test('another screen can open Training at its Cardio section, again after leaving it', async () => {
-  const shown = jest.fn();
-  await open(<TrainingTabScreen requestedSection="cardio" onRequestShown={shown} />);
+  await open(<TrainingTabScreen requestedSection="cardio" requestId="1" />);
   expect(await screen.findByRole('tab', { name: 'Cardio', selected: true })).toBeVisible();
-  expect(shown).toHaveBeenCalledTimes(1);
 
-  // The route clears the request once shown; the next request switches back to Cardio.
-  await screen.rerender(withProviders(<TrainingTabScreen onRequestShown={shown} />));
   await fireEvent.press(screen.getByRole('tab', { name: 'Sessions' }));
   expect(screen.getByRole('tab', { name: 'Sessions', selected: true })).toBeVisible();
+  // The same section asked for again is a new request.
   await screen.rerender(
-    withProviders(<TrainingTabScreen requestedSection="cardio" onRequestShown={shown} />),
+    withProviders(<TrainingTabScreen requestedSection="cardio" requestId="2" />),
   );
   expect(screen.getByRole('tab', { name: 'Cardio', selected: true })).toBeVisible();
-  expect(shown).toHaveBeenCalledTimes(2);
 });
 
 test('Exercises searches the library and opens an exercise', async () => {
