@@ -1,6 +1,6 @@
 import { Host, Picker, Text as SwiftText } from '@expo/ui/swift-ui';
 import { disabled as swiftDisabled, pickerStyle, tag, tint } from '@expo/ui/swift-ui/modifiers';
-import { Children, Fragment, isValidElement, type ReactNode, type Ref } from 'react';
+import { Children, Fragment, isValidElement, useContext, type ReactNode, type Ref } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -14,7 +14,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { buttonColors, cardSurface } from '../../ui/components';
 import { Switch } from '../../ui/controls';
 import { haptics } from '../../ui/haptics';
@@ -40,7 +40,8 @@ export function SettingsPage({
   scrollRef?: Ref<ScrollViewInstance>;
 }) {
   const { colors, space } = useTheme();
-  const insets = useSafeAreaInsets();
+  // Optional, so pages rendered without a safe-area provider (tests, other stacks) still work.
+  const bottomInset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
   return (
     <ScrollView
       ref={scrollRef}
@@ -50,7 +51,7 @@ export function SettingsPage({
       contentContainerStyle={{
         padding: space.gutter,
         gap: space.xl,
-        paddingBottom: Math.max(space.xxl * 2, insets.bottom + 36),
+        paddingBottom: Math.max(space.xxl * 2, bottomInset + 36),
       }}
       refreshControl={
         onRefresh ? (
