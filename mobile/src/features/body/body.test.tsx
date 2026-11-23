@@ -368,12 +368,13 @@ test('reaching a loss goal suggests a maintenance range until it is dismissed', 
   expect(screen.queryByLabelText('Quick tip')).toBeNull();
 });
 
-test('the maintenance tip waits for a reached goal and never shows once a range was used', async () => {
+test('the maintenance tip waits until the goal is reached', async () => {
   await renderBody();
   expect(await screen.findByText('Log weigh-in')).toBeVisible();
   expect(screen.queryByLabelText('Quick tip')).toBeNull();
-  screen.unmount();
-  client.clear();
+});
+
+test('the maintenance tip never shows once a goal has used a range', async () => {
   responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6)];
   responses['/api/body-weight-goals'] = [
     goal,
