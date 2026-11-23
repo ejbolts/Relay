@@ -329,8 +329,24 @@ test('a removed goal hides at once, Undo brings it back, and otherwise it is del
   await fireEvent.press(screen.getByRole('button', { name: 'Edit goal, 80 kg' }));
   await fireEvent.press(await screen.findByRole('button', { name: 'Remove goal' }));
   expect(apiSend).not.toHaveBeenCalledWith('/api/body-weight-goals/g1', 'DELETE');
-  await act(() => jest.advanceTimersByTimeAsync(5000));
+  // Nothing is deleted while Undo is still on screen; the toast's end sends it.
+  await act(() => jest.advanceTimersByTimeAsync(6000));
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeOnTheScreen();
+  expect(apiSend).not.toHaveBeenCalledWith('/api/body-weight-goals/g1', 'DELETE');
+  await act(() => jest.advanceTimersByTimeAsync(2500));
   expect(apiSend).toHaveBeenCalledWith('/api/body-weight-goals/g1', 'DELETE');
+});
+
+test('a late Undo on a removed goal keeps it', async () => {
+  await renderBody();
+  jest.useFakeTimers();
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit goal, 80 kg' }));
+  await fireEvent.press(await screen.findByRole('button', { name: 'Remove goal' }));
+  await act(() => jest.advanceTimersByTimeAsync(6000));
+  await fireEvent.press(screen.getByRole('button', { name: 'Undo' }));
+  expect(screen.getByRole('button', { name: 'Edit goal, 80 kg' })).toBeVisible();
+  await act(() => jest.advanceTimersByTimeAsync(10000));
+  expect(apiSend).not.toHaveBeenCalledWith('/api/body-weight-goals/g1', 'DELETE');
 });
 
 test('a part typed on the figure is saved into today’s measurements', async () => {

@@ -4,6 +4,7 @@ import {
   acceptedVideoName,
   canDeleteSession,
   moveItem,
+  newerSession,
   overallUploadProgress,
   sessionRetryLabel,
   sessionStatusDetail,
@@ -70,5 +71,16 @@ describe('video sessions', () => {
       message: youtubeCallbackResult('failed').message,
       confirmation: false,
     });
+  });
+});
+
+describe('newerSession', () => {
+  const at = (id: string, status: WorkoutSession['status']) => ({ id, status });
+  it('never takes a finished session back, and ignores another session', () => {
+    expect(newerSession(null, at('a', 'queued'))).toEqual(at('a', 'queued'));
+    expect(newerSession(at('a', 'queued'), at('a', 'stitching'))).toEqual(at('a', 'stitching'));
+    expect(newerSession(at('a', 'complete'), at('a', 'stitching'))).toEqual(at('a', 'complete'));
+    expect(newerSession(at('a', 'failed'), at('a', 'queued'))).toEqual(at('a', 'failed'));
+    expect(newerSession(at('a', 'queued'), at('b', 'complete'))).toEqual(at('a', 'queued'));
   });
 });

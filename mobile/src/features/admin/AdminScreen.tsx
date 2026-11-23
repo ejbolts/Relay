@@ -44,6 +44,7 @@ import {
   useServerSettings,
   useServerStatus,
 } from './adminData';
+import { useAccountGuard } from './accountGuard';
 import { adminIcons } from './icons';
 import { adminRoutes } from './routes';
 import { AccountTags } from './AccountTags';
@@ -216,12 +217,16 @@ function FeedbackSection({ feedback }: { feedback: AppFeedback[] }) {
   const [error, setError] = useState<{ id: string; message: string } | null>(null);
   const open = feedback.filter((item) => item.resolved_at === null).length;
 
+  const guard = useAccountGuard();
+
   async function setResolved(item: AppFeedback, resolved: boolean) {
     if (busy) return;
     setBusy(item.id);
     setError(null);
+    const current = guard();
     try {
       const updated = await adminApi.setFeedbackResolved(item.id, resolved);
+      if (!current()) return;
       // Keep the row where it is until the next refresh, so it doesn't jump away mid-review.
       client.setQueryData<AppFeedback[]>(adminKeys.feedback, (current) =>
         current?.map((row) => (row.id === updated.id ? updated : row)),
@@ -300,6 +305,8 @@ function FeedbackSection({ feedback }: { feedback: AppFeedback[] }) {
 function SwitchesSection({ settings }: { settings: ServerSettings }) {
   const client = useQueryClient();
   const { updateUser } = useSession();
+  const me = useUser();
+  const guard = useAccountGuard();
   const [saving, setSaving] = useState<ServerSettingsUpdate | null>(null);
   const [error, setError] = useState<string | null>(null);
   const shown = { ...settings, ...saving };
@@ -308,17 +315,25 @@ function SwitchesSection({ settings }: { settings: ServerSettings }) {
     if (saving) return;
     setSaving(update);
     setError(null);
+    // A response that arrives after this account signed out is dropped, so it can neither
+    // recreate the cleared settings nor install this admin's profile over the next account's.
+    const current = guard();
     try {
       const saved = await adminApi.updateSettings(update);
+      if (!current()) return;
       client.setQueryData(adminKeys.settings, saved);
       if (update.video_uploads) {
         // Show or hide Videos for this admin straight away; the switch is already saved, so a
         // failed refresh only delays that until the next sign-in check.
+        const before = me.id;
         await adminApi
           .me()
-          .then(updateUser)
+          .then((fresh) => {
+            if (current() && fresh.id === before) updateUser(fresh);
+          })
           .catch(() => undefined);
       }
+      if (!current()) return;
       showToast(settingsSavedNotice(update, saved));
     } catch (reason) {
       setError(errorMessage(reason));

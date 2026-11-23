@@ -66,6 +66,7 @@ export function Segmented({
       >
         {values.map((label, index) => {
           const selected = index === selectedIndex;
+          // Each choice is a full-height 44 pt pressable; the pill inside it is the web's 36 pt.
           return (
             <Pressable
               key={`${index}-${label}`}
@@ -74,18 +75,24 @@ export function Segmented({
               accessibilityState={{ selected, checked: selected, disabled: !enabled }}
               disabled={!enabled}
               onPress={() => choose(index)}
-              style={({ pressed }) => [
-                styles.segment,
-                selected && { backgroundColor: colors.surface3 },
-                pressed && !selected && { opacity: 0.7 },
-              ]}
+              style={styles.segment}
             >
-              <Text
-                numberOfLines={1}
-                style={[styles.segmentText, { color: selected ? colors.text : colors.muted }]}
-              >
-                {label}
-              </Text>
+              {({ pressed }) => (
+                <View
+                  style={[
+                    styles.segmentPill,
+                    selected && { backgroundColor: colors.surface3 },
+                    pressed && !selected && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.segmentText, { color: selected ? colors.text : colors.muted }]}
+                  >
+                    {label}
+                  </Text>
+                </View>
+              )}
             </Pressable>
           );
         })}
@@ -159,14 +166,18 @@ export function Slider({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors, scheme } = useTheme();
-  const clamp = (next: number) => snapToStep(next, min, max, step);
   const [last, setLast] = useState(value);
-  const change = (next: number) => {
-    const snapped = clamp(next);
+  const change = (snapped: number) => {
     if (snapped !== last) haptics.selection();
     setLast(snapped);
     onChange(snapped);
   };
+  // One grid of reachable values (from `min` in steps, then `max` itself) for the native track
+  // and for screen readers. Ranges the steps divide evenly get native stops. An uneven range is
+  // not supported (see the dev warning): its track moves freely and lands on the grid, and after
+  // a release that snaps back to the same value the native thumb can rest off it.
+  const grid = sliderGrid(min, max, step);
+  const nativeChange = (next: number) => change(snapToStep(next, min, max, step));
   return (
     <View
       accessible
@@ -175,7 +186,9 @@ export function Slider({
       accessibilityValue={valueText ? { text: valueText } : { min, max, now: value }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={(event) =>
-        change(value + (event.nativeEvent.actionName === 'increment' ? step : -step))
+        change(
+          stepSlider(value, min, max, step, event.nativeEvent.actionName === 'increment' ? 1 : -1),
+        )
       }
       style={[styles.slider, style]}
     >
@@ -185,8 +198,8 @@ export function Slider({
             value={value}
             min={min}
             max={max}
-            step={step}
-            onValueChange={change}
+            step={grid.even ? grid.step : undefined}
+            onValueChange={nativeChange}
             modifiers={[tint(colors.accent)]}
           />
         </Host>
@@ -196,8 +209,8 @@ export function Slider({
             value={value}
             min={min}
             max={max}
-            steps={Math.max(0, Math.round((max - min) / step) - 1)}
-            onValueChange={change}
+            steps={grid.even ? Math.max(0, grid.last - 1) : 0}
+            onValueChange={nativeChange}
             colors={{
               thumbColor: colors.accent,
               activeTrackColor: colors.accent,
@@ -278,19 +291,99 @@ export function TextField({
   );
 }
 
-/** The nearest value on the slider's grid, which starts at `min`, kept within the range. */
-export function snapToStep(value: number, min: number, max: number, step: number) {
-  const snapped = min + Math.round((value - min) / step) * step;
+const warned = new Set<string>();
+function warnOnce(message: string) {
+  if (!__DEV__ || warned.has(message)) return;
+  warned.add(message);
+  console.warn(message);
+}
+
+/**
+ * A slider's reachable values without listing them: `min`, each `step` above it, then `max`
+ * itself. Invalid input (a step that isn't positive and finite, or bounds out of order) becomes
+ * one step across the whole range, with a warning in development.
+ */
+export function sliderGrid(min: number, max: number, step: number) {
+  const valid =
+    Number.isFinite(min) && Number.isFinite(max) && Number.isFinite(step) && step > 0 && max > min;
+  if (!valid) {
+    warnOnce(`Slider: invalid range ${min}–${max} with step ${step}.`);
+    const lo = Number.isFinite(min) ? min : 0;
+    const hi = Number.isFinite(max) && max > lo ? max : lo + 1;
+    return {
+      min: lo,
+      max: hi,
+      step: hi - lo,
+      last: 1,
+      even: true,
+      at: (i: number) => (i <= 0 ? lo : hi),
+    };
+  }
+  const quotient = (max - min) / step;
+  // Tolerant, so decimal steps such as 0.1 over 0.3 still count as even.
+  const even = Math.abs(quotient - Math.round(quotient)) < 1e-9 * Math.max(1, quotient);
+  const last = even ? Math.round(quotient) : Math.ceil(quotient);
+  if (!even) {
+    warnOnce(
+      `Slider: ${min}–${max} isn't a whole number of ${step} steps. Uneven ranges aren't ` +
+        'supported: the native thumb can rest between values.',
+    );
+  }
   // Drop float noise such as 0.30000000000000004 from decimal steps.
-  return Math.min(max, Math.max(min, Number(snapped.toFixed(10))));
+  const at = (i: number) => (i >= last ? max : Number((min + i * step).toFixed(10)));
+  return { min, max, step, last, even, at };
+}
+
+/** Every value a slider can take, in order (`sliderGrid` without the arithmetic). */
+export function sliderValues(min: number, max: number, step: number): number[] {
+  const grid = sliderGrid(min, max, step);
+  return Array.from({ length: grid.last + 1 }, (_, i) => grid.at(i));
+}
+
+/** The index and value on the grid nearest `value`. */
+function nearestOnGrid(grid: ReturnType<typeof sliderGrid>, value: number) {
+  const clamped = Math.min(grid.max, Math.max(grid.min, value));
+  const below = Math.min(grid.last, Math.max(0, Math.floor((clamped - grid.min) / grid.step)));
+  const above = Math.min(grid.last, below + 1);
+  const index =
+    Math.abs(grid.at(above) - clamped) < Math.abs(grid.at(below) - clamped) ? above : below;
+  return { index, value: grid.at(index) };
+}
+
+/** The nearest value on the slider's grid. */
+export function snapToStep(value: number, min: number, max: number, step: number) {
+  return nearestOnGrid(sliderGrid(min, max, step), value).value;
+}
+
+/** The next value up (`1`) or down (`-1`) the grid from `value`, as a screen reader's swipe. */
+export function stepSlider(
+  value: number,
+  min: number,
+  max: number,
+  step: number,
+  direction: 1 | -1,
+) {
+  const grid = sliderGrid(min, max, step);
+  const { index } = nearestOnGrid(grid, value);
+  return grid.at(Math.min(grid.last, Math.max(0, index + direction)));
 }
 
 const styles = StyleSheet.create({
   slider: { flex: 1, height: 44, justifyContent: 'center' },
-  segments: { flexDirection: 'row', gap: 4, borderWidth: 1, borderRadius: 13, padding: 3 },
-  segment: {
-    flex: 1,
-    minHeight: 36,
+  // The web's control: a 1 pt outline round 36 pt pills, 4 pt apart, 44 pt in all. The outline
+  // sits inside the 44 pt so each choice's pressable can fill the full height.
+  segments: {
+    flexDirection: 'row',
+    height: 44,
+    borderWidth: 1,
+    borderRadius: 13,
+    paddingHorizontal: 2,
+    overflow: 'hidden',
+  },
+  segment: { flex: 1, minWidth: 44, marginVertical: -1, justifyContent: 'center' },
+  segmentPill: {
+    height: 36,
+    marginHorizontal: 2,
     borderRadius: 10,
     paddingHorizontal: 8,
     alignItems: 'center',
