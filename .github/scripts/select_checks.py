@@ -40,10 +40,20 @@ CONTRACT_MODULES = {
     "workout_type_exercises.py",
     "youtube_connections.py",
 }
-# Relative imports in the mobile app (import/export ... from, side-effect imports, require).
-MOBILE_IMPORT = re.compile(r"""(?:\bfrom\s*|\bimport\s*|\brequire\(\s*)['"](\.{1,2}/[^'"]+)['"]""")
+# Comments can quote module paths ("Alex" from "Alex Morgan", or from './old'), so they are
+# removed before a file's imports are read.
+COMMENTS = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+# import ... from 'x', export ... from 'x', import 'x', import('x') and require('x').
+MODULE_SPECIFIER = re.compile(
+    r"""(?:\b(?:import|export)\b[^'";]*?\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)(['"])([^'"]+)\1"""
+)
 MOBILE_SOURCES = {".ts", ".tsx", ".js", ".jsx"}
 MOBILE_SKIPPED_DIRS = {"node_modules", ".expo", "dist", "coverage", "ios", "android"}
+
+
+def module_specifiers(text: str) -> list[str]:
+    """The modules a TypeScript or JavaScript file imports, ignoring comments."""
+    return [match.group(2) for match in MODULE_SPECIFIER.finditer(COMMENTS.sub("", text))]
 
 
 def mobile_shared_files(root: Path = ROOT) -> frozenset[str]:
@@ -66,7 +76,9 @@ def mobile_shared_files(root: Path = ROOT) -> frozenset[str]:
         if source in seen:
             continue
         seen.add(source)
-        for specifier in MOBILE_IMPORT.findall(source.read_text(encoding="utf-8")):
+        for specifier in module_specifiers(source.read_text(encoding="utf-8")):
+            if not specifier.startswith("."):
+                continue
             base = (source.parent / specifier).resolve()
             if base.is_relative_to(mobile):
                 continue
