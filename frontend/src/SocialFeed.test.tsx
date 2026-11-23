@@ -197,20 +197,18 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   expect(collage.querySelector('img')?.getAttribute('srcset')).toBe(
     '/thumb/p1 360w, /full/p1 1200w',
   );
-  // Three exercises are listed; the rest are counted.
-  expect(
-    [...friendCard.querySelectorAll('.feed-exercises > li')].map((entry) => entry.textContent),
-  ).toEqual(['Bench press, ', 'Row, ', 'Curl ', '+2 more']);
-  // Tapping the count lists them all, and tapping again folds them away.
-  const rows = () =>
-    [...friendCard.querySelectorAll('.feed-exercises > li')].map((entry) => entry.textContent);
-  const more = button(friendCard, 'Show 2 more exercises')!;
-  expect(more.getAttribute('aria-expanded')).toBe('false');
-  await click(more);
-  expect(rows()).toEqual(['Bench press, ', 'Row, ', 'Curl, ', 'Fly, ', 'Dip ', 'Show less']);
-  expect(button(friendCard, 'Show less')?.getAttribute('aria-expanded')).toBe('true');
-  await click(button(friendCard, 'Show less'));
-  expect(rows()).toHaveLength(4);
+  // Three exercises are listed, each with its icon; the rest are counted.
+  const rows = [...friendCard.querySelectorAll('.feed-exercises > li')];
+  expect(rows.map((entry) => entry.textContent)).toEqual([
+    'Bench press',
+    'Row',
+    'Curl',
+    '+2 exercises',
+  ]);
+  expect(rows.slice(0, 3).every((entry) => entry.querySelector('.exercise-icon img'))).toBe(true);
+  // The count opens the whole workout on its owner's profile.
+  await click(button(friendCard, 'Open Alex Sample’s Upper body workout, with 2 more exercises'));
+  expect(openProfile).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'alex' }), theirs);
   // Your one-exercise workout still names its exercise, as it differs from the workout's name.
   expect(own.querySelector('.feed-exercises')?.textContent).toBe('Bench press');
   expect(button(friendCard, 'React to Alex Sample’s Upper body')).toBeDefined();

@@ -97,6 +97,7 @@ import type {
   WorkoutHistorySummary,
   WorkoutImportOptions,
   WorkoutInput,
+  WorkoutReactions,
   WorkoutRecommendation,
   WorkoutSetInput,
   WorkoutType,
@@ -132,6 +133,7 @@ import { SetEntryConfirmationDialog } from './SetEntryConfirmationDialog';
 import { WorkoutNameDialog } from './WorkoutNameDialog';
 import { CalendarDayDetail } from './CalendarDayDetail';
 import { ExerciseIcon } from './ExerciseIcon';
+import { WorkoutReactionControl } from './WorkoutReactionControl';
 import { ExercisePicker } from './ExercisePicker';
 import { SupersetPicker } from './SupersetPicker';
 import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
@@ -9865,6 +9867,9 @@ function HistoryScreen({
  * A profile's shared workouts, grouped by week like History but read-only, two weeks with
  * workouts to a page. Older workouts are read as later pages need them.
  */
+/** A workout nobody has reacted to or commented on. */
+const NO_REACTIONS: WorkoutReactions = { counts: [], yours: null, comment_count: 0 };
+
 export function SharedWorkoutHistory({
   workouts,
   focusWorkoutId,
@@ -9877,6 +9882,9 @@ export function SharedWorkoutHistory({
   categoryColors: viewerColors,
   weekStartDay,
   workoutTypes,
+  reactions,
+  onReactionsChange,
+  owner,
 }: SharedWorkoutListProps & { categoryColors: WorkoutTypeColors; weekStartDay: number }) {
   // Draw the member's own colours, as their calendar does, rather than the viewer's.
   const categoryColors = useMemo(
@@ -9886,6 +9894,8 @@ export function SharedWorkoutHistory({
   const [chosenPage, setChosenPage] = useState<number | null>(null);
   const pagesRef = useRef<HTMLDivElement>(null);
   const [openId, setOpenId] = useState<string | null>(focusWorkoutId ?? null);
+  // One workout's reaction picker or comment thread is open at a time.
+  const [discussing, setDiscussing] = useState<string | null>(null);
   const summaryRef = useRef<HTMLButtonElement>(null);
   const revealed = useRef(false);
   const [expandedPhoto, setExpandedPhoto] = useState<MachinePhoto | null>(null);
@@ -9978,6 +9988,24 @@ export function SharedWorkoutHistory({
                   onToggle={() =>
                     setOpenId((current) => (current === workout.id ? null : workout.id))
                   }
+                  discussion={
+                    reactions && onReactionsChange && owner ? (
+                      <WorkoutReactionControl
+                        compact
+                        ownWorkout={owner.is_you}
+                        workoutId={workout.id}
+                        subject={`${owner.is_you ? 'Your' : `${owner.display_name}’s`} ${workoutDisplayName(workout)}`}
+                        reactions={reactions[workout.id] ?? NO_REACTIONS}
+                        open={discussing === workout.id}
+                        onOpenChange={(value) =>
+                          setDiscussing((current) =>
+                            value ? workout.id : current === workout.id ? null : current,
+                          )
+                        }
+                        onChange={(next) => onReactionsChange(workout.id, next)}
+                      />
+                    ) : null
+                  }
                 />
               ))}
             </div>
@@ -10022,6 +10050,7 @@ function HistoryWorkoutCard({
   onEdit,
   onDelete,
   onPhotosChange,
+  discussion = null,
 }: {
   bodyweight?: number | null;
   detailsOnly?: boolean;
@@ -10052,6 +10081,8 @@ function HistoryWorkoutCard({
   onDelete?: () => void;
   /** Given for your own saved workout: its photos were added to or removed. */
   onPhotosChange?: () => void;
+  /** A profile workout's reaction and comment buttons, under its summary. */
+  discussion?: ReactNode;
 }) {
   const weightUnit = useWeightUnit();
   const [shareOpen, setShareOpen] = useState(false);
@@ -10237,6 +10268,7 @@ function HistoryWorkoutCard({
           </span>
         </button>
       )}
+      {discussion && !detailsOnly && <div className="history-card-social">{discussion}</div>}
       {open && (
         <div className={`history-detail${shared ? ' shared-session' : ''}`}>
           {onPhotosChange && !detailsOnly ? (
