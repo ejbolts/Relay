@@ -28,6 +28,9 @@ import { SocialScreen } from './SocialScreen';
 const mockRouter = { push: jest.fn(), navigate: jest.fn(), setParams: jest.fn(), back: jest.fn() };
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
+  get router() {
+    return mockRouter;
+  },
   useIsFocused: () => true,
   Stack: { Screen: () => null },
 }));
@@ -298,7 +301,7 @@ test("the feed shows friends' workouts, and a reaction is sent and shown", async
 test('Friends lists requests and friends, and accepting a request asks the server', async () => {
   jest.mocked(apiSend).mockResolvedValue({ status: 'friends' });
   await show(<SocialScreen />);
-  expect(await screen.findByText('1')).toBeVisible();
+  expect(await screen.findByLabelText('Social sections, 1 friend request')).toBeVisible();
   await fireEvent.press(await screen.findByRole('tab', { name: 'Friends' }));
   expect(screen.getByText('Friend requests')).toBeVisible();
   expect(screen.getByText(connectionDate('request', '2026-11-20T10:00:00Z'))).toBeVisible();

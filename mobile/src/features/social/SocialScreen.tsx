@@ -1,4 +1,4 @@
-import { useIsFocused, useRouter } from 'expo-router';
+import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ComponentRef, type RefObject } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -42,7 +42,6 @@ type Section = 'feed' | 'friends';
  */
 export function SocialScreen() {
   const { colors } = useTheme();
-  const router = useRouter();
   const user = useUser();
   const nav = useSocialNavigation();
   const focused = useIsFocused();
@@ -93,8 +92,11 @@ export function SocialScreen() {
         actions={
           <AccountHeaderActions
             notifications={<NotificationsBell />}
-            profile={{ user, onPress: () => nav.openProfile(user) }}
-            onSettings={() => router.push('/settings')}
+            profile={{
+              user,
+              onPress: () => nav.openProfile(user),
+              waiting: { friendRequests: requests },
+            }}
           />
         }
       >
@@ -315,8 +317,7 @@ function Feed({
       {items.length === 0 ? (
         <EmptyState
           icon={socialIcons.people}
-          title={friends && friends.length > 0 ? 'No workouts yet' : 'No friends yet'}
-          message={
+          title={
             friends && friends.length > 0
               ? 'No workouts here yet. Sessions you and your friends log appear in this feed.'
               : 'Add friends to see their workouts and photos here.'

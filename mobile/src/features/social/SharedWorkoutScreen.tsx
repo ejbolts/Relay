@@ -78,6 +78,7 @@ export function SharedWorkoutScreen({
   }
 
   const { workout, reactions } = data;
+  const comments = reactions.comment_count ?? 0;
   const session = friendSession(workout);
   const own = memberId === nav.me;
   const name = own ? 'You' : (member?.display_name ?? '');
@@ -178,32 +179,24 @@ export function SharedWorkoutScreen({
             />
           </Card>
         )}
-        <Card style={{ gap: space.md }}>
-          <View
-            style={{ gap: space.md }}
-            onLayout={(event) => {
-              if (!showComments || scrolled.current) return;
-              scrolled.current = true;
-              const y = event.nativeEvent.layout.y;
-              requestAnimationFrame(() => scroll.current?.scrollTo({ y, animated: true }));
-            }}
-          >
-            <CardHeader
-              title="Comments"
-              detail={
-                thread.items.length > 0
-                  ? `${thread.items.length} ${thread.items.length === 1 ? 'comment' : 'comments'}`
-                  : undefined
-              }
-            />
+        <View
+          onLayout={(event) => {
+            if (!showComments || scrolled.current) return;
+            scrolled.current = true;
+            const y = event.nativeEvent.layout.y;
+            requestAnimationFrame(() => scroll.current?.scrollTo({ y, animated: true }));
+          }}
+        >
+          <Card style={{ gap: space.md }}>
+            <CardHeader title="Comments" detail={comments > 0 ? `${comments}` : undefined} />
             <CommentList
               thread={thread}
               highlightId={highlightCommentId}
               onOpenPerson={nav.openProfile}
               onCompose={() => composer.current?.focus()}
             />
-          </View>
-        </Card>
+          </Card>
+        </View>
       </ScrollView>
       <View
         style={[

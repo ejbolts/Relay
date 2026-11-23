@@ -284,9 +284,6 @@ function PeopleSearch({ onOpenQr }: { onOpenQr?: () => void }) {
           style={styles.searchButton}
         />
       </View>
-      <Text style={[type.footnote, { color: colors.muted, lineHeight: 18 }]}>
-        Search by display name, username or full UUID. Only shared profiles appear.
-      </Text>
       {term.length > 0 &&
         (search.isPending ? (
           <ActivityIndicator accessibilityLabel="Searching" color={colors.accentText} />

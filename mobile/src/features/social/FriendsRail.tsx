@@ -102,7 +102,7 @@ export function FriendsRail({
 }
 
 const styles = StyleSheet.create({
-  rail: { gap: 10, paddingVertical: 2 },
+  rail: { gap: 4, paddingVertical: 2 },
   person: { width: 68, alignItems: 'center', gap: 5 },
   ring: {
     padding: 3,
