@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { lastWeek } from './friendFeedData';
+import { firstName, lastWeek } from './friendFeedData';
 import { PresenceAvatar } from './PresenceAvatar';
 import { byLiveActivity, presenceStatus, presenceText, useNow, workoutElapsed } from './presence';
 import {
@@ -16,10 +16,6 @@ const PREFETCH_REFRESH_MS = 5 * 60_000;
 /** Changes when a friend logs a session, so their background copy is loaded again. */
 function profileSignature(friend: FriendActivity): string {
   return `${friend.latest?.workout.id ?? ''}:${friend.recent_workout_count}`;
-}
-
-function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] || name;
 }
 
 /**

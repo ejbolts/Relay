@@ -1,7 +1,7 @@
 import { FollowNotifications } from './FollowNotifications';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
-import { profileButtonLabel } from './friendsActivityData';
+import { profileBadgeText, profileButtonLabel } from './profileButton';
 import type { User } from './types';
 
 export function ProfileButton({
@@ -20,7 +20,7 @@ export function ProfileButton({
   friendRequests?: number;
   openFeedback?: number;
 }) {
-  const count = friendRequests + openFeedback;
+  const badge = profileBadgeText(friendRequests + openFeedback);
   return (
     <button
       className="icon-button-pulse profile-button"
@@ -28,9 +28,9 @@ export function ProfileButton({
       onClick={onClick}
       aria-label={profileButtonLabel(name, friendRequests, openFeedback)}
     >
-      {count > 0 && (
+      {badge && (
         <span className="profile-request-badge" aria-hidden="true">
-          {count > 9 ? '9+' : count}
+          {badge}
         </span>
       )}
       {name ? (

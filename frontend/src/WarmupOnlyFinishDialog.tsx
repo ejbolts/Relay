@@ -1,5 +1,6 @@
 import { PopupDialog } from './PopupDialog';
-import { formatWeight, type WeightUnit } from './weightUnits';
+import type { WeightUnit } from './weightUnits';
+import { warmupSetLabel } from './workingSetCheck';
 import './warmupOnlyFinishDialog.css';
 
 type LoggedWarmup = {
@@ -14,13 +15,6 @@ export type WarmupOnlyMovement = {
   iconUrl: string;
   sets: LoggedWarmup[];
 };
-
-function setLabel(item: LoggedWarmup, unit: WeightUnit, position: number) {
-  const weight = item.weight_kg !== null ? formatWeight(item.weight_kg, unit) : null;
-  if (weight && item.reps !== null) return `${weight} × ${item.reps}`;
-  if (item.reps !== null) return `${item.reps} reps`;
-  return weight ?? `Set ${position}`;
-}
 
 /** Reminds the user, before finishing, which exercises were logged with only warm-up sets. */
 export function WarmupOnlyFinishDialog({
@@ -73,7 +67,7 @@ export function WarmupOnlyFinishDialog({
                       W
                     </b>
                     <span className="sr-only">Warm-up: </span>
-                    {setLabel(item, weightUnit, index + 1)}
+                    {warmupSetLabel(item, weightUnit, index + 1)}
                   </li>
                 ))}
             </ul>

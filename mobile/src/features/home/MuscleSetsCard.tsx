@@ -1,0 +1,264 @@
+import * as Haptics from 'expo-haptics';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  muscleSetsView,
+  muscleWeekName,
+  setChangeLabel,
+  setChangeTone,
+  setCredits,
+  signedSetChange,
+} from '../../../../frontend/src/muscleSetRows';
+import { useDashboard, useTrainingPreferences } from '../../data/queries';
+import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
+import { Icon } from '../../ui/Icon';
+import { useTheme } from '../../ui/theme';
+
+/**
+ * Working sets per muscle against each muscle's weekly goal, with the week before behind it, as
+ * on the web. Step back through earlier weeks; Show more lists every muscle.
+ */
+export function MuscleSetsCard() {
+  const { colors, type } = useTheme();
+  const dashboard = useDashboard();
+  const preferences = useTrainingPreferences();
+  const [weeksAgo, setWeeksAgo] = useState(0);
+  const [expanded, setExpanded] = useState(false);
+  const goal = preferences.data?.weekly_muscle_set_goal ?? 10;
+  const goals = preferences.data?.weekly_muscle_set_goals;
+  const view = muscleSetsView({
+    weeklySets: dashboard.data?.weekly_sets,
+    history: dashboard.data?.weekly_sets_history,
+    weeksAgo,
+    goal,
+    goals,
+    expanded,
+  });
+  const step = (by: number) => {
+    void Haptics.selectionAsync();
+    setWeeksAgo(view.weeksAgo + by);
+  };
+  const changeColor = {
+    up: colors.good,
+    down: colors.danger,
+    pending: colors.muted,
+    same: colors.muted,
+  };
+
+  return (
+    <Card>
+      <CardHeader
+        title="Sets per muscle"
+        action={
+          <View style={styles.nav} accessibilityLabel="Week">
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Previous week"
+              accessibilityState={{ disabled: view.weeksAgo >= view.weeks.length - 1 }}
+              disabled={view.weeksAgo >= view.weeks.length - 1}
+              hitSlop={8}
+              onPress={() => step(1)}
+              style={({ pressed }) => [
+                styles.navButton,
+                (pressed || view.weeksAgo >= view.weeks.length - 1) && styles.dim,
+              ]}
+            >
+              <Icon name="chevronLeft" size={16} color={colors.text} />
+            </Pressable>
+            <Text
+              accessibilityLiveRegion="polite"
+              style={[type.footnote, styles.navLabel, { color: colors.text }]}
+            >
+              {view.name}
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Next week"
+              accessibilityState={{ disabled: view.current }}
+              disabled={view.current}
+              hitSlop={8}
+              onPress={() => step(-1)}
+              style={({ pressed }) => [styles.navButton, (pressed || view.current) && styles.dim]}
+            >
+              <Icon name="chevronRight" size={16} color={colors.text} />
+            </Pressable>
+          </View>
+        }
+      />
+      {dashboard.isPending ? (
+        <Loading label="Loading sets per muscle" />
+      ) : !dashboard.data ? (
+        <ErrorState
+          message={errorMessage(dashboard.error)}
+          onRetry={() => void dashboard.refetch()}
+        />
+      ) : (
+        <>
+          <View style={styles.key}>
+            {view.week && (
+              <View style={styles.keyItem}>
+                <View style={[styles.swatch, { backgroundColor: colors.accent }]} />
+                <Text style={[type.caption, { color: colors.secondary }]}>
+                  {view.current ? 'Current week' : view.name}
+                </Text>
+              </View>
+            )}
+            {view.previous && (
+              <View style={styles.keyItem}>
+                <View
+                  style={[styles.swatch, styles.previousSwatch, { borderColor: colors.muted }]}
+                />
+                <Text style={[type.caption, { color: colors.secondary }]}>
+                  {muscleWeekName(view.weeksAgo + 1)}
+                </Text>
+              </View>
+            )}
+            <View style={styles.keyItem}>
+              <View style={[styles.goalKey, { backgroundColor: colors.text }]} />
+              <Text style={[type.caption, { color: colors.secondary }]}>
+                {Object.keys(goals ?? {}).length ? 'Weekly target' : `Goal ${goal}`}
+              </Text>
+            </View>
+          </View>
+          {view.rows.length > 0 && (
+            <View style={{ gap: 14 }}>
+              {view.rows.map((row) => (
+                <View
+                  key={row.muscle_group}
+                  style={styles.row}
+                  accessible
+                  accessibilityLabel={`${row.muscle_group}: ${setCredits(row.raw_sets)} of ${row.target} sets${
+                    row.change === null ? '' : `, ${setChangeLabel(row.change, view.current)}`
+                  }`}
+                >
+                  <Text
+                    style={[type.footnote, styles.name, { color: colors.text }]}
+                    numberOfLines={1}
+                  >
+                    {row.muscle_group}
+                  </Text>
+                  <View style={styles.track}>
+                    {row.previous !== null && row.previous > 0 && (
+                      <View
+                        style={[
+                          styles.bar,
+                          styles.previousBar,
+                          {
+                            width: `${(row.previous / view.scale) * 100}%`,
+                            borderColor: colors.muted,
+                          },
+                        ]}
+                      />
+                    )}
+                    <View
+                      style={[
+                        styles.bar,
+                        {
+                          width: `${(row.raw_sets / view.scale) * 100}%`,
+                          backgroundColor: colors.accent,
+                        },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.goalTick,
+                        {
+                          left: `${(row.target / view.scale) * 100}%`,
+                          backgroundColor: colors.text,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <View style={styles.value}>
+                    <Text
+                      style={[
+                        type.footnote,
+                        type.number,
+                        { color: colors.text, fontWeight: '700' },
+                      ]}
+                    >
+                      {setCredits(row.raw_sets)}
+                      <Text style={{ color: colors.muted, fontWeight: '500' }}>
+                        {' '}
+                        / {row.target}
+                      </Text>
+                    </Text>
+                    {row.change !== null && (
+                      <Text
+                        style={[
+                          type.caption,
+                          type.number,
+                          {
+                            color: changeColor[setChangeTone(row.change, view.current)],
+                            fontWeight: '600',
+                          },
+                        ]}
+                      >
+                        {signedSetChange(row.change)}
+                      </Text>
+                    )}
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+          {!view.trainedCount && (
+            <Text style={[type.footnote, { color: colors.muted }]}>
+              {view.current
+                ? 'No working sets logged yet this week.'
+                : 'No working sets logged that week.'}
+            </Text>
+          )}
+          {view.trainedCount > 0 && view.untrained > 0 && (
+            <Text style={[type.caption, { color: colors.muted }]}>
+              {view.untrained} muscles not trained{view.current ? ' yet' : ''}
+            </Text>
+          )}
+          {view.canExpand && (
+            <Button
+              label={expanded ? 'Show less' : 'Show more'}
+              icon={expanded ? 'chevronUp' : 'chevronDown'}
+              variant="link"
+              style={{ alignSelf: 'center' }}
+              onPress={() => setExpanded((value) => !value)}
+            />
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
+const styles = StyleSheet.create({
+  nav: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  navButton: { width: 30, height: 30, alignItems: 'center', justifyContent: 'center' },
+  navLabel: { minWidth: 84, textAlign: 'center', fontWeight: '600' },
+  dim: { opacity: 0.35 },
+  key: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 14, rowGap: 6 },
+  keyItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  swatch: { width: 14, height: 8, borderTopRightRadius: 3, borderBottomRightRadius: 3 },
+  previousSwatch: { borderWidth: 1.5, borderLeftWidth: 0 },
+  goalKey: { width: 2, height: 12, borderRadius: 2 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  name: { width: 92 },
+  track: { flex: 1, height: 8, justifyContent: 'center' },
+  bar: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
+  },
+  previousBar: { borderWidth: 1.5, borderLeftWidth: 0, zIndex: 1 },
+  goalTick: {
+    position: 'absolute',
+    top: -4,
+    bottom: -4,
+    width: 2,
+    marginLeft: -1,
+    borderRadius: 2,
+    zIndex: 2,
+  },
+  value: { width: 52, alignItems: 'flex-end' },
+});

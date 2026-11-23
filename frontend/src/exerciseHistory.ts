@@ -1,4 +1,4 @@
-import { createSuggestedWorkoutSet } from './workoutSets';
+import { createSuggestedWorkoutSet, isLoggedWorkingSet } from './workoutSets';
 import type {
   ExerciseHistoryBaseline,
   ExerciseKind,
@@ -108,6 +108,22 @@ export function historyOnMachine(
   });
 }
 
+/** A movement's recent sessions: its pinned machine's own when it has any, else all of them. */
+export function movementHistory(
+  history: ExerciseHistoryEntry[],
+  machineId: string | null | undefined,
+  aliases: ReadonlyMap<string, string>,
+  limit = 5,
+): ExerciseHistoryEntry[] {
+  const onMachine = historyOnMachine(history, machineId, aliases);
+  return (onMachine.length ? onMachine : history).slice(0, limit);
+}
+
+/** The sets hints come from: the last session with working sets; one cut short to warm-ups is skipped. */
+export function lastWorkingSessionSets(history: ExerciseHistoryEntry[]): TrackedSet[] {
+  return history.find((entry) => entry.sets.some(isLoggedWorkingSet))?.sets ?? [];
+}
+
 /**
  * The sets to suggest for a machine: its latest session, or the exercise's latest session when
  * the machine has none yet.
@@ -130,6 +146,7 @@ export function withSuggestedSets(
   current: WorkoutDraftSet[],
   previous: TrackedSet[],
   kind: ExerciseKind,
+  newKey: () => string = () => crypto.randomUUID(),
 ): WorkoutDraftSet[] {
   if (!previous.length) return current;
   const length = Math.max(current.length, previous.length);
@@ -140,7 +157,7 @@ export function withSuggestedSets(
       sets.push(item);
     } else if (previous[index]) {
       sets.push({
-        key: item?.key ?? crypto.randomUUID(),
+        key: item?.key ?? newKey(),
         ...createSuggestedWorkoutSet(kind, previous[index]),
         fromPrevious: true,
         restRevealed: false,

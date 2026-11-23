@@ -2,11 +2,12 @@ import { useMemo, useState } from 'react';
 import { exerciseIconFor } from './exerciseIcons';
 import { formatLastDone } from './exerciseLastDone';
 import {
+  missingSwapMuscles,
   rankSwapAlternatives,
   SAME_MUSCLES_MATCH,
+  swapAlternativeGroups,
+  swapCarrySummary,
   swapMuscleCreditList,
-  swapMuscleCredits,
-  type SwapAlternative,
 } from './exerciseSwap';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
@@ -16,16 +17,9 @@ import './exerciseSwap.css';
 
 const ALL_EQUIPMENT = 'All';
 
-function plural(count: number, word: string) {
-  return `${count} ${word}${count === 1 ? '' : 's'}`;
-}
-
 function MuscleChips({ original, alternative }: { original: Exercise; alternative: Exercise }) {
   const trained = swapMuscleCreditList(alternative);
-  const trainedKeys = swapMuscleCredits(alternative);
-  const missing = swapMuscleCreditList(original).filter(
-    ({ muscle }) => !trainedKeys.has(muscle.toLowerCase()),
-  );
+  const missing = missingSwapMuscles(original, alternative);
   if (!trained.length) return null;
   return (
     <span className="exercise-swap-muscles">
@@ -40,7 +34,7 @@ function MuscleChips({ original, alternative }: { original: Exercise; alternativ
           )}
         </span>
       ))}
-      {missing.map(({ muscle }) => (
+      {missing.map((muscle) => (
         <span key={muscle} className="missing">
           <span className="sr-only">Not </span>
           {muscle}
@@ -88,26 +82,8 @@ export function ExerciseSwapSheet({
     (item) => equipment === ALL_EQUIPMENT || item.equipment === equipment,
   );
   const cardio = exercise.kind === 'cardio';
-  const groups: { label: string; items: SwapAlternative[] }[] = cardio
-    ? [{ label: 'Other cardio', items: shown }]
-    : [
-        {
-          label: 'Same muscles',
-          items: shown.filter((item) => (item.match ?? 0) >= SAME_MUSCLES_MATCH),
-        },
-        {
-          label: 'Close match',
-          items: shown.filter((item) => (item.match ?? 0) < SAME_MUSCLES_MATCH),
-        },
-      ];
-  const carry = [
-    plannedSetCount ? `${plural(plannedSetCount, 'planned set')} move across` : null,
-    loggedSetCount
-      ? `${plural(loggedSetCount, 'logged set')} ${loggedSetCount === 1 ? 'stays' : 'stay'}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+  const groups = swapAlternativeGroups(shown, cardio);
+  const carry = swapCarrySummary(plannedSetCount, loggedSetCount);
 
   return (
     <PopupDialog

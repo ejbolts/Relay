@@ -33,13 +33,24 @@ When asked for a Tailscale URL for this project, include the preview URL and a v
 - Apply the same rule to PR titles, descriptions, comments and shared screenshots or recordings. Before committing or publishing a PR update, inspect the staged additions, PR text and selected evidence for private URLs; omit or redact them, including browser address bars. Do not repeat a removed private URL in commit messages or PR explanations.
 - Private replies to the user may include the actual clickable local or Tailscale URL. Keep actual host/address details in private replies or local verification notes; describe the environment generically in PRs while retaining the relevant port, branch/commit and sample-data isolation details.
 
+## Web and mobile parity
+
+The native app (`mobile/`) is replacing the web app (`frontend/`), which will be archived once the app covers it. Until then both ship, so they must not drift.
+
+- **One rule, two screens.** Logic lives once, in a pure module in `frontend/src` (no packages, no browser APIs) that both apps import; each app only presents it. Never copy logic into `mobile/`. If the web logic you need or change sits inside a component, extract it into a shared module first. **Mobile checks** run in CI whenever a shared module changes.
+- **Changing behaviour in a ported area** (see [`mobile/PARITY.md`](mobile/PARITY.md)): change both apps in the same PR, or record the difference in `mobile/PARITY.md` in that PR. A change to a shared module reaches both apps; still check that the mobile screen shows it correctly.
+- **New features:** put the rule in a shared module, and build the mobile screen first or alongside the web one. Don't start large web-only features unless the user asks; until it is archived, the web gets fixes and small changes.
+- **Say where a change lands.** Every PR description includes a `Platforms:` line: `web`, `mobile`, `both`, or `web (mobile gap recorded in mobile/PARITY.md)`.
+- **The app is another API client.** The backward-compatibility rules below apply to it, more strictly: an installed app build keeps its old code until the user updates it, and can't be refreshed like the web. Never depend on web and mobile updating together.
+- **Keep the tracker current.** Update `mobile/PARITY.md` when a port lands, a gap opens or a gap closes.
+
 ## Backward-compatible API changes
 
 Installed apps keep running their loaded release until they are refreshed, so every backend change must keep working with releases that are already deployed. See [App versions and API compatibility](docs/TECHNICAL-REFERENCE.md#app-versions-and-api-compatibility).
 
 - Make API changes additive: new request fields are optional with a default, new response fields are additions, and existing fields, endpoints and meanings stay as they are. Frontend code must tolerate unknown enum values and missing new fields.
 - When a full-replace save (for example `PUT /api/workouts/{id}`) gains a field, register it in `FIELDS_ADDED_IN` in `backend/app/client_versions.py` with the release that introduces it, and make sure that endpoint preserves registered fields, so older apps cannot wipe it.
-- Remove or change something older apps send or read in two steps: first ship a release that no longer depends on it, then remove it once **Admin > App versions in use** shows no sign-ins on older releases (including *Not reported*) for the last 30 days. If it cannot wait, raise `MIN_WRITE_CLIENT_VERSION` to the first release that no longer needs it, in the same change, and explain why in the PR. Never set it above the release being deployed.
+- Remove or change something older apps send or read in two steps: first ship a release that no longer depends on it, then remove it once **Admin > App versions in use** shows no sign-ins on older releases (including _Not reported_) for the last 30 days. If it cannot wait, raise `MIN_WRITE_CLIENT_VERSION` to the first release that no longer needs it, in the same change, and explain why in the PR. Never set it above the release being deployed.
 - Changing a stored device format (such as the active workout draft) must migrate older data rather than discard it.
 
 ## Release versions and announcements

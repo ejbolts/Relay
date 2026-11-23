@@ -3,6 +3,7 @@ import {
   extendInactiveWorkoutFinishAt,
   inactiveWorkoutEndAt,
   inactiveWorkoutFinishAt,
+  inactiveWorkoutTimes,
   MAX_INACTIVE_WORKOUT_MS,
   RECENT_WORKOUT_ACTIVITY_MS,
   setInactiveWorkoutLimitMinutes,
@@ -78,5 +79,24 @@ describe('inactive workout timeout', () => {
     } finally {
       setInactiveWorkoutLimitMinutes(null);
     }
+  });
+});
+
+describe('an inactive workout prompt', () => {
+  const at = (day: number, hour: number, minute: number) =>
+    new Date(2026, 10, day, hour, minute).getTime();
+  const time = (value: number) =>
+    new Date(value).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
+
+  it('gives the end time alone on the day the workout started', () => {
+    const times = inactiveWorkoutTimes(at(23, 9, 0), at(23, 10, 12));
+    expect(times.ended).toBe(time(at(23, 10, 12)));
+    expect(times.started).toContain(time(at(23, 9, 0)));
+  });
+
+  it('gives the end day too after midnight', () => {
+    const times = inactiveWorkoutTimes(at(23, 23, 0), at(24, 0, 30));
+    expect(times.ended).not.toBe(time(at(24, 0, 30)));
+    expect(times.ended).toContain(time(at(24, 0, 30)));
   });
 });

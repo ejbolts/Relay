@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
+import { cleanMachineSettings } from './setMachines';
 import type { MachineSetting } from './types';
 import './machineSettings.css';
 
 type Row = MachineSetting & { key: string };
-const numericValue = /^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/;
 const row = (setting: MachineSetting = { name: '', value: '' }): Row => ({
   ...setting,
   key: crypto.randomUUID(),
@@ -102,15 +102,11 @@ export function MachineSettingsEditor({
 
   async function save() {
     if (savingRef.current) return;
-    const settings = rows
-      .map(({ name, value }) => ({ name: name.trim(), value: value.trim() }))
-      .filter(({ name, value }) => name || value);
-    if (settings.some(({ name, value }) => !name || !value)) {
-      setError('Enter a setting name and value.');
-      return;
-    }
-    if (settings.some(({ value }) => !numericValue.test(value))) {
-      setError('Enter a number for each value.');
+    let settings: MachineSetting[];
+    try {
+      settings = cleanMachineSettings(rows);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : 'Enter a setting name and value.');
       return;
     }
     savingRef.current = true;

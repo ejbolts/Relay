@@ -9,12 +9,12 @@ import { Toast } from './Toast';
 import type { UndoBodyweightCheckIn } from './bodyweightCheckIn';
 import { ConsistencyCard } from './ConsistencyCard';
 import { consistencyWeeks } from './consistencyWeeks';
-import { cardioRecordLabel } from './cardioRecords';
+import { recordKindLabel } from './recordLabels';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { MuscleSetsCard } from './MuscleSetsCard';
 import type { MuscleSetsWeek } from './liveMuscleSets';
-import { formatMemberSince } from './profileDisplay';
+import { formatMemberSince, formatProfileTotal as formatTotal } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
 import type { useHomeLayout } from './useHomeLayout';
 import {
@@ -30,8 +30,6 @@ import { CardioGoalCardSettingsForm } from './CardioGoalCardSettings';
 import { ActivityCardSettingsForm } from './ActivityCardSettings';
 import { SparkBars, Sparkline } from './PulseCharts';
 import {
-  averageOf,
-  daysBetween,
   latestTopSets,
   parseLocalDate,
   prSetCount,
@@ -39,7 +37,6 @@ import {
   shortDate,
   trainingDayGrid,
   weekStartDayFrom,
-  weeklyBodyweightAverages,
   weeklyTrainingTotals,
   upNextSetLabel,
   type SessionTemplate,
@@ -66,7 +63,6 @@ import {
   formatWeight,
   recordDisplayValue,
   weightFromKg,
-  weightToKg,
   weightInputValue,
   weightUnitName,
 } from './weightUnits';
@@ -85,6 +81,22 @@ import {
   MuscleFreshnessCard,
 } from './HomeInsightCards';
 import { muscleFreshness } from './homeInsights';
+import {
+  BODY_FAT_RANGE_ERROR,
+  activityAverageLabel,
+  bodyFatEntry,
+  bodyweightStatCaption,
+  bodyweightTrendCaption,
+  checkInChange,
+  checkInSavedMessage,
+  homeActivityStats,
+  homeBodyweightStats,
+  homeCardioGoals,
+  nudgedBodyFat,
+  nudgedBodyweightKg,
+  quickCheckInEntry,
+  validBodyFat,
+} from './homeStats';
 
 export function PageHeader({
   eyebrow,
@@ -150,16 +162,6 @@ export function SettingsButton({ onClick }: { onClick: () => void }) {
     </button>
   );
 }
-
-function formatTotal(value: number | null | undefined): string {
-  return value == null ? '–' : value.toLocaleString();
-}
-
-const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
-  relative_strength: 'Relative strength PR',
-  reps_at_weight: 'Volume PR for this weight',
-  weight: 'Weight PR',
-};
 
 export interface TodayScreenProps {
   home: ReturnType<typeof useHomeLayout>;
@@ -324,44 +326,33 @@ export function TodayScreen({
     needsSplitUpdate,
   } = useUpNextSession(data?.recommendation, workouts, today);
   const latestSets = useMemo(() => latestTopSets(workouts, today), [workouts, today]);
-  const currentWeek = weeks.at(-1);
-  const haveWorkouts = workouts.length > 0;
-  const workoutsThisWeek = haveWorkouts ? (currentWeek?.workouts ?? 0) : data?.workouts_this_week;
-  // Cardio sessions are mirrored from workouts' cardio movements, so no workouts means none.
-  const cardioSessionsThisWeek = haveWorkouts
-    ? (currentWeek?.cardioSessions ?? 0)
-    : data
-      ? 0
-      : null;
-  const workoutHistory = weeks.slice(-workoutWeeks);
-  const cardioHistory = weeks.slice(-cardioWeeks);
-  const averageWorkouts = averageOf(workoutHistory.map((week) => week.workouts));
-  const averageCardioSessions = averageOf(cardioHistory.map((week) => week.cardioSessions));
+  const {
+    workoutsThisWeek,
+    cardioSessionsThisWeek,
+    workoutHistory,
+    cardioHistory,
+    averageWorkouts,
+    averageCardioSessions,
+  } = homeActivityStats({
+    weeks,
+    haveWorkouts: workouts.length > 0,
+    data,
+    workoutWeeks,
+    cardioWeeks,
+  });
   const trainingDays = grid.flat().filter((day) => day.workouts > 0).length;
-  const zone2 = data?.zone2 ?? null;
-  const cardioGoals = data?.cardio_goals ?? (zone2 ? [{ zone: 2, ...zone2 }] : []);
-  const latest = measurements[0] ?? null;
+  const { goals: cardioGoals, daysLeft: cardioDaysLeft } = homeCardioGoals(data, today);
   const checkInMode = homeSectionSettings(home.editing ? home.draft : home.layout, 'check_in').mode;
-  const priorBodyweight =
-    measurements.find((item) => item.measurement_date < today)?.weight_kg ?? null;
-  const priorBodyFat =
-    measurements.find((item) => item.measurement_date < today && item.body_fat_pct !== null)
-      ?.body_fat_pct ?? null;
-  const recentWeights = measurements
-    .slice(0, 30)
-    .map((measurement) => measurement.weight_kg)
-    .reverse();
-  const monthAgo = latest
-    ? measurements.find(
-        (measurement) => daysBetween(measurement.measurement_date, latest.measurement_date) >= 28,
-      )
-    : null;
-  const monthChange = latest && monthAgo ? latest.weight_kg - monthAgo.weight_kg : null;
-  const weeklyWeights = useMemo(
-    () =>
-      weeklyBodyweightAverages(measurements, today, weekStartDay, 12).filter(
-        (value): value is number => value !== null,
-      ),
+  const {
+    latest,
+    priorBodyweight,
+    priorBodyFat,
+    latestBodyFat,
+    recentWeights,
+    monthChange,
+    weeklyWeights,
+  } = useMemo(
+    () => homeBodyweightStats(measurements, today, weekStartDay),
     [measurements, today, weekStartDay],
   );
   const records = recentRecords(personalRecords, 3);
@@ -631,13 +622,9 @@ export function TodayScreen({
       <button type="button" className="pulse-kpi" onClick={onOpenHistory}>
         <span>Workouts</span>
         <strong>{workoutsThisWeek ?? '–'}</strong>
-        <em>
-          {averageWorkouts === null
-            ? 'This week'
-            : `${workoutWeeks}-wk avg ${averageWorkouts.toFixed(1)}`}
-        </em>
+        <em>{activityAverageLabel(averageWorkouts, workoutWeeks)}</em>
         <SparkBars
-          values={workoutHistory.map((week) => week.workouts)}
+          values={workoutHistory}
           label={`Workouts per week, last ${workoutWeeks} weeks`}
         />
       </button>
@@ -646,13 +633,9 @@ export function TodayScreen({
       <button type="button" className="pulse-kpi" onClick={onOpenCardio} data-guide-target="cardio">
         <span>Cardio sessions</span>
         <strong>{cardioSessionsThisWeek ?? '–'}</strong>
-        <em>
-          {averageCardioSessions === null
-            ? 'This week'
-            : `${cardioWeeks}-wk avg ${averageCardioSessions.toFixed(1)}`}
-        </em>
+        <em>{activityAverageLabel(averageCardioSessions, cardioWeeks)}</em>
         <SparkBars
-          values={cardioHistory.map((week) => week.cardioSessions)}
+          values={cardioHistory}
           label={`Cardio sessions per week, last ${cardioWeeks} weeks`}
         />
       </button>
@@ -663,13 +646,7 @@ export function TodayScreen({
         <strong>
           {latest ? `${weightFromKg(latest.weight_kg, weightUnit).toFixed(1)} ${weightUnit}` : '–'}
         </strong>
-        <em>
-          {monthChange !== null
-            ? `${monthChange > 0 ? '+' : monthChange < 0 ? '−' : '±'}${weightFromKg(Math.abs(monthChange), weightUnit).toFixed(1)} ${weightUnit} / 4 wk`
-            : measurements.length
-              ? `${measurements.length} ${measurements.length === 1 ? 'check-in' : 'check-ins'}`
-              : 'No check-ins'}
-        </em>
+        <em>{bodyweightStatCaption(monthChange, measurements.length, weightUnit)}</em>
         <Sparkline
           values={weeklyWeights}
           label="Average body weight per week, last 12 weeks"
@@ -701,7 +678,7 @@ export function TodayScreen({
       <CardioGoalCard
         goals={cardioGoals}
         settings={homeSectionSettings(home.editing ? home.draft : home.layout, 'zone2')}
-        daysLeft={zone2 ? Math.max(0, daysBetween(today, zone2.week_end) + 1) : null}
+        daysLeft={cardioDaysLeft}
         onOpen={onOpenCardio}
       />
     ),
@@ -719,9 +696,7 @@ export function TodayScreen({
           yAxis
         />
         <p className={monthChange !== null && monthChange < 0 ? 'trend-down' : ''}>
-          {monthChange === null
-            ? `${measurements.length} check-ins`
-            : `${monthChange > 0 ? '+' : monthChange < 0 ? '−' : '±'}${weightFromKg(Math.abs(monthChange), weightUnit).toFixed(1)} ${weightUnit} in 30 days`}
+          {bodyweightTrendCaption(monthChange, measurements.length, weightUnit)}
         </p>
       </button>
     ),
@@ -733,9 +708,7 @@ export function TodayScreen({
         todayBodyFat={todayBodyFat}
         priorBodyweight={priorBodyweight}
         priorBodyFat={priorBodyFat}
-        latestBodyFat={
-          measurements.find((item) => item.body_fat_pct !== null)?.body_fat_pct ?? null
-        }
+        latestBodyFat={latestBodyFat}
         {...checkIns}
       />
     ),
@@ -762,11 +735,7 @@ export function TodayScreen({
                   <span className="record-copy">
                     <b>{record.exercise_name ?? 'Exercise'}</b>
                     <small>
-                      {cardioRecordLabel(record) ?? RECORD_LABELS[record.record_type] ?? 'PR'}
-                      {record.record_type === 'reps_at_weight' && record.weight_kg != null
-                        ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
-                        : ''}{' '}
-                      · {shortDate(record.achieved_date)}
+                      {recordKindLabel(record, weightUnit)} · {shortDate(record.achieved_date)}
                       {record.bodyweight_kg != null && (
                         <span className="record-bodyweight">
                           at {formatWeight(record.bodyweight_kg, weightUnit)} BW
@@ -997,10 +966,7 @@ function CheckInStatus({
   unit: string;
 }) {
   const format = (value: number) => `${value.toFixed(1)}${unit === '%' ? '%' : ` ${unit}`}`;
-  const change =
-    prior === null || today === null
-      ? null
-      : Number((Number(today.toFixed(1)) - Number(prior.toFixed(1))).toFixed(1));
+  const change = checkInChange(prior, today);
   return (
     <span
       className="quick-check-in-status"
@@ -1107,18 +1073,15 @@ export function DashboardQuickBodyweight({
 
   async function save() {
     if (saving || busy) return;
-    if (
-      selectedWeight === null ||
-      !Number.isFinite(selectedWeight) ||
-      selectedWeight <= 0 ||
-      selectedWeight > 500
-    ) {
-      setError(`Enter a bodyweight above 0 and up to ${formatWeight(500, weightUnit)}.`);
-      return;
-    }
-    const fatValue = bodyFat.trim() === '' ? NaN : Number(bodyFat);
-    if (singleButton && (!Number.isFinite(fatValue) || fatValue < 1 || fatValue > 70)) {
-      setError('Enter body fat from 1% to 70%.');
+    const fatValue = bodyFatEntry(bodyFat);
+    const entry = quickCheckInEntry({
+      weightKg: selectedWeight,
+      bodyFat: fatValue,
+      requireBodyFat: singleButton,
+      unit: weightUnit,
+    });
+    if (entry.error !== null) {
+      setError(entry.error);
       return;
     }
     setSaving(true);
@@ -1126,8 +1089,8 @@ export function DashboardQuickBodyweight({
     setUndo(null);
     try {
       const run = singleButton
-        ? await onSave(selectedWeight, fatValue)
-        : await onSave(selectedWeight);
+        ? await onSave(entry.weightKg, fatValue)
+        : await onSave(entry.weightKg);
       setUndo({
         run,
         attempt: 0,
@@ -1143,9 +1106,9 @@ export function DashboardQuickBodyweight({
 
   async function saveFat() {
     if (saving || busy || !onSaveBodyFat) return;
-    const value = bodyFat.trim() === '' ? NaN : Number(bodyFat);
-    if (!Number.isFinite(value) || value < 1 || value > 70) {
-      setError('Enter body fat from 1% to 70%.');
+    const value = bodyFatEntry(bodyFat);
+    if (!validBodyFat(value)) {
+      setError(BODY_FAT_RANGE_ERROR);
       return;
     }
     if (todayBodyweight === null) {
@@ -1166,9 +1129,7 @@ export function DashboardQuickBodyweight({
   }
 
   function nudgeFat(delta: number) {
-    const current = Number(bodyFat);
-    const base = bodyFat !== '' && Number.isFinite(current) ? current : (latestBodyFat ?? 0);
-    setBodyFat(Math.min(70, Math.max(1, base + delta)).toFixed(1));
+    setBodyFat(nudgedBodyFat(bodyFat, latestBodyFat, delta));
     setError(null);
   }
 
@@ -1188,16 +1149,7 @@ export function DashboardQuickBodyweight({
   }
 
   function nudge(delta: number) {
-    const base =
-      selectedWeight !== null && Number.isFinite(selectedWeight) && selectedWeight > 0
-        ? selectedWeight
-        : (latestBodyweight ?? 0);
-    setWeight(
-      weightToKg(
-        Number(Math.max(0, weightFromKg(base, weightUnit) + delta).toFixed(2)),
-        weightUnit,
-      ),
-    );
+    setWeight(nudgedBodyweightKg(selectedWeight, latestBodyweight, delta, weightUnit));
     setError(null);
   }
 
@@ -1389,15 +1341,7 @@ export function DashboardQuickBodyweight({
       {undo && undo.version === undoVersion && (
         <Toast
           id={undo.attempt}
-          message={
-            saving
-              ? 'Undoing check-in…'
-              : undo.kind === 'combined'
-                ? 'Check-in saved'
-                : undo.kind === 'fat'
-                  ? 'Body fat saved'
-                  : 'Body weight saved'
-          }
+          message={saving ? 'Undoing check-in…' : checkInSavedMessage(undo.kind)}
           action={{ label: 'Undo', run: undoSave }}
           busy={saving || busy}
           dismissLabel={

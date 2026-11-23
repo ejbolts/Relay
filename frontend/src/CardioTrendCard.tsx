@@ -1,48 +1,39 @@
 import { useState } from 'react';
 import type { CardioOverview } from './types';
 import { CardioEnergyCard } from './CardioEnergyCard';
-import { cardioDistanceTabs, cardioTrendWeeks, distanceGroupFor } from './cardioTrend';
+import {
+  CARDIO_TREND_METRICS as metrics,
+  cardioTrendSelection,
+  formatCardioAmount as format,
+  type CardioTrendMetricKey,
+} from './cardioTrend';
 import { Icon } from './Icon';
 
-const metrics = [
-  { key: 'time', label: 'Time', unit: 'min' },
-  { key: 'distance', label: 'Distance', unit: 'km' },
-  { key: 'elevation', label: 'Elevation', unit: 'm' },
-  { key: 'calories', label: 'Calories', unit: 'kcal', suffix: 'burnt' },
-] as const;
-const format = (value: number) => value.toLocaleString(undefined, { maximumFractionDigits: 1 });
 const shortDate = (value: string) =>
   new Date(`${value}T12:00:00`).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
 
 export function CardioTrendCard({ overview, today }: { overview: CardioOverview; today: string }) {
-  const [metricKey, setMetricKey] = useState<(typeof metrics)[number]['key']>('time');
+  const [metricKey, setMetricKey] = useState<CardioTrendMetricKey>('time');
   const [selectedStart, setSelectedStart] = useState<string | null>(null);
   const [distanceKey, setDistanceKey] = useState<string | null>(null);
-  const currentStart = overview.current_week.week_start;
-  const allWeeks = cardioTrendWeeks(overview.sessions, currentStart, today);
-  const distanceGroups = cardioDistanceTabs(overview.sessions, allWeeks[1].start, today);
-  const distanceGroup =
-    distanceGroups.find((group) => group.key === distanceKey) ?? distanceGroups[0] ?? null;
-  const distanceWeeks = distanceGroup
-    ? cardioTrendWeeks(
-        overview.sessions.filter(
-          (session) => distanceGroupFor(session.activity_type).key === distanceGroup.key,
-        ),
-        currentStart,
-        today,
-      )
-    : allWeeks;
-  const weeks = metricKey === 'distance' ? distanceWeeks : allWeeks;
-  const found = weeks.findIndex((week, i) => i > 0 && week.start === selectedStart);
-  const index = found > 0 ? found : 8;
-  const selected = weeks[index];
-  const previous = weeks[index - 1];
-  const selectedDistance = distanceWeeks[index].distance;
-  const metric = metrics.find((item) => item.key === metricKey)!;
-  const value = selected[metricKey];
-  const previousValue = previous[metricKey];
-  const difference = value === null || previousValue === null ? null : value - previousValue;
-  const maximum = Math.max(1, ...weeks.slice(1).map((week) => week[metricKey] ?? 0));
+  const {
+    weeks,
+    distanceGroups,
+    distanceGroup,
+    selected,
+    selectedDistance,
+    metric,
+    value,
+    difference,
+    maximum,
+  } = cardioTrendSelection(
+    overview.sessions,
+    overview.current_week.week_start,
+    today,
+    metricKey,
+    selectedStart,
+    distanceKey,
+  );
 
   return (
     <section className="pulse-card cardio-trend-card" aria-label="Weekly cardio trend">

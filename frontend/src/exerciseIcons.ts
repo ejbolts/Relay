@@ -229,6 +229,7 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'leg press': 'leg-press',
   'lying leg curl': 'hamstring-curl',
   'machine bicep preacher curl': 'preacher-curl',
+  'ez bar preacher curl': 'preacher-curl',
   'machine chest press': 'machine-chest-press',
   'machine shoulder press': 'machine-shoulder-press',
   'machine lateral raise': 'machine-lateral-raise',

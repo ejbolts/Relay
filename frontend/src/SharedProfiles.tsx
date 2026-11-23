@@ -1,11 +1,5 @@
 import { useWeightUnit } from './trainingPreferencesContext';
-import {
-  bodyGoalKind,
-  bodyGoalName,
-  bodyGoalTarget,
-  maintenanceRange,
-  maintenanceStatus,
-} from './bodyMeasurementHistory';
+import { bodyGoalTarget, maintenanceRange } from './bodyMeasurementHistory';
 import { formatWeight, weightFromKg, type WeightUnit } from './weightUnits';
 import { Fragment, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError } from './api';
@@ -23,7 +17,7 @@ import { useUserSession } from './userContext';
 import { PaginationControls } from './PaginationControls';
 import { SharedWorkoutFilterToggle, SharedWorkoutFilters } from './SharedWorkoutFilters';
 import { ConsistencyCard } from './ConsistencyCard';
-import { consistencyWeeks } from './consistencyWeeks';
+import { consistencyWeeks, firstTrainingDay } from './consistencyWeeks';
 import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
 import { splitCalendarDays } from './trainingSplit';
 import { builtinTypeColors, calendarLegendTypes } from './workoutTypes';
@@ -36,21 +30,41 @@ import { formatMemberSince } from './profileDisplay';
 import { TrendChart, type GoalPath } from './PulseCharts';
 import type { FriendConnectionsState } from './friendConnections';
 import {
+  blockConfirmation,
+  connectionDate,
+  friendAction,
+  friendListDetail,
+  friendPill,
+  friendsOnlyNotice,
+  inviteMessage,
+  inviteSendsRequest,
+  profileStats,
   searchResultDetail,
-  plural,
+  SHARED_HISTORY_KIND as HISTORY_KIND,
+  SHARED_HISTORY_TABS as HISTORY_TABS,
   SHARED_WORKOUT_PAGE_SIZE,
+  sharedHistoryEmpty,
+  SHARING_LOCKED,
+  BODY_WEIGHT_CHART_DAYS,
+  sharedBodyWeight,
+  sharedGoalsSummary,
+  signedWeightChange,
   sinceMonthLabel,
+  unavailableProfile,
+  type InviteResult,
+  type SharedHistoryTab as HistoryTab,
 } from './sharedProfileDisplay';
-import { byLiveActivity, presenceStatus, presenceText, useNow } from './presence';
-import { addDays, dayMonth, parseLocalDate } from './trainingSummary';
+import { byLiveActivity, useNow } from './presence';
+import { dayMonth } from './trainingSummary';
 import { useGoalRemoval } from './useGoalRemoval';
 import { Toast } from './Toast';
-import { localDate, localDateOf } from './utils';
+import { localDate } from './utils';
 import {
   cachedSharedProfile,
   forgetSharedProfile,
   pendingSharedProfile,
   storeSharedProfile,
+  updateCachedReactions,
   workoutsFromCache,
   type SharedProfileData,
 } from './sharedProfileCache';
@@ -67,29 +81,13 @@ import type {
   SharedConsistency,
   SharedWorkoutFilters as WorkoutFilters,
   SharedWorkoutFilterOptions,
-  SharedWorkoutKind,
   SharedWorkoutPage,
   SharingConnection,
   TrackedWorkout,
   User,
+  WorkoutReactions,
   WorkoutType,
 } from './types';
-
-const BODY_WEIGHT_CHART_DAYS = 90;
-/** What scanning a friend QR code did: sent a request, accepted theirs, or could not send. */
-type InviteResult = {
-  kind: 'sent' | 'friends' | 'failed' | 'undo-failed';
-  name: string;
-  serial: number;
-};
-
-function inviteMessage(result: InviteResult): string {
-  if (result.kind === 'sent') return `Friend request sent to ${result.name}`;
-  if (result.kind === 'friends') return `You and ${result.name} are now friends`;
-  if (result.kind === 'undo-failed')
-    return 'Could not cancel the request. Try again from the menu.';
-  return 'Could not send the friend request. Tap Add friend to try again.';
-}
 
 type LoadState = 'loading' | 'ready' | 'locked' | 'missing' | 'blocked' | 'error';
 
@@ -97,14 +95,6 @@ function loadStateFor(reason: unknown): LoadState {
   if (reason instanceof ApiError && reason.code === 'sharing_required') return 'locked';
   if (reason instanceof ApiError && reason.status === 404) return 'missing';
   return 'error';
-}
-
-function longDate(value: string): string {
-  return parseLocalDate(value).toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
 }
 
 function avatarUser(member: {
@@ -122,7 +112,7 @@ function avatarUser(member: {
 
 export function SharingLocked({
   onChooseSharing,
-  title = 'Share your profile to see others',
+  title = SHARING_LOCKED.title,
 }: {
   onChooseSharing: () => void;
   title?: string;
@@ -135,12 +125,9 @@ export function SharingLocked({
           <h2 id="sharing-locked-title">{title}</h2>
         </div>
       </header>
-      <p>
-        Your profile is private. Share it with friends or everyone in Settings to see and add other
-        members as friends; your workouts and profile photo are always part of it.
-      </p>
+      <p>{SHARING_LOCKED.body}</p>
       <button type="button" className="profile-primary" onClick={onChooseSharing}>
-        Choose who can see your profile
+        {SHARING_LOCKED.action}
       </button>
     </section>
   );
@@ -170,7 +157,8 @@ function FriendButton({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   if (profile.is_you) return null;
-  if (profile.friend_status === 'friends') {
+  const choice = friendAction(profile);
+  if (!choice) {
     return (
       <span className="friend-status-label">
         <Icon name="check" /> Friends
@@ -178,14 +166,13 @@ function FriendButton({
     );
   }
   const action = {
-    none: { label: 'Add friend', primary: true, run: () => api.sharing.addFriend(profile.id) },
-    incoming: { label: 'Accept', primary: true, run: () => api.sharing.acceptFriend(profile.id) },
-    outgoing: {
-      label: 'Cancel request',
-      primary: false,
-      run: () => api.sharing.removeFriend(profile.id),
-    },
-  }[profile.friend_status];
+    ...choice,
+    run: {
+      add: () => api.sharing.addFriend(profile.id),
+      accept: () => api.sharing.acceptFriend(profile.id),
+      cancel: () => api.sharing.removeFriend(profile.id),
+    }[choice.kind],
+  };
 
   async function run() {
     if (busy) return;
@@ -275,7 +262,7 @@ function ProfileFriendControl({
   if (profile.is_you) return null;
   const status = removal.pending ? 'none' : profile.friend_status;
   const since = status === 'friends' ? sinceMonthLabel(profile.friends_since) : null;
-  const pill = status === 'friends' ? 'Friends' : status === 'outgoing' ? 'Requested' : null;
+  const pill = friendPill(status);
   const spinner = <span className="auth-spinner" aria-hidden="true" />;
 
   async function run(action: () => Promise<FriendStatus>) {
@@ -422,7 +409,7 @@ function ProfileFriendControl({
       )}
       {confirmBlock && (
         <PopupDialog
-          title={`Block ${profile.display_name}?`}
+          title={blockConfirmation(profile.display_name).title}
           className="friend-block-dialog"
           size="compact"
           busy={busy}
@@ -448,10 +435,7 @@ function ProfileFriendControl({
             </>
           }
         >
-          <p>
-            They will no longer find you or see your profile, data and activity, and you stop being
-            friends. You can unblock them in Social, under Friends.
-          </p>
+          <p>{blockConfirmation(profile.display_name).body}</p>
         </PopupDialog>
       )}
       {removal.pending && (
@@ -808,7 +792,7 @@ export function FindPanel({
           <FriendRow
             key={person.id}
             person={person}
-            detail={`Blocked ${longDate(localDateOf(person.since))}`}
+            detail={connectionDate('blocked', person.since)}
             actions={
               <button
                 type="button"
@@ -890,7 +874,7 @@ export function FindPanel({
             <FriendRow
               key={person.id}
               person={person}
-              detail={`Asked ${longDate(localDateOf(person.since))}`}
+              detail={connectionDate('request', person.since)}
               onOpen={open(person)}
               actions={
                 <>
@@ -931,10 +915,7 @@ export function FindPanel({
             <FriendRow
               key={friend.id}
               person={friend}
-              detail={
-                presenceText(presenceStatus(friend.presence), now) ??
-                `${plural(friend.recent_workout_count, 'workout')} in the last 30 days`
-              }
+              detail={friendListDetail(friend, now)}
               onOpen={open(friend)}
             />
           ))}
@@ -952,7 +933,7 @@ export function FindPanel({
             <FriendRow
               key={person.id}
               person={person}
-              detail={`Sent ${longDate(localDateOf(person.since))}`}
+              detail={connectionDate('sent', person.since)}
               onOpen={open(person)}
               actions={
                 <button
@@ -1023,17 +1004,11 @@ function BodyWeightCard({
   goals: SharedGoals | null;
 }) {
   const weightUnit = useWeightUnit();
-  const latest = measurements[0];
-  const recent = useMemo(() => {
-    if (!latest) return [];
-    const earliest = addDays(latest.measurement_date, -BODY_WEIGHT_CHART_DAYS);
-    return measurements
-      .filter((item) => item.measurement_date >= earliest)
-      .map((item) => ({ date: item.measurement_date, value: item.weight_kg }))
-      .reverse();
-  }, [latest, measurements]);
-  const latestFat = measurements.find((item) => item.body_fat_pct !== null)?.body_fat_pct ?? null;
-  const change = recent.length > 1 ? recent[recent.length - 1].value - recent[0].value : null;
+  const summary = useMemo(() => sharedBodyWeight(measurements), [measurements]);
+  const latest = summary?.latest;
+  const recent = summary?.recent ?? [];
+  const latestFat = summary?.latestFat ?? null;
+  const change = summary?.change ?? null;
 
   return (
     <section className="pulse-card shared-card" aria-labelledby="shared-body-weight-title">
@@ -1053,10 +1028,7 @@ function BodyWeightCard({
             {change !== null && (
               <div>
                 <dt>{BODY_WEIGHT_CHART_DAYS} days</dt>
-                <dd className="num">
-                  {change > 0 ? '+' : change < 0 ? '−' : ''}
-                  {formatWeight(Math.abs(change), weightUnit, 1)}
-                </dd>
+                <dd className="num">{signedWeightChange(change, weightUnit)}</dd>
               </div>
             )}
             {latestFat !== null && (
@@ -1093,13 +1065,8 @@ function BodyWeightCard({
 
 function GoalsCard({ goals, latestWeight }: { goals: SharedGoals; latestWeight: number | null }) {
   const weightUnit = useWeightUnit();
-  const goal = goals.body_weight;
-  const span =
-    goal && bodyGoalKind(goal) !== 'maintain' ? goal.start_weight_kg - goal.target_weight_kg : 0;
-  const progress =
-    goal && latestWeight !== null && span !== 0
-      ? (goal.start_weight_kg - latestWeight) / span
-      : null;
+  const summary = sharedGoalsSummary(goals, latestWeight, weightUnit);
+  const goal = summary.bodyWeight;
 
   return (
     <section className="pulse-card shared-card" aria-labelledby="shared-goals-title">
@@ -1110,18 +1077,12 @@ function GoalsCard({ goals, latestWeight }: { goals: SharedGoals; latestWeight: 
         <strong>Body weight</strong>
         {goal ? (
           <>
-            <span>
-              {bodyGoalKind(goal) === 'maintain'
-                ? `${bodyGoalName(goal, weightUnit)} until ${longDate(goal.target_date)}`
-                : `${formatWeight(goal.start_weight_kg, weightUnit, 1)} → ${formatWeight(goal.target_weight_kg, weightUnit, 1)} by ${longDate(goal.target_date)}`}
-            </span>
-            {latestWeight !== null && maintenanceRange(goal) && (
-              <small>{maintenanceStatus(goal, latestWeight)}</small>
-            )}
-            {progress !== null && (
+            <span>{goal.text}</span>
+            {goal.status && <small>{goal.status}</small>}
+            {goal.progress !== null && (
               <>
-                <ProgressBar value={progress} label="Body-weight goal progress" />
-                <small>{Math.round(Math.min(Math.max(progress, 0), 1) * 100)}% of the way</small>
+                <ProgressBar value={goal.progress} label="Body-weight goal progress" />
+                <small>{goal.progressText}</small>
               </>
             )}
           </>
@@ -1131,10 +1092,8 @@ function GoalsCard({ goals, latestWeight }: { goals: SharedGoals; latestWeight: 
       </div>
       <div className="shared-goal">
         <strong>Weekly cardio zone goals</strong>
-        {(goals.cardio_goals ?? [{ zone: 2, ...goals.zone2 }]).map((goal) => (
-          <span key={goal.zone}>
-            Zone {goal.zone} · {goal.completed_minutes} of {goal.goal_minutes} min this week
-          </span>
+        {summary.cardio.map((item) => (
+          <span key={item.zone}>{item.text}</span>
         ))}
       </div>
     </section>
@@ -1156,6 +1115,11 @@ export interface SharedWorkoutListProps {
   onLoadMore?: () => void;
   /** The member's own workout types, so the list matches the colours of their calendar. */
   workoutTypes?: WorkoutType[];
+  /** Each listed workout's reactions and comment count, by workout id. */
+  reactions?: Record<string, WorkoutReactions>;
+  onReactionsChange?: (workoutId: string, reactions: WorkoutReactions) => void;
+  /** Whose workouts these are, to name them to screen readers: "Riley's Push day". */
+  owner?: { display_name: string; is_you: boolean };
 }
 
 function SharedConsistencyCalendar({
@@ -1179,12 +1143,7 @@ function SharedConsistencyCalendar({
     [data.training_split, today],
   );
   // The heatmap holds every training day, so its earliest is the member's first workout.
-  const firstWorkout = data.heatmap
-    .filter((day) => day.workout_count > 0)
-    .reduce<string | undefined>(
-      (first, day) => (!first || day.workout_date < first ? day.workout_date : first),
-      undefined,
-    );
+  const firstWorkout = firstTrainingDay(data.heatmap);
   return (
     <ConsistencyCard
       streak={data.current_streak}
@@ -1226,28 +1185,13 @@ function ProfileStats({ profile }: { profile: SharedProfile }) {
   if (!profile.can_view) return null;
   return (
     <dl className="shared-stat-row">
-      <div>
-        <dt>Workouts</dt>
-        <dd className="num">
-          {(profile.strength_workout_count ?? profile.workout_count ?? 0).toLocaleString('en-GB')}
-        </dd>
-        {!!profile.imported_workout_count && (
-          <ImportedShare value={profile.imported_workout_count.toLocaleString('en-GB')} />
-        )}
-      </div>
-      <div>
-        <dt>Last 30 days</dt>
-        <dd className="num">{profile.recent_workout_count ?? 0}</dd>
-        {!!profile.imported_recent_workout_count && (
-          <ImportedShare value={profile.imported_recent_workout_count.toLocaleString('en-GB')} />
-        )}
-      </div>
-      <div>
-        <dt>Last workout</dt>
-        <dd className="num">
-          {profile.last_workout_date ? dayMonth(profile.last_workout_date) : '–'}
-        </dd>
-      </div>
+      {profileStats(profile).map((stat) => (
+        <div key={stat.label}>
+          <dt>{stat.label}</dt>
+          <dd className="num">{stat.value}</dd>
+          {!!stat.imported && <ImportedShare value={stat.imported.toLocaleString('en-GB')} />}
+        </div>
+      ))}
     </dl>
   );
 }
@@ -1302,20 +1246,6 @@ function ProfileSkeleton() {
   );
 }
 
-type HistoryTab = 'all' | 'workouts' | 'cardio';
-// One list in every tab; the server leaves out cardio-only workouts under Workouts and keeps
-// only those under Cardio.
-const HISTORY_KIND: Record<HistoryTab, SharedWorkoutKind | undefined> = {
-  all: undefined,
-  workouts: 'strength',
-  cardio: 'cardio',
-};
-const HISTORY_TABS: readonly (readonly [HistoryTab, string])[] = [
-  ['all', 'All sessions'],
-  ['workouts', 'Workouts'],
-  ['cardio', 'Cardio'],
-];
-
 export function SharedProfileScreen({
   onOpenSplits,
   dataRevision = null,
@@ -1359,6 +1289,9 @@ export function SharedProfileScreen({
   const [profile, setProfile] = useState<SharedProfile | null>(seed?.profile ?? null);
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>(seed?.page?.workouts ?? []);
   const [records, setRecords] = useState<PersonalRecord[]>(seed?.page?.personal_records ?? []);
+  const [reactions, setReactions] = useState<Record<string, WorkoutReactions>>(
+    seed?.page?.reactions ?? {},
+  );
   const [total, setTotal] = useState(seed?.page?.total ?? 0);
   const [state, setState] = useState<LoadState>(seed ? 'ready' : 'loading');
   const [unblocking, setUnblocking] = useState(false);
@@ -1469,13 +1402,7 @@ export function SharedProfileScreen({
       const warmedPage = warmed ? warmPage(warmed) : null;
       let nextProfile =
         (warmedPage && warmed?.profile) || initial?.[0] || (await api.sharing.profile(profileId));
-      const status = nextProfile.friend_status;
-      if (
-        invite &&
-        !inviteRequest.current &&
-        !nextProfile.is_you &&
-        (status === 'none' || status === 'incoming')
-      ) {
+      if (invite && !inviteRequest.current && inviteSendsRequest(nextProfile)) {
         inviteRequest.current = { done: sendInviteRequest(nextProfile), shown: false };
       }
       if (inviteRequest.current && !inviteRequest.current.shown) {
@@ -1529,6 +1456,7 @@ export function SharedProfileScreen({
       onLoadedRef.current?.(nextProfile);
       setWorkouts(page.workouts);
       setRecords(page.personal_records);
+      setReactions(page.reactions ?? {});
       setTotal(page.total);
       setFilterOptions(options);
       setState('ready');
@@ -1583,6 +1511,7 @@ export function SharedProfileScreen({
         ...page.workouts.filter((item) => !current.some((existing) => existing.id === item.id)),
       ]);
       setRecords((current) => [...current, ...page.personal_records]);
+      setReactions((current) => ({ ...current, ...page.reactions }));
       // Pages read on demand stop once the server has nothing new, even if its total disagrees.
       setTotal(added.length ? page.total : workouts.length);
     } catch (reason) {
@@ -1675,22 +1604,23 @@ export function SharedProfileScreen({
       <section className="settings-screen shared-profile-screen content-page">
         <SharingLocked
           onChooseSharing={onChooseSharing}
-          title={invite ? 'Share your profile to add friends' : undefined}
+          title={invite ? SHARING_LOCKED.inviteTitle : undefined}
         />
       </section>
     );
   }
   if (state === 'blocked' && profile) {
+    const blocked = unavailableProfile('blocked', profile.display_name, invite);
     return (
       <section className="settings-screen shared-profile-screen content-page">
         <section className="settings-panel panel">
           <header>
             <div>
-              <p className="section-kicker">BLOCKED</p>
-              <h2>You blocked {profile.display_name}</h2>
+              <p className="section-kicker">{blocked.kicker}</p>
+              <h2>{blocked.title}</h2>
             </div>
           </header>
-          <p>They can no longer find you or see your profile.</p>
+          <p>{blocked.body}</p>
           {unblockError && (
             <p className="inline-error" role="alert">
               {unblockError}
@@ -1709,20 +1639,17 @@ export function SharedProfileScreen({
     );
   }
   if (state === 'missing') {
+    const missing = unavailableProfile('missing', '', invite);
     return (
       <section className="settings-screen shared-profile-screen content-page">
         <section className="settings-panel panel">
           <header>
             <div>
-              <p className="section-kicker">{invite ? 'FRIEND INVITE' : 'SHARING'}</p>
-              <h2>{invite ? 'This invite can’t be opened' : 'This profile is no longer shared'}</h2>
+              <p className="section-kicker">{missing.kicker}</p>
+              <h2>{missing.title}</h2>
             </div>
           </header>
-          <p>
-            {invite
-              ? 'Its owner’s profile is private, or the link is no longer valid.'
-              : 'Its owner has made it private, so their training is hidden again.'}
-          </p>
+          <p>{missing.body}</p>
         </section>
       </section>
     );
@@ -1800,22 +1727,10 @@ export function SharedProfileScreen({
           <header>
             <div>
               <p className="section-kicker">FRIENDS ONLY</p>
-              <h2>
-                {profile.friend_status === 'outgoing'
-                  ? 'Friend request sent'
-                  : profile.friend_status === 'incoming'
-                    ? `${profile.display_name} sent you a friend request`
-                    : `Add ${profile.display_name} as a friend to see their training`}
-              </h2>
+              <h2>{friendsOnlyNotice(profile).title}</h2>
             </div>
           </header>
-          <p>
-            {profile.friend_status === 'outgoing'
-              ? `Their workouts appear here once ${profile.display_name} accepts your request.`
-              : profile.friend_status === 'incoming'
-                ? 'Accept it to see each other’s training.'
-                : `${profile.display_name} shares with friends only. Send a friend request and their workouts appear here once they accept.`}
-          </p>
+          <p>{friendsOnlyNotice(profile).body}</p>
         </section>
       ) : (
         <>
@@ -1949,15 +1864,7 @@ export function SharedProfileScreen({
                   Loading workouts…
                 </p>
               ) : workouts.length === 0 ? (
-                <p className="shared-card-empty">
-                  {listKind === 'cardio'
-                    ? filtered
-                      ? 'No cardio sessions match these filters.'
-                      : 'No cardio sessions yet.'
-                    : filtered
-                      ? 'No workouts match these filters.'
-                      : 'No workouts logged yet.'}
-                </p>
+                <p className="shared-card-empty">{sharedHistoryEmpty(listKind, filtered)}</p>
               ) : (
                 <Fragment key={filterKey}>
                   {renderWorkouts({
@@ -1969,6 +1876,12 @@ export function SharedProfileScreen({
                     focusWorkoutId: linkedWorkoutId,
                     personalRecords: records,
                     workoutTypes: profile.consistency?.workout_types,
+                    reactions,
+                    owner: profile,
+                    onReactionsChange: (workoutId, next) => {
+                      if (cacheable) updateCachedReactions(viewerId, profileId, workoutId, next);
+                      setReactions((current) => ({ ...current, [workoutId]: next }));
+                    },
                     onFilterMachine: (photo) => {
                       setFilters((current) => ({ ...current, machine_photo_id: photo.id }));
                       setFiltersOpen(true);

@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import type { TrainingPreferences } from './types';
+import { weekStartDayOf } from './trainingSummary';
 
 export const TrainingPreferencesContext = createContext<{
   preferences: TrainingPreferences | null;
@@ -12,8 +13,7 @@ export function useTrainingPreferences() {
 }
 
 export function useWeekStartDay(): number {
-  const weekStart = useTrainingPreferences().preferences?.week_start;
-  return weekStart === 'sunday' ? 0 : weekStart === 'saturday' ? 6 : 1;
+  return weekStartDayOf(useTrainingPreferences().preferences?.week_start);
 }
 
 /** The rest a new set gets when last time gives none, or null when the user has not set one. */

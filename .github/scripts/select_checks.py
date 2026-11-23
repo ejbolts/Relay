@@ -40,6 +40,55 @@ CONTRACT_MODULES = {
     "workout_type_exercises.py",
     "youtube_connections.py",
 }
+# Comments can quote module paths ("Alex" from "Alex Morgan", or from './old'), so they are
+# removed before a file's imports are read.
+COMMENTS = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
+# import ... from 'x', export ... from 'x', import 'x', import('x') and require('x').
+MODULE_SPECIFIER = re.compile(
+    r"""(?:\b(?:import|export)\b[^'";]*?\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)(['"])([^'"]+)\1"""
+)
+MOBILE_SOURCES = {".ts", ".tsx", ".js", ".jsx"}
+MOBILE_SKIPPED_DIRS = {"node_modules", ".expo", "dist", "coverage", "ios", "android"}
+
+
+def module_specifiers(text: str) -> list[str]:
+    """The modules a TypeScript or JavaScript file imports, ignoring comments."""
+    return [match.group(2) for match in MODULE_SPECIFIER.finditer(COMMENTS.sub("", text))]
+
+
+def mobile_shared_files(root: Path = ROOT) -> frozenset[str]:
+    """Files outside mobile/ that the app imports, directly or through each other.
+
+    The app shares the web's plain TypeScript rules (frontend/src), so a change to one of them
+    can break it. Computed from the tested checkout, so a new shared import never needs a list
+    updated and can't skip the mobile checks. An import that can't be resolved fails detection.
+    """
+    root = root.resolve()
+    mobile = root / "mobile"
+    pending: list[Path] = []
+    for folder, dirs, files in os.walk(mobile):
+        dirs[:] = [name for name in dirs if name not in MOBILE_SKIPPED_DIRS]
+        pending += [Path(folder) / name for name in files if Path(name).suffix in MOBILE_SOURCES]
+    seen: set[Path] = set()
+    shared: set[str] = set()
+    while pending:
+        source = pending.pop()
+        if source in seen:
+            continue
+        seen.add(source)
+        for specifier in module_specifiers(source.read_text(encoding="utf-8")):
+            if not specifier.startswith("."):
+                continue
+            base = (source.parent / specifier).resolve()
+            if base.is_relative_to(mobile):
+                continue
+            candidates = [base, *(base.with_name(base.name + ext) for ext in (".ts", ".tsx"))]
+            target = next((path for path in candidates if path.is_file()), None)
+            if target is None or not target.is_relative_to(root):
+                raise ValueError(f"Cannot resolve {specifier} imported by {source}")
+            shared.add(target.relative_to(root).as_posix())
+            pending.append(target)
+    return frozenset(shared)
 
 
 FrontendScope = Literal["none", "styles", "related", "full"]
@@ -49,19 +98,28 @@ FrontendScope = Literal["none", "styles", "related", "full"]
 class Selection:
     frontend: FrontendScope
     backend: bool
+    mobile: bool
     reason: str
 
 
 def select_paths(paths: list[str], root: Path = ROOT) -> Selection:
     frontend_paths = set()
-    backend = False
+    backend = mobile = False
     full_frontend = False
+    shared: frozenset[str] | None = None
     for path in paths:
         if not path or path.startswith("/") or ".." in path.split("/"):
             raise ValueError("Invalid changed-file path")
         if path in DOC_FILES or path.startswith("docs/"):
             continue
-        if path in {"frontend/src/api.ts", "frontend/src/types.ts"} or (
+        if path.startswith("frontend/"):
+            if shared is None:
+                shared = mobile_shared_files(root)
+            if path in shared:
+                mobile = True
+        if path.startswith("mobile/"):
+            mobile = True
+        elif path in {"frontend/src/api.ts", "frontend/src/types.ts"} or (
             path.startswith("backend/app/")
             and (path.rsplit("/", 1)[-1] in CONTRACT_MODULES or path.endswith("schemas.py"))
         ):
@@ -72,9 +130,9 @@ def select_paths(paths: list[str], root: Path = ROOT) -> Selection:
             backend = True
         else:
             # CI, deployment, shared configuration and unknown paths are conservative.
-            full_frontend = backend = True
+            full_frontend = backend = mobile = True
     mode = "full" if full_frontend else frontend_scope(frontend_paths, root)
-    return Selection(mode, backend, "Selected from changed files in the tested PR merge.")
+    return Selection(mode, backend, mobile, "Selected from changed files in the tested PR merge.")
 
 
 def frontend_scope(paths: set[str], root: Path) -> FrontendScope:
@@ -105,14 +163,14 @@ def git(root: Path, *args: str) -> bytes:
 
 def select_event(event_name: str, event: dict, merge_sha: str, root: Path = ROOT) -> Selection:
     if event_name != "pull_request":
-        return Selection("full", True, "Push, manual or other verification runs both suites.")
+        return Selection("full", True, True, "Push, manual or other verification runs both suites.")
     pr = event["pull_request"]
     base_ref = pr["base"]["ref"]
     if not isinstance(base_ref, str) or not base_ref:
         raise ValueError("PR base branch is missing")
     if base_ref == "main":
         return Selection(
-            "full", True, "PRs into main verify the complete release with both suites."
+            "full", True, True, "PRs into main verify the complete release with every suite."
         )
     base, head = pr["base"]["sha"], pr["head"]["sha"]
     if not all(isinstance(sha, str) and SHA.fullmatch(sha) for sha in (base, head, merge_sha)):
@@ -143,7 +201,11 @@ def main() -> int:
     try:
         event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
         selected = select_event(os.environ["GITHUB_EVENT_NAME"], event, os.getenv("GITHUB_SHA", ""))
-        output = f"frontend={selected.frontend}\nbackend={str(selected.backend).lower()}\n"
+        output = (
+            f"frontend={selected.frontend}\n"
+            f"backend={str(selected.backend).lower()}\n"
+            f"mobile={str(selected.mobile).lower()}\n"
+        )
         # Publish outputs only after all detection/validation has succeeded.
         with Path(os.environ["GITHUB_OUTPUT"]).open("a", encoding="utf-8") as handle:
             handle.write(output)
@@ -151,6 +213,7 @@ def main() -> int:
             f"{selected.reason}\n\n"
             f"Frontend scope: {selected.frontend}.\n"
             f"Backend suite: {'run' if selected.backend else 'not needed'}.\n"
+            f"Mobile checks: {'run' if selected.mobile else 'not needed'}.\n"
         )
         if summary_path := os.getenv("GITHUB_STEP_SUMMARY"):
             with Path(summary_path).open("a", encoding="utf-8") as handle:

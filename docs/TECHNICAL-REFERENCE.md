@@ -138,7 +138,7 @@ fetch are coalesced into a follow-up fetch, and 30-second visible polling remain
 - `backend/migrations/`: Alembic initial schema migration.
 - `data/` (ignored by Git): SQLite database, reusable machine photos, original uploads, normalized temp files, and stitched outputs.
 
-Sign-in uses cookie-based sessions with per-user accounts and authorization checks on each request. A sign-in lasts until the person signs out or goes 90 days (`GYM_SESSION_DAYS`) without using the app; each day of use restarts the count. Signing out, changing the password (other devices), disabling an account, or deleting it ends sessions immediately.
+Sign-in uses cookie-based sessions with per-user accounts and authorization checks on each request. A sign-in lasts until the person signs out or goes 90 days (`GYM_SESSION_DAYS`) without using the app; each day of use restarts the count. Signing out, changing the password (other devices), disabling an account, or deleting it ends sessions immediately. The native app signs in with `"session": "token"` on `POST /api/auth/login`: the response's `session_token` replaces the cookie, and the app sends it as `Authorization: Bearer <token>` on every request and socket. It is the same revocable server session, so sliding expiry and every sign-out rule apply; `logout-session` ends only that app's session. A bearer header is used on its own (a bad token never falls back to a cookie), and other `Authorization` schemes, such as Basic from a proxy, are ignored.
 
 There is no self-service password recovery. **Forgot password?** on the sign-in form asks the administrators for a temporary password (`POST /api/auth/password-reset-request`, public). It only records `users.password_reset_requested_at` (migration `0061_password_reset_requests`) and never changes the password, so naming someone else's username cannot lock them out. The reply is the same for every username, and one address may send 5 requests in the sign-in throttle's 15-minute window. Administrators see waiting requests in the notifications bell (`GET /api/admin/password-reset-requests`) until they are handled. A new request also sends a phone alert to every other active admin with alerts turned on. The alert goes out after the reply is sent, so reply timing does not reveal the account. Asking again while a request is open sends nothing. Tapping the alert opens `/?admin-account=<id>#admin`; the app removes the query and opens that account. **Review** opens the account in the admin console, where requested accounts are listed first and highlighted. A request ends when an admin resets the password, dismisses it (`DELETE /api/admin/password-reset-requests/{user_id}`), or the person signs in or changes their password. Requests also expire after 7 days, and disabled accounts are never listed. Check who is asking before handing over a temporary password, because anyone can type a username into the form.
 
@@ -405,7 +405,7 @@ frontend `RoutinePanel` and workout recovery tests.
 
 ## Renaming and hiding exercises
 
-`PATCH /api/exercises/{id}` accepts an optional `name` and `hidden`. Only custom exercises can be renamed (`422` otherwise); a name that matches another of the account's exercises after canonical spelling and case folding is refused with `409`. Workouts, records, photos and routines reference the exercise by ID, so they follow a rename. Any exercise can be hidden. Hidden IDs are stored as a JSON list in the account's `hidden_exercises` setting, so they are per account, included in backups and need no migration; `GET /api/exercises` reports `hidden` on each exercise. The app leaves hidden exercises out of the workout picker, swap alternatives and split exercise search, and shows them in the exercise library only under the **Hidden** pill. History, progress and personal records are unaffected. Both changes bump the training revision. Older app versions ignore the new field and keep listing hidden exercises. Test with `backend/tests/test_exercise_edit.py`.
+`PATCH /api/exercises/{id}` accepts an optional `name`, `equipment` (null clears it), `muscle_set_credits` and `hidden`. Only custom exercises can be renamed or have their equipment or muscles changed (`422` otherwise); the app's **Edit** option sends only the name and equipment that changed. a name that matches another of the account's exercises after canonical spelling and case folding is refused with `409`. Workouts, records, photos and routines reference the exercise by ID, so they follow a rename. Any exercise can be hidden. Hidden IDs are stored as a JSON list in the account's `hidden_exercises` setting, so they are per account, included in backups and need no migration; `GET /api/exercises` reports `hidden` on each exercise. The app leaves hidden exercises out of the workout picker, swap alternatives and split exercise search, and shows them in the exercise library only under the **Hidden** pill. History, progress and personal records are unaffected. Both changes bump the training revision. Older app versions ignore the new field and keep listing hidden exercises. Test with `backend/tests/test_exercise_edit.py` and `frontend/src/ExerciseLibrary.test.tsx`.
 
 ## Exercise merges
 
@@ -490,15 +490,19 @@ stacked PRs, from the changed files in the exact tested merge commit:
 - Backend route, schema, model and frontend-serving modules, plus
   `frontend/src/api.ts` and `frontend/src/types.ts`, run both suites. The detector's
   tests guard the route-module mapping when new API routers are added.
-- CI, deployment, shared configuration and unknown paths run both suites.
+- Changes under `mobile/` run only **Mobile checks**: the mobile typecheck, lint and
+  Jest tests. Frontend files the mobile app imports, directly or through each other, also
+  run them: the detector follows `mobile/`'s relative imports in the tested checkout
+  (`mobile_shared_files`), and its tests check that those files import no packages.
+- CI, deployment, shared configuration and unknown paths run every suite.
 - Changes confined to `docs/`, the README, contributor/agent instructions or license
-  files need neither application suite on feature PRs.
-- PRs into `main`, `main` pushes and manual dispatch always run both suites.
+  files need no application suite on feature PRs.
+- PRs into `main`, `main` pushes and manual dispatch always run every suite.
 
-Both required job names, **Frontend checks** and **Backend checks**, remain present.
-An unaffected job reports success without checking out code, installing dependencies
-or running its suite. Detection failure, cancellation or invalid output fails both
-required jobs. Labels do not control selection, and the workflow is never suppressed
+The job names **Frontend checks**, **Backend checks** and **Mobile checks** remain
+present. An unaffected job reports success without checking out code, installing
+dependencies or running its suite. Detection failure, cancellation or invalid output
+fails every job. Labels do not control selection, and the workflow is never suppressed
 by path filters. Detection uses a depth-two checkout and a NUL-delimited Git diff,
 including both paths of renames, without the file-count limits of API/path filtering.
 
@@ -668,4 +672,4 @@ Four things can open by themselves when the app is opened: the first-run tour wi
 
 ## Exercise catalogue upgrades
 
-Default seeding matches each account's exercises by case-insensitive name or the explicit aliases in `exercise_aliases.py`. A matched custom exercise keeps its ID, name, custom flag, favourites, muscle credits and explicit equipment; only blank equipment is filled from a recognised default. This invalidates cached workout snapshots once. Manual creation and CSV imports recognise the same aliases, preventing a second entry when an older custom name is retained. Unknown or ambiguous names are left alone, and equipment variants retain separate histories. The Custom pill combines with search and equipment filters in the library and workout picker.
+Default seeding matches each account's exercises by case-insensitive name or the explicit aliases in `exercise_aliases.py`. A matched custom exercise keeps its ID, name, custom flag, favourites, muscle credits and explicit equipment; only blank equipment is filled from a recognised default. The exception is a custom exercise with exactly a new default's name (ignoring case) and no logged sets, typically made before the catalogue gained that exercise: it becomes the official exercise in place, keeping its ID, favourite, hidden state, routines and photos, while the default name, equipment and muscle credits replace its custom ones. This invalidates cached workout snapshots once. Manual creation and CSV imports recognise the same aliases, preventing a second entry when an older custom name is retained. Unknown or ambiguous names are left alone, and equipment variants retain separate histories. The Custom pill combines with search and equipment filters in the library and workout picker.

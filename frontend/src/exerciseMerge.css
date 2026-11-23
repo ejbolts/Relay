@@ -209,12 +209,14 @@
   color: var(--p-muted);
 }
 
-/* The rename dialog opened from the same exercise options menu. */
-.exercise-rename-dialog > form {
+/* The edit dialog opened from the same exercise options menu. */
+.exercise-edit-dialog > form {
+  display: grid;
+  gap: 0.85rem;
   padding: 1rem;
 }
 
-.exercise-rename-dialog label {
+.exercise-edit-dialog label {
   display: grid;
   gap: 0.35rem;
   color: var(--p-ink-2);
@@ -222,7 +224,7 @@
   font-weight: 700;
 }
 
-.exercise-rename-dialog input {
+.exercise-edit-dialog input {
   width: 100%;
   min-width: 0;
   min-height: 2.75rem;
@@ -234,8 +236,8 @@
   font-size: 1rem;
 }
 
-.exercise-rename-dialog .inline-error {
-  margin: 0.6rem 0 0;
+.exercise-edit-dialog .inline-error {
+  margin: 0;
 }
 .exercise-merge-nudge {
   display: flex;

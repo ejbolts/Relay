@@ -8,7 +8,13 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import { WeightInput } from './WeightInput';
 import { formatWeight, weightFromKg } from './weightUnits';
 import type { BodyMeasurement, BodyWeightGoal } from './types';
-import { clipBodyWeightGoalPath, filterMeasurementsByRange } from './bodyTrend';
+import {
+  clipBodyWeightGoalPath,
+  filterMeasurementsByRange,
+  trailingWeekAverageKg,
+} from './bodyTrend';
+import { checkInEditPayload } from './bodyCheckInForm';
+import { bodyGoalPayload, bodyGoalProgressPercent } from './bodyGoalForm';
 import { useRangePinchZoom } from './rangePinchZoom';
 import type { BodyTrendRange } from './bodyTrend';
 import {
@@ -38,7 +44,7 @@ import { localDate } from './utils';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
 import { HISTORY_PAGE_SIZE, RANGE_LABELS, prettyDate } from './appShared';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
-import { IMPORTED_BODYWEIGHT_NOTE, WeighInDialog } from './WeighInDialog';
+import { WeighInDialog } from './WeighInDialog';
 import './bodyScreen.css';
 
 export function BodyCompositionScreen({
@@ -136,12 +142,6 @@ export function BodyCompositionScreen({
   const latest = measurements[0];
   // The newest reading, which may come from an earlier check-in than the latest weigh-in.
   const latestBodyFat = measurements.find((item) => item.body_fat_pct !== null);
-  const targetWeight = goalTarget;
-  const hasValidTarget =
-    targetWeight !== null &&
-    Number.isFinite(targetWeight) &&
-    targetWeight > 0 &&
-    targetWeight <= 500;
 
   useEffect(() => {
     setCheckInPage((page) => Math.min(page, checkInPageCount));
@@ -254,47 +254,26 @@ export function BodyCompositionScreen({
   }
 
   async function saveGoal() {
-    const range = maintenanceRange({
-      maintenance_min_kg: goalMinimum,
-      maintenance_max_kg: goalMaximum,
-    });
-    if (goalKind === 'maintain' && !range) {
-      setError(
-        `Enter a minimum and a higher maximum, both above 0 and at most ${formatWeight(500, weightUnit)}.`,
-      );
-      return;
-    }
-    if ((!latest && !editingGoal) || (goalKind !== 'maintain' && !hasValidTarget) || !goalDate) {
-      setError('Log a current weight, target weight, and target date first.');
-      return;
-    }
-    const savedTarget =
-      range && goalKind === 'maintain' ? (range[0] + range[1]) / 2 : targetWeight!;
     // An edited goal keeps where it started; a new one starts from the latest weigh-in.
-    const startWeight = editingGoal ? editingGoal.start_weight_kg : latest!.weight_kg;
-    const direction = bodyGoalKind({
-      start_weight_kg: startWeight,
-      target_weight_kg: targetWeight!,
+    const checked = bodyGoalPayload({
+      kind: goalKind,
+      target: goalTarget,
+      minimum: goalMinimum,
+      maximum: goalMaximum,
+      targetDate: goalDate,
+      latestKg: latest?.weight_kg ?? null,
+      editing: editingGoal,
+      today: localDate(),
+      unit: weightUnit,
     });
-    if (goalKind !== 'maintain' && direction !== goalKind) {
-      setError(
-        `For a weight-${goalKind} goal, choose a target ${goalKind === 'loss' ? 'below' : 'above'} ${editingGoal ? 'its starting' : 'your current'} ${formatWeight(startWeight, weightUnit)}.`,
-      );
+    if (checked.error !== null) {
+      setError(checked.error);
       return;
     }
     setSavingGoal(true);
     setError(null);
     try {
-      const payload = {
-        start_date: editingGoal ? editingGoal.start_date : localDate(),
-        target_date: goalDate,
-        start_weight_kg: goalKind === 'maintain' ? savedTarget : startWeight,
-        target_weight_kg: savedTarget,
-        ...(goalKind === 'maintain' && range
-          ? { maintenance_min_kg: range[0], maintenance_max_kg: range[1] }
-          : {}),
-        active: true,
-      };
+      const payload = checked.payload;
       if (editingGoal) {
         const goal = await api.updateBodyWeightGoal(editingGoal.id, payload);
         setGoals((current) => current.map((item) => (item.id === goal.id ? goal : item)));
@@ -325,34 +304,15 @@ export function BodyCompositionScreen({
 
   async function submitMeasurementEdit() {
     if (!editingMeasurement) return;
-    const weightValue = editWeight;
-    const bodyFatValue = editBodyFat.trim() ? Number(editBodyFat) : null;
-    if (
-      weightValue === null ||
-      !Number.isFinite(weightValue) ||
-      weightValue <= 0 ||
-      weightValue > 500
-    ) {
-      setEditError(`Enter a body weight above 0 and up to ${formatWeight(500, weightUnit)}.`);
-      return;
-    }
-    if (
-      bodyFatValue !== null &&
-      (!Number.isFinite(bodyFatValue) || bodyFatValue < 1 || bodyFatValue > 70)
-    ) {
-      setEditError('Enter a body-fat percentage between 1 and 70, or leave it blank.');
+    const checked = checkInEditPayload(editingMeasurement, editWeight, editBodyFat, weightUnit);
+    if (checked.error !== null) {
+      setEditError(checked.error);
       return;
     }
     setEditSaving(true);
     setEditError(null);
     try {
-      await onSave({
-        measurement_date: editingMeasurement.measurement_date,
-        weight_kg: weightValue,
-        body_fat_pct: bodyFatValue,
-        notes:
-          editingMeasurement.notes === IMPORTED_BODYWEIGHT_NOTE ? null : editingMeasurement.notes,
-      });
+      await onSave(checked.payload);
       setEditingMeasurement(null);
     } catch (saveError) {
       setEditError(
@@ -512,7 +472,7 @@ export function BodyCompositionScreen({
                 <div className="zone2-track">
                   <i
                     style={{
-                      width: `${Math.min(100, Math.max(0, (Math.abs(latest.weight_kg - activeGoal.start_weight_kg) / Math.max(Math.abs(activeGoal.target_weight_kg - activeGoal.start_weight_kg), 0.1)) * 100))}%`,
+                      width: `${bodyGoalProgressPercent(activeGoal, latest.weight_kg)}%`,
                     }}
                   />
                 </div>
@@ -829,17 +789,10 @@ function BodyTrendChart({
   const clippedGoal = activeGoal
     ? clipBodyWeightGoalPath(activeGoal, selectedDateRange.start_date)
     : null;
-  const weekMs = 7 * 86_400_000;
   const averagePoints = useMemo<TrendPoint[]>(
     () =>
       ordered.map((item) => {
-        const end = new Date(`${item.measurement_date}T12:00:00`).getTime();
-        const window = measurements.filter((candidate) => {
-          const time = new Date(`${candidate.measurement_date}T12:00:00`).getTime();
-          return time <= end && time > end - weekMs;
-        });
-        const average =
-          window.reduce((total, candidate) => total + candidate.weight_kg, 0) / window.length;
+        const average = trailingWeekAverageKg(measurements, item.measurement_date);
         return {
           date: item.measurement_date,
           value: weightFromKg(average, weightUnit),

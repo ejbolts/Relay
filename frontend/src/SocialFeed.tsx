@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { friendSession, relativeDay } from './friendFeedData';
+import {
+  FEED_SHOWN_EXERCISES,
+  feedExercises,
+  feedStats,
+  friendSession,
+  relativeDay,
+} from './friendFeedData';
+import { ExerciseIcon } from './ExerciseIcon';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { PopupDialog } from './PopupDialog';
@@ -9,18 +16,16 @@ import { ShowMoreButton } from './ShowMoreButton';
 import { LoadProblem, SharingLocked } from './SharedProfiles';
 import { updateCachedReactions } from './sharedProfileCache';
 import { useTimeline } from './timeline';
-import { formatVolume, strengthSets, workoutVolumeKg } from './trainingSummary';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type {
   FriendActivity,
   TimelineItem,
-  TrackedMovement,
   TrackedWorkout,
   WorkoutPhoto,
   WorkoutReactions,
 } from './types';
 import { useUserSession } from './userContext';
-import { formatMinutesDuration, localDate } from './utils';
+import { localDate } from './utils';
 import { WorkoutPhotoEditor, WorkoutPhotos } from './WorkoutPhotos';
 import { WorkoutComments } from './WorkoutComments';
 import { WorkoutReactionControl } from './WorkoutReactionControl';
@@ -28,31 +33,15 @@ import { WorkoutReactionPeople } from './WorkoutReactionPeople';
 import { clearWorkoutFocus, useWorkoutFocus, type WorkoutFocus } from './workoutFocus';
 import './socialFeed.css';
 
-/** Exercises listed on a card before the rest are counted. */
-const SHOWN_EXERCISES = 3;
 /** Older pages loaded while looking for a workout opened from a notification. */
 const FOCUS_SEARCH_PAGES = 5;
 /** How long a revealed card stays highlighted. */
 const FOCUS_HIGHLIGHT_MS = 2400;
 
-function completedSets(movement: TrackedMovement) {
-  return movement.sets.filter((item) => item.completed);
-}
-
 function FeedStats({ workout, records }: { workout: TrackedWorkout; records: number }) {
   const weightUnit = useWeightUnit();
-  const session = friendSession(workout);
-  const sets = strengthSets(workout).length;
-  const volume = workoutVolumeKg(workout);
   // One line: each value carries its own unit, so none needs a label.
-  const stats: string[] = [];
-  if (workout.duration_minutes) stats.push(formatMinutesDuration(workout.duration_minutes));
-  if (session.cardio) {
-    if (session.detail) stats.push(session.detail);
-  } else {
-    if (sets) stats.push(`${sets} ${sets === 1 ? 'set' : 'sets'}`);
-    if (volume > 0) stats.push(formatVolume(volume, weightUnit));
-  }
+  const stats = feedStats(workout, weightUnit);
   if (!stats.length && !records) return null;
   return (
     <ul className="feed-stats num" aria-label="Summary">
@@ -100,16 +89,11 @@ function FeedCard({
   const owner = member.is_you ? 'Your' : `${member.display_name}’s`;
   const subject = `${owner} ${workout.name}`;
   const photos = workout.photos ?? [];
-  const movements = workout.movements.filter((movement) => completedSets(movement).length > 0);
   // A session of one exercise named after it (a run called "Running") needs no exercise line.
-  const listExercises =
-    movements.length > 1 ||
-    (movements.length === 1 &&
-      movements[0].exercise.name.toLocaleLowerCase() !== session.name.toLocaleLowerCase());
-  const hidden = movements.length - SHOWN_EXERCISES;
-  const [showAll, setShowAll] = useState(false);
-  const exercisesId = `feed-exercises-${workout.id}`;
-  const listed = showAll ? movements : movements.slice(0, SHOWN_EXERCISES);
+  const movements = feedExercises(workout);
+  const listExercises = movements.length > 0;
+  const hidden = movements.length - FEED_SHOWN_EXERCISES;
+  const listed = movements.slice(0, FEED_SHOWN_EXERCISES);
   const card = useRef<HTMLLIElement>(null);
   const [highlighted, setHighlighted] = useState(false);
   const focusKey = focus?.key;
@@ -210,28 +194,21 @@ function FeedCard({
         )}
         <FeedStats workout={workout} records={item.record_count} />
         {listExercises && (
-          <ul id={exercisesId} className="feed-exercises" aria-label="Exercises">
-            {listed.map((movement, index) => (
+          <ul className="feed-exercises" aria-label="Exercises">
+            {listed.map((movement) => (
               <li key={movement.id}>
-                {movement.exercise.name}
-                {/* The space lets "+N more" wrap to the next line without an indent. */}
-                {index < listed.length - 1 ? ', ' : hidden > 0 ? ' ' : null}
+                <ExerciseIcon exercise={movement.exercise} />
+                <span>{movement.exercise.name}</span>
               </li>
             ))}
             {hidden > 0 && (
               <li className="feed-exercises-more">
                 <button
                   type="button"
-                  aria-label={
-                    showAll
-                      ? 'Show less'
-                      : `Show ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`
-                  }
-                  aria-expanded={showAll}
-                  aria-controls={exercisesId}
-                  onClick={() => setShowAll((current) => !current)}
+                  aria-label={`Open ${subject} workout, with ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`}
+                  onClick={onOpenWorkout}
                 >
-                  {showAll ? 'Show less' : `+${hidden} more`}
+                  +{hidden} {hidden === 1 ? 'exercise' : 'exercises'}
                 </button>
               </li>
             )}

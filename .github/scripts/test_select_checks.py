@@ -12,7 +12,15 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from select_checks import ROOT, git, main, select_event, select_paths
+from select_checks import (
+    ROOT,
+    git,
+    main,
+    mobile_shared_files,
+    module_specifiers,
+    select_event,
+    select_paths,
+)
 
 
 class PathSelectionTests(unittest.TestCase):
@@ -28,6 +36,7 @@ class PathSelectionTests(unittest.TestCase):
                 selected = select_paths([path])
                 self.assertEqual(selected.frontend, "full")
                 self.assertFalse(selected.backend)
+                self.assertFalse(selected.mobile)
 
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -64,6 +73,81 @@ class PathSelectionTests(unittest.TestCase):
                 selected = select_paths([path])
                 self.assertEqual(selected.frontend, "none")
                 self.assertTrue(selected.backend)
+                self.assertFalse(selected.mobile)
+
+    def test_mobile_paths_run_only_the_mobile_checks(self):
+        for path in (
+            "mobile/src/app/index.tsx",
+            "mobile/package-lock.json",
+            "mobile/app.json",
+            "mobile/assets/icon.png",
+            "mobile/README.md",
+        ):
+            with self.subTest(path=path):
+                selected = select_paths([path])
+                self.assertEqual(
+                    (selected.frontend, selected.backend, selected.mobile), ("none", False, True)
+                )
+
+    def test_frontend_files_the_mobile_app_imports_run_the_mobile_checks(self):
+        shared = mobile_shared_files()
+        self.assertTrue({"frontend/src/types.ts", "frontend/src/upNextSession.ts"} <= shared)
+        for path in shared:
+            with self.subTest(path=path):
+                self.assertTrue(select_paths([path]).mobile)
+
+    def test_shared_files_import_no_packages(self):
+        # Metro would resolve a package here from the web's node_modules, not the app's.
+        for path in mobile_shared_files():
+            with self.subTest(path=path):
+                text = (ROOT / path).read_text(encoding="utf-8")
+                packages = [name for name in module_specifiers(text) if not name.startswith(".")]
+                self.assertEqual(packages, [])
+
+    def test_imports_are_read_from_code_not_comments(self):
+        text = """import { a } from './rules';
+import type {
+  B,
+  C,
+} from "./types";
+export * from './more';
+import './side-effect';
+const lazy = import('./lazy');
+const old = require('./legacy');
+/** "Alex" from "Alex Morgan"; import { x } from './gone' once lived here. */
+// export { y } from 'some-package'
+const greeting = 'hello from the app';
+"""
+        self.assertEqual(
+            module_specifiers(text),
+            ["./rules", "./types", "./more", "./side-effect", "./lazy", "./legacy"],
+        )
+
+    def test_mobile_shared_files_follow_imports_through_the_web(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            files = {
+                "mobile/src/home.tsx": "import { a } from '../../frontend/src/rules';",
+                "mobile/src/local.ts": "export * from './home';",
+                "mobile/node_modules/pkg/index.js": "require('../../../frontend/src/never');",
+                "frontend/src/rules.ts": "import type { T } from './types'; export const a = 1;",
+                "frontend/src/types.ts": "export type T = number;",
+                "frontend/src/unrelated.ts": "export const b = 2;",
+            }
+            for path, text in files.items():
+                (root / path).parent.mkdir(parents=True, exist_ok=True)
+                (root / path).write_text(text, encoding="utf-8")
+            self.assertEqual(
+                mobile_shared_files(root), {"frontend/src/rules.ts", "frontend/src/types.ts"}
+            )
+            self.assertTrue(select_paths(["frontend/src/types.ts"], root).mobile)
+            self.assertFalse(select_paths(["frontend/src/unrelated.ts"], root).mobile)
+
+            (root / "mobile/src/broken.ts").write_text(
+                "import { x } from '../../frontend/src/gone';", encoding="utf-8"
+            )
+            with self.assertRaises(ValueError):
+                mobile_shared_files(root)
 
     def test_shared_contract_and_unknown_paths_run_both(self):
         for path in (
@@ -73,6 +157,11 @@ class PathSelectionTests(unittest.TestCase):
             "backend/app/new_schemas.py",
             "frontend/src/api.ts",
             "frontend/src/types.ts",
+        ):
+            with self.subTest(path=path):
+                selected = select_paths([path])
+                self.assertEqual((selected.frontend, selected.backend), ("full", True))
+        for path in (
             ".github/workflows/checks.yml",
             ".github/scripts/select_checks.py",
             ".env.example",
@@ -81,7 +170,9 @@ class PathSelectionTests(unittest.TestCase):
         ):
             with self.subTest(path=path):
                 selected = select_paths([path])
-                self.assertEqual((selected.frontend, selected.backend), ("full", True))
+                self.assertEqual(
+                    (selected.frontend, selected.backend, selected.mobile), ("full", True, True)
+                )
 
     def test_docs_and_empty_diff_need_neither_suite(self):
         for paths in (
@@ -90,7 +181,9 @@ class PathSelectionTests(unittest.TestCase):
         ):
             with self.subTest(paths=paths):
                 selected = select_paths(paths)
-                self.assertEqual((selected.frontend, selected.backend), ("none", False))
+                self.assertEqual(
+                    (selected.frontend, selected.backend, selected.mobile), ("none", False, False)
+                )
 
     def test_mixed_changes_run_both(self):
         selected = select_paths(["frontend/vite.config.ts", "backend/app/cardio_energy.py"])
@@ -112,11 +205,15 @@ class PathSelectionTests(unittest.TestCase):
 
     def test_main_release_push_and_manual_runs_are_full(self):
         selected = select_event("pull_request", {"pull_request": {"base": {"ref": "main"}}}, "")
-        self.assertEqual((selected.frontend, selected.backend), ("full", True))
+        self.assertEqual(
+            (selected.frontend, selected.backend, selected.mobile), ("full", True, True)
+        )
         for name in ("push", "workflow_dispatch", "unexpected-event"):
             with self.subTest(event=name):
                 selected = select_event(name, {}, "")
-                self.assertEqual((selected.frontend, selected.backend), ("full", True))
+                self.assertEqual(
+                    (selected.frontend, selected.backend, selected.mobile), ("full", True, True)
+                )
 
 
 class MergeSelectionTests(unittest.TestCase):
@@ -275,11 +372,13 @@ class RequiredCheckTests(unittest.TestCase):
             r"(?:        .*\n)*?        run: \|\n((?:          .*\n)+)",
             workflow,
         )
-        self.assertEqual(len(gates), 2)
+        self.assertEqual(len(gates), 3)
         bash = "C:/Program Files/Git/bin/bash.exe" if os.name == "nt" else shutil.which("bash")
         self.assertTrue(bash, "Bash is needed to verify the workflow's actual gate scripts")
         for gate, valid_flags in zip(
-            gates, [("true", "false"), ("none", "styles", "related", "full")], strict=True
+            gates,
+            [("true", "false"), ("none", "styles", "related", "full"), ("true", "false")],
+            strict=True,
         ):
             script = "\n".join(line[10:] for line in gate.splitlines())
             for result, flag, expected in (
@@ -338,7 +437,9 @@ class RequiredCheckTests(unittest.TestCase):
                 contextlib.redirect_stdout(io.StringIO()),
             ):
                 self.assertEqual(main(), 0)
-            self.assertEqual(output.read_text(encoding="utf-8"), "frontend=full\nbackend=true\n")
+            self.assertEqual(
+                output.read_text(encoding="utf-8"), "frontend=full\nbackend=true\nmobile=true\n"
+            )
             self.assertIn("Backend suite: run", summary.read_text(encoding="utf-8"))
 
 

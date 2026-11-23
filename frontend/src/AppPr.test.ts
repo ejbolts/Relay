@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDraftPrs, calculateScopedDraftPrs, prToastLines } from './workoutPr';
+import {
+  calculateDraftPrs,
+  calculateScopedDraftPrs,
+  initialPrCelebrations,
+  newPrCelebrations,
+  prBadgeLabel,
+  prToastLines,
+} from './workoutPr';
 import { createWorkoutSet } from './workoutSets';
 import type { WorkoutDraftMovement } from './workoutMovements';
 import type { Exercise, ExerciseHistoryBaseline, TrackedWorkout, WorkoutSetInput } from './types';
@@ -578,5 +585,45 @@ describe('personal record toast lines', () => {
     const [lb] = prToastLines([entry], 'lb');
     expect(lb.detail).toContain('8 reps at 220.46 lb');
     expect(lb.detail).not.toContain(' kg');
+  });
+});
+
+describe('celebrating live records', () => {
+  const badges = (movement: WorkoutDraftMovement) =>
+    calculateDraftPrs([movement], [baseline], null, '2026-01-15');
+
+  it('celebrates a record set once, when it is first ticked, and never one it opened with', () => {
+    const opened = draft([set(105, 1)]);
+    const start = initialPrCelebrations([opened], badges(opened));
+    expect(newPrCelebrations([opened], badges(opened), start, () => null).entries).toEqual([]);
+
+    const live = draft([set(105, 1), set(100, 9, { completed: false })]);
+    const before = initialPrCelebrations([live], badges(live));
+    const ticked = {
+      ...live,
+      sets: live.sets.map((item) => ({ ...item, completed: true })),
+    };
+    const first = newPrCelebrations([ticked], badges(ticked), before, () => 80);
+    expect(first.entries).toEqual([
+      {
+        exercise: 'Barbell Bench Press',
+        labels: ['Volume PR for this weight'],
+        reps: 9,
+        weightKg: 100,
+        bodyweightKg: 80,
+      },
+    ]);
+    const unticked = { ...ticked, sets: [ticked.sets[0], { ...ticked.sets[1], completed: false }] };
+    const second = newPrCelebrations([unticked], badges(unticked), first.next, () => 80);
+    expect(newPrCelebrations([ticked], badges(ticked), second.next, () => 80).entries).toEqual([]);
+  });
+
+  it('names a badge by its broadest scope', () => {
+    expect(prBadgeLabel(['Block weight PR', 'All-time volume PR for this weight'])).toBe(
+      'All-time PR',
+    );
+    expect(prBadgeLabel(['Block weight PR', 'Fresh start weight PR'])).toBe('Fresh start PR');
+    expect(prBadgeLabel(['Block weight PR'])).toBe('Block PR');
+    expect(prBadgeLabel(['Weight PR'])).toBe('PR');
   });
 });
