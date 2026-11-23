@@ -2,35 +2,23 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { YouTubeConnectionPanel } from './YouTubeConnectionPanel';
-import type { Health, LocalClip, SessionStatus, WorkoutSession, YouTubeConnection } from './types';
+import type { Health, LocalClip, WorkoutSession, YouTubeConnection } from './types';
+import {
+  acceptedVideoName,
+  canDeleteSession,
+  moveItem,
+  overallUploadProgress,
+  SESSION_POLL_MS,
+  sessionRetryLabel,
+  sessionStatusDetail,
+  sessionStatusText,
+  TERMINAL_SESSION_STATUSES,
+  VIDEO_FILE_TYPES,
+  youtubeReady as connectionReady,
+} from './videoSessions';
 import { formatBytes, formatSeconds, localDate } from './utils';
 
 type Screen = 'upload' | 'progress' | 'processing' | 'complete';
-const terminalStatuses: SessionStatus[] = ['complete', 'failed', 'cancelled'];
-const processingStatuses: SessionStatus[] = [
-  'queued',
-  'normalizing',
-  'stitching',
-  'uploading_to_youtube',
-  'youtube_processing',
-];
-
-function statusText(status: SessionStatus): string {
-  return {
-    draft: 'Waiting for uploads',
-    uploading: 'Uploading clips',
-    upload_failed: 'Some uploads need attention',
-    queued: 'Queued',
-    normalizing: 'Normalizing videos',
-    stitching: 'Stitching your workout',
-    uploading_to_youtube: 'Uploading to YouTube',
-    youtube_processing: 'YouTube is processing',
-    complete: 'Complete',
-    failed: 'Processing failed',
-    cancelled: 'Cancelled',
-  }[status];
-}
-
 export function VideoUpload() {
   const [screen, setScreen] = useState<Screen>('upload');
   const [sessionName, setSessionName] = useState('');
@@ -67,7 +55,7 @@ export function VideoUpload() {
     if (
       !serverSession ||
       screen !== 'processing' ||
-      terminalStatuses.includes(serverSession.status)
+      TERMINAL_SESSION_STATUSES.includes(serverSession.status)
     )
       return;
     const timer = window.setInterval(() => {
@@ -80,15 +68,12 @@ export function VideoUpload() {
         .catch((error: unknown) =>
           setMessage(error instanceof Error ? error.message : 'Could not refresh status.'),
         );
-    }, 2500);
+    }, SESSION_POLL_MS);
     return () => window.clearInterval(timer);
   }, [screen, serverSession]);
 
   const totalBytes = useMemo(() => clips.reduce((sum, clip) => sum + clip.file.size, 0), [clips]);
-  const overallProgress = useMemo(() => {
-    if (!clips.length) return 0;
-    return Math.round(clips.reduce((sum, clip) => sum + clip.progress, 0) / clips.length);
-  }, [clips]);
+  const overallProgress = useMemo(() => overallUploadProgress(clips), [clips]);
 
   function updateClip(clientId: string, update: Partial<LocalClip>) {
     setClips((current) =>
@@ -101,9 +86,9 @@ export function VideoUpload() {
       setMessage('Connect your YouTube channel before adding clips.');
       return;
     }
-    const accepted = Array.from(files).filter((file) => /\.(mp4|mov|m4v)$/i.test(file.name));
+    const accepted = Array.from(files).filter((file) => acceptedVideoName(file.name));
     if (accepted.length !== Array.from(files).length)
-      setMessage('Only MP4, MOV, and M4V video files were added.');
+      setMessage(`Only ${VIDEO_FILE_TYPES} video files were added.`);
     const additions = accepted.map((file) => {
       const previewUrl = URL.createObjectURL(file);
       previewUrls.current.add(previewUrl);
@@ -132,12 +117,7 @@ export function VideoUpload() {
 
   function moveClip(from: number, to: number) {
     if (to < 0 || to >= clips.length || from === to) return;
-    setClips((current) => {
-      const next = [...current];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
+    setClips((current) => moveItem(current, from, to));
   }
 
   async function acquireWakeLock() {
@@ -289,12 +269,11 @@ export function VideoUpload() {
     setScreen('upload');
   }
 
-  const youtubeReady = youtube?.status === 'connected' || youtube?.status === 'mock';
+  const youtubeReady = connectionReady(youtube);
   const uploadDisabled =
     !clips.length || !sessionName.trim() || !workoutDate || busy || !youtubeReady;
   const failedClips = clips.filter((clip) => clip.status === 'failed');
-  const canDeleteCurrentSession =
-    serverSession !== null && !processingStatuses.includes(serverSession.status);
+  const canDeleteCurrentSession = canDeleteSession(serverSession);
 
   return (
     <div className="video-module">
@@ -500,28 +479,8 @@ export function VideoUpload() {
           <div className="card status-card">
             <span className={`status-dot ${serverSession.status}`} />
             <div>
-              <strong>{statusText(serverSession.status)}</strong>
-              <p>
-                {serverSession.status === 'queued' &&
-                  'Your complete batch is ready; work will begin shortly.'}
-                {serverSession.status === 'normalizing' &&
-                  'Preparing each phone video for a consistent, 1080p MP4 output.'}
-                {serverSession.status === 'stitching' && 'Joining sets in the order you selected.'}
-                {serverSession.status === 'uploading_to_youtube' &&
-                  'Sending the combined video to your connected YouTube channel.'}
-                {serverSession.status === 'youtube_processing' &&
-                  'YouTube is preparing playback versions. Configure completion alerts in Settings.'}
-                {serverSession.status === 'draft' &&
-                  'This batch was never started. Delete it if you no longer have the original clips.'}
-                {serverSession.status === 'uploading' &&
-                  'This batch has incomplete uploads. Re-select the original clips in a new session, or delete this batch.'}
-                {serverSession.status === 'upload_failed' &&
-                  'An upload was rejected. Delete this incomplete batch before starting again.'}
-                {serverSession.status === 'failed' &&
-                  'Review the error below, then retry processing or delete the batch.'}
-                {serverSession.status === 'cancelled' &&
-                  'This upload batch was cancelled. Any successful uploads remain on disk until you delete the session.'}
-              </p>
+              <strong>{sessionStatusText(serverSession.status)}</strong>
+              <p>{sessionStatusDetail(serverSession.status)}</p>
             </div>
           </div>
           {serverSession.processing_error && (
@@ -529,7 +488,7 @@ export function VideoUpload() {
           )}
           {serverSession.status === 'failed' && (
             <button type="button" className="pulse-button large block" onClick={retryFailedSession}>
-              {serverSession.youtube_video_id ? 'Check YouTube again' : 'Retry processing'}
+              {sessionRetryLabel(serverSession)}
             </button>
           )}
           {serverSession.status === 'cancelled' && (
