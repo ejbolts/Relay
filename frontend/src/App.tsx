@@ -58,6 +58,8 @@ import { entriesInMonths } from './calendarRange';
 import { splitCalendarDays } from './trainingSplit';
 import { splitSkipMessage, splitSkipMove } from './splitSkip';
 import { PlannedDaySheet, type PlannedStart } from './PlannedDaySheet';
+// W3 (mobile Home): the calendar's day rule, shared with the app.
+import { calendarDayTarget } from './plannedDay';
 import {
   useDefaultRest,
   useTrainingPreferences,
@@ -3302,9 +3304,9 @@ function InteractiveWorkoutCalendar({
   // Today with a split, and every later day, show the plan and start it today; a past day
   // logs a missed session on that date.
   const openDay = (workoutDate: string, entry: DashboardData['heatmap'][number] | undefined) => {
+    const target = calendarDayTarget(workoutDate, today, !!entry, !!split?.enabled);
     if (entry) setSelectedDay(entry);
-    else if (workoutDate > today || (workoutDate === today && split?.enabled))
-      setPlannedDate(workoutDate);
+    else if (target === 'planned') setPlannedDate(workoutDate);
     else setPendingWorkoutDate(workoutDate);
   };
 

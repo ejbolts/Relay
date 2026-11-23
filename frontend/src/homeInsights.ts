@@ -3,10 +3,12 @@ import type { MuscleSetsWeek } from './liveMuscleSets';
 import { addDays, daysBetween, weekStartFor } from './trainingSummary';
 import type {
   BodyWeightGoal,
+  Exercise,
   ExerciseLibrarySummary,
   FriendActivity,
   TrackedWorkout,
 } from './types';
+import { formatWeightNumber, type WeightUnit } from './weightUnits';
 
 /** Within this many kg of the line to the target date counts as on track. */
 const ON_TRACK_KG = 0.1;
@@ -196,4 +198,85 @@ export function distancePeriodStart(
   weekStartDay: number,
 ): string {
   return period === 'week' ? weekStartFor(today, weekStartDay) : `${today.slice(0, 8)}01`;
+}
+
+/** The Body goal card's chip: where the latest weight sits against the goal. */
+export function bodyGoalChip(
+  progress: BodyGoalProgress | null,
+  weightUnit: WeightUnit,
+): { text: string; tone: 'good' | 'warn' } | null {
+  if (!progress) return null;
+  if (progress.kind === 'maintain')
+    return {
+      text:
+        progress.status === 'in'
+          ? 'In range'
+          : progress.status === 'above'
+            ? 'Above range'
+            : 'Below range',
+      tone: progress.status === 'in' ? 'good' : 'warn',
+    };
+  if (progress.ahead_kg === 0 || progress.ahead_kg === null)
+    return { text: 'On track', tone: 'good' };
+  return {
+    text: `${formatWeightNumber(Math.abs(progress.ahead_kg), weightUnit, 1)} ${weightUnit} ${progress.ahead_kg > 0 ? 'ahead' : 'behind'}`,
+    tone: progress.ahead_kg > 0 ? 'good' : 'warn',
+  };
+}
+
+export function goalDaysLeftLabel(days: number, ended: boolean): string {
+  if (ended) return 'Target date passed';
+  if (days === 0) return 'Due today';
+  if (days === 1) return '1 day left';
+  if (days < 14) return `${days} days left`;
+  return `${Math.round(days / 7)} weeks left`;
+}
+
+/** Friends this week: each row's rank (ties share one), and how you stand against the others. */
+export function weekBoard(rows: WeekStanding[]) {
+  const rank = (days: number) => 1 + rows.filter((row) => row.days > days).length;
+  const me = rows.find((row) => row.is_you);
+  const leader = rows[0];
+  const runnerUp = rows.find((row) => !row.is_you);
+  const days = (count: number) => `${count} ${count === 1 ? 'day' : 'days'}`;
+  const summary = !me
+    ? ''
+    : leader && !leader.is_you
+      ? `${days(leader.days - me.days)} behind ${leader.display_name}`
+      : runnerUp && runnerUp.days === me.days
+        ? `Level with ${runnerUp.display_name}`
+        : runnerUp
+          ? `${days(me.days - runnerUp.days)} ahead`
+          : '';
+  return { rank, yourRank: rank(me?.days ?? 0), summary };
+}
+
+/** Exercise names by id, from the training history and then the exercise list. */
+export function exerciseNameMap(
+  workouts: TrackedWorkout[],
+  exercises: Exercise[] = [],
+): Map<string, string> {
+  const names = new Map<string, string>();
+  for (const workout of workouts)
+    for (const movement of workout.movements)
+      names.set(movement.exercise.id, movement.exercise.name);
+  for (const exercise of exercises) names.set(exercise.id, exercise.name);
+  return names;
+}
+
+/** The lifts Exercise spotlight can follow, most trained first. */
+export function spotlightOptions(
+  summaries: ExerciseLibrarySummary[],
+  names: ReadonlyMap<string, string>,
+): { id: string; name: string }[] {
+  return summaries
+    .filter((item) => item.latest_estimated_1rm != null && names.has(item.exercise_id))
+    .sort((a, b) => b.session_count - a.session_count)
+    .map((item) => ({ id: item.exercise_id, name: names.get(item.exercise_id)! }));
+}
+
+/** Cardio distance's period line: This week, or the month's name. */
+export function distancePeriodName(period: 'week' | 'month', today: string): string {
+  if (period === 'week') return 'This week';
+  return new Intl.DateTimeFormat('en-GB', { month: 'long' }).format(new Date(`${today}T12:00:00`));
 }

@@ -4,6 +4,7 @@ import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { PopupDialog } from './PopupDialog';
 import { RoutineMovementList } from './RoutineMovementList';
 import type { Exercise, RoutineMovement, WorkoutType } from './types';
+import { workoutTypeExercisesError } from './workoutTypeExerciseSettings';
 import './routines.css';
 
 const failure = (reason: unknown, fallback: string) =>
@@ -62,8 +63,9 @@ export function WorkoutTypeExercisesEditor({
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (busy) return;
-    if (movements.some((m) => m.sets.some((set) => (set.weight_kg ?? 0) > 10000))) {
-      setError('Starting weights must be no more than 10,000 kg.');
+    const invalid = workoutTypeExercisesError(movements);
+    if (invalid) {
+      setError(invalid);
       return;
     }
     setBusy(true);

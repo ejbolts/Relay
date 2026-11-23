@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useReduceMotion } from '../features/settings/devicePreferences';
 import { useTheme } from './theme';
 
 // Brief, non-blocking confirmations such as "Workout saved". Any screen calls `showToast`; the
@@ -36,6 +37,7 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
   const [toast, setToast] = useState<Toast | null>(null);
   const insets = useSafeAreaInsets();
   const { colors, type, radius } = useTheme();
+  const reduced = useReduceMotion();
   const [shown] = useState(() => new Animated.Value(0));
 
   useEffect(() => {
@@ -48,11 +50,13 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
 
   useEffect(() => {
     if (!toast) return;
-    shown.setValue(0);
-    Animated.timing(shown, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+    shown.setValue(reduced ? 1 : 0);
+    if (!reduced) {
+      Animated.timing(shown, { toValue: 1, duration: 180, useNativeDriver: true }).start();
+    }
     const timer = setTimeout(() => setToast(null), toast.action ? ACTION_VISIBLE_MS : VISIBLE_MS);
     return () => clearTimeout(timer);
-  }, [toast, shown]);
+  }, [toast, shown, reduced]);
 
   if (!toast) return null;
   return (

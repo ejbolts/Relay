@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { Alert, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   averagePerWeek,
   consistencyWeeks,
@@ -47,6 +47,7 @@ import { Segmented } from '../training/parts';
 import { workoutColor } from '../training/useTrainingContext';
 import { WorkoutCard, WorkoutDetails } from '../training/WorkoutCard';
 import { Avatar } from './Avatar';
+import { PhotoViewer } from './PhotoViewer';
 import { FriendQrSheet } from './FriendQrSheet';
 import { socialIcons } from './icons';
 import { useSocialNavigation } from './navigation';
@@ -202,11 +203,31 @@ function ProfileHeader({ profile, onBlocked }: { profile: SharedProfile; onBlock
   const router = useRouter();
   const nav = useSocialNavigation();
   const [qrOpen, setQrOpen] = useState(false);
+  const [viewing, setViewing] = useState(false);
   const memberSince = formatMemberSince(profile.member_since);
+  const photo = profile.profile_photo_url;
   return (
     <Card>
       <View style={styles.headerRow}>
-        <Avatar person={profile} size={72} />
+        {photo ? (
+          <Pressable
+            accessibilityRole="imagebutton"
+            accessibilityLabel={`View ${profile.display_name}'s profile photo`}
+            onPress={() => setViewing(true)}
+            style={({ pressed }) => pressed && { opacity: 0.7 }}
+          >
+            <Avatar person={profile} size={72} />
+          </Pressable>
+        ) : (
+          <Avatar person={profile} size={72} />
+        )}
+        {viewing && photo && (
+          <PhotoViewer
+            photos={[{ id: photo, url: photo, label: `${profile.display_name}'s profile photo` }]}
+            title={() => 'Profile photo'}
+            onClose={() => setViewing(false)}
+          />
+        )}
         <View style={{ flex: 1, gap: 4 }}>
           <View style={styles.nameRow}>
             <Text

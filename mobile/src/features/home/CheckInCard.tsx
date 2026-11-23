@@ -2,14 +2,22 @@ import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { saveBodyweightCheckInWith } from '../../../../frontend/src/bodyCheckInUndo';
 import {
+  saveBodyFatCheckInWith,
+  saveBodyweightCheckInWith,
+} from '../../../../frontend/src/bodyCheckInUndo';
+import type { BodyCheckInSettings } from '../../../../frontend/src/homeLayout';
+import {
+  BODY_FAT_RANGE_ERROR,
+  bodyCheckInView,
   checkInChange,
   checkInSavedMessage,
   homeBodyweightStats,
+  homeCheckInMode,
   nudgedBodyFat,
   nudgedBodyweightKg,
   quickCheckInEntry,
+  validBodyFat,
 } from '../../../../frontend/src/homeStats';
 import type { BodyMeasurement } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
@@ -25,11 +33,11 @@ import { bodyIcons } from '../body/bodyIcons';
 import { useWeekStartDay } from './StatCards';
 
 /**
- * Home's Body weight check-in in the web's default style: today's weight and body fat with ±0.1
- * steppers and one Log (or Update) button. Saving shows an Undo toast that puts back the day's
- * previous check-in, or removes a new one (frontend/src/bodyCheckInUndo.ts).
+ * Home's Body weight check-in in its saved mode, as on the web: weight only, body fat only, or
+ * both (the default) with ±0.1 steppers and one Log (or Update) button. Saving shows an Undo
+ * toast that puts back the day's previous check-in (frontend/src/bodyCheckInUndo.ts).
  */
-export function CheckInCard() {
+export function CheckInCard({ settings }: { settings: BodyCheckInSettings }) {
   const today = localDate();
   const weekStartDay = useWeekStartDay();
   const measurements = useBodyMeasurements().data;
@@ -40,15 +48,24 @@ export function CheckInCard() {
   const weight = stats.today?.weight_kg ?? stats.latest?.weight_kg ?? null;
   const fat = stats.today?.body_fat_pct ?? stats.latestBodyFat ?? null;
   // Starts again from the saved values whenever they change, as the web's card does.
-  return <CheckInForm key={`${today}:${weight}:${fat}`} stats={stats} today={today} />;
+  return (
+    <CheckInForm
+      key={`${today}:${weight}:${fat}`}
+      stats={stats}
+      today={today}
+      mode={homeCheckInMode(settings.mode)}
+    />
+  );
 }
 
 function CheckInForm({
   stats,
   today,
+  mode,
 }: {
   stats: ReturnType<typeof homeBodyweightStats>;
   today: string;
+  mode: BodyCheckInSettings['mode'];
 }) {
   const { colors, type } = useTheme();
   const client = useQueryClient();
@@ -62,41 +79,56 @@ function CheckInForm({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const busy = useRef(false);
-  const hasToday = todayEntry !== null && todayEntry.body_fat_pct !== null;
+  const view = bodyCheckInView({
+    mode,
+    todayBodyweight: todayEntry?.weight_kg ?? null,
+    todayBodyFat: todayEntry?.body_fat_pct ?? null,
+  });
+  const { hasToday } = view;
 
   async function save() {
     if (busy.current) return;
-    const entry = quickCheckInEntry({
-      weightKg: weight,
-      bodyFat: fat ?? NaN,
-      requireBodyFat: true,
-      unit,
-    });
-    if (entry.error !== null) {
-      setError(entry.error);
-      return;
+    let weightKg = 0;
+    if (view.fatOnly) {
+      if (!validBodyFat(fat ?? NaN)) {
+        setError(BODY_FAT_RANGE_ERROR);
+        return;
+      }
+    } else {
+      const entry = quickCheckInEntry({
+        weightKg: weight,
+        bodyFat: fat ?? NaN,
+        requireBodyFat: view.singleButton,
+        unit,
+      });
+      if (entry.error !== null) {
+        setError(entry.error);
+        return;
+      }
+      weightKg = entry.weightKg;
     }
     busy.current = true;
     setSaving(true);
     setError(null);
     try {
-      const undo = await saveBodyweightCheckInWith(
-        bodyCheckInApi,
-        todayEntry,
-        today,
-        entry.weightKg,
-        fat!,
-      );
+      const undo = view.fatOnly
+        ? await saveBodyFatCheckInWith(bodyCheckInApi, todayEntry, today, fat!)
+        : view.singleButton
+          ? await saveBodyweightCheckInWith(bodyCheckInApi, todayEntry, today, weightKg, fat!)
+          : await saveBodyweightCheckInWith(bodyCheckInApi, todayEntry, today, weightKg);
       void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       await refreshBodyMeasurements(client);
-      showToast(checkInSavedMessage('combined'), {
-        label: 'Undo',
-        run: () =>
-          void undo().then(
-            () => refreshBodyMeasurements(client),
-            (reason) => showToast(errorMessage(reason)),
-          ),
-      });
+      showToast(
+        checkInSavedMessage(view.fatOnly ? 'fat' : view.singleButton ? 'combined' : 'weight'),
+        {
+          label: 'Undo',
+          run: () =>
+            void undo().then(
+              () => refreshBodyMeasurements(client),
+              (reason) => showToast(errorMessage(reason)),
+            ),
+        },
+      );
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not save today’s weight.');
     } finally {
@@ -113,7 +145,7 @@ function CheckInForm({
           <Button
             label={hasToday ? 'Update' : 'Log'}
             accessibilityLabel={
-              saving ? 'Saving check-in' : `${hasToday ? 'Update' : 'Log'} check-in`
+              saving ? `Saving ${view.saveKind}` : `${hasToday ? 'Update' : 'Log'} ${view.saveKind}`
             }
             icon="check"
             disabled={saving}
@@ -122,55 +154,59 @@ function CheckInForm({
           />
         }
       />
-      <View style={{ gap: 8 }}>
-        <View style={styles.heading}>
-          <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
-            Weight
-          </Text>
-          <Status
-            prior={
-              stats.priorBodyweight === null ? null : weightFromKg(stats.priorBodyweight, unit)
-            }
-            today={todayEntry === null ? null : weightFromKg(todayEntry.weight_kg, unit)}
+      {view.showWeight && (
+        <View style={{ gap: 8 }}>
+          <View style={styles.heading}>
+            <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
+              Weight
+            </Text>
+            <Status
+              prior={
+                stats.priorBodyweight === null ? null : weightFromKg(stats.priorBodyweight, unit)
+              }
+              today={todayEntry === null ? null : weightFromKg(todayEntry.weight_kg, unit)}
+              unit={unit}
+            />
+          </View>
+          <WeightStepper
+            weightKg={weight}
             unit={unit}
+            disabled={saving}
+            onChange={(kg) => {
+              setWeight(kg);
+              setError(null);
+            }}
+            onStep={(delta) => {
+              setWeight(nudgedBodyweightKg(weight, latestKg, delta, unit));
+              setError(null);
+            }}
           />
         </View>
-        <WeightStepper
-          weightKg={weight}
-          unit={unit}
-          disabled={saving}
-          onChange={(kg) => {
-            setWeight(kg);
-            setError(null);
-          }}
-          onStep={(delta) => {
-            setWeight(nudgedBodyweightKg(weight, latestKg, delta, unit));
-            setError(null);
-          }}
-        />
-      </View>
-      <View style={{ gap: 8 }}>
-        <View style={styles.heading}>
-          <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
-            Body fat
-          </Text>
-          <Status prior={stats.priorBodyFat} today={todayEntry?.body_fat_pct ?? null} unit="%" />
+      )}
+      {view.showFat && (
+        <View style={{ gap: 8 }}>
+          <View style={styles.heading}>
+            <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
+              Body fat
+            </Text>
+            <Status prior={stats.priorBodyFat} today={todayEntry?.body_fat_pct ?? null} unit="%" />
+          </View>
+          <BodyFatStepper
+            value={fat}
+            disabled={saving}
+            onChange={(value) => {
+              setFat(value);
+              setError(null);
+            }}
+            onStep={(delta) => {
+              setFat(
+                Number(nudgedBodyFat(fat === null ? '' : String(fat), stats.latestBodyFat, delta)),
+              );
+              setError(null);
+            }}
+          />
         </View>
-        <BodyFatStepper
-          value={fat}
-          disabled={saving}
-          onChange={(value) => {
-            setFat(value);
-            setError(null);
-          }}
-          onStep={(delta) => {
-            setFat(
-              Number(nudgedBodyFat(fat === null ? '' : String(fat), stats.latestBodyFat, delta)),
-            );
-            setError(null);
-          }}
-        />
-      </View>
+      )}
       {error && (
         <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
           {error}

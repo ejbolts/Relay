@@ -1,5 +1,6 @@
 import { useRef, useState, type ComponentRef } from 'react';
 import {
+  Alert,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -11,9 +12,23 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { apiOrigin } from '../data/api';
-import { Button, errorMessage, ErrorState, Loading } from '../ui/components';
+import {
+  authErrorText,
+  registrationFields,
+  sampleProfileIdentity,
+  SIGNUP_NAME_HELP,
+  SIGNUP_USERNAME_HELP,
+  registrationFieldErrors,
+  validateAuthForm,
+  type AuthFieldErrors,
+} from '../../../frontend/src/authRules';
+import { ApiError, apiOrigin } from '../data/api';
+import { Button, Card, errorMessage, ErrorState, Loading } from '../ui/components';
+import { ProfilePhoto } from '../ui/ProfilePhoto';
+import { Sheet } from '../ui/Sheet';
+import { showToast, ToastHost } from '../ui/Toast';
 import { useTheme } from '../ui/theme';
+import { registerAccount, useRegistrationConfig } from './registration';
 import { useSession } from './SessionProvider';
 
 /** Shown instead of the app until the account is signed in. */
@@ -24,17 +39,60 @@ export function SignInScreen() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [displayName, setDisplayName] = useState('');
+  const [inviteCode, setInviteCode] = useState('');
+  const [needsInviteCode, setNeedsInviteCode] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
+  const [sampleOpen, setSampleOpen] = useState(false);
+  const config = useRegistrationConfig(status.kind === 'signed-out');
+  const inviteRequired = needsInviteCode || !!config.data?.invite_code_required;
   const passwordInput = useRef<ComponentRef<typeof TextInput>>(null);
+  const inviteInput = useRef<ComponentRef<typeof TextInput>>(null);
+
+  function switchForm() {
+    setCreating(!creating);
+    setPassword('');
+    setError('');
+    setFieldErrors({});
+  }
 
   async function submit() {
-    if (busy || !username.trim() || !password) return;
+    if (busy || (!creating && (!username.trim() || !password))) return;
+    const values = { displayName, username, password, inviteCode };
+    if (creating) {
+      const problems = validateAuthForm('create-account', values, {
+        invite_code_required: inviteRequired,
+      });
+      setFieldErrors(problems);
+      setError('');
+      if (Object.keys(problems).length) return;
+    }
     setBusy(true);
     setError('');
     Keyboard.dismiss();
     try {
-      await signIn(username.trim(), password);
+      if (creating) {
+        const fields = registrationFields(values);
+        await registerAccount(fields);
+        try {
+          await signIn(fields.username, password);
+        } catch {
+          setUsername(fields.username);
+          setPassword('');
+          setCreating(false);
+          showToast('Account created. Sign in with your password.');
+        }
+      } else {
+        await signIn(username.trim(), password);
+      }
     } catch (e) {
-      setError(errorMessage(e));
+      setError(creating && e instanceof ApiError ? authErrorText(e) : errorMessage(e));
+      if (creating && e instanceof ApiError) {
+        setFieldErrors(registrationFieldErrors(e.code));
+        if (e.code === 'invalid_invite_code') setNeedsInviteCode(true);
+      }
+    } finally {
       setBusy(false);
     }
   }
@@ -48,6 +106,10 @@ export function SignInScreen() {
       borderRadius: radius.md,
     },
   ];
+  const label = [type.callout, { color: colors.secondary }];
+  const errorStyle = [type.callout, { color: colors.danger }];
+  const title = creating ? 'Create account' : 'Sign in';
+  const sample = sampleProfileIdentity(displayName, username);
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }}>
       <KeyboardAvoidingView
@@ -71,9 +133,46 @@ export function SignInScreen() {
           ) : (
             <>
               <Text accessibilityRole="header" style={[type.largeTitle, { color: colors.text }]}>
-                Sign in
+                {title}
               </Text>
-              <Text style={[type.callout, { color: colors.secondary }]}>Username</Text>
+              {creating && (
+                <>
+                  <View style={styles.fieldLabel}>
+                    <Text style={label}>Display name</Text>
+                    <Button
+                      label="?"
+                      accessibilityLabel="About display name"
+                      variant="link"
+                      onPress={() => Alert.alert('Display name', SIGNUP_NAME_HELP)}
+                    />
+                  </View>
+                  <TextInput
+                    style={input}
+                    accessibilityLabel="Display name"
+                    autoComplete="name"
+                    maxLength={80}
+                    editable={!busy}
+                    value={displayName}
+                    onChangeText={setDisplayName}
+                  />
+                  {!!fieldErrors.displayName && (
+                    <Text accessibilityRole="alert" style={errorStyle}>
+                      {fieldErrors.displayName}
+                    </Text>
+                  )}
+                </>
+              )}
+              <View style={creating ? styles.fieldLabel : undefined}>
+                <Text style={label}>Username</Text>
+                {creating && (
+                  <Button
+                    label="?"
+                    accessibilityLabel="About username"
+                    variant="link"
+                    onPress={() => Alert.alert('Username', SIGNUP_USERNAME_HELP)}
+                  />
+                )}
+              </View>
               <TextInput
                 style={input}
                 accessibilityLabel="Username"
@@ -87,34 +186,102 @@ export function SignInScreen() {
                 returnKeyType="next"
                 onSubmitEditing={() => passwordInput.current?.focus()}
               />
-              <Text style={[type.callout, { color: colors.secondary }]}>Password</Text>
+              {!!fieldErrors.username && (
+                <Text accessibilityRole="alert" style={errorStyle}>
+                  {fieldErrors.username}
+                </Text>
+              )}
+              <Text style={label}>Password</Text>
               <TextInput
                 ref={passwordInput}
                 style={input}
                 accessibilityLabel="Password"
-                autoComplete="current-password"
-                textContentType="password"
+                autoComplete={creating ? 'new-password' : 'current-password'}
+                textContentType={creating ? 'newPassword' : 'password'}
                 secureTextEntry
                 editable={!busy}
                 value={password}
                 onChangeText={setPassword}
-                returnKeyType="go"
-                onSubmitEditing={() => void submit()}
+                returnKeyType={creating && inviteRequired ? 'next' : 'go'}
+                onSubmitEditing={() => {
+                  if (creating && inviteRequired) inviteInput.current?.focus();
+                  else void submit();
+                }}
               />
+              {!!fieldErrors.password && (
+                <Text accessibilityRole="alert" style={errorStyle}>
+                  {fieldErrors.password}
+                </Text>
+              )}
+              {creating && inviteRequired && (
+                <>
+                  <Text style={label}>Invite code</Text>
+                  <TextInput
+                    ref={inviteInput}
+                    style={input}
+                    accessibilityLabel="Invite code"
+                    value={inviteCode}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    maxLength={200}
+                    editable={!busy}
+                    onChangeText={setInviteCode}
+                    returnKeyType="go"
+                    onSubmitEditing={() => void submit()}
+                  />
+                  {!!fieldErrors.inviteCode && (
+                    <Text accessibilityRole="alert" style={errorStyle}>
+                      {fieldErrors.inviteCode}
+                    </Text>
+                  )}
+                </>
+              )}
               {!!error && (
                 <Text accessibilityRole="alert" style={[type.callout, { color: colors.danger }]}>
                   {error}
                 </Text>
               )}
               <Button
-                label={busy ? 'Signing in…' : 'Sign in'}
-                disabled={busy || !username.trim() || !password}
+                label={busy ? (creating ? 'Creating account…' : 'Signing in…') : title}
+                disabled={busy || (!creating && (!username.trim() || !password))}
                 onPress={() => void submit()}
               />
+              {(creating || config.data?.registration_open) && (
+                <Button
+                  label={creating ? 'Back to sign in' : 'Create account'}
+                  variant="secondary"
+                  disabled={busy}
+                  onPress={switchForm}
+                />
+              )}
+              {creating && (
+                <Button
+                  label="See a sample profile"
+                  variant="link"
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setSampleOpen(true);
+                  }}
+                />
+              )}
             </>
           )}
         </ScrollView>
       </KeyboardAvoidingView>
+      {creating && (
+        <Sheet visible={sampleOpen} title="Sample profile" onClose={() => setSampleOpen(false)}>
+          <Card>
+            <View style={styles.sample}>
+              <ProfilePhoto user={sample} size={60} />
+              <View style={{ flex: 1, gap: 4 }}>
+                <Text style={[type.headline, { color: colors.text }]}>{sample.display_name}</Text>
+                <Text style={[type.callout, { color: colors.secondary }]}>@{sample.username}</Text>
+              </View>
+            </View>
+          </Card>
+        </Sheet>
+      )}
+      <ToastHost />
     </SafeAreaView>
   );
 }
@@ -124,4 +291,6 @@ const styles = StyleSheet.create({
   brand: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 26 },
   logo: { width: 35, height: 35, borderRadius: 9 },
   input: { minHeight: 50, paddingHorizontal: 14, borderWidth: 1, fontSize: 18 },
+  fieldLabel: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sample: { flexDirection: 'row', alignItems: 'center', gap: 12 },
 });

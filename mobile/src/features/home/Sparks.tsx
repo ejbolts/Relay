@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { View } from 'react-native';
 import Svg, { Circle, Line, Path, Text as SvgText } from 'react-native-svg';
 import { niceTicks } from '../../../../frontend/src/trainingSummary';
@@ -139,6 +139,59 @@ export function Meter({ value, max, label }: { value: number; max: number; label
           backgroundColor: percent >= 100 ? colors.good : colors.accent,
         }}
       />
+    </View>
+  );
+}
+
+/** A progress ring with its value in the middle, as the web's ring-style cards draw. */
+export function Ring({
+  value,
+  max,
+  size,
+  label,
+  children,
+}: {
+  value: number;
+  max: number;
+  size: number;
+  label: string;
+  children?: ReactNode;
+}) {
+  const { colors } = useTheme();
+  const stroke = Math.max(4, Math.round(size / 11));
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const ratio = max > 0 ? Math.min(1, Math.max(0, value / max)) : 0;
+  return (
+    <View
+      accessible
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      accessibilityValue={{ min: 0, max, now: value }}
+      style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <Svg width={size} height={size} style={{ position: 'absolute' }}>
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={colors.surface3}
+          strokeWidth={stroke}
+          fill="none"
+        />
+        <Circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={ratio >= 1 ? colors.good : colors.accent}
+          strokeWidth={stroke}
+          strokeLinecap="round"
+          strokeDasharray={`${circumference * ratio} ${circumference}`}
+          fill="none"
+          transform={`rotate(-90 ${size / 2} ${size / 2})`}
+        />
+      </Svg>
+      {children}
     </View>
   );
 }

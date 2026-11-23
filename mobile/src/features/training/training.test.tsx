@@ -270,7 +270,7 @@ test('Exercises searches the library and opens an exercise', async () => {
   expect(screen.queryByRole('button', { name: /^Bench Press/ })).toBeNull();
 });
 
-test('Cardio shows the week, its sessions and zone goals, and logs a session', async () => {
+test('Cardio shows the week, its sessions and zone goals, and opens its editors', async () => {
   await open(<TrainingTabScreen />);
   await fireEvent.press(await screen.findByRole('tab', { name: 'Cardio' }));
   expect(await screen.findByText('Weekly zone goals')).toBeVisible();
@@ -282,6 +282,11 @@ test('Cardio shows the week, its sessions and zone goals, and logs a session', a
   await fireEvent.press(row);
   expect(screen.getByText('385 kcal · ≈ 50 g fat burnt')).toBeVisible();
   expect(screen.getByText('142 bpm avg · 4.8 km')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit metrics' }));
+  expect(mockRouter.push).toHaveBeenCalledWith({
+    pathname: '/cardio/metrics/[id]',
+    params: { id: cardio.sessions[0].id },
+  });
   await fireEvent.press(screen.getByRole('button', { name: 'Open workout' }));
   expect(mockRouter.push).toHaveBeenCalledWith({
     pathname: '/training/session/[id]',
@@ -289,7 +294,9 @@ test('Cardio shows the week, its sessions and zone goals, and logs a session', a
   });
 
   await fireEvent.press(screen.getByRole('button', { name: 'Log session' }));
-  expect(mockWorkout.start).toHaveBeenCalledWith({ kind: 'cardio' });
+  expect(mockRouter.push).toHaveBeenCalledWith('/cardio/log');
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit zones' }));
+  expect(mockRouter.push).toHaveBeenCalledWith('/cardio/zones');
 });
 
 test('an exercise shows its progress, personal bests and sessions', async () => {

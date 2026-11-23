@@ -13,6 +13,7 @@ import { recordKindLabel } from './recordLabels';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
 import { MuscleSetsCard } from './MuscleSetsCard';
+import { withMuscleSetGoal } from './muscleGoalEditing';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import { formatMemberSince, formatProfileTotal as formatTotal } from './profileDisplay';
 import { HomeLayoutSections } from './HomeLayoutSections';
@@ -79,10 +80,11 @@ import {
   FriendsWeekCard,
   MuscleFreshnessCard,
 } from './HomeInsightCards';
-import { muscleFreshness } from './homeInsights';
+import { exerciseNameMap, muscleFreshness, spotlightOptions } from './homeInsights';
 import {
   BODY_FAT_RANGE_ERROR,
   activityAverageLabel,
+  bodyCheckInView,
   bodyFatEntry,
   bodyweightStatCaption,
   bodyweightTrendCaption,
@@ -91,6 +93,7 @@ import {
   homeActivityStats,
   homeBodyweightStats,
   homeCardioGoals,
+  homeCheckInMode,
   nudgedBodyFat,
   nudgedBodyweightKg,
   quickCheckInEntry,
@@ -285,12 +288,13 @@ export function TodayScreen({
   /** Saves one muscle's weekly goal from Home; `null` returns it to the default goal. */
   async function saveMuscleGoal(muscle: string, goal: number | null) {
     if (!musclePreferences) throw new Error('Training preferences are still loading. Try again.');
-    const goals = { ...(musclePreferences.weekly_muscle_set_goals ?? {}) };
-    if (goal === null) delete goals[muscle];
-    else goals[muscle] = goal;
     const saved = await api.updateTrainingPreferences({
       ...musclePreferences,
-      weekly_muscle_set_goals: goals,
+      weekly_muscle_set_goals: withMuscleSetGoal(
+        musclePreferences.weekly_muscle_set_goals,
+        muscle,
+        goal,
+      ),
     });
     trainingPreferences.applySaved(saved);
     window.dispatchEvent(new Event('training-preferences-updated'));
@@ -366,20 +370,9 @@ export function TodayScreen({
     [measurements, today, weekStartDay],
   );
   const records = recentRecords(personalRecords, 3);
-  const exerciseNames = useMemo(() => {
-    const names = new Map<string, string>();
-    for (const workout of workouts)
-      for (const movement of workout.movements)
-        names.set(movement.exercise.id, movement.exercise.name);
-    for (const exercise of exercises ?? []) names.set(exercise.id, exercise.name);
-    return names;
-  }, [workouts, exercises]);
-  const spotlightOptions = useMemo(
-    () =>
-      (exerciseSummaries ?? [])
-        .filter((item) => item.latest_estimated_1rm != null && exerciseNames.has(item.exercise_id))
-        .sort((a, b) => b.session_count - a.session_count)
-        .map((item) => ({ id: item.exercise_id, name: exerciseNames.get(item.exercise_id)! })),
+  const exerciseNames = useMemo(() => exerciseNameMap(workouts, exercises), [workouts, exercises]);
+  const spotlightChoices = useMemo(
+    () => spotlightOptions(exerciseSummaries ?? [], exerciseNames),
     [exerciseSummaries, exerciseNames],
   );
   const thisWeekSets = muscleSets?.weeklySets ?? data?.weekly_sets;
@@ -701,7 +694,7 @@ export function TodayScreen({
     ),
     'combined-check-in': (
       <DashboardQuickBodyweight
-        mode={checkInMode === 'combined' ? 'combined-single' : checkInMode}
+        mode={homeCheckInMode(checkInMode)}
         latestBodyweight={latest?.weight_kg ?? null}
         todayBodyweight={todayBodyweight}
         todayBodyFat={todayBodyFat}
@@ -915,7 +908,7 @@ export function TodayScreen({
           ),
           'exercise-spotlight': (
             <ExerciseSpotlightSettingsForm
-              options={spotlightOptions}
+              options={spotlightChoices}
               value={homeSectionSettings(home.draft, 'exercise_spotlight')}
               onChange={(change) =>
                 home.change(updateHomeSectionSettings(home.draft, 'exercise_spotlight', change))
@@ -1028,11 +1021,6 @@ export function DashboardQuickBodyweight({
   onSaveBodyFat?: (bodyFat: number) => Promise<UndoBodyweightCheckIn>;
 }) {
   const weightUnit = useWeightUnit();
-  // Body fat is stored on a weigh-in, so until today's weight is in, Body fat only asks for both.
-  const mode: BodyCheckInMode =
-    configuredMode === 'fat' && onSaveBodyFat && todayBodyweight === null
-      ? 'combined-single'
-      : configuredMode;
   const initialWeight = todayBodyweight ?? latestBodyweight;
   const titleId = useId();
   const weightFormId = useId();
@@ -1048,16 +1036,14 @@ export function DashboardQuickBodyweight({
   } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const selectedWeight = weight;
-  const singleButton = mode === 'combined-single' && !!onSaveBodyFat;
-  const combined = mode === 'combined' || singleButton;
-  const headerSave = singleButton || mode !== 'combined';
-  const fatOnly = mode === 'fat' && !!onSaveBodyFat;
-  const hasToday = fatOnly
-    ? todayBodyFat !== null
-    : singleButton
-      ? todayBodyweight !== null && todayBodyFat !== null
-      : todayBodyweight !== null;
-  const saveKind = fatOnly ? 'body fat' : singleButton ? 'check-in' : 'weight';
+  const { mode, singleButton, combined, headerSave, fatOnly, hasToday, saveKind } = bodyCheckInView(
+    {
+      mode: configuredMode,
+      todayBodyweight,
+      todayBodyFat,
+      canSaveBodyFat: !!onSaveBodyFat,
+    },
+  );
   const saveLabel = saving ? `Saving ${saveKind}` : `${hasToday ? 'Update' : 'Log'} ${saveKind}`;
 
   useEffect(() => {

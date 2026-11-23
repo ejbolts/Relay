@@ -1,10 +1,12 @@
 import { Stack } from 'expo-router';
+import { useReduceMotion } from '../../features/settings/devicePreferences';
 import { HeaderBack } from '../../features/settings/HeaderBack';
 import { useTheme } from '../../ui/theme';
 
 /** The split library and editor: pushed over the tabs from Home or Settings. */
 export default function SplitLayout() {
   const { colors } = useTheme();
+  const reduced = useReduceMotion();
   return (
     <Stack
       screenOptions={{
@@ -15,6 +17,7 @@ export default function SplitLayout() {
         headerShadowVisible: false,
         headerBackButtonDisplayMode: 'minimal',
         contentStyle: { backgroundColor: colors.page },
+        ...(reduced && { animation: 'none' }),
       }}
     >
       <Stack.Screen

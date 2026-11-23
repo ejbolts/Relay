@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { splitCalendarMonths } from './splitCalendar';
 import {
   currentSplitStep,
   nextTrainingStep,
@@ -100,6 +101,22 @@ describe('workout-following split previews', () => {
       null,
       'upper',
     ]);
+  });
+
+  it('starts the two-month preview at the next logged step and keeps planned rest days', () => {
+    const months = splitCalendarMonths(
+      { ...split, next_step: 1, next_date: '2026-11-28' },
+      '2026-11-15',
+      0,
+    );
+    expect(months.map((month) => month.first)).toEqual(['2026-11-01', '2026-12-01']);
+    expect(months[0].cells[0]?.getDate()).toBe(1);
+    expect(months[0].days).toEqual([
+      { date: '2026-11-28', typeId: 'lower', step: 1 },
+      { date: '2026-11-29', typeId: null, step: 2 },
+      { date: '2026-11-30', typeId: 'upper', step: 0 },
+    ]);
+    expect(months[1].days[0]).toEqual({ date: '2026-12-01', typeId: 'lower', step: 1 });
   });
 });
 

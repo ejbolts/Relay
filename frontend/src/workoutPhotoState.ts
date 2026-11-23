@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import type { TrackedWorkout, WorkoutPhoto } from './types';
 
-/** The most photos one workout can hold; the server enforces the same number. */
-export const MAX_WORKOUT_PHOTOS = 3;
+export { MAX_WORKOUT_PHOTOS } from './workoutPhotoRules';
 
 /**
  * A saved workout's photos, updated on screen the moment one is added or removed, until the
