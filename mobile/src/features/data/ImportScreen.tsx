@@ -1,13 +1,15 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
 import type { WorkoutImportOptions } from '../../../../frontend/src/types';
 import {
   defaultImportOptions,
   IMPORT_FILE_TYPES,
   IMPORT_GUIDE_INTRO,
+  IMPORT_MAX_BYTES,
   IMPORT_SOURCE_HINTS,
   IMPORT_SOURCES,
+  IMPORT_TOO_LARGE,
   STRONG_DISTANCE_UNITS,
   STRONG_UNITS_NOTE,
   STRONG_WEIGHT_UNITS,
@@ -17,12 +19,13 @@ import {
   workoutCsvTemplate,
 } from '../../../../frontend/src/workoutCsvTemplate';
 import { useWeightUnit } from '../../data/queries';
+import { useUser } from '../../session/SessionProvider';
 import { Button, errorMessage } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { ChoiceRow, Row, Section, SettingsPage } from '../settings/SettingsList';
-import { pickFile, shareText } from './dataApi';
+import { discardStagedFile, pickFile, shareText } from './dataApi';
 import { dataIcons } from './icons';
-import { importError, reviewImport, useImportSession } from './importSession';
+import { importError, resetImportSession, reviewImport, useImportSession } from './importSession';
 
 const SOURCE_ICONS = {
   strengthlevel: require('../../../assets/import-apps/strengthlevel.png'),
@@ -41,8 +44,19 @@ export function ImportScreen() {
   const unit = useWeightUnit();
   const [chosen, setChosen] = useState<WorkoutImportOptions | null>(null);
   const options = chosen ?? defaultImportOptions(unit);
-  const session = useImportSession();
+  const userId = useUser().id;
+  const session = useImportSession(userId);
   const [picking, setPicking] = useState(false);
+  // The review lives while this screen does: closing it (or signing out) ends the review, and a
+  // request still running then is ignored when it answers.
+  const open = useRef(true);
+  useEffect(() => {
+    open.current = true;
+    return () => {
+      open.current = false;
+      resetImportSession();
+    };
+  }, []);
   const [error, setError] = useState<string | null>(null);
   const busy = picking || session.reviewing || session.saving;
 
@@ -56,10 +70,16 @@ export function ImportScreen() {
     setError(null);
     setPicking(true);
     try {
-      const file = await pickFile(IMPORT_FILE_TYPES, 'text/csv');
+      const file = await pickFile(IMPORT_FILE_TYPES, 'text/csv', {
+        maxBytes: IMPORT_MAX_BYTES,
+        tooLarge: IMPORT_TOO_LARGE,
+      });
       if (!file) return;
-      if (await reviewImport(file, options)) router.push('/data/import-review');
-      else setError(importError() ?? 'Could not review that CSV file.');
+      if (!open.current) return discardStagedFile(file);
+      const reviewed = await reviewImport(userId, file, options);
+      if (!open.current) return;
+      if (reviewed) router.push('/data/import-review');
+      else setError(importError(userId) ?? 'Could not review that CSV file.');
     } catch (caught) {
       setError(errorMessage(caught));
     } finally {
