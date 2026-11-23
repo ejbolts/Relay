@@ -1,7 +1,14 @@
+import { useMemo } from 'react';
 import { useColorScheme } from 'react-native';
+import { COLOUR_THEMES, mixHex } from '../../../frontend/src/appearanceChoices';
+import {
+  colourMode,
+  colourTheme,
+  darkStyle,
+  lightStyle,
+} from '../features/settings/devicePreferences';
 
-// Relay's Pulse palette, from frontend/src/pulse.css (dark) and its light colour mode. The app
-// follows the phone's appearance setting.
+// Relay's Pulse palette, from frontend/src/pulse.css and lightMode.css.
 const dark = {
   page: '#0b0d0f',
   surface: '#15181b',
@@ -66,6 +73,66 @@ export const type = {
 };
 
 export function useTheme() {
-  const scheme = useColorScheme() === 'light' ? 'light' : 'dark';
-  return { scheme, colors: palettes[scheme], space, radius, type } as const;
+  const system = useColorScheme() === 'light' ? 'light' : 'dark';
+  const mode = colourMode.use();
+  const theme = colourTheme.use();
+  const dark = darkStyle.use();
+  const light = lightStyle.use();
+  const scheme = mode === 'auto' ? system : mode;
+  const colors = useMemo(
+    () => themedPalette(scheme, theme, dark, light),
+    [scheme, theme, dark, light],
+  );
+  return { scheme, colors, space, radius, type } as const;
+}
+
+export function themedPalette(
+  scheme: 'light' | 'dark',
+  themeId: ReturnType<typeof colourTheme.use>,
+  dark: ReturnType<typeof darkStyle.use>,
+  light: ReturnType<typeof lightStyle.use>,
+): Palette {
+  const theme = COLOUR_THEMES.find(({ id }) => id === themeId) ?? COLOUR_THEMES[0];
+  const accentText = scheme === 'light' ? theme.lightText : theme.text;
+  const colors = {
+    ...palettes[scheme],
+    accent: theme.accent,
+    accentText,
+    accentSoft: `${theme.accent}${scheme === 'light' ? '26' : '33'}`,
+  };
+  if (scheme === 'light' && light === 'stained') {
+    return {
+      ...colors,
+      page: mixHex(theme.accent, '#f3f5f7', 7),
+      surface: mixHex(theme.accent, '#ffffff', 4),
+      surface2: mixHex(theme.accent, '#eef1f3', 9),
+      surface3: mixHex(theme.accent, '#e2e6ea', 14),
+    };
+  }
+  if (scheme === 'dark' && dark === 'stained') {
+    return {
+      ...colors,
+      page: mixHex(theme.accent, '#0a0d12', 7),
+      surface: mixHex(theme.accent, '#151a21', 13),
+      surface2: mixHex(theme.accent, '#1d242d', 17),
+      surface3: mixHex(theme.accent, '#262e38', 23),
+      line: `${accentText}24`,
+      lineStrong: `${accentText}42`,
+    };
+  }
+  if (scheme === 'dark' && dark === 'oled') {
+    return {
+      ...colors,
+      page: '#000000',
+      surface: '#000000',
+      surface2: '#121417',
+      surface3: '#1f2226',
+      line: '#ffffff24',
+      lineStrong: '#ffffff3d',
+      text: '#ffffff',
+      secondary: '#d4d9dd',
+      muted: '#a8b0b6',
+    };
+  }
+  return colors;
 }

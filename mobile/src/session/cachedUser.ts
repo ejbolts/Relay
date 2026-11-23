@@ -21,7 +21,7 @@ function currentOrigin(): string | null {
 
 export function rememberUser(user: User) {
   const origin = currentOrigin();
-  if (origin) writeJson(KEY, { origin, user } satisfies Saved);
+  if (origin) writeJson(KEY, { origin, user: publicUser(user) } satisfies Saved);
 }
 
 export function forgetCachedUser() {
@@ -33,5 +33,14 @@ export async function offlineUser(): Promise<User | null> {
   const origin = currentOrigin();
   const saved = readJson<Saved>(KEY);
   if (!origin || saved?.origin !== origin || !saved.user?.id) return null;
-  return (await sessionToken(origin)) ? saved.user : null;
+  if (!(await sessionToken(origin))) return null;
+  const user = publicUser(saved.user);
+  if ('session_token' in saved.user) rememberUser(user);
+  return user;
+}
+
+export function publicUser(user: User): User {
+  const profile: User & { session_token?: unknown } = { ...user };
+  delete profile.session_token;
+  return profile;
 }

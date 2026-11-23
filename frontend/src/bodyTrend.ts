@@ -15,6 +15,35 @@ export const BODY_TREND_DURATION_OPTIONS = [
 export type BodyTrendDuration = (typeof BODY_TREND_DURATION_OPTIONS)[number]['value'];
 export type BodyTrendStatistic = 'average' | 'median';
 
+export const BODY_TREND_PREFERENCE_KEY = 'gym-logger-body-trend';
+
+export interface BodyTrendPreference {
+  duration: BodyTrendDuration;
+  statistic: BodyTrendStatistic;
+}
+
+export const DEFAULT_BODY_TREND_PREFERENCE: BodyTrendPreference = {
+  duration: '30d',
+  statistic: 'average',
+};
+
+export function parseBodyTrendPreference(value: string | null): BodyTrendPreference {
+  try {
+    const saved = JSON.parse(value ?? 'null') as {
+      duration?: unknown;
+      statistic?: unknown;
+    } | null;
+    return {
+      duration:
+        BODY_TREND_DURATION_OPTIONS.find((option) => option.value === saved?.duration)?.value ??
+        DEFAULT_BODY_TREND_PREFERENCE.duration,
+      statistic: saved?.statistic === 'median' ? 'median' : 'average',
+    };
+  } catch {
+    return DEFAULT_BODY_TREND_PREFERENCE;
+  }
+}
+
 export interface WeightedMeasurement extends DatedMeasurement {
   weight_kg: number;
 }

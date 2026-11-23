@@ -2,7 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { ApiError, currentUser, signIn, signOut } from '../data/api';
+import { ApiError, currentUser, request, signIn, signOut } from '../data/api';
+import { friendInviteFromUrl } from './friendInvite';
 import { SessionProvider, useSession } from './SessionProvider';
 import { SignInScreen } from './SignInScreen';
 
@@ -12,6 +13,7 @@ jest.mock('../data/api', () => ({
   currentUser: jest.fn(),
   signIn: jest.fn(),
   signOut: jest.fn(),
+  request: jest.fn(),
 }));
 
 const user = { id: 'u1', username: 'preview', must_change_password: false } as Awaited<
@@ -48,7 +50,10 @@ function open() {
   );
 }
 
-beforeEach(() => jest.resetAllMocks());
+beforeEach(() => {
+  jest.resetAllMocks();
+  jest.mocked(request).mockResolvedValue({ registration_open: false, invite_code_required: false });
+});
 afterEach(() => client.clear());
 
 test('signs in from the form and back out again', async () => {
@@ -80,6 +85,75 @@ test('keeps the form and shows why a sign-in was refused', async () => {
   await fireEvent.press(screen.getByRole('button', { name: 'Sign in' }));
   expect(await screen.findByText('Incorrect username or password.')).toBeVisible();
   expect(screen.getByLabelText('Username')).toHaveProp('value', 'preview');
+});
+
+test('registers with a required code, then signs in through the native session', async () => {
+  jest.mocked(currentUser).mockRejectedValue(signedOut());
+  jest
+    .mocked(request)
+    .mockResolvedValueOnce({ registration_open: true, invite_code_required: true })
+    .mockResolvedValueOnce(user);
+  jest.mocked(signIn).mockResolvedValue(user);
+  await open();
+  const create = () => screen.getByRole('button', { name: 'Create account' });
+  await fireEvent.press(await screen.findByRole('button', { name: 'Create account' }));
+  await fireEvent.changeText(screen.getByLabelText('Display name'), 'Sample Lifter');
+  await fireEvent.changeText(screen.getByLabelText('Username'), 'Sample');
+  await fireEvent.changeText(screen.getByLabelText('Password'), 'sample-password');
+  await fireEvent.press(create());
+  expect(screen.getByText('Enter your invite code.')).toBeVisible();
+  expect(request).toHaveBeenCalledTimes(1);
+  await fireEvent.changeText(screen.getByLabelText('Invite code'), ' sample-code ');
+  await fireEvent.press(create());
+  expect(request).toHaveBeenLastCalledWith(
+    '/api/auth/register',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: 'sample',
+        password: 'sample-password',
+        display_name: 'Sample Lifter',
+        invite_code: 'sample-code',
+      }),
+    },
+    null,
+  );
+  expect(signIn).toHaveBeenCalledWith('sample', 'sample-password');
+  expect(await screen.findByText('Signed in as preview')).toBeVisible();
+});
+
+test('goes back to sign-in if the account was created and token sign-in failed', async () => {
+  jest.mocked(currentUser).mockRejectedValue(signedOut());
+  jest
+    .mocked(request)
+    .mockResolvedValueOnce({ registration_open: true, invite_code_required: false })
+    .mockResolvedValueOnce(user);
+  jest.mocked(signIn).mockRejectedValue(new Error('Connection lost'));
+  await open();
+  await fireEvent.press(await screen.findByRole('button', { name: 'Create account' }));
+  await fireEvent.changeText(screen.getByLabelText('Display name'), 'Sample Lifter');
+  await fireEvent.changeText(screen.getByLabelText('Username'), 'Sample');
+  await fireEvent.changeText(screen.getByLabelText('Password'), 'sample-password');
+  await fireEvent.press(screen.getByRole('button', { name: 'Create account' }));
+  expect(
+    await screen.findByRole('button', {
+      name: 'Account created. Sign in with your password.. Dismiss',
+    }),
+  ).toBeTruthy();
+  expect(screen.getByLabelText('Username')).toHaveProp('value', 'sample');
+  expect(screen.getByLabelText('Password')).toHaveProp('value', '');
+});
+
+test.each([
+  ['relay-mobile://social/profile/friend-1?invite=1', 'friend-1'],
+  ['relay-mobile:///social/profile/friend-2?invite=1', 'friend-2'],
+  ['exp://127.0.0.1:18852/--/social/profile/friend-3?invite=1', 'friend-3'],
+  ['relay-mobile://social/profile/friend-1?invite=0', null],
+  ['relay-mobile://social/profile/%2f?invite=1', null],
+  ['https://gym.example.com/social/profile/friend-1?invite=1', null],
+])('recognises the invite route %s', (url, id) => {
+  expect(friendInviteFromUrl(url)).toBe(id);
 });
 
 test('an unreachable server on opening offers Try again', async () => {
