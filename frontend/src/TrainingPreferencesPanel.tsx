@@ -3,16 +3,17 @@ import { api } from './api';
 import { MuscleGoalEditor } from './MuscleGoalEditor';
 import { useToast } from './Toast';
 import { useTrainingPreferences } from './trainingPreferencesContext';
+import {
+  GOAL_SAVE_DELAY_MS,
+  validWeeklySetGoal as validGoal,
+  validWeeklySetGoals as validGoals,
+  WEEK_START_CHOICES,
+  WEEKLY_GOAL_ERROR as GOAL_ERROR,
+  WEIGHT_UNIT_CHOICES,
+} from './trainingSettings';
 import type { Exercise, TrainingPreferences } from './types';
 
-/** How long a pause in typing a weekly goal waits before saving; leaving the field saves at once. */
-export const GOAL_SAVE_DELAY_MS = 800;
-
-const GOAL_ERROR = 'Enter weekly muscle set goals between 1 and 1,000 whole sets.';
-const validGoal = (goal: number) => Number.isInteger(goal) && goal >= 1 && goal <= 1000;
-const validGoals = (preferences: TrainingPreferences) =>
-  validGoal(preferences.weekly_muscle_set_goal) &&
-  Object.values(preferences.weekly_muscle_set_goals ?? {}).every(validGoal);
+export { GOAL_SAVE_DELAY_MS };
 
 /**
  * Units, week start and weekly set goals. Each change saves by itself, like the switches around
@@ -131,8 +132,11 @@ export function TrainingPreferencesPanel({
                 )
               }
             >
-              <option value="kg">Kilograms</option>
-              <option value="lb">Pounds</option>
+              {WEIGHT_UNIT_CHOICES.map((choice) => (
+                <option key={choice.value} value={choice.value}>
+                  {choice.label}
+                </option>
+              ))}
             </select>
           </label>
           <label>
@@ -149,9 +153,11 @@ export function TrainingPreferencesPanel({
                 )
               }
             >
-              <option value="monday">Monday</option>
-              <option value="sunday">Sunday</option>
-              <option value="saturday">Saturday</option>
+              {WEEK_START_CHOICES.map((choice) => (
+                <option key={choice.value} value={choice.value}>
+                  {choice.label}
+                </option>
+              ))}
             </select>
           </label>
           <label>

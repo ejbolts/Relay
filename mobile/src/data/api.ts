@@ -17,7 +17,7 @@ export class ApiError extends Error {
   constructor(
     readonly status: number,
     message: string,
-    /** The server's error code, such as `sharing_required`. */
+    /** The server's error code, such as `invalid_password` or `sharing_required`, when it sent one. */
     readonly code?: string,
   ) {
     super(message);
