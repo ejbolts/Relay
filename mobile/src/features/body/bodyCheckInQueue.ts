@@ -14,6 +14,7 @@ import {
   withRefusedBodyMeasurementChange,
   withRetriedBodyMeasurementChanges,
   withoutBodyMeasurementChange,
+  type BodyMeasurementChange,
   type BodyMeasurementInput,
   type BodyMeasurementQueue,
 } from '../../../../frontend/src/bodyMeasurementQueue';
@@ -38,6 +39,15 @@ let revision = 0;
 let syncing: Promise<number> | null = null;
 const listeners = new Set<() => void>();
 let status = { pending: 0, error: null as string | null };
+/**
+ * Sends the server acknowledged, by the revision they made, so a list that started earlier can
+ * still show them before the phone has a copy of its own.
+ */
+let acknowledged: {
+  revision: number;
+  change: Pick<BodyMeasurementChange, 'date'>;
+  saved: BodyMeasurement | null;
+}[] = [];
 
 function queueFor(account: string): BodyMeasurementQueue {
   try {
@@ -75,6 +85,7 @@ function signedInOwner(): string {
 
 /** Starts or ends the signed-in account's queue; another account's queue and copy are dropped. */
 export function setBodyCheckInOwner(account: string | null) {
+  if (account !== owner) acknowledged = [];
   owner = account;
   if (account) {
     if (
@@ -127,14 +138,29 @@ export function localBodyMeasurements(
 }
 
 /** The server's check-ins with the waiting changes applied, keeping a copy for offline use. */
-export async function fetchBodyMeasurements(signal?: AbortSignal) {
+export async function fetchBodyMeasurements(signal?: AbortSignal): Promise<BodyMeasurement[]> {
+  // The account and revision the list is for, taken before it is asked for.
+  const account = owner;
   const started = revision;
   const rows = await apiGet<BodyMeasurement[]>(PATH, signal);
-  const account = owner;
+  if (owner !== account) {
+    // Another account signed in meanwhile: this list is not theirs, so ask again for theirs.
+    if (!owner) throw new Error('The signed-in account changed.');
+    return fetchBodyMeasurements(signal);
+  }
   if (!account) return rows;
-  // A list that started before a local save or a send must not replace its acknowledged result.
+  let base = rows;
   if (started === revision) writeJson(ROWS_KEY, { owner: account, rows });
-  const base = started === revision ? rows : (savedRows(account) ?? rows);
+  else {
+    // A list that started before a local save or a send must not replace its acknowledged
+    // result: use the copy, or (before there is one) this list with what was sent since.
+    base =
+      savedRows(account) ??
+      acknowledged
+        .filter((item) => item.revision > started)
+        .reduce((list, item) => acknowledgedBodyMeasurements(list, item.change, item.saved), rows);
+    writeJson(ROWS_KEY, { owner: account, rows: base });
+  }
   return overlayBodyMeasurements(base, queueFor(account).changes);
 }
 
@@ -208,6 +234,7 @@ export function syncBodyCheckIns(retry = false): Promise<number> {
             rows: acknowledgedBodyMeasurements(rows, change, saved),
           });
         persist(withoutBodyMeasurementChange(queueFor(account), change.token));
+        acknowledged = [...acknowledged.slice(-49), { revision, change, saved }];
         sent += 1;
       } catch (reason) {
         const code = reason instanceof ApiError ? reason.status : undefined;

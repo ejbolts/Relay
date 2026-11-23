@@ -72,14 +72,14 @@ export function dateBounds(dates: string[]): { earliest: string; latest: string 
 }
 
 /**
- * One step of a pinch that began on `baseRange`: the span it shows now and the chip it would
- * snap to on release.
+ * One step of a pinch that began showing `baseSpanDays` (captured when the pinch starts, so a
+ * refresh mid-gesture can't move it): the span it shows now and the chip it would snap to.
  */
 export function pinchStep(
-  baseRange: TimeRange,
+  baseSpanDays: number,
   scale: number,
   spans: Record<TimeRange, number>,
 ): { spanDays: number; range: TimeRange } {
-  const spanDays = pinchedSpan(spans[baseRange], scale, spans);
+  const spanDays = pinchedSpan(baseSpanDays, scale, spans);
   return { spanDays, range: nearestTimeRange(spanDays, spans) };
 }

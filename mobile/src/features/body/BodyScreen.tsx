@@ -16,6 +16,7 @@ import { Icon } from '../../ui/Icon';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { BodyHistory } from './BodyHistory';
+import { syncBodyCheckIns } from './bodyCheckInQueue';
 import { CheckInSyncCard, MaintenanceTip } from './BodyNotices';
 import { bodyIcons } from './bodyIcons';
 import {
@@ -104,6 +105,8 @@ export function BodyScreen() {
   async function refresh() {
     setRefreshing(true);
     try {
+      // Pulling down also retries check-ins waiting on the phone, refused or not.
+      await syncBodyCheckIns(true).catch(() => undefined);
       await client.refetchQueries({ queryKey: bodyKeys.all, type: 'active' });
     } finally {
       setRefreshing(false);

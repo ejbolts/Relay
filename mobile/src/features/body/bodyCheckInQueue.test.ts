@@ -98,3 +98,47 @@ test('a deletion is sent for the day, and another account never sees the queue',
   setBodyCheckInOwner('u1');
   expect(bodyCheckInStatus().pending).toBe(0);
 });
+
+/** A list request the test answers later. */
+function deferredList() {
+  let answer!: (rows: unknown) => void;
+  jest.mocked(apiGet).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+  );
+  return (rows: unknown) => answer(rows);
+}
+
+test('a list that started for one account never reaches the next account', async () => {
+  memoryKv.clear();
+  setBodyCheckInOwner('u1');
+  const answerFirst = deferredList();
+  const listing = fetchBodyMeasurements();
+  setBodyCheckInOwner('u2');
+  jest.mocked(apiGet).mockResolvedValueOnce([server('2026-11-05', 70)]);
+  answerFirst([server('2026-11-01', 80)]);
+  // Asked again for the signed-in account, whose rows are the only ones kept.
+  expect((await listing).map((row) => row.weight_kg)).toEqual([70]);
+  expect(localBodyMeasurements('u2')!.map((row) => row.weight_kg)).toEqual([70]);
+  expect(localBodyMeasurements('u1')).toBeNull();
+});
+
+test('a list that started before a send keeps what the server acknowledged', async () => {
+  memoryKv.clear();
+  setBodyCheckInOwner(null);
+  setBodyCheckInOwner('u1');
+  // A fresh phone: no copy yet. The first list is slow; a weigh-in is sent meanwhile.
+  const answerFirst = deferredList();
+  const listing = fetchBodyMeasurements();
+  saveBodyCheckIn(checkIn('2026-11-02', 81));
+  await syncBodyCheckIns();
+  expect(bodyCheckInStatus().pending).toBe(0);
+  answerFirst([server('2026-11-01', 80)]);
+  expect((await listing).map((row) => row.measurement_date)).toEqual(['2026-11-02', '2026-11-01']);
+  expect(localBodyMeasurements()!.map((row) => row.measurement_date)).toEqual([
+    '2026-11-02',
+    '2026-11-01',
+  ]);
+});
