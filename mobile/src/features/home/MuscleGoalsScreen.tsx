@@ -8,7 +8,7 @@ import {
   validMuscleSetGoal,
 } from '../../../../frontend/src/muscleGoalEditing';
 import { useExercises, useTrainingPreferences } from '../../data/queries';
-import { ErrorState, errorMessage, Loading } from '../../ui/components';
+import { ErrorState, errorMessage, Loading, cardSurface } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
 import { haptics } from '../../ui/haptics';
@@ -101,7 +101,7 @@ function GoalList({
           {custom ? `${custom} custom` : 'All use default'}
         </Text>
       </View>
-      <View style={{ backgroundColor: colors.surface, borderRadius: radius.card }}>
+      <View style={cardSurface(colors)}>
         {muscles.map((muscle, index) => {
           const value =
             drafts[muscle] ?? (goals[muscle] === undefined ? '' : String(goals[muscle]));
