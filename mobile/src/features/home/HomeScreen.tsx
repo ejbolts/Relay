@@ -1,9 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { homeDateLine } from '../../../../frontend/src/homeDateLine';
 import { homeSectionLists } from '../../../../frontend/src/homeLayout';
 import { calendarDayTarget } from '../../../../frontend/src/plannedDay';
-import { isoLocalDate, parseLocalDate } from '../../../../frontend/src/trainingSummary';
+import { isoLocalDate } from '../../../../frontend/src/trainingSummary';
 import type { HeatmapDay } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { queryKeys, useDashboard } from '../../data/queries';
@@ -89,7 +90,7 @@ export function HomeScreen() {
     <>
       <HomePage
         title="Home"
-        eyebrow={dateLine(today)}
+        eyebrow={homeDateLine(today)}
         // B4 (guides): the tips pill, the quick tour and the "Still working out?" alert.
         eyebrowAccessory={<HomeGuides />}
         actions={<HomeHeaderActions canEdit={canEdit} />}
@@ -129,10 +130,3 @@ export function HomeScreen() {
 const styles = StyleSheet.create({
   layoutError: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
 });
-
-/** "Tuesday 24 November", as the web (Android's date format adds a comma after the weekday). */
-function dateLine(today: string) {
-  const date = parseLocalDate(today);
-  const part = (options: Intl.DateTimeFormatOptions) => date.toLocaleDateString('en-GB', options);
-  return `${part({ weekday: 'long' })} ${date.getDate()} ${part({ month: 'long' })}`;
-}

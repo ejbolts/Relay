@@ -336,35 +336,70 @@ test('the header has the notifications bell, your profile and Settings', async (
   });
 });
 
-test('the header leads with Edit and the Video logger, as on the web', async () => {
-  await open();
-  const labels = screen
-    .getAllByRole('button')
-    .map((button) => button.props.accessibilityLabel)
-    .filter((label) =>
-      ['Edit Home layout', 'Video logger', 'Profile: Preview', 'Settings'].includes(label),
-    );
-  expect(labels).toEqual(['Edit Home layout', 'Video logger', 'Profile: Preview', 'Settings']);
-  await fireEvent.press(screen.getByRole('button', { name: 'Video logger' }));
-  expect(mockRouter.push).toHaveBeenLastCalledWith('/videos');
+const uploads = (value: boolean | undefined) => {
+  const user = mockUser as { can_upload_videos?: boolean };
+  if (value === undefined) delete user.can_upload_videos;
+  else user.can_upload_videos = value;
+};
+
+test('the header has all five buttons in the web order', async () => {
+  uploads(true);
+  try {
+    await open();
+    await screen.findByRole('button', { name: 'Notifications, 3 unread' });
+    const order = [
+      'Edit Home layout',
+      'Video logger',
+      'Notifications, 3 unread',
+      'Profile: Preview',
+      'Settings',
+    ];
+    const labels = screen
+      .getAllByRole('button')
+      .map((button) => button.props.accessibilityLabel as string)
+      .filter((label) => order.includes(label));
+    expect(labels).toEqual(order);
+    await fireEvent.press(screen.getByRole('button', { name: 'Video logger' }));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/videos');
+  } finally {
+    uploads(undefined);
+  }
 });
 
-test('the Video logger is left out for an account that cannot upload', async () => {
-  (mockUser as { can_upload_videos?: boolean }).can_upload_videos = false;
+test('the Video logger follows the upload permission, allowing it when the field is missing', async () => {
+  uploads(false);
   try {
     await open();
     expect(screen.queryByRole('button', { name: 'Video logger' })).toBeNull();
   } finally {
-    delete (mockUser as { can_upload_videos?: boolean }).can_upload_videos;
+    uploads(undefined);
   }
+  // An older server leaves the field out: uploads stay allowed.
+  await open();
+  expect(screen.getByRole('button', { name: 'Video logger' })).toBeVisible();
 });
 
-test('the date line reads as the web, without a comma after the weekday', async () => {
-  await open();
-  const today = parseLocalDate(localDate());
-  const weekday = today.toLocaleDateString('en-GB', { weekday: 'long' });
-  const month = today.toLocaleDateString('en-GB', { month: 'long' });
-  expect(screen.getByText(`${weekday} ${today.getDate()} ${month}`)).toBeVisible();
+test('the date line reads as the web, even where the combined format adds a comma', async () => {
+  // Android's combined weekday-day-month format gives "Tuesday, 24 November".
+  const original = Date.prototype.toLocaleDateString;
+  const format = jest.spyOn(Date.prototype, 'toLocaleDateString').mockImplementation(function (
+    this: Date,
+    locale,
+    options,
+  ) {
+    const text = original.call(this, locale, options);
+    return options?.weekday && options.day ? text.replace(/^(\w+) /, '$1, ') : text;
+  });
+  try {
+    await open();
+    const today = parseLocalDate(localDate());
+    const weekday = original.call(today, 'en-GB', { weekday: 'long' });
+    const month = original.call(today, 'en-GB', { month: 'long' });
+    expect(screen.getByText(`${weekday} ${today.getDate()} ${month}`)).toBeVisible();
+    expect(screen.queryByText(`${weekday}, ${today.getDate()} ${month}`)).toBeNull();
+  } finally {
+    format.mockRestore();
+  }
 });
 
 test('Edit split opens the split screen', async () => {

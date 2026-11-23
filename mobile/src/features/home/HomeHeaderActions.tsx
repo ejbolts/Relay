@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
+import { canUploadVideos } from '../../../../frontend/src/videoAccess';
 import { useUser } from '../../session/SessionProvider';
 import { AccountHeaderActions } from '../../ui/AccountHeaderActions';
 import { IconButton } from '../../ui/components';
@@ -44,7 +45,7 @@ export function HomeHeaderActions({ canEdit }: { canEdit: boolean }) {
         disabled={!canEdit}
         onPress={() => router.push('/home-layout')}
       />
-      {user.can_upload_videos !== false && (
+      {canUploadVideos(user) && (
         <IconButton
           icon={videoIcons.video}
           accessibilityLabel="Video logger"
