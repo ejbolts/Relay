@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   NO_SHARED_WORKOUT_FILTERS,
   SHARED_FILTER_DATES_ERROR,
@@ -8,6 +8,7 @@ import {
   sharedWorkoutTypeValue,
   withSharedWorkoutType,
 } from '../../../../frontend/src/sharedHistoryFilters';
+import { localDate } from '../../../../frontend/src/utils';
 import type {
   SharedWorkoutFilterOptions,
   SharedWorkoutFilters,
@@ -205,6 +206,10 @@ function DateRow({
   value: string;
   onChange: (date: string) => void;
 }) {
+  // iOS's compact picker always draws a date, so an unset date there would look like today.
+  // Until one is chosen it is a row saying so, which starts the picker at today.
+  if (Platform.OS === 'ios' && !value)
+    return <ChoiceRow label={label} value="Any date" onPress={() => onChange(localDate())} />;
   return (
     <View style={styles.dateRow}>
       <View style={{ flex: 1 }}>

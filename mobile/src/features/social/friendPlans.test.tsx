@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+import { Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   LINKED_WORKOUT_MISSING,
@@ -181,6 +182,7 @@ beforeEach(() => {
   });
 });
 afterEach(() => {
+  jest.restoreAllMocks();
   client.clear();
   if (mockSession.status.user?.id !== 'me') switchAccount('me');
 });
@@ -344,6 +346,7 @@ describe('history filters', () => {
   });
 
   test('a From date after the To date reads nothing and says why', async () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
     await show(<ProfileScreen profileId="alex" />);
     await fireEvent.press(await screen.findByRole('button', { name: 'Filter workouts' }));
     mockPickedDate.value = today;
@@ -356,6 +359,19 @@ describe('history filters', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Clear To date' }));
     await waitFor(() => expect(workoutReads().at(-1)).toMatchObject({ start_date: today }));
     expect(screen.queryByText(SHARED_FILTER_DATES_ERROR)).toBeNull();
+  });
+});
+
+describe('history dates on iOS', () => {
+  test('an unset date says Any date, since the native picker always shows one', async () => {
+    jest.replaceProperty(Platform, 'OS', 'ios');
+    await show(<ProfileScreen profileId="alex" />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Filter workouts' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'From, Any date' }));
+    // Choosing one starts the picker at today, with Clear beside it.
+    await waitFor(() => expect(workoutReads().at(-1)).toMatchObject({ start_date: today }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Clear From date' }));
+    expect(await screen.findByRole('button', { name: 'From, Any date' })).toBeVisible();
   });
 });
 
