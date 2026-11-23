@@ -155,7 +155,7 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
-async function renderBody() {
+async function renderBody(latestWeight = '84.2 kg') {
   client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: Infinity },
@@ -175,7 +175,7 @@ async function renderBody() {
       </QueryClientProvider>
     </SafeAreaProvider>,
   );
-  await screen.findByLabelText('Bodyweight: 84.2 kg');
+  await screen.findByLabelText(`Bodyweight: ${latestWeight}`);
 }
 
 test('Body shows the latest weight, goal and body fat, the trend and the history', async () => {
@@ -339,4 +339,31 @@ test('choosing an outline offers to save it as the account’s sex', async () =>
   expect(
     await screen.findByLabelText('Female, set on your profile', {}, { timeout: 5000 }),
   ).toBeVisible();
+});
+
+test('reaching a loss goal suggests a maintenance range until it is dismissed', async () => {
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
+  await renderBody('79.6 kg');
+  const tip = await screen.findByLabelText('Quick tip');
+  expect(within(tip).getByText('Maintain a range, not a single number')).toBeVisible();
+  await fireEvent.press(within(tip).getByRole('button', { name: 'Set a goal' }));
+  // The goal form opens on Maintain, and the tip doesn't come back.
+  expect(await screen.findByLabelText('Minimum in kg')).toBeVisible();
+  expect(screen.queryByLabelText('Quick tip')).toBeNull();
+});
+
+test('the maintenance tip waits for a reached goal and never shows once a range was used', async () => {
+  await renderBody();
+  expect(await screen.findByText('Log weigh-in')).toBeVisible();
+  expect(screen.queryByLabelText('Quick tip')).toBeNull();
+  screen.unmount();
+  client.clear();
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6)];
+  responses['/api/body-weight-goals'] = [
+    goal,
+    { ...goal, id: 'old', active: false, maintenance_min_kg: 80, maintenance_max_kg: 82 },
+  ];
+  await renderBody('79.6 kg');
+  expect(await screen.findByText('Log weigh-in')).toBeVisible();
+  expect(screen.queryByLabelText('Quick tip')).toBeNull();
 });
