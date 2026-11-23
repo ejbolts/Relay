@@ -3,7 +3,11 @@ import { Animated, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import { haptics } from '../../ui/haptics';
 
-/** As long as the web's set handle asks a finger to rest before a drag starts. */
+/**
+ * How long a finger rests on a set before it picks up, as the web's set handle. A hold on a number
+ * field stays the system's text selection (Android's field claims it first), so a set picks up
+ * from its number, RPE, tick or the space between them.
+ */
 export const SET_DRAG_HOLD_MS = 500;
 
 /** Where each set's block (the set and the rest or "+" row after it) sits in the card. */
@@ -92,7 +96,8 @@ export function useSetDrag(setKeys: string[], onMove: (from: number, to: number)
 
 /**
  * Holding a set row for half a second picks it up; moving then drags it. A quick swipe still
- * reaches the row's swipe-to-delete, and a tap still reaches its fields and buttons.
+ * reaches the row's swipe-to-delete, a tap still reaches its fields and buttons, and moving before
+ * the hold ends scrolls the logger as usual.
  */
 export function SetDragGesture({
   enabled,

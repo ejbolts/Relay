@@ -298,7 +298,14 @@ export const MovementCard = memo(function MovementCard({
           onPress={toggle}
           style={({ pressed }) => [styles.chevronButton, pressed && styles.pressed]}
         >
-          <Icon name={expanded ? 'chevronUp' : 'chevronDown'} size={18} color={colors.secondary} />
+          {/* A folded card's chevron is tinted, as on the web, so it reads as "open me". */}
+          <View style={[styles.chevronFace, !expanded && { backgroundColor: colors.accentSoft }]}>
+            <Icon
+              name={expanded ? 'chevronUp' : 'chevronDown'}
+              size={18}
+              color={expanded ? colors.secondary : colors.accentText}
+            />
+          </View>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -1248,6 +1255,13 @@ const styles = StyleSheet.create({
     width: 36,
     height: 44,
     marginRight: -4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chevronFace: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
