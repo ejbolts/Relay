@@ -621,7 +621,10 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         onAdd={(selected, machineChoices) => {
           const target = picker?.swapping;
           if (target) {
-            if (selected[0]) change((latest) => swapExercise(latest, target, selected[0], context));
+            if (selected[0])
+              change((latest) =>
+                swapExercise(latest, target, selected[0], context, machineChoices),
+              );
           } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}
         onCreateSuperset={(selected, machineChoices) =>

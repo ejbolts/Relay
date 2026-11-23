@@ -101,7 +101,8 @@ export function ExercisePicker({
   const { colors, type, radius } = useTheme();
   const insets = useSafeAreaInsets();
   const client = useQueryClient();
-  const machinesOn = chooseMachines && !swap;
+  // Swapping offers the replacement's machines too, as the web's Switch exercise picker does.
+  const machinesOn = chooseMachines;
   const allMachines = useAllMachinePhotos(visible && machinesOn).data;
   const savedMachines = useMemo(
     () =>
@@ -145,9 +146,18 @@ export function ExercisePicker({
   };
   const toggle = (exercise: Exercise) => {
     haptics.selection();
-    if (swap) {
+    // One tap swaps, unless the replacement has saved machines: then it is picked with its
+    // last-used machine and its machines open, and Swap exercise confirms the choice.
+    if (swap && !savedMachines.get(exercise.id)?.length) {
       onAdd([exercise], {});
       close();
+      return;
+    }
+    if (swap) {
+      const wasPicked = selected[0]?.id === exercise.id;
+      setSelected(wasPicked ? [] : [exercise]);
+      setMachineChoices({});
+      setOpenMachinesId(wasPicked ? null : exercise.id);
       return;
     }
     const wasSelected = selected.some((item) => item.id === exercise.id);
@@ -166,13 +176,14 @@ export function ExercisePicker({
   /** Tapping the chosen machine again returns to the baseline exercise; it picks the exercise too. */
   const chooseMachine = (exercise: Exercise, machineId: string) => {
     const picked = selected.some((item) => item.id === exercise.id);
-    setMachineChoices((current) => ({
-      ...current,
-      [exercise.id]: picked
-        ? toggledMachineChoice(resolvedChoices[exercise.id] ?? null, machineId)
-        : machineId,
-    }));
-    if (!picked) setSelected((current) => [...current, exercise]);
+    const choice = picked
+      ? toggledMachineChoice(resolvedChoices[exercise.id] ?? null, machineId)
+      : machineId;
+    // Swapping picks one replacement, so a machine of another exercise replaces the pick.
+    setMachineChoices((current) =>
+      swap ? { [exercise.id]: choice } : { ...current, [exercise.id]: choice },
+    );
+    if (!picked) setSelected((current) => (swap ? [exercise] : [...current, exercise]));
   };
   const machineAdded = (exercise: Exercise, photo: MachinePhotoUsage) => {
     client.setQueryData<MachinePhotoUsage[]>(loggerKeys.allMachines, (current) => [
@@ -180,9 +191,11 @@ export function ExercisePicker({
       photo,
     ]);
     void client.invalidateQueries({ queryKey: loggerKeys.machines(exercise.id) });
-    setMachineChoices((current) => ({ ...current, [exercise.id]: photo.id }));
+    setMachineChoices((current) =>
+      swap ? { [exercise.id]: photo.id } : { ...current, [exercise.id]: photo.id },
+    );
     if (!selected.some((item) => item.id === exercise.id))
-      setSelected((current) => [...current, exercise]);
+      setSelected((current) => (swap ? [exercise] : [...current, exercise]));
   };
 
   return (
@@ -490,6 +503,21 @@ export function ExercisePicker({
               block
               onPress={() => {
                 onCreateSuperset(selected, resolvedChoices);
+                close();
+              }}
+            />
+          </View>
+        )}
+        {swap && selected[0] && (
+          <View
+            style={[styles.footer, { borderColor: colors.line, paddingBottom: insets.bottom + 10 }]}
+          >
+            <Button
+              label="Swap exercise"
+              icon={{ sf: 'arrow.left.arrow.right', md: 'swap-horiz' }}
+              block
+              onPress={() => {
+                onAdd([selected[0]], resolvedChoices);
                 close();
               }}
             />

@@ -8,6 +8,7 @@ import { exerciseLastDoneDates } from '../../../../frontend/src/exerciseLastDone
 import { liveMuscleSets, type MuscleSetsWeek } from '../../../../frontend/src/liveMuscleSets';
 import { bodyweightOn } from '../../../../frontend/src/relativeStrength';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
+import type { ExerciseMachineChoices } from '../../../../frontend/src/exerciseMachineChoices';
 import type { Exercise } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import {
@@ -216,10 +217,10 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const closeShelf = useCallback(() => setShelf(null), []);
 
   const swap = useCallback(
-    (movementKey: string, replacement: Exercise) => {
+    (movementKey: string, replacement: Exercise, machineChoices?: ExerciseMachineChoices) => {
       const before = getState();
       if (!before) return;
-      change((current) => swapExercise(current, movementKey, replacement, context));
+      change((current) => swapExercise(current, movementKey, replacement, context, machineChoices));
       showToast(`Swapped to ${replacement.name}`, {
         label: 'Undo',
         run: () => change((current) => ({ ...current, movements: before.movements })),
@@ -755,7 +756,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         onAdd={(selected, machineChoices) => {
           const target = picker?.swapping;
           if (target) {
-            if (selected[0]) swap(target, selected[0]);
+            if (selected[0]) swap(target, selected[0], machineChoices);
           } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}
         onCreateSuperset={(selected, machineChoices) =>
