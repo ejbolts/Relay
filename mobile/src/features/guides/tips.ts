@@ -1,4 +1,5 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
+import { AppState } from 'react-native';
 import {
   parseTips,
   tipStorageKey,
@@ -99,6 +100,27 @@ export function useTips() {
   const account = useUser().id;
   const state = useSyncExternalStore(subscribe, () => read(account));
   return { state, ...tipsFor(account) };
+}
+
+/**
+ * Brings back guided tips whose reminder is due (7, 14 and 28 days after being put away) while the
+ * app stays in memory: on mount and whenever it returns to the foreground, as the web does when
+ * its tab becomes visible. Subscribers hear only of an actual change.
+ */
+export function applyDueTipReminders(account: string, now = Date.now()) {
+  const state = read(account);
+  const next = withTipReminders(state, now);
+  if (next !== state) write(account, next);
+}
+
+export function useTipReminders(account: string) {
+  useEffect(() => {
+    applyDueTipReminders(account);
+    const subscription = AppState.addEventListener('change', (state) => {
+      if (state === 'active') applyDueTipReminders(account);
+    });
+    return () => subscription.remove();
+  }, [account]);
 }
 
 /** For tests: forget the cached tips. */

@@ -67,10 +67,11 @@ export function HomeTips({
     latestWeightKg,
   );
   const blockCount = blocks.loading || blocks.error ? null : blocks.config.blocks.length;
+  // Read on every render, so Home left open across midnight sees the new day.
+  const today = localDate();
   const facts = useMemo(
-    () =>
-      homeTipFacts({ workouts, createdAt, today: localDate(), blockCount, hasSplit, goalReached }),
-    [workouts, createdAt, blockCount, hasSplit, goalReached],
+    () => homeTipFacts({ workouts, createdAt, today, blockCount, hasSplit, goalReached }),
+    [workouts, createdAt, today, blockCount, hasSplit, goalReached],
   );
   const { machineExerciseId } = facts;
   const eligible = useMemo(() => homeTipList(facts, tips.state), [facts, tips.state]);

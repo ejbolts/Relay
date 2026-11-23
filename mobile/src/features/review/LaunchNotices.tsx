@@ -25,7 +25,7 @@ export function LaunchNotices() {
   const review = useWeeklyReview();
   const reviewDue = release.checked && review.ready && review.available && !review.shownThisWeek;
   const { currentStart } = review;
-  const tour = useAppTour();
+  const tour = useAppTour(user.id);
 
   useEffect(() => {
     if (!focused || launchPromptOpened(user.id) !== null) return;

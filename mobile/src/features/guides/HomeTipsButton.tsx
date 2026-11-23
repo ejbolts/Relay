@@ -50,17 +50,19 @@ export function HomeTipsButton() {
   useEffect(() => {
     if (hasSplit) learn('split');
   }, [hasSplit, learn]);
+  // Read on every render, so Home left open across midnight sees the new day.
+  const today = localDate();
   const facts = useMemo(
     () =>
       homeTipFacts({
         workouts: workouts ?? [],
         createdAt: user.created_at,
-        today: localDate(),
+        today,
         blockCount,
         hasSplit,
         goalReached,
       }),
-    [workouts, user.created_at, blockCount, hasSplit, goalReached],
+    [workouts, user.created_at, today, blockCount, hasSplit, goalReached],
   );
   const eligible = homeTipList(facts, tips.state);
   const read = tips.state.homeRead ?? [];
