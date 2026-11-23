@@ -1,3 +1,4 @@
+import Constants, { ExecutionEnvironment } from 'expo-constants';
 import { File, Paths, UploadType, type UploadTask } from 'expo-file-system';
 import type { Clip } from '../../../../frontend/src/types';
 import { acceptedVideoName } from '../../../../frontend/src/videoSessions';
@@ -8,10 +9,9 @@ import { uploadFile, UploadStopped } from '../../data/uploadFile';
 
 const UNREACHABLE = 'Could not reach Relay. Check your connection, then try again.';
 const FAILED = 'Upload failed.';
+const UNREADABLE = 'Relay couldn’t read this video on your phone. Pick it again, then try again.';
 // A phone video can be hundreds of megabytes on a slow connection.
 const FALLBACK_TIMEOUT_MS = 30 * 60_000;
-// How often a stopped transfer is cancelled again until it settles (see `stop`).
-const CANCEL_AGAIN_MS = 250;
 
 /** One clip on its way to the server, which can be stopped. */
 export interface ClipTransfer {
@@ -28,6 +28,9 @@ export interface ClipFile {
 const fileNameOf = (uri: string) =>
   decodeURIComponent(uri.split(/[/?#]/).filter(Boolean).pop() ?? '');
 const extensionOf = (name: string) => name.split('.').pop()?.toLowerCase() ?? 'mp4';
+const refusedRead = (error: unknown) => /permission/i.test(String(error));
+/** Expo Go, whose file API may read only the project's own folders. */
+const inExpoGo = () => Constants.executionEnvironment === ExecutionEnvironment.StoreClient;
 
 /**
  * Uploads one clip straight from a file: the phone streams it from disk rather than building the
@@ -37,10 +40,14 @@ const extensionOf = (name: string) => name.split('.').pop()?.toLowerCase() ?? 'm
  *
  * - The server checks the uploaded file's extension, so a file whose own name has none (an
  *   Android `content://` video, say) is first copied into the cache under a name that does.
- * - Expo Go's file API reads only the project's own folders. Where it refuses the file, the clip
- *   goes through `uploadFile` (React Native's multipart upload) instead; that path still holds
- *   the body in memory on iOS, but only Expo Go takes it.
+ * - Only in Expo Go, where the file API may refuse to read a picked file, does the clip go
+ *   through `uploadFile` (React Native's multipart upload) instead. That path holds the body in
+ *   memory on iOS, so an installed app reports a file it can't read or copy as an error.
  * - The native transfer runs in a foreground session, so it ends with the app.
+ * - Stopping cancels the native transfer once. Expo's task can lose a cancel that arrives
+ *   before its native start, so a stopped transfer that still completes is reported as stopped
+ *   (its result is ignored), and the server refuses a clip that finishes after its session was
+ *   cancelled or deleted.
  */
 export function startClipUpload(
   path: string,
@@ -49,9 +56,7 @@ export function startClipUpload(
   onProgress: (percent: number) => void,
 ): ClipTransfer {
   let stopped = false;
-  let settled = false;
   let task: UploadTask | null = null;
-  let cancelAgain: ReturnType<typeof setInterval> | undefined;
   const controller = new AbortController();
 
   const fallback = () => {
@@ -74,9 +79,10 @@ export function startClipUpload(
         copy = new File(Paths.cache, `relay-clip-${newId()}.${extensionOf(clip.name)}`);
         await source.copy(copy);
         source = copy;
-      } catch {
+      } catch (caught) {
         copy = null;
-        return fallback();
+        if (inExpoGo() && refusedRead(caught)) return fallback();
+        throw new Error(UNREADABLE);
       }
     }
     try {
@@ -96,13 +102,7 @@ export function startClipUpload(
           },
           sessionType: 'foreground',
           onProgress: ({ bytesSent, totalBytes }) => {
-            // A cancel that reached the task before it started is lost natively; any sign of
-            // life from a stopped transfer cancels it again.
-            if (stopped) {
-              current.cancel();
-              return;
-            }
-            if (totalBytes > 0)
+            if (!stopped && totalBytes > 0)
               onProgress(Math.min(100, Math.round((bytesSent / totalBytes) * 100)));
           },
         });
@@ -111,9 +111,13 @@ export function startClipUpload(
         result = await current.uploadAsync();
       } catch (caught) {
         if (stopped || caught instanceof UploadStopped) throw new UploadStopped();
-        if (/permission/i.test(String(caught))) return await fallback();
+        if (refusedRead(caught)) {
+          if (inExpoGo()) return await fallback();
+          throw new Error(UNREADABLE);
+        }
         throw new Error(UNREACHABLE);
       }
+      // A stopped transfer that completed anyway (its cancel was lost) changes nothing here.
       if (stopped) throw new UploadStopped();
       let body: { error?: { message?: string; code?: string } } | null = null;
       try {
@@ -132,26 +136,13 @@ export function startClipUpload(
     }
   }
 
-  const done = send().finally(() => {
-    settled = true;
-    clearInterval(cancelAgain);
-  });
-
   return {
-    done,
+    done: send(),
     stop() {
       if (stopped) return;
       stopped = true;
       controller.abort();
       task?.cancel();
-      // The native task can start after a cancel and reset its cancelled flag (on both platforms),
-      // so the cancel is repeated until the transfer settles. The server-side session cancel that
-      // follows a stop refuses any clip that still arrives.
-      if (!settled)
-        cancelAgain = setInterval(() => {
-          if (settled) clearInterval(cancelAgain);
-          else task?.cancel();
-        }, CANCEL_AGAIN_MS);
     },
   };
 }

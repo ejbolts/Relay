@@ -10,8 +10,16 @@ jest.mock('expo-constants', () => ({
 }));
 
 const mockKeychain = new Map<string, string>();
+// When set, the next read takes its snapshot at once but delivers it only once the gate opens.
+let mockReadGate: Promise<void> | null = null;
 jest.mock('expo-secure-store', () => ({
-  getItemAsync: async (key: string) => mockKeychain.get(key) ?? null,
+  getItemAsync: async (key: string) => {
+    const value = mockKeychain.get(key) ?? null;
+    const gate = mockReadGate;
+    mockReadGate = null;
+    if (gate) await gate;
+    return value;
+  },
   setItemAsync: async (key: string, value: string) => void mockKeychain.set(key, value),
   deleteItemAsync: async (key: string) => void mockKeychain.delete(key),
 }));
@@ -280,4 +288,43 @@ test("keeps the next account's session when an old request is refused after it s
   answer(reply(401, { error: { message: 'Sign in to continue.' } }));
   await expect(late).rejects.toMatchObject({ status: 401 });
   expect(JSON.parse(mockKeychain.get('relay.session')!).token).toBe('next-token');
+});
+
+test("a delayed refusal of the old token can't delete the next account's after sign-out and sign-in", async () => {
+  const api = signedIn();
+  let answer!: (response: Response) => void;
+  fetchMock.mockImplementation(async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path === '/api/auth/me') return new Promise<Response>((resolve) => (answer = resolve));
+    if (path === '/api/auth/logout-session') return reply(204);
+    if (path === '/api/auth/login') return reply(200, { id: 'b', session_token: 'next-token' });
+    return reply(404, {});
+  });
+  const late = api.apiGet('/api/auth/me');
+  await settle();
+  // The refusal's cleanup reads the saved token (still the old one), but its answer is delayed.
+  let open!: () => void;
+  mockReadGate = new Promise<void>((resolve) => (open = resolve));
+  answer(reply(401, { error: { message: 'Sign in to continue.' } }));
+  await settle();
+  // Meanwhile the old account signs out and the next one signs in.
+  const signedOut = api.signOut();
+  const nextIn = api.signIn('casey', 'pw');
+  await settle();
+  open();
+  await expect(late).rejects.toMatchObject({ status: 401 });
+  await signedOut;
+  await nextIn;
+  expect(JSON.parse(mockKeychain.get('relay.session')!).token).toBe('next-token');
+  fetchMock.mockImplementation(async (url: string) => {
+    const body = answers[new URL(url).pathname];
+    return { ok: true, status: 200, json: async () => body } as Response;
+  });
+});
+
+test('a refusal of the token still saved clears it', async () => {
+  const api = signedIn();
+  fetchMock.mockResolvedValueOnce(reply(401, { error: { message: 'Sign in to continue.' } }));
+  await expect(api.apiGet('/api/dashboard')).rejects.toMatchObject({ status: 401 });
+  expect(mockKeychain.has('relay.session')).toBe(false);
 });
