@@ -46,6 +46,7 @@ import {
   completeExercise,
   deleteSet,
   editInput,
+  mergeMachines,
   moveMovement,
   moveSet,
   removeMovement,
@@ -587,6 +588,9 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
           const key = machinesFor;
           if (key) change((latest) => setMachineSettings(latest, key, settings));
         }}
+        onMerged={(mergedId, awayIds) =>
+          change((latest) => mergeMachines(latest, mergedId, awayIds))
+        }
         onClose={() => setMachinesFor(null)}
       />
       <ExercisePicker
