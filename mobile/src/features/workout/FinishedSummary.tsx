@@ -4,7 +4,7 @@ import { completionRecordDetail } from '../../../../frontend/src/recordLabels';
 import { formatVolume } from '../../../../frontend/src/trainingSummary';
 import { formatMinutesDuration } from '../../../../frontend/src/utils';
 import type { WeightUnit } from '../../../../frontend/src/weightUnits';
-import { Button } from '../../ui/components';
+import { Button, cardSurface } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { ShareReminderAction } from '../guides/ShareReminderAction';
@@ -107,9 +107,15 @@ export function FinishedSummary({
           {summary.name}
         </Text>
       </View>
-      <View style={[styles.stats, { backgroundColor: colors.surface, borderRadius: radius.card }]}>
-        {stats.map((stat) => (
-          <View key={stat.label} style={styles.stat}>
+      <View style={[cardSurface(colors), styles.stats]}>
+        {stats.map((stat, index) => (
+          <View
+            key={stat.label}
+            style={[
+              styles.stat,
+              index > 0 && { borderLeftWidth: StyleSheet.hairlineWidth, borderColor: colors.line },
+            ]}
+          >
             <Text style={[type.title, type.number, { color: colors.text }]}>{stat.value}</Text>
             <Text style={[type.footnote, { color: colors.muted }]}>{stat.label}</Text>
           </View>
@@ -135,7 +141,14 @@ export function FinishedSummary({
       )}
       {!!records?.length && (
         <View
-          style={[styles.records, { backgroundColor: colors.goldSoft, borderRadius: radius.card }]}
+          style={[
+            styles.records,
+            {
+              backgroundColor: colors.goldSoft,
+              borderColor: `${colors.gold}66`,
+              borderRadius: radius.card,
+            },
+          ]}
         >
           <View style={styles.recordsTitle}>
             <Icon name="trophy" size={16} color={colors.gold} />
@@ -156,14 +169,14 @@ export function FinishedSummary({
         </View>
       )}
       <ShareReminderAction workoutId={savedId} records={records?.length ?? 0} />
-      <Button label="Done" onPress={onDone} />
+      <Button label="Done" block size="large" onPress={onDone} />
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   hero: { alignItems: 'center', gap: 6 },
-  stats: { flexDirection: 'row', paddingVertical: 16 },
+  stats: { flexDirection: 'row', paddingVertical: 14 },
   stat: { flex: 1, alignItems: 'center', gap: 2 },
   status: {
     flexDirection: 'row',
@@ -171,6 +184,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
-  records: { padding: 16, gap: 10 },
+  records: { padding: 16, gap: 10, borderWidth: 1 },
   recordsTitle: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });

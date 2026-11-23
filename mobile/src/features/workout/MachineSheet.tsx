@@ -276,6 +276,7 @@ function MachineChoices({
           label="Merge duplicates"
           icon={{ sf: 'square.on.square', md: 'merge-type' }}
           variant="link"
+          style={styles.leading}
           onPress={() => setMerging(true)}
         />
       )}
@@ -411,7 +412,12 @@ function SettingsEditor({
   const field = [
     styles.field,
     type.body,
-    { backgroundColor: colors.surface2, borderRadius: radius.md, color: colors.text },
+    {
+      backgroundColor: colors.surface2,
+      borderColor: colors.lineStrong,
+      borderRadius: radius.md,
+      color: colors.text,
+    },
   ];
   const changeRow = (index: number, values: Partial<MachineSetting>) => {
     setError(null);
@@ -471,7 +477,7 @@ function SettingsEditor({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Remove setting ${index + 1}`}
-            hitSlop={8}
+            style={styles.remove}
             onPress={() =>
               setRows((current) =>
                 current.length > 1
@@ -494,6 +500,7 @@ function SettingsEditor({
           label="Add setting"
           icon="plus"
           variant="link"
+          style={styles.leading}
           onPress={() => setRows((current) => [...current, { name: '', value: '' }])}
         />
         <Button
@@ -526,7 +533,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  field: { paddingHorizontal: 12, paddingVertical: 8, minHeight: 42 },
+  field: { paddingHorizontal: 12, paddingVertical: 8, minHeight: 44, borderWidth: 1 },
+  remove: {
+    width: 44,
+    height: 44,
+    marginHorizontal: -6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leading: { alignSelf: 'flex-start', paddingHorizontal: 0 },
   settingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   settingActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });

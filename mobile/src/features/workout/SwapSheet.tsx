@@ -15,6 +15,7 @@ import { localDate } from '../../../../frontend/src/utils';
 import { Button } from '../../ui/components';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
+import { ExerciseIcon } from '../social/ExerciseIcon';
 
 const ALL = 'All';
 
@@ -128,6 +129,7 @@ function SwapChoices({
                   styles.chip,
                   {
                     backgroundColor: on ? colors.accent : colors.surface2,
+                    borderColor: on ? colors.accent : colors.lineStrong,
                     borderRadius: radius.pill,
                   },
                 ]}
@@ -164,48 +166,58 @@ function SwapChoices({
                     onPress={() => onChoose(alternative)}
                     style={({ pressed }) => [
                       styles.option,
-                      { backgroundColor: colors.surface2, borderRadius: radius.md },
+                      {
+                        backgroundColor: colors.surface2,
+                        borderColor: colors.line,
+                        borderRadius: radius.md,
+                      },
                       pressed && { opacity: 0.7 },
                     ]}
                   >
-                    <View style={styles.titleRow}>
-                      <Text style={[type.headline, { color: colors.text, flexShrink: 1 }]}>
-                        {alternative.name}
+                    <ExerciseIcon exercise={alternative} size={40} />
+                    <View style={styles.optionCopy}>
+                      <View style={styles.titleRow}>
+                        <Text style={[type.headline, { color: colors.text, flexShrink: 1 }]}>
+                          {alternative.name}
+                        </Text>
+                        {match !== null && (
+                          <Text
+                            style={[
+                              type.caption,
+                              type.number,
+                              styles.match,
+                              {
+                                color:
+                                  match >= SAME_MUSCLES_MATCH ? colors.good : colors.accentText,
+                                borderRadius: radius.pill,
+                                backgroundColor: colors.surface,
+                              },
+                            ]}
+                          >
+                            {match}%
+                          </Text>
+                        )}
+                      </View>
+                      <Text style={[type.footnote, { color: colors.muted }]}>
+                        {[kit, done ? `Last done ${formatLastDone(done, today)}` : null]
+                          .filter(Boolean)
+                          .join(' · ')}
                       </Text>
-                      {match !== null && (
-                        <Text
-                          style={[
-                            type.caption,
-                            type.number,
-                            styles.match,
-                            {
-                              color: match >= SAME_MUSCLES_MATCH ? colors.good : colors.accentText,
-                              borderRadius: radius.pill,
-                              backgroundColor: colors.surface,
-                            },
-                          ]}
-                        >
-                          {match}%
+                      {(trained.length > 0 || missing.length > 0) && (
+                        <Text style={[type.caption, { color: colors.secondary }]}>
+                          {trained
+                            .map(({ muscle, sets }) => (sets < 1 ? `${muscle} ½` : muscle))
+                            .join(' · ')}
+                          {missing.length > 0 && (
+                            <Text
+                              style={{ color: colors.muted, textDecorationLine: 'line-through' }}
+                            >
+                              {`${trained.length ? ' · ' : ''}${missing.join(' · ')}`}
+                            </Text>
+                          )}
                         </Text>
                       )}
                     </View>
-                    <Text style={[type.footnote, { color: colors.muted }]}>
-                      {[kit, done ? `Last done ${formatLastDone(done, today)}` : null]
-                        .filter(Boolean)
-                        .join(' · ')}
-                    </Text>
-                    {(trained.length > 0 || missing.length > 0) && (
-                      <Text style={[type.caption, { color: colors.secondary }]}>
-                        {trained
-                          .map(({ muscle, sets }) => (sets < 1 ? `${muscle} ½` : muscle))
-                          .join(' · ')}
-                        {missing.length > 0 && (
-                          <Text style={{ color: colors.muted, textDecorationLine: 'line-through' }}>
-                            {`${trained.length ? ' · ' : ''}${missing.join(' · ')}`}
-                          </Text>
-                        )}
-                      </Text>
-                    )}
                   </Pressable>
                 );
               })}
@@ -229,8 +241,9 @@ function SwapChoices({
 
 const styles = StyleSheet.create({
   chips: { gap: 8 },
-  chip: { paddingHorizontal: 14, paddingVertical: 8 },
-  option: { padding: 12, gap: 3 },
+  chip: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 14, borderWidth: 1 },
+  option: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 12, borderWidth: 1 },
+  optionCopy: { flex: 1, gap: 3 },
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   match: { paddingHorizontal: 8, paddingVertical: 2, fontWeight: '700', overflow: 'hidden' },
 });
