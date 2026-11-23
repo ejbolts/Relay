@@ -10,6 +10,11 @@ import {
   trailingWeekAverageKg,
   type BodyTrendRange,
 } from '../../../../frontend/src/bodyTrend';
+import {
+  chartDateTicks,
+  chartLabelWidth,
+  goalLabelPlacement,
+} from '../../../../frontend/src/chartLayout';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from '../../../../frontend/src/dateRanges';
 import { niceTicks, parseLocalDate, shortDate } from '../../../../frontend/src/trainingSummary';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
@@ -42,24 +47,7 @@ interface Goal {
 const PAD = { top: 12, right: 12, bottom: 26, left: 40 };
 const HEIGHT = 200;
 const DAY_MS = 86_400_000;
-/** About the day readout's height, to keep it off the point it describes. */
-const TOOLTIP_HEIGHT = 84;
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-
-/**
- * Baseline for a goal line's end label, matching web's goalLabelY: a falling line keeps its
- * label under the end unless that would sit on the date ticks, in which case it goes above.
- */
-function goalLabelY(
-  line: { x1: number; y1: number; x2: number; y2: number; label: string },
-  plotBottom: number,
-): number {
-  if (line.y2 <= line.y1) return line.y2 - 6;
-  const below = line.y2 + 14;
-  if (below <= plotBottom - 2) return below;
-  const reach = Math.min(1, (line.label.length * 6 + 4) / Math.max(line.x2 - line.x1, 1));
-  return line.y2 - (line.y2 - line.y1) * reach - 5;
-}
+const READOUT_WIDTH = 176;
 
 /** Where the line, dots, goal and gridlines sit in a chart `width` wide. */
 function chartModel(
@@ -88,43 +76,20 @@ function chartModel(
     times.length === 1 ? PAD.left + plotWidth / 2 : PAD.left + ((ms - tMin) / span) * plotWidth;
   const x = (date: string) => xTime(time(date));
   const y = (value: number) => PAD.top + (1 - (value - yMin) / (yMax - yMin || 1)) * plotHeight;
-  const spanDays = span / DAY_MS;
-
-  let dates: { x: number; label: string; anchor: 'start' | 'middle' | 'end' }[] = [];
-  if (spanDays > 45) {
-    const start = new Date(tMin);
-    const months: { x: number; label: string; anchor: 'start' | 'middle' | 'end' }[] = [];
-    for (
-      let month = new Date(start.getFullYear(), start.getMonth() + 1, 1, 12);
-      month.getTime() <= tMax;
-      month = new Date(month.getFullYear(), month.getMonth() + 1, 1, 12)
-    ) {
-      months.push({
-        x: xTime(month.getTime()),
-        label:
-          spanDays > 400
-            ? `${MONTHS[month.getMonth()]} ’${String(month.getFullYear()).slice(2)}`
-            : MONTHS[month.getMonth()],
-        anchor: 'middle',
-      });
-    }
-    const every = Math.ceil(months.length / Math.max(Math.floor(plotWidth / 56), 1));
-    dates = months.filter((_, index) => index % every === 0);
-  } else {
-    const count = Math.min(4, Math.max(2, Math.floor(plotWidth / 80)));
-    dates =
-      points.length === 1
-        ? [{ x: x(points[0].date), label: shortDate(points[0].date), anchor: 'middle' }]
-        : Array.from({ length: count }, (_, index) => {
-            const ms = tMin + (span * index) / Math.max(count - 1, 1);
-            const date = new Date(ms);
-            return {
-              x: PAD.left + (plotWidth * index) / Math.max(count - 1, 1),
-              label: `${date.getDate()} ${MONTHS[date.getMonth()]}`,
-              anchor: index === 0 ? 'start' : index === count - 1 ? 'end' : 'middle',
-            };
-          });
-  }
+  // Shared with the web chart. A single short reading names its day; edge labels stay inside.
+  const dateTicks = chartDateTicks(tMin, tMax, plotWidth, xTime);
+  const dates = (
+    points.length === 1 && span / DAY_MS <= 45
+      ? [{ x: x(points[0].date), label: shortDate(points[0].date) }]
+      : dateTicks
+  ).map((tick) => ({
+    ...tick,
+    anchor: (tick.x - chartLabelWidth(tick.label) / 2 < 2
+      ? 'start'
+      : tick.x + chartLabelWidth(tick.label) / 2 > width - 2
+        ? 'end'
+        : 'middle') as 'start' | 'middle' | 'end',
+  }));
 
   return {
     x,
@@ -149,7 +114,7 @@ export function BodyTrendChart({
   measurements: BodyMeasurement[];
   goals: BodyWeightGoal[];
 }) {
-  const { colors, scheme } = useTheme();
+  const { colors } = useTheme();
   const unit = useWeightUnit();
   const [range, setRange] = useState<BodyTrendRange>('3m');
   const [series, setSeries] = useState<'weight' | 'fat'>('weight');
@@ -171,7 +136,8 @@ export function BodyTrendChart({
   );
   const title = showFat ? 'Body fat trend' : 'Bodyweight trend';
   const active = selected !== null && selected < points.length ? selected : null;
-  const dotColor = scheme === 'light' ? colors.axis : colors.muted;
+  // Muted at 75 % keeps the daily dots about 3:1 on the card in light and dark.
+  const dotColor = colors.muted;
 
   return (
     <Card accessibilityLabel="Trend">
@@ -181,6 +147,7 @@ export function BodyTrendChart({
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.rangeScroll}
             contentContainerStyle={styles.rangeTabs}
           >
             {TIME_RANGE_OPTIONS.map((option) => (
@@ -277,30 +244,25 @@ function RangeTab({
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ selected }}
-      hitSlop={6}
       onPress={() => {
         haptics.selection();
         onPress();
       }}
-      style={({ pressed }) => [
-        styles.rangeTab,
-        selected && {
-          backgroundColor: colors.surface3,
-        },
-        pressed && !selected && { opacity: 0.65 },
-      ]}
+      style={({ pressed }) => [styles.rangeTab, pressed && !selected && { opacity: 0.65 }]}
     >
-      <Text
-        style={[
-          type.footnote,
-          {
-            color: selected ? colors.text : colors.muted,
-            fontWeight: '600',
-          },
-        ]}
-      >
-        {label}
-      </Text>
+      <View style={[styles.rangeFace, selected && { backgroundColor: colors.surface3 }]}>
+        <Text
+          style={[
+            type.footnote,
+            {
+              color: selected ? colors.text : colors.muted,
+              fontWeight: '600',
+            },
+          ]}
+        >
+          {label}
+        </Text>
+      </View>
     </Pressable>
   );
 }
@@ -330,10 +292,12 @@ function TrendPlot({
   onSelect: (index: number | null) => void;
   pinch: { onPinch: (scale: number) => void; onPinchEnd: () => void };
 }) {
-  const { colors, scheme, type, radius } = useTheme();
+  const { colors, type, radius } = useTheme();
   const [width, setWidth] = useState(0);
+  const [tipSize, setTipSize] = useState({ width: READOUT_WIDTH, height: 84 });
   const model = chartModel(points, dots, goal, width, height);
-  const dotColor = scheme === 'light' ? colors.axis : colors.muted;
+  // Muted at 75 % keeps the daily dots about 3:1 on the card in light and dark.
+  const dotColor = colors.muted;
   const select = (x: number) => {
     if (!model) return;
     onSelect(
@@ -355,9 +319,7 @@ function TrendPlot({
 
   const activePoint = active !== null ? points[active] : null;
   const activeCoord = active !== null && model ? model.coords[active] : null;
-  const tooltipLeft = activeCoord
-    ? Math.min(Math.max(activeCoord.x - 80, 4), Math.max(width - 164, 4))
-    : 0;
+  const tip = readoutPosition(activeCoord, tipSize, width, height);
   const goalCoords =
     goal && model
       ? {
@@ -369,25 +331,21 @@ function TrendPlot({
         }
       : null;
 
+  const label = showFat ? 'Body fat percentage' : 'Bodyweight, 7-day average over daily weigh-ins';
+  const shown = active ?? (points.length ? points.length - 1 : null);
+  const reading = (index: number) => {
+    const point = points[index];
+    const value = showFat ? `${point.value.toFixed(1)}%` : `${point.value.toFixed(1)} ${unit}`;
+    return showFat
+      ? `${shortDate(point.date)}, ${value}`
+      : `${shortDate(point.date)}, ${value} 7-day average${point.detail ? `, ${point.detail}` : ''}`;
+  };
+
   return (
     <GestureDetector gesture={gesture}>
-      <View
-        accessibilityRole="image"
-        accessibilityLabel={
-          showFat ? 'Body fat percentage' : 'Bodyweight, 7-day average over daily weigh-ins'
-        }
-        style={{ height }}
-        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-        onStartShouldSetResponder={() => true}
-        onMoveShouldSetResponder={() => true}
-        onResponderTerminationRequest={() => true}
-        // A scroll that started on the chart doesn't leave a day selected.
-        onResponderTerminate={() => onSelect(null)}
-        onResponderGrant={(event) => select(event.nativeEvent.locationX)}
-        onResponderMove={(event) => select(event.nativeEvent.locationX)}
-      >
+      <View style={{ height }}>
         {model && (
-          <Svg width={width} height={height}>
+          <Svg width={width} height={height} pointerEvents="none">
             {model.gridlines.map((grid) => (
               <Line
                 key={grid.value}
@@ -468,21 +426,31 @@ function TrendPlot({
                     strokeDasharray="0.1 5.5"
                   />
                 )}
-                <SvgText
-                  accessibilityLabel={goal.label}
-                  x={Math.min(goalCoords.x2, width - PAD.right) - 4}
-                  y={
-                    goal.maxValue != null
-                      ? model.y(goal.maxValue) - 6
-                      : goalLabelY(goalCoords, height - PAD.bottom)
-                  }
-                  fontSize={10.5}
-                  fontWeight="600"
-                  fill={colors.secondary}
-                  textAnchor="end"
-                >
-                  {goal.label}
-                </SvgText>
+                {(() => {
+                  const placed = goalLabelPlacement(
+                    goalCoords,
+                    {
+                      width,
+                      height,
+                      plotRight: width - PAD.right,
+                      plotBottom: height - PAD.bottom,
+                    },
+                    goal.maxValue != null ? model.y(goal.maxValue) : null,
+                  );
+                  return (
+                    <SvgText
+                      accessibilityLabel={goal.label}
+                      x={placed.x}
+                      y={placed.y}
+                      fontSize={10.5}
+                      fontWeight="600"
+                      fill={colors.secondary}
+                      textAnchor={placed.anchor}
+                    >
+                      {goal.label}
+                    </SvgText>
+                  );
+                })()}
               </>
             )}
             {model.dots.map((dot, index) => (
@@ -537,16 +505,50 @@ function TrendPlot({
             )}
           </Svg>
         )}
+        {/*
+          The touch layer has no children, so a touch's locationX is always in plot coordinates,
+          even under the readout (whose text lets touches through). For screen readers it is the
+          chart: its value is the latest or chosen reading, and swiping up or down moves a day.
+        */}
+        <View
+          style={StyleSheet.absoluteFill}
+          accessible
+          accessibilityRole="adjustable"
+          accessibilityLabel={label}
+          accessibilityValue={shown !== null ? { text: reading(shown) } : undefined}
+          accessibilityActions={[
+            { name: 'increment', label: 'Next reading' },
+            { name: 'decrement', label: 'Previous reading' },
+          ]}
+          onAccessibilityAction={(event) => {
+            if (shown === null) return;
+            const next =
+              event.nativeEvent.actionName === 'increment'
+                ? Math.min(shown + 1, points.length - 1)
+                : Math.max(shown - 1, 0);
+            if (next !== active) onSelect(next);
+          }}
+          onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+          onStartShouldSetResponder={() => true}
+          onMoveShouldSetResponder={() => true}
+          onResponderTerminationRequest={() => true}
+          // A scroll that started on the chart doesn't leave a day selected.
+          onResponderTerminate={() => onSelect(null)}
+          onResponderGrant={(event) => select(event.nativeEvent.locationX)}
+          onResponderMove={(event) => select(event.nativeEvent.locationX)}
+        />
         {activePoint && activeCoord && (
           <View
+            pointerEvents="box-none"
+            onLayout={(event) => {
+              const { width: w, height: h } = event.nativeEvent.layout;
+              if (w !== tipSize.width || h !== tipSize.height) setTipSize({ width: w, height: h });
+            }}
             style={[
               styles.tooltip,
               {
-                left: tooltipLeft,
-                top:
-                  activeCoord.y >= TOOLTIP_HEIGHT + 12
-                    ? activeCoord.y - TOOLTIP_HEIGHT - 12
-                    : activeCoord.y + 12,
+                left: tip.left,
+                top: tip.top,
                 backgroundColor: colors.surface,
                 borderColor: colors.lineStrong,
                 borderRadius: radius.sm,
@@ -554,38 +556,65 @@ function TrendPlot({
               },
             ]}
           >
-            <View style={styles.tooltipHeader}>
-              <Text style={[type.caption, { color: colors.secondary, flex: 1 }]} numberOfLines={1}>
+            <View
+              pointerEvents="none"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={styles.tooltipBody}
+            >
+              <Text style={[type.caption, { color: colors.secondary }]}>
                 {shortDate(activePoint.date)}
               </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Close ${shortDate(activePoint.date)} details`}
-                hitSlop={10}
-                onPress={() => onSelect(null)}
-                style={styles.tooltipClose}
-              >
-                <Icon name="close" size={12} color={colors.muted} />
-              </Pressable>
-            </View>
-            <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>
-              {showFat
-                ? `${activePoint.value.toFixed(1)}%`
-                : `${activePoint.value.toFixed(1)} ${unit}`}
-            </Text>
-            <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
-              {showFat ? 'Body fat' : '7-day average'}
-            </Text>
-            {!showFat && !!activePoint.detail && (
-              <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
-                {activePoint.detail}
+              <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>
+                {showFat
+                  ? `${activePoint.value.toFixed(1)}%`
+                  : `${activePoint.value.toFixed(1)} ${unit}`}
               </Text>
-            )}
+              <Text style={[type.caption, { color: colors.muted }]}>
+                {showFat ? 'Body fat' : '7-day average'}
+              </Text>
+              {!showFat && !!activePoint.detail && (
+                <Text style={[type.caption, { color: colors.muted }]}>{activePoint.detail}</Text>
+              )}
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Close ${shortDate(activePoint.date)} details`}
+              onPress={() => onSelect(null)}
+              style={styles.tooltipClose}
+            >
+              <Icon name="close" size={12} color={colors.muted} />
+            </Pressable>
           </View>
         )}
       </View>
     </GestureDetector>
   );
+}
+
+/**
+ * Where the day readout sits: centred on the point, inside the plot, above the point when its
+ * measured height fits there, otherwise below it, otherwise on whichever side has more room.
+ */
+function readoutPosition(
+  point: { x: number; y: number } | null,
+  size: { width: number; height: number },
+  width: number,
+  height: number,
+) {
+  if (!point) return { left: 0, top: 0 };
+  const left = Math.max(Math.min(point.x - size.width / 2, width - size.width - 4), 4);
+  const above = point.y - size.height - 12;
+  const below = point.y + 12;
+  const top =
+    above >= 0
+      ? above
+      : below + size.height <= height
+        ? below
+        : point.y > height / 2
+          ? Math.max(above, 0)
+          : Math.max(Math.min(below, height - size.height), 0);
+  return { left, top };
 }
 
 /** The chart's series for a range, in the account's unit, oldest first. */
@@ -687,10 +716,13 @@ function Legend({
 const styles = StyleSheet.create({
   controls: { gap: 8 },
   rangeRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  rangeTabs: { gap: 4, alignItems: 'center' },
-  rangeTab: {
+  rangeScroll: { flexGrow: 0, flexShrink: 1 },
+  rangeTabs: { alignItems: 'center' },
+  // A 44 pt target around the web's compact 32 pt tab face.
+  rangeTab: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  rangeFace: {
     minWidth: 36,
-    minHeight: 32,
+    height: 32,
     paddingHorizontal: 10,
     borderRadius: 9,
     alignItems: 'center',
@@ -705,18 +737,25 @@ const styles = StyleSheet.create({
   seriesSegmented: { width: 190 },
   tooltip: {
     position: 'absolute',
-    width: 160,
-    paddingHorizontal: 10,
+    width: READOUT_WIDTH,
+    flexDirection: 'row',
+    paddingLeft: 10,
     paddingVertical: 7,
     borderWidth: 1,
-    gap: 2,
     elevation: 4,
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.25,
     shadowRadius: 12,
   },
-  tooltipHeader: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  tooltipClose: { width: 20, height: 20, alignItems: 'center', justifyContent: 'center' },
+  tooltipBody: { flex: 1, gap: 2 },
+  // A 44 pt target in the readout's top corner, inside its bounds so touches reach it.
+  tooltipClose: {
+    width: 44,
+    height: 44,
+    marginTop: -7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   legend: { flexDirection: 'row', flexWrap: 'wrap', gap: 16 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot: { width: 6, height: 6, borderRadius: 3 },

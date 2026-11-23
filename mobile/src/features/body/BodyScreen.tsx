@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import {
   bodyGoalTarget,
   maintenanceRange,
@@ -114,6 +114,16 @@ export function BodyScreen() {
   // The newest reading, which may come from an earlier check-in than the latest weigh-in.
   const latestBodyFat = measurements.find((item) => item.body_fat_pct !== null);
   const activeGoal = goals.find((goal) => goal.active) ?? null;
+  const { width: screenWidth, fontScale } = useWindowDimensions();
+  const wideGoal = !summaryFits(
+    [
+      latest ? formatWeight(latest.weight_kg, unit) : '–',
+      activeGoal ? bodyGoalTarget(activeGoal, unit) : '–',
+      latestBodyFat ? `${latestBodyFat.body_fat_pct}%` : '–',
+    ],
+    screenWidth,
+    fontScale,
+  );
 
   async function refresh() {
     setRefreshing(true);
@@ -199,67 +209,153 @@ export function BodyScreen() {
               ready={!!goalsQuery.data}
               onSetGoal={() => setGoalRequest({ goal: null, kind: 'maintain' })}
             />
-            <Card style={styles.statsCard} accessibilityLabel="Bodyweight summary">
-              <Stat
-                label="Bodyweight"
-                value={latest ? formatWeight(latest.weight_kg, unit) : '–'}
-              />
-              <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
-              {activeGoal ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Edit goal, ${bodyGoalTarget(activeGoal, unit)}`}
-                  onPress={() => {
-                    haptics.tap();
-                    setGoalRequest({ goal: activeGoal });
-                  }}
-                  style={({ pressed }) => [
-                    styles.stat,
-                    pressed && { backgroundColor: colors.surface2 },
-                  ]}
-                >
-                  <View style={styles.statLabel}>
-                    <Text
-                      style={[type.caption, { color: colors.muted, fontWeight: '600' }]}
-                      numberOfLines={1}
-                    >
-                      {new Date(`${activeGoal.target_date}T12:00:00`).toLocaleDateString(
-                        undefined,
-                        {
-                          month: 'long',
-                        },
-                      )}{' '}
-                      goal
-                    </Text>
-                    <Icon name="chevronRight" size={12} color={colors.muted} />
+            <Card
+              style={[styles.statsCard, wideGoal && styles.statsCardStacked]}
+              accessibilityLabel="Bodyweight summary"
+            >
+              {wideGoal ? (
+                <>
+                  <View style={styles.statsRow}>
+                    <Stat
+                      label="Bodyweight"
+                      value={latest ? formatWeight(latest.weight_kg, unit) : '–'}
+                    />
+                    <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
+                    <Stat
+                      label="Body fat"
+                      value={latestBodyFat ? `${latestBodyFat.body_fat_pct}%` : '–'}
+                      detail={
+                        latestBodyFat && latestBodyFat !== latest
+                          ? dayMonth(latestBodyFat.measurement_date)
+                          : undefined
+                      }
+                    />
                   </View>
-                  <Text
-                    style={[type.title, type.number, { color: colors.text }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                    minimumFontScale={0.75}
-                  >
-                    {bodyGoalTarget(activeGoal, unit)}
-                  </Text>
-                  {latest && maintenanceRange(activeGoal) && (
-                    <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
-                      {maintenanceStatus(activeGoal, latest.weight_kg)}
-                    </Text>
+                  <View style={[styles.statRule, { backgroundColor: colors.line }]} />
+                  {activeGoal ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit goal, ${bodyGoalTarget(activeGoal, unit)}`}
+                      onPress={() => {
+                        haptics.tap();
+                        setGoalRequest({ goal: activeGoal });
+                      }}
+                      style={({ pressed }) => [
+                        styles.stat,
+                        pressed && { backgroundColor: colors.surface2 },
+                      ]}
+                    >
+                      <View style={styles.statLabel}>
+                        <Text
+                          style={[type.caption, { color: colors.muted, fontWeight: '600' }]}
+                          numberOfLines={1}
+                        >
+                          {new Date(`${activeGoal.target_date}T12:00:00`).toLocaleDateString(
+                            undefined,
+                            {
+                              month: 'long',
+                            },
+                          )}{' '}
+                          goal
+                        </Text>
+                        <Icon name="chevronRight" size={12} color={colors.muted} />
+                      </View>
+                      <Text
+                        style={[type.title, type.number, { color: colors.text }]}
+                        {...(wideGoal
+                          ? {}
+                          : {
+                              numberOfLines: 1,
+                              adjustsFontSizeToFit: true,
+                              minimumFontScale: 0.75,
+                            })}
+                      >
+                        {bodyGoalTarget(activeGoal, unit)}
+                      </Text>
+                      {latest && maintenanceRange(activeGoal) && (
+                        <Text
+                          style={[type.caption, { color: colors.muted }]}
+                          numberOfLines={wideGoal ? undefined : 1}
+                        >
+                          {maintenanceStatus(activeGoal, latest.weight_kg)}
+                        </Text>
+                      )}
+                    </Pressable>
+                  ) : (
+                    <Stat label="Weight goal" value="–" />
                   )}
-                </Pressable>
+                </>
               ) : (
-                <Stat label="Weight goal" value="–" />
+                <>
+                  <Stat
+                    label="Bodyweight"
+                    value={latest ? formatWeight(latest.weight_kg, unit) : '–'}
+                  />
+                  <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
+                  {activeGoal ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit goal, ${bodyGoalTarget(activeGoal, unit)}`}
+                      onPress={() => {
+                        haptics.tap();
+                        setGoalRequest({ goal: activeGoal });
+                      }}
+                      style={({ pressed }) => [
+                        styles.stat,
+                        pressed && { backgroundColor: colors.surface2 },
+                      ]}
+                    >
+                      <View style={styles.statLabel}>
+                        <Text
+                          style={[type.caption, { color: colors.muted, fontWeight: '600' }]}
+                          numberOfLines={1}
+                        >
+                          {new Date(`${activeGoal.target_date}T12:00:00`).toLocaleDateString(
+                            undefined,
+                            {
+                              month: 'long',
+                            },
+                          )}{' '}
+                          goal
+                        </Text>
+                        <Icon name="chevronRight" size={12} color={colors.muted} />
+                      </View>
+                      <Text
+                        style={[type.title, type.number, { color: colors.text }]}
+                        {...(wideGoal
+                          ? {}
+                          : {
+                              numberOfLines: 1,
+                              adjustsFontSizeToFit: true,
+                              minimumFontScale: 0.75,
+                            })}
+                      >
+                        {bodyGoalTarget(activeGoal, unit)}
+                      </Text>
+                      {latest && maintenanceRange(activeGoal) && (
+                        <Text
+                          style={[type.caption, { color: colors.muted }]}
+                          numberOfLines={wideGoal ? undefined : 1}
+                        >
+                          {maintenanceStatus(activeGoal, latest.weight_kg)}
+                        </Text>
+                      )}
+                    </Pressable>
+                  ) : (
+                    <Stat label="Weight goal" value="–" />
+                  )}
+                  <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
+                  <Stat
+                    label="Body fat"
+                    value={latestBodyFat ? `${latestBodyFat.body_fat_pct}%` : '–'}
+                    detail={
+                      latestBodyFat && latestBodyFat !== latest
+                        ? dayMonth(latestBodyFat.measurement_date)
+                        : undefined
+                    }
+                  />
+                </>
               )}
-              <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
-              <Stat
-                label="Body fat"
-                value={latestBodyFat ? `${latestBodyFat.body_fat_pct}%` : '–'}
-                detail={
-                  latestBodyFat && latestBodyFat !== latest
-                    ? dayMonth(latestBodyFat.measurement_date)
-                    : undefined
-                }
-              />
             </Card>
             <View style={styles.actions}>
               <Button
@@ -307,6 +403,18 @@ export function BodyScreen() {
   );
 }
 
+/**
+ * Whether the three summary values fit side by side at this width and text size: each third of
+ * the card leaves its value about (screen − gutters) / 3 − insets, and 22 pt figures average
+ * about 12 pt a character, down to the 0.75 minimum scale. A long maintenance range in pounds
+ * ("176.4–198.4 lb") on a narrow phone or with larger text doesn't, so its goal gets a full row.
+ */
+export function summaryFits(values: string[], screenWidth: number, fontScale: number) {
+  const cell = (screenWidth - 28) / 3 - 28;
+  const longest = Math.max(...values.map((value) => value.length));
+  return longest * 12 * fontScale * 0.75 <= cell;
+}
+
 function Stat({ label, value, detail }: { label: string; value: string; detail?: string }) {
   const { colors, type } = useTheme();
   return (
@@ -337,6 +445,9 @@ function Stat({ label, value, detail }: { label: string; value: string; detail?:
 
 const styles = StyleSheet.create({
   statsCard: { flexDirection: 'row', padding: 0, gap: 0, overflow: 'hidden' },
+  statsCardStacked: { flexDirection: 'column' },
+  statsRow: { flexDirection: 'row' },
+  statRule: { height: StyleSheet.hairlineWidth },
   statDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch' },
   stat: {
     flex: 1,

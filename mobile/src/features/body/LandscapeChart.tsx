@@ -15,22 +15,24 @@ export function LandscapeButton({ title, onPress }: { title: string; onPress: ()
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`View ${title} full screen in landscape`}
-      hitSlop={4}
       onPress={() => {
         haptics.tap();
         onPress();
       }}
-      style={({ pressed }) => [
-        styles.toggle,
-        {
-          backgroundColor: colors.surface2,
-          borderColor: colors.lineStrong,
-          borderRadius: radius.sm,
-        },
-        pressed && { opacity: 0.65 },
-      ]}
+      style={({ pressed }) => [styles.toggleTarget, pressed && { opacity: 0.65 }]}
     >
-      <Icon name={bodyIcons.expand} size={18} color={colors.accentText} />
+      <View
+        style={[
+          styles.toggle,
+          {
+            backgroundColor: colors.surface2,
+            borderColor: colors.lineStrong,
+            borderRadius: radius.sm,
+          },
+        ]}
+      >
+        <Icon name={bodyIcons.expand} size={18} color={colors.accentText} />
+      </View>
     </Pressable>
   );
 }
@@ -116,6 +118,8 @@ export function LandscapeChartView({
 }
 
 const styles = StyleSheet.create({
+  // A 44 pt target around the web's 36 pt bordered square.
+  toggleTarget: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   toggle: {
     width: 36,
     height: 36,

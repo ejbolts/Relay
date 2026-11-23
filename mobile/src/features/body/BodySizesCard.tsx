@@ -109,14 +109,15 @@ export function BodySizesCard() {
     setInlineField(null);
     setInlineError(null);
     if (result.kind === 'unchanged') return true;
-    haptics.success();
     setLogs((items) => withBodySizeLog(items, result.entry));
     setShownDate(day);
-    queueSave(result.entry).catch((reason) => {
-      setInlineError(errorMessage(reason));
-      // Reload, so the figure shows what is actually stored.
-      void client.invalidateQueries({ queryKey: bodyKeys.sizes });
-    });
+    queueSave(result.entry)
+      .then(() => haptics.success())
+      .catch((reason) => {
+        setInlineError(errorMessage(reason));
+        // Reload, so the figure shows what is actually stored.
+        void client.invalidateQueries({ queryKey: bodyKeys.sizes });
+      });
     return true;
   }
 
@@ -585,8 +586,8 @@ const styles = StyleSheet.create({
   changes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   change: { flexDirection: 'row', gap: 6, paddingHorizontal: 10, paddingVertical: 5 },
   entryActions: { flexDirection: 'row', gap: 8 },
-  historySection: { borderTopWidth: 1, paddingTop: 12 },
-  historyHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 36 },
+  historySection: { borderTopWidth: 1, paddingTop: 4 },
+  historyHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 44 },
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
