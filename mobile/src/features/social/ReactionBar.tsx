@@ -256,9 +256,10 @@ export function ReactionActions({
     <View
       style={[
         styles.joinedPill,
-        {
+        !compact && {
           backgroundColor: selected ? colors.accentSoft : colors.surface2,
           borderColor: selected ? colors.accent : colors.lineStrong,
+          borderWidth: 1,
           borderRadius: radius.pill,
         },
       ]}
@@ -272,6 +273,7 @@ export function ReactionActions({
         onPress={togglePicker}
         style={({ pressed }) => [
           styles.joinedPart,
+          compact && styles.compactPart,
           waiting && styles.waiting,
           pressed && { opacity: 0.6 },
         ]}
@@ -287,7 +289,11 @@ export function ReactionActions({
           haptics.tap();
           setPeople(true);
         }}
-        style={({ pressed }) => [styles.joinedCount, pressed && { opacity: 0.6 }]}
+        style={({ pressed }) => [
+          styles.joinedCount,
+          compact && styles.compactCount,
+          pressed && { opacity: 0.6 },
+        ]}
       >
         {!selected && !pendingChoice && (
           <Text style={styles.emojiSmall}>{summary.emojis.slice(0, SUMMARY_EMOJIS).join('')}</Text>
@@ -296,7 +302,7 @@ export function ReactionActions({
           style={[
             type.footnote,
             type.number,
-            { color: selected ? colors.accentText : colors.text, fontWeight: '600' },
+            { color: selected ? colors.accentText : colors.secondary, fontWeight: '700' },
           ]}
         >
           {summary.total}
@@ -315,8 +321,8 @@ export function ReactionActions({
         setPeople(true);
       }}
       style={({ pressed }) => [
-        styles.summaryPill,
-        {
+        compact ? styles.iconButton : styles.summaryPill,
+        !compact && {
           backgroundColor: colors.surface2,
           borderColor: colors.lineStrong,
           borderRadius: radius.pill,
@@ -325,7 +331,7 @@ export function ReactionActions({
       ]}
     >
       <Text style={styles.emojiSmall}>{summary.emojis.slice(0, SUMMARY_EMOJIS).join('')}</Text>
-      <Text style={[type.footnote, type.number, { color: colors.text, fontWeight: '600' }]}>
+      <Text style={[type.footnote, type.number, { color: colors.secondary, fontWeight: '700' }]}>
         {summary.total}
       </Text>
     </Pressable>
@@ -520,13 +526,12 @@ const styles = StyleSheet.create({
     gap: 5,
   },
   joinedPill: {
-    minHeight: 34,
-    borderWidth: 1,
+    minHeight: 36,
     flexDirection: 'row',
     alignItems: 'center',
   },
   joinedPart: {
-    minHeight: 34,
+    minHeight: 36,
     paddingLeft: 10,
     paddingRight: 4,
     flexDirection: 'row',
@@ -534,8 +539,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 3,
   },
+  compactPart: { paddingLeft: 6, paddingRight: 3, minHeight: 40 },
   joinedCount: {
-    minHeight: 34,
+    minHeight: 36,
     paddingLeft: 4,
     paddingRight: 10,
     flexDirection: 'row',
@@ -543,6 +549,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
+  compactCount: { paddingLeft: 3, paddingRight: 6, minHeight: 40 },
   emoji: { fontSize: 18 },
   emojiSmall: { fontSize: 15, letterSpacing: -2 },
   emojiLarge: { fontSize: 24 },

@@ -31,8 +31,7 @@ import type {
   SharingNotifications,
 } from '../../../../frontend/src/types';
 import { notificationWorkoutFocus } from '../../../../frontend/src/workoutFocusRequest';
-import { Button, errorMessage } from '../../ui/components';
-import { haptics } from '../../ui/haptics';
+import { Button, errorMessage, IconButton } from '../../ui/components';
 import { Icon, type IconPair } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
 import { reviewRoutes, useBellNotices } from '../review';
@@ -54,8 +53,9 @@ import { requestWorkoutFocus } from './workoutFocus';
  * administrators, people waiting for a reset or their username, with a count of what's unread or
  * waiting for an answer.
  */
-export function NotificationsBell({ size = 40 }: { size?: number }) {
-  const { colors, radius } = useTheme();
+export function NotificationsBell(props: { size?: number }) {
+  // Kept optional while HomeHeaderActions migrates to AccountHeaderActions.
+  void props.size;
   const query = useNotifications();
   const bell = useBellNotices();
   const [open, setOpen] = useState(false);
@@ -63,35 +63,12 @@ export function NotificationsBell({ size = 40 }: { size?: number }) {
   const badge = profileBadgeText(count);
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
+      <IconButton
+        icon="bell"
+        badge={badge}
         accessibilityLabel={notificationsLabel(count)}
-        hitSlop={4}
-        onPress={() => {
-          haptics.tap();
-          setOpen(true);
-        }}
-        style={({ pressed }) => [
-          styles.square,
-          {
-            width: size,
-            height: size,
-            borderRadius: radius.md,
-            backgroundColor: colors.surface,
-            borderColor: colors.lineStrong,
-          },
-          pressed && { opacity: 0.7 },
-        ]}
-      >
-        <Icon name="bell" size={Math.round(size * 0.48)} color={colors.secondary} />
-        {badge && (
-          <View
-            style={[styles.badge, { backgroundColor: colors.danger, borderColor: colors.page }]}
-          >
-            <Text style={styles.badgeText}>{badge}</Text>
-          </View>
-        )}
-      </Pressable>
+        onPress={() => setOpen(true)}
+      />
       {open && <NotificationsSheet notices={bell} onClose={() => setOpen(false)} />}
     </>
   );
@@ -469,24 +446,6 @@ function NotificationRow({
 }
 
 const styles = StyleSheet.create({
-  square: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-  },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -5,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    paddingHorizontal: 3,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   problem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   list: { paddingBottom: 16 },
   row: {

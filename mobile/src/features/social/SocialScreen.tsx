@@ -1,24 +1,15 @@
 import { useIsFocused, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ComponentRef, type RefObject } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FriendActivity, TimelineItem } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { workoutFocusStep } from '../../../../frontend/src/workoutFocusRequest';
 import { useUser } from '../../session/SessionProvider';
-import {
-  Button,
-  EmptyState,
-  ErrorState,
-  errorMessage,
-  IconButton,
-  Loading,
-  Screen,
-} from '../../ui/components';
+import { AccountHeaderActions } from '../../ui/AccountHeaderActions';
+import { Button, EmptyState, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
 import { Segmented } from '../../ui/controls';
-import { haptics } from '../../ui/haptics';
 import { useTheme } from '../../ui/theme';
-import { Avatar } from './Avatar';
 import { CommentsSheet } from './Comments';
 import { FeedCard } from './FeedCard';
 import { FriendQrSheet } from './FriendQrSheet';
@@ -50,7 +41,7 @@ type Section = 'feed' | 'friends';
  * header, matching every other tab. A workout opened from a notification is revealed in the feed.
  */
 export function SocialScreen() {
-  const { colors, radius } = useTheme();
+  const { colors } = useTheme();
   const router = useRouter();
   const user = useUser();
   const nav = useSocialNavigation();
@@ -100,52 +91,24 @@ export function SocialScreen() {
         onRefresh={() => void refresh()}
         scrollRef={scroll}
         actions={
-          <View style={styles.actions}>
-            <NotificationsBell />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open your profile"
-              hitSlop={4}
-              onPress={() => {
-                haptics.tap();
-                nav.openProfile(user);
-              }}
-              style={({ pressed }) => [
-                styles.headerButton,
-                {
-                  borderRadius: radius.md,
-                  backgroundColor: colors.surface,
-                  borderColor: colors.lineStrong,
-                },
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Avatar person={user} size={26} />
-            </Pressable>
-            <IconButton
-              icon="settings"
-              accessibilityLabel="Settings"
-              onPress={() => router.push('/settings')}
-              style={{ borderColor: colors.lineStrong }}
-            />
-          </View>
+          <AccountHeaderActions
+            notifications={<NotificationsBell />}
+            profile={{ user, onPress: () => nav.openProfile(user) }}
+            onSettings={() => router.push('/settings')}
+          />
         }
       >
         <View style={styles.segmentWrap}>
-          <View
-            style={[styles.segmentTrack, { borderColor: colors.line, borderRadius: radius.sm }]}
-          >
-            <Segmented
-              accessibilityLabel={
-                requests > 0
-                  ? `Social sections, ${requests} friend ${requests === 1 ? 'request' : 'requests'}`
-                  : 'Social sections'
-              }
-              values={['Feed', 'Friends']}
-              selectedIndex={section === 'feed' ? 0 : 1}
-              onChange={(index) => setSection(index === 0 ? 'feed' : 'friends')}
-            />
-          </View>
+          <Segmented
+            accessibilityLabel={
+              requests > 0
+                ? `Social sections, ${requests} friend ${requests === 1 ? 'request' : 'requests'}`
+                : 'Social sections'
+            }
+            values={['Feed', 'Friends']}
+            selectedIndex={section === 'feed' ? 0 : 1}
+            onChange={(index) => setSection(index === 0 ? 'feed' : 'friends')}
+          />
           {requests > 0 && (
             <View
               pointerEvents="none"
@@ -403,16 +366,7 @@ function Feed({
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerButton: {
-    width: 40,
-    height: 40,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   segmentWrap: { position: 'relative' },
-  segmentTrack: { borderWidth: 1, overflow: 'hidden' },
   requestBadge: {
     position: 'absolute',
     top: -6,
