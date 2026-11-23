@@ -5,8 +5,10 @@ import { Alert, StyleSheet, Text, View } from 'react-native';
 import {
   ARCHIVE_DOWNLOAD_FAILED,
   ARCHIVE_FILE_TYPES,
+  ARCHIVE_MAX_BYTES,
   ARCHIVE_RESTORE_WARNING,
   ARCHIVE_RESTORED,
+  ARCHIVE_TOO_LARGE,
   archiveCountRows,
   archiveFileName,
   archiveKicker,
@@ -21,15 +23,17 @@ import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { Row, Section, SectionError } from '../settings/SettingsList';
 import {
-  downloadFile,
+  discardStagedFile,
+  downloadFiles,
+  evictAccountData,
   pickFile,
   previewArchive,
-  refreshAccountData,
   removeSampleWorkouts,
   restoreArchive,
   shareFiles,
   type PickedFile,
 } from './dataApi';
+import { restoreBlocker, useLocalWorkoutWrites, type LocalWorkoutWrites } from './localWrites';
 import { dataIcons } from './icons';
 
 /**
@@ -47,14 +51,17 @@ export function DataSection() {
   const [pending, setPending] = useState<{ file: PickedFile; preview: ArchivePreview } | null>(
     null,
   );
+  const writes = useLocalWorkoutWrites();
 
   async function download() {
     if (downloading) return;
     setDownloading(true);
     setError(null);
     try {
-      const name = archiveFileName(localDate());
-      const file = await downloadFile('/api/account-archive', name, ARCHIVE_DOWNLOAD_FAILED);
+      const [file] = await downloadFiles(
+        [{ path: '/api/account-archive', name: archiveFileName(localDate()) }],
+        ARCHIVE_DOWNLOAD_FAILED,
+      );
       await shareFiles([{ file, type: 'application/zip' }], 'Relay backup');
     } catch (caught) {
       setError(errorMessage(caught));
@@ -65,12 +72,20 @@ export function DataSection() {
 
   async function check() {
     if (checking) return;
-    setError(null);
+    // Workouts this phone has yet to send could overwrite what the backup puts back.
+    const blocked = restoreBlocker(writes);
+    setError(blocked);
+    if (blocked) return;
     setChecking(true);
+    let file: PickedFile | null = null;
     try {
-      const file = await pickFile(ARCHIVE_FILE_TYPES, 'application/zip');
+      file = await pickFile(ARCHIVE_FILE_TYPES, 'application/zip', {
+        maxBytes: ARCHIVE_MAX_BYTES,
+        tooLarge: ARCHIVE_TOO_LARGE,
+      });
       if (file) setPending({ file, preview: await previewArchive(file) });
     } catch (caught) {
+      if (file) discardStagedFile(file);
       setError(errorMessage(caught));
     } finally {
       setChecking(false);
@@ -88,7 +103,7 @@ export function DataSection() {
           setError(null);
           try {
             await removeSampleWorkouts();
-            await refreshAccountData(client);
+            await evictAccountData(client);
             showToast('Sample workouts removed. They will not be seeded again.');
           } catch (caught) {
             setError(errorMessage(caught));
@@ -155,12 +170,17 @@ export function DataSection() {
       {pending && (
         <RestoreSheet
           pending={pending}
-          onClose={() => setPending(null)}
-          onRestored={async () => {
+          writes={writes}
+          onClose={() => {
+            discardStagedFile(pending.file);
             setPending(null);
-            // A restore replaces splits, blocks, layout and preferences as well as training,
-            // so everything is read again (the web reloads), then it confirms.
-            await refreshAccountData(client);
+          }}
+          onRestored={async () => {
+            discardStagedFile(pending.file);
+            setPending(null);
+            // A restore replaces splits, blocks, layout and preferences as well as training, so
+            // every cached and offline read is dropped and read again (the web reloads).
+            await evictAccountData(client);
             showToast(ARCHIVE_RESTORED);
           }}
         />
@@ -172,10 +192,12 @@ export function DataSection() {
 /** The web's Restore this backup? confirmation: the backup's counts beside today's. */
 function RestoreSheet({
   pending,
+  writes,
   onClose,
   onRestored,
 }: {
   pending: { file: PickedFile; preview: ArchivePreview };
+  writes: LocalWorkoutWrites;
   onClose: () => void;
   onRestored: () => Promise<void>;
 }) {
@@ -186,8 +208,11 @@ function RestoreSheet({
 
   async function restore() {
     if (restoring) return;
+    // Checked again: a workout may have been started or finished since the backup was picked.
+    const blocked = restoreBlocker(writes);
+    setError(blocked);
+    if (blocked) return;
     setRestoring(true);
-    setError(null);
     try {
       await restoreArchive(pending.file);
       await onRestored();

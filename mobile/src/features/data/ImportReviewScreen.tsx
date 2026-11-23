@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigation, useRouter } from 'expo-router';
-import { useEffect } from 'react';
+import { useNavigation, usePreventRemove, useRouter } from 'expo-router';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import {
   IMPORT_SAFETY_NOTE,
@@ -13,6 +13,7 @@ import {
   reviewSessionDetails,
   reviewSessionsOverflow,
 } from '../../../../frontend/src/workoutImport';
+import { useUser } from '../../session/SessionProvider';
 import { Button } from '../../ui/components';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
@@ -35,34 +36,46 @@ export function ImportReviewScreen() {
   const navigation = useNavigation();
   const client = useQueryClient();
   const { colors, type, space } = useTheme();
-  const session = useImportSession();
+  const userId = useUser().id;
+  const session = useImportSession(userId);
   const { preview, options, file } = session;
+  // 'saving' runs from Save until the saved data is refreshed; 'saved' then leaves this screen.
+  const [phase, setPhase] = useState<'review' | 'saving' | 'saved'>('review');
+  const saving = phase !== 'review';
 
-  // Leaving the review (back, or a swipe) cancels it: nothing is saved.
+  // Leaving the review (back, or a swipe) cancels it: nothing is saved. Not while saving.
   useEffect(
-    () => (navigation as unknown as Leaving).addListener('beforeRemove', clearImport),
-    [navigation],
+    () =>
+      saving
+        ? undefined
+        : (navigation as unknown as Leaving).addListener('beforeRemove', clearImport),
+    [navigation, saving],
   );
+  // While Save runs, no Back (header, gesture or Android's) can leave; the screen leaves itself.
+  usePreventRemove(phase === 'saving', () => undefined);
   useEffect(() => {
-    navigation.setOptions({ gestureEnabled: !session.saving });
-  }, [navigation, session.saving]);
+    if (phase === 'saved') router.back();
+  }, [phase, router]);
 
   if (!preview || !options || !file) return <SettingsPage>{null}</SettingsPage>;
   const totals = importReviewTotals(preview);
   const overflow = reviewSessionsOverflow(preview.sessions.length);
   const exercises = preview.available_exercises ?? [];
   const matches = preview.exercise_matches ?? [];
-  const busy = session.saving || session.reviewing;
+  const busy = saving || session.reviewing;
 
   async function save() {
+    if (saving || !canSaveImport(session)) return;
+    setPhase('saving');
     try {
-      const result = await saveReviewedImport();
-      if (!result) return;
+      const result = await saveReviewedImport(userId);
+      if (!result) return setPhase('review');
       await refreshAccountData(client);
       showToast(importSavedMessage(result));
-      router.back();
+      setPhase('saved');
     } catch {
       // The reason shows on the review, which stays open.
+      setPhase('review');
     }
   }
 
@@ -99,7 +112,7 @@ export function ImportReviewScreen() {
             })}
           </Section>
           {session.stale && !session.reviewing && (
-            <Button variant="secondary" label="Try again" onPress={retryReview} />
+            <Button variant="secondary" label="Try again" onPress={() => retryReview(userId)} />
           )}
         </View>
       )}
@@ -173,14 +186,14 @@ export function ImportReviewScreen() {
           </Text>
         )}
         <Button
-          label={session.saving ? 'Saving…' : 'Save import'}
-          disabled={!canSaveImport(session)}
+          label={saving ? 'Saving…' : 'Save import'}
+          disabled={saving || !canSaveImport(session)}
           onPress={() => void save()}
         />
         <Button
           variant="secondary"
           label="Cancel"
-          disabled={session.saving}
+          disabled={saving}
           onPress={() => router.back()}
         />
       </View>
