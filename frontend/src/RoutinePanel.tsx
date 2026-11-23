@@ -20,6 +20,7 @@ import { SplitVolumeChart } from './SplitVolumeChart';
 import {
   canAddSplitDay,
   canAddSplitDayType,
+  cardioBarWidth,
   hasSplitTemplate,
   legacySplitRoutine,
   moveSplitDay,
@@ -40,6 +41,8 @@ import {
   splitTemplateName,
   splitTypeNameError,
   nextSplitDayType,
+  plannedMinutes,
+  splitSetPips,
   withSplitDayExtraType,
   withSplitDayType,
 } from './splitEditing';
@@ -80,8 +83,6 @@ function RoutinePattern({ days }: { days: RoutineDay[] }) {
   );
 }
 
-const MAX_PIPS = 10;
-
 /** A day's cycle as one row per exercise, with a block for each planned set. */
 function RoutineCycle({ routine }: { routine: Routine }) {
   const [showMuscles, setShowMuscles] = useState(false);
@@ -117,10 +118,9 @@ function RoutineCycle({ routine }: { routine: Routine }) {
                 <ul>
                   {day.movements.map((movement, mi) => {
                     const cardio = movement.exercise.kind === 'cardio';
-                    const length = Math.round(
-                      movement.sets.reduce((sum, set) => sum + (set.duration_seconds ?? 0), 0) / 60,
-                    );
+                    const length = plannedMinutes(movement);
                     const count = movement.sets.length;
+                    const pips = splitSetPips(count);
                     return (
                       <li className="routine-exercise" key={mi}>
                         <span className="routine-exercise-label">
@@ -132,7 +132,7 @@ function RoutineCycle({ routine }: { routine: Routine }) {
                             <span
                               className="routine-cardio-bar"
                               aria-hidden="true"
-                              style={{ width: `${Math.max(6, Math.min(length, 120) * 0.6)}px` }}
+                              style={{ width: `${cardioBarWidth(length)}px` }}
                             />
                             {length} min
                           </span>
@@ -142,10 +142,10 @@ function RoutineCycle({ routine }: { routine: Routine }) {
                             role="img"
                             aria-label={`${count} ${count === 1 ? 'set' : 'sets'}`}
                           >
-                            {Array.from({ length: Math.min(count, MAX_PIPS) }, (_, pip) => (
+                            {Array.from({ length: pips.shown }, (_, pip) => (
                               <i key={pip} />
                             ))}
-                            {count > MAX_PIPS && <span>+{count - MAX_PIPS}</span>}
+                            {pips.more > 0 && <span>+{pips.more}</span>}
                           </span>
                         )}
                       </li>
