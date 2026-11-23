@@ -29,6 +29,8 @@ interface Listeners {
   onOpen: () => void;
   onActiveWorkout: () => void;
   onFriendPresence: (event: FriendPresenceEvent) => void;
+  /** The inbox changed (a request, reaction or comment), as the web's bell hears it. */
+  onNotifications?: () => void;
   onSignedOut: () => void;
 }
 
@@ -97,6 +99,7 @@ export function connectLivePresence(listeners: Listeners) {
         const message = decodePresenceEvent(event.data);
         if (message?.type === 'active_workout') listeners.onActiveWorkout();
         if (message?.type === 'presence') listeners.onFriendPresence(message);
+        if (message?.type === 'notifications') listeners.onNotifications?.();
       };
       current.onclose = (event) => {
         if (socket !== current) return;

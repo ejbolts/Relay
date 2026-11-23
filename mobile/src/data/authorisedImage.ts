@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { apiOrigin } from './api';
+import { apiOrigin, clientVersionHeaders } from './api';
 import { sessionToken } from './session';
 
 // Images the API serves only to signed-in members (profile and workout photos), as data URIs.
@@ -33,6 +33,8 @@ export function loadAuthorisedImage(url: string): Promise<string | null> {
       xhr.responseType = 'blob';
       xhr.timeout = 15_000;
       xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      for (const [name, value] of Object.entries(clientVersionHeaders()))
+        xhr.setRequestHeader(name, value);
       xhr.onerror = xhr.ontimeout = () => resolve(null);
       xhr.onload = () => {
         if (xhr.status !== 200) {

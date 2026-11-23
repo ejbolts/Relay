@@ -15,6 +15,12 @@ export const BODY_TREND_DURATION_OPTIONS = [
 export type BodyTrendDuration = (typeof BODY_TREND_DURATION_OPTIONS)[number]['value'];
 export type BodyTrendStatistic = 'average' | 'median';
 
+/** Body history's week and month tabs, named after the chosen statistic: "Avg Week", "Median Monthly". */
+export function bodyHistoryPeriodLabel(period: 'week' | 'month', statistic: BodyTrendStatistic) {
+  const prefix = statistic === 'average' ? 'Avg' : 'Median';
+  return period === 'week' ? `${prefix} Week` : `${prefix} Monthly`;
+}
+
 export const BODY_TREND_PREFERENCE_KEY = 'gym-logger-body-trend';
 
 export interface BodyTrendPreference {

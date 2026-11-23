@@ -131,8 +131,8 @@ test('the layout editor moves, hides, adds and resizes cards, then saves the lay
   );
   // Records joins the two cards that are half width already.
   expect(screen.getAllByText('Half width')).toHaveLength(3);
-  // The training block isn't drawn by the app yet, so the editor leaves it out.
-  expect(screen.queryByText('Training block')).toBeNull();
+  // The training block card is listed with the rest.
+  expect(screen.getByText('Training block')).toBeVisible();
 
   await fireEvent.press(screen.getByRole('button', { name: 'Save Home layout' }));
   await waitFor(() => expect(apiSend).toHaveBeenCalled());
@@ -164,12 +164,19 @@ test("a card's options change in its Customise sheet", async () => {
   );
   await fireEvent.press(await screen.findByRole('radio', { name: 'Body fat only' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
+  // The training block card's design, as the web's Customise offers.
+  await fireEvent.press(
+    screen.getByRole('button', { name: 'More for Training block: Customise…' }),
+  );
+  await fireEvent.press(await screen.findByRole('radio', { name: 'Timeline' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Done' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Save Home layout' }));
   await waitFor(() => expect(apiSend).toHaveBeenCalled());
   expect(savedLayout().settings).toMatchObject({
     workouts: { weeks: 4 },
     check_in: { mode: 'fat' },
     cardio_sessions: { weeks: 8 },
+    training_block: { style: 'timeline' },
   });
 });
 

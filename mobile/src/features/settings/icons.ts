@@ -6,6 +6,7 @@ export const settingsIcons = {
   unit: { sf: 'scalemass', md: 'scale' },
   week: { sf: 'calendar', md: 'calendar-today' },
   goal: { sf: 'target', md: 'track-changes' },
+  heartRate: { sf: 'heart.text.square', md: 'monitor-heart' },
   rest: { sf: 'timer', md: 'timer' },
   types: { sf: 'paintpalette', md: 'palette' },
   autoSave: { sf: 'tray.and.arrow.down', md: 'save' },

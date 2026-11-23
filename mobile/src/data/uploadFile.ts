@@ -1,4 +1,4 @@
-import { apiOrigin, ApiError } from './api';
+import { apiOrigin, ApiError, clientVersionHeaders } from './api';
 import { sessionToken } from './session';
 
 const TIMEOUT_MS = 60_000;
@@ -31,6 +31,9 @@ export async function uploadFile<T>(
     xhr.open(method, origin + path);
     xhr.timeout = TIMEOUT_MS;
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+    // The release and build headers every other request sends, so uploads count and gate alike.
+    for (const [name, value] of Object.entries(clientVersionHeaders()))
+      xhr.setRequestHeader(name, value);
     xhr.withCredentials = false;
     xhr.onerror = () => reject(new Error(UNREACHABLE));
     xhr.ontimeout = () => reject(new Error(UNREACHABLE));

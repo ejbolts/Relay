@@ -305,6 +305,14 @@ describe('Settings links', () => {
     await fireEvent.press(row);
     expect(mockRouter.push).toHaveBeenLastCalledWith('/social/sharing');
   });
+
+  it('opens per-muscle goals and heart-rate zones', async () => {
+    await show(<SettingsScreen />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Muscle goals' }));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/muscle-goals');
+    await fireEvent.press(screen.getByRole('button', { name: 'Heart-rate zones' }));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/cardio/zones');
+  });
 });
 
 describe('Workout types', () => {

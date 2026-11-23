@@ -85,7 +85,8 @@ import {
 } from '../../data/queries';
 import { useOptionalSession } from '../../session/SessionProvider';
 import { showToast, ToastHost } from '../../ui/Toast';
-import { refreshFriendPresence, updateFriendPresence } from '../social/socialQueries';
+import { restTimerPreference } from '../settings/devicePreferences';
+import { refreshFriendPresence, socialKeys, updateFriendPresence } from '../social/socialQueries';
 import { FinishedQueueSender, type QueueStatus } from './finishedQueueSender';
 import {
   addSet as addSetRule,
@@ -510,6 +511,15 @@ const WorkoutEngine = memo(function WorkoutEngine({
     setRest(next);
   }, []);
 
+  // Turning Settings › Rest timer off ends a countdown in progress, as on the web.
+  useEffect(
+    () =>
+      restTimerPreference.subscribe(() => {
+        if (!restTimerPreference.get()) commitRest(NO_REST);
+      }),
+    [commitRest],
+  );
+
   // Every stored change reaches the other devices shortly after, as the web's sync does.
   const syncRef = useRef<ActiveWorkoutSynchronizer | null>(null);
   const presenceRef = useRef<ReturnType<typeof connectLivePresence> | null>(null);
@@ -676,6 +686,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
 
   const startRest = useCallback(
     (seconds: number, movementKey: string | null = null) => {
+      // Settings › Rest timer off: logged sets start no countdown, as on the web.
+      if (!restTimerPreference.get()) return;
       void askForRestAlerts();
       commitRest(startRestRule(seconds, movementKey, Date.now(), newId()));
       // A rest started while paused waits for the workout to resume.
@@ -1162,6 +1174,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
       },
       onActiveWorkout: () => void sync.sync(),
       onFriendPresence: (event) => updateFriendPresence(client, event),
+      // The bell refreshes at once, as the web's does, instead of on its next check.
+      onNotifications: () => void client.invalidateQueries({ queryKey: socialKeys.notifications }),
       // The session provider observes 401s in the query cache.
       onSignedOut: () =>
         void client

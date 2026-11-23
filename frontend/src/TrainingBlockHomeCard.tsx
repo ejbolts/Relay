@@ -1,5 +1,9 @@
 import type { Ref } from 'react';
-import type { TrainingBlockCardSettings, TrainingBlockCardStyle } from './homeLayout';
+import {
+  TRAINING_BLOCK_CARD_STYLES,
+  type TrainingBlockCardSettings,
+  type TrainingBlockCardStyle,
+} from './homeLayout';
 import { Icon } from './Icon';
 import { blockEndedLabel, blockWeekLabel } from './trainingBlockHome';
 import { blockProgress, daysLeftLabel } from './trainingBlocks';
@@ -111,12 +115,6 @@ export function TrainingBlockHomeCard({
   );
 }
 
-const STYLES: { id: TrainingBlockCardStyle; label: string }[] = [
-  { id: 'progress', label: 'Progress' },
-  { id: 'timeline', label: 'Timeline' },
-  { id: 'both', label: 'Both' },
-];
-
 export function TrainingBlockCardSettingsForm({
   value,
   onChange,
@@ -129,7 +127,7 @@ export function TrainingBlockCardSettingsForm({
       <fieldset>
         <legend>Design</legend>
         <div className="cardio-card-styles">
-          {STYLES.map((style) => (
+          {TRAINING_BLOCK_CARD_STYLES.map((style) => (
             <label key={style.id}>
               <input
                 type="radio"

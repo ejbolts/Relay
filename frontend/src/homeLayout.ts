@@ -171,6 +171,12 @@ export interface CardioGoalCardSettings {
   style: CardioGoalCardStyle;
 }
 export type TrainingBlockCardStyle = 'progress' | 'timeline' | 'both';
+/** The training block card's designs, in the order Customise offers them. */
+export const TRAINING_BLOCK_CARD_STYLES: { id: TrainingBlockCardStyle; label: string }[] = [
+  { id: 'progress', label: 'Progress' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'both', label: 'Both' },
+];
 export interface TrainingBlockCardSettings {
   style: TrainingBlockCardStyle;
 }
