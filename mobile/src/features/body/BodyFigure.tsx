@@ -18,6 +18,7 @@ import {
   type BodyFigureKind,
 } from '../../../../frontend/src/bodyFigureShapes';
 import type { BodySizeField } from '../../../../frontend/src/bodySizes';
+import { haptics } from '../../ui/haptics';
 import { useTheme } from '../../ui/theme';
 
 const WIDTH = FIGURE_HALF_WIDTH * 2;
@@ -220,7 +221,10 @@ export function BodyFigure({
                 Boolean(value && carried.has(item.field)),
                 unit,
               )}
-              onPress={() => onPick(item.field)}
+              onPress={() => {
+                haptics.selection();
+                onPick(item.field);
+              }}
               style={({ pressed }) => [
                 styles.hit,
                 {
@@ -296,7 +300,7 @@ function InlineEditor({
         style,
         {
           borderColor: invalid ? colors.danger : colors.accent,
-          backgroundColor: colors.surface,
+          backgroundColor: colors.surface2,
           borderRadius: radius.sm,
         },
       ]}

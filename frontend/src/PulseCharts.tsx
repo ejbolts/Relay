@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EDGE_SWIPE_START_PX } from './edgeSwipe';
-import { chartPointerX, goalLabelY } from './chartLayout';
+import { chartDateTicks, chartPointerX, goalLabelY } from './chartLayout';
 import { Icon } from './Icon';
 import type {
   CSSProperties,
@@ -8,8 +8,6 @@ import type {
   PointerEvent as ReactPointerEvent,
 } from 'react';
 import { niceTicks, parseLocalDate, shortDate } from './trainingSummary';
-
-const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 function useElementSize<T extends HTMLElement>(fallback: number, fallbackHeight = 0) {
   const ref = useRef<T>(null);
@@ -174,45 +172,9 @@ export function TrendChart({
         }
       });
     }
-    const dayMs = 86_400_000;
-    const spanDays = span / dayMs;
-    const xTicks: Array<{ x: number; label: string }> = [];
-    if (spanDays > 45) {
-      const start = new Date(tMin);
-      for (
-        let month = new Date(start.getFullYear(), start.getMonth() + 1, 1, 12);
-        month.getTime() <= tMax;
-        month = new Date(month.getFullYear(), month.getMonth() + 1, 1, 12)
-      ) {
-        xTicks.push({
-          x: x(month.getTime()),
-          label:
-            spanDays > 400
-              ? `${MONTHS[month.getMonth()]} ’${String(month.getFullYear()).slice(2)}`
-              : MONTHS[month.getMonth()],
-        });
-      }
-      const every = Math.ceil(xTicks.length / Math.max(Math.floor(plotWidth / 56), 1));
-      return {
-        ticks,
-        y,
-        coords,
-        records,
-        background: backgroundPoints.map((point, index) => ({
-          x: x(backgroundTimes[index]),
-          y: y(point.value),
-        })),
-        xTicks: xTicks.filter((_, index) => index % every === 0),
-        baseline: y(yMin),
-        goalLine,
-      };
-    }
-    const count = Math.min(4, Math.max(2, Math.floor(plotWidth / 80)));
-    for (let index = 0; index < count; index += 1) {
-      const time = tMin + (span * index) / Math.max(count - 1, 1);
-      const date = new Date(time);
-      xTicks.push({ x: x(time), label: `${date.getDate()} ${MONTHS[date.getMonth()]}` });
-    }
+    const xTicks = chartDateTicks(tMin, tMax, plotWidth, x);
+    // Month labels cover a long span even with one reading; a short single reading names its day.
+    const monthTicks = span / 86_400_000 > 45;
     return {
       ticks,
       y,
@@ -222,7 +184,10 @@ export function TrendChart({
         x: x(backgroundTimes[index]),
         y: y(point.value),
       })),
-      xTicks: points.length === 1 ? [{ x: coords[0].x, label: shortDate(points[0].date) }] : xTicks,
+      xTicks:
+        points.length === 1 && !monthTicks
+          ? [{ x: coords[0].x, label: shortDate(points[0].date) }]
+          : xTicks,
       baseline: y(yMin),
       goalLine,
     };

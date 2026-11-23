@@ -5,7 +5,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import type { BodySizeLog } from '../../../../frontend/src/bodySizes';
 import { emptyBodySizeLog } from '../../../../frontend/src/bodySizeEntries';
-import { addDays, dayMonth } from '../../../../frontend/src/trainingSummary';
+import { bodyGoalTarget } from '../../../../frontend/src/bodyMeasurementHistory';
+import { addDays, dayMonth, shortDate } from '../../../../frontend/src/trainingSummary';
 import type {
   BodyMeasurement,
   BodyWeightGoal,
@@ -14,13 +15,14 @@ import type {
 } from '../../../../frontend/src/types';
 import { tipStorageKey } from '../../../../frontend/src/tipsState';
 import { localDate } from '../../../../frontend/src/utils';
+import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { apiGet, apiSend } from '../../data/api';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { ToastHost } from '../../ui/Toast';
 import { resetTipsForTests } from '../guides/tips';
 import { bodyTrendPreference } from '../settings/devicePreferences';
 import { bodyCheckInStatus, setBodyCheckInOwner, syncBodyCheckIns } from './bodyCheckInQueue';
-import { BodyScreen } from './BodyScreen';
+import { BodyScreen, summaryFits } from './BodyScreen';
 import { clearMaintainGoalRequest, requestMaintainGoal } from './maintainGoalRequest';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
@@ -46,7 +48,20 @@ jest.mock('../../data/api', () => ({
   apiGet: jest.fn(),
   apiSend: jest.fn(),
 }));
-const mockUser = { id: 'u1', username: 'preview', display_name: 'Preview', sex: null } as User;
+const mockRouter = { navigate: jest.fn(), push: jest.fn() };
+jest.mock('expo-router', () => ({
+  router: mockRouter,
+  useRouter: () => mockRouter,
+  useIsFocused: () => true,
+}));
+const mockUser = {
+  id: 'u1',
+  username: 'preview',
+  display_name: 'Preview',
+  sex: null,
+  created_at: '2026-11-01T00:00:00Z',
+  profile_photo_url: null,
+} as unknown as User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
 // A plain text box for the native date picker, so a test can type a date.
 jest.mock('./DateField', () => {
@@ -157,6 +172,9 @@ beforeEach(() => {
     '/api/body-weight-goals': [goal],
     '/api/body-sizes': [] as BodySizeLog[],
     '/api/training-preferences': preferences,
+    '/api/sharing/notifications': { requests: [], accepted: [] },
+    '/api/release': null,
+    '/api/weekly-review': null,
   };
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     const value = responses[path.split('?')[0]];
@@ -212,15 +230,26 @@ test('Body shows the latest weight, goal and body fat, the trend and the history
   expect(
     screen.getByLabelText(`Body fat: 18.5%, ${dayMonth(measurements[1].measurement_date)}`),
   ).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Settings' })).toBeVisible();
+  expect(screen.getByRole('button', { name: /Notifications/i })).toBeVisible();
   expect(screen.getByLabelText('Trend')).toBeVisible();
   expect(screen.getByText('7-day average')).toBeVisible();
-  expect(screen.getByText('Goal 80 kg')).toBeVisible();
+  expect(screen.getByText('Goal')).toBeVisible();
+  await fireEvent(
+    screen.getByLabelText('Bodyweight, 7-day average over daily weigh-ins'),
+    'layout',
+    { nativeEvent: { layout: { width: 340, height: 200 } } },
+  );
+  expect(screen.getByLabelText('Goal 80 kg')).toBeOnTheScreen();
   expect(
     screen.getByLabelText(
       'Weight decreased by 0.4 kg since previous check-in; in line with weight-loss goal',
     ),
   ).toBeVisible();
   expect(screen.getByText('After travel')).toBeVisible();
+  // As on the web, a logged body fat is marked as an estimate.
+  expect(screen.getByLabelText('Body fat 18.5%, estimate')).toBeVisible();
+  expect(screen.getAllByLabelText('Body fat not logged').length).toBeGreaterThan(0);
 
   // The weekly view averages each week's check-ins.
   await fireEvent.press(screen.getByRole('tab', { name: 'Avg Week' }));
@@ -235,7 +264,7 @@ test('with the median chosen in Settings, the history offers median weeks and mo
     expect(screen.getByRole('tab', { name: 'Median Monthly' })).toBeVisible();
     expect(screen.queryByRole('tab', { name: 'Avg Week' })).toBeNull();
   } finally {
-    bodyTrendPreference.set({ duration: '30d', statistic: 'average' });
+    await act(async () => bodyTrendPreference.set({ duration: '30d', statistic: 'average' }));
   }
 });
 
@@ -373,7 +402,7 @@ test('a part typed on the figure is saved into today’s measurements', async ()
 
 test('choosing an outline offers to save it as the account’s sex', async () => {
   await renderBody();
-  await fireEvent.press(screen.getByRole('tab', { name: 'Female' }));
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Female' }));
   const [title, , buttons] = jest.mocked(Alert.alert).mock.calls.at(-1)!;
   expect(title).toBe('Save your sex as Female?');
   await act(async () => (buttons as AlertButton[]).find((b) => b.text === 'Save')!.onPress!());
@@ -457,6 +486,118 @@ test('pinching the trend changes its range, and it opens full screen in landscap
   await waitFor(() =>
     expect(jest.requireMock('expo-screen-orientation').unlockAsync).toHaveBeenCalled(),
   );
+});
+
+test('touching the trend reads the day under the finger, in the card and full screen', async () => {
+  await renderBody();
+  const plot = () => screen.getAllByLabelText('Bodyweight, 7-day average over daily weigh-ins');
+  const oldest = shortDate(measurements[2].measurement_date);
+  const newest = shortDate(today);
+  await fireEvent(plot()[0], 'layout', { nativeEvent: { layout: { width: 340, height: 200 } } });
+  // Unevenly spaced check-ins (10 days, then 2): each edge reads its own day.
+  await fireEvent(plot()[0], 'responderGrant', { nativeEvent: { locationX: 0 } });
+  expect(plot()[0]).toHaveAccessibilityValue({
+    text: `${oldest}, 85.4 kg 7-day average, weighed 85.4 kg`,
+  });
+  // The readout's text is drawn for sight; screen readers get it as the chart's value.
+  const drawn = { includeHiddenElements: true };
+  expect(screen.getByText(oldest, drawn)).toBeOnTheScreen();
+  expect(screen.getByText('weighed 85.4 kg', drawn)).toBeOnTheScreen();
+  await fireEvent(plot()[0], 'responderMove', { nativeEvent: { locationX: 340 } });
+  expect(screen.getByText(newest, drawn)).toBeOnTheScreen();
+  expect(plot()[0]).toHaveAccessibilityValue({
+    text: `${newest}, 84.4 kg 7-day average, weighed 84.2 kg`,
+  });
+  await fireEvent.press(screen.getByRole('button', { name: `Close ${newest} details` }));
+  expect(screen.queryByRole('button', { name: `Close ${newest} details` })).toBeNull();
+
+  // A screen reader hears the latest reading and steps back a day at a time.
+  expect(plot()[0].props.accessibilityValue.text).toMatch(new RegExp(`^${newest}`));
+  await fireEvent(plot()[0], 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+  const middle = shortDate(measurements[1].measurement_date);
+  expect(plot()[0].props.accessibilityValue.text).toMatch(new RegExp(`^${middle}`));
+  expect(screen.getByRole('button', { name: `Close ${middle} details` })).toBeVisible();
+
+  // Full screen draws the same plot at its own size.
+  await fireEvent.press(
+    screen.getByRole('button', { name: 'View Bodyweight trend full screen in landscape' }),
+  );
+  await screen.findByRole('button', { name: 'Exit full-screen Bodyweight trend' });
+  const wide = plot().at(-1)!;
+  await fireEvent(wide, 'layout', { nativeEvent: { layout: { width: 700, height: 300 } } });
+  await fireEvent(wide, 'responderGrant', { nativeEvent: { locationX: 0 } });
+  expect(plot().at(-1)).toHaveAccessibilityValue({
+    text: `${oldest}, 85.4 kg 7-day average, weighed 85.4 kg`,
+  });
+  await fireEvent.press(screen.getAllByRole('button', { name: `Close ${oldest} details` }).at(-1)!);
+  expect(screen.queryAllByRole('button', { name: `Close ${oldest} details` })).toHaveLength(0);
+});
+
+test('in pounds, a weigh-in is saved in kilograms and a long maintenance range stays whole', async () => {
+  responses['/api/training-preferences'] = { ...preferences, preferred_weight_unit: 'lb' };
+  responses['/api/body-weight-goals'] = [
+    { ...goal, target_weight_kg: 85, maintenance_min_kg: 80, maintenance_max_kg: 90 },
+  ];
+  await renderBody(formatWeight(84.2, 'lb'));
+  const range = bodyGoalTarget(
+    { ...goal, target_weight_kg: 85, maintenance_min_kg: 80, maintenance_max_kg: 90 },
+    'lb',
+  );
+  // The range gets its own row rather than shrinking or cutting off.
+  expect(screen.getByText(range).props.numberOfLines).toBeUndefined();
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Log weigh-in' }));
+  await fireEvent.changeText(screen.getByLabelText('Bodyweight in pounds'), '185');
+  await fireEvent.press(screen.getByRole('button', { name: 'Update check-in' }));
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/body-measurements', 'POST', expect.anything()),
+  );
+  const [, , body] = jest
+    .mocked(apiSend)
+    .mock.calls.find(([path]) => path === '/api/body-measurements')!;
+  expect((body as { weight_kg: number }).weight_kg).toBeCloseTo(185 / 2.20462, 1);
+  expect(body).toMatchObject({ measurement_date: today });
+});
+
+test('summaryFits keeps the summary in one row only while every value fits', () => {
+  expect(summaryFits(['82.5 kg', '80 kg', '17.2%'], 393, 1)).toBe(true);
+  expect(summaryFits(['181.9 lb', '176.4–198.4 lb', '17.2%'], 320, 1)).toBe(false);
+  expect(summaryFits(['82.5 kg', '80 kg', '17.2%'], 393, 3)).toBe(false);
+});
+
+test('earlier and later measurements step between days, and Edit saves the day shown', async () => {
+  responses['/api/body-sizes'] = [
+    { ...emptyBodySizeLog(addDays(today, -5)), waist_cm: 82 },
+    { ...emptyBodySizeLog(addDays(today, -20)), waist_cm: 84 },
+  ];
+  await renderBody();
+  // The card's own date format, as it shows it.
+  const cardDate = (date: string) =>
+    new Date(`${date}T12:00:00`).toLocaleDateString(undefined, {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    });
+  const later = cardDate(addDays(today, -5));
+  const earlier = cardDate(addDays(today, -20));
+  expect(await screen.findByText(later)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Later measurements' })).toBeDisabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Earlier measurements' }));
+  expect(screen.getByText(earlier)).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Earlier measurements' })).toBeDisabled();
+
+  const card = screen.getByLabelText('Body measurements');
+  await fireEvent.press(within(card).getAllByRole('button', { name: 'Edit' })[0]);
+  await fireEvent.changeText(await screen.findByLabelText('Waist (cm)'), '83');
+  await fireEvent.press(screen.getByRole('button', { name: 'Update measurements' }));
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/body-sizes', 'PUT', {
+      ...emptyBodySizeLog(addDays(today, -20)),
+      waist_cm: 83,
+    }),
+  );
+  await fireEvent.press(screen.getByRole('button', { name: 'Later measurements' }));
+  expect(screen.getByText(later)).toBeVisible();
 });
 
 const posts = () =>

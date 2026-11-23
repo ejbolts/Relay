@@ -7,6 +7,7 @@ import {
 import { TIP_DEFINITIONS } from '../../../../frontend/src/tipDefinitions';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
 import { Button, Card } from '../../ui/components';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { useTips } from '../guides/tips';
@@ -50,6 +51,7 @@ export function CheckInSyncCard() {
           <Button
             label="Retry sync"
             variant="secondary"
+            size="small"
             onPress={() => void syncBodyCheckIns(true).catch(() => undefined)}
           />
         </>
@@ -90,7 +92,15 @@ export function MaintenanceTip({
   return (
     <View
       accessibilityLabel="Quick tip"
-      style={[styles.tip, { backgroundColor: colors.accentSoft, borderRadius: radius.lg }]}
+      style={[
+        styles.tip,
+        {
+          backgroundColor: colors.accentSoft,
+          borderColor: colors.cardBorder,
+          borderWidth: 1,
+          borderRadius: radius.lg,
+        },
+      ]}
     >
       <Icon name={bodyIcons.sparkle} size={18} color={colors.accentText} />
       <View style={{ flex: 1, gap: 4 }}>
@@ -110,7 +120,10 @@ export function MaintenanceTip({
         accessibilityRole="button"
         accessibilityLabel="Dismiss tip"
         hitSlop={8}
-        onPress={hide}
+        onPress={() => {
+          haptics.tap();
+          hide();
+        }}
       >
         <Icon name="close" size={14} color={colors.muted} />
       </Pressable>

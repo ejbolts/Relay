@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import {
   bodySizeDraft,
   bodySizeLastValue,
@@ -10,6 +10,8 @@ import {
 import { BODY_SIZE_FIELDS, type BodySizeLog } from '../../../../frontend/src/bodySizes';
 import { localDate } from '../../../../frontend/src/utils';
 import { Button } from '../../ui/components';
+import { TextField } from '../../ui/controls';
+import { haptics } from '../../ui/haptics';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 import { DateField } from './DateField';
@@ -44,6 +46,7 @@ export function BodySizesSheet({
           logs={logs}
           size={size}
           saving={saving}
+          onClose={onClose}
           onSave={onSave}
         />
       )}
@@ -56,15 +59,17 @@ function SizesForm({
   logs,
   size,
   saving,
+  onClose,
   onSave,
 }: {
   initialDate: string;
   logs: BodySizeLog[] | null;
   size: BodySizeUnit;
   saving: boolean;
+  onClose: () => void;
   onSave: (entry: BodySizeLog) => Promise<string | null>;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const [date, setDate] = useState(initialDate);
   const [draft, setDraft] = useState<BodySizeDraft>(() => bodySizeDraft(logs, initialDate, size));
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +78,7 @@ function SizesForm({
   async function submit() {
     const checked = bodySizesPayload(stored, date, draft, size);
     if (checked.error !== null) {
+      haptics.error();
       setError(checked.error);
       return;
     }
@@ -80,7 +86,7 @@ function SizesForm({
   }
 
   return (
-    <View style={{ gap: 16 }}>
+    <View style={{ gap: 14 }}>
       <DateField
         label="Date"
         value={date}
@@ -94,30 +100,21 @@ function SizesForm({
       />
       <View style={styles.grid}>
         {BODY_SIZE_FIELDS.map(([key, label]) => (
-          <View key={key} style={styles.field}>
-            <Text style={[type.footnote, { color: colors.secondary }]} numberOfLines={1}>
-              {label} ({size.unit})
-            </Text>
-            <TextInput
-              value={draft[key] ?? ''}
-              onChangeText={(text) => {
-                setDraft((current) => ({ ...current, [key]: text.replace(',', '.') }));
-                setError(null);
-              }}
-              editable={!saving}
-              keyboardType="decimal-pad"
-              returnKeyType="done"
-              placeholder={bodySizeLastValue(logs, date, key, size)}
-              placeholderTextColor={colors.muted}
-              accessibilityLabel={`${label} (${size.unit})`}
-              style={[
-                type.body,
-                type.number,
-                styles.input,
-                { color: colors.text, backgroundColor: colors.surface2, borderRadius: radius.md },
-              ]}
-            />
-          </View>
+          <TextField
+            key={key}
+            label={`${label} (${size.unit})`}
+            value={draft[key] ?? ''}
+            onChangeText={(text) => {
+              setDraft((current) => ({ ...current, [key]: text.replace(',', '.') }));
+              setError(null);
+            }}
+            editable={!saving}
+            keyboardType="decimal-pad"
+            returnKeyType="done"
+            placeholder={bodySizeLastValue(logs, date, key, size)}
+            style={styles.field}
+            inputStyle={[type.number, styles.input]}
+          />
         ))}
       </View>
       {error && (
@@ -125,17 +122,22 @@ function SizesForm({
           {error}
         </Text>
       )}
-      <Button
-        label={saving ? 'Saving…' : stored ? 'Update measurements' : 'Save measurements'}
-        disabled={saving}
-        onPress={() => void submit()}
-      />
+      <View style={styles.actions}>
+        <Button
+          label={saving ? 'Saving…' : stored ? 'Update measurements' : 'Save measurements'}
+          loading={saving}
+          disabled={saving}
+          onPress={() => void submit()}
+        />
+        <Button label="Cancel" variant="secondary" disabled={saving} onPress={onClose} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 12, columnGap: 10 },
-  field: { width: '47%', flexGrow: 1, gap: 6 },
-  input: { height: 44, paddingHorizontal: 12 },
+  field: { width: '47%', flexGrow: 1 },
+  input: { minHeight: 44, paddingVertical: 8 },
+  actions: { gap: 8, marginTop: 2 },
 });
