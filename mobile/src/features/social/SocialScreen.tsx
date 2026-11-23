@@ -92,11 +92,8 @@ export function SocialScreen() {
         actions={
           <AccountHeaderActions
             notifications={<NotificationsBell />}
-            profile={{
-              user,
-              onPress: () => nav.openProfile(user),
-              waiting: { friendRequests: requests },
-            }}
+            // As the web's Social header: the Friends segment carries the request count.
+            profile={{ user, onPress: () => nav.openProfile(user) }}
           />
         }
       >
