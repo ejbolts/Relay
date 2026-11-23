@@ -35,6 +35,7 @@ import { showToast } from '../../ui/Toast';
 import { CardioAllStats } from '../cardio/CardioAllStats';
 import { deleteCardioEntry } from '../cardio/cardioData';
 import { CardioShareSheet } from '../cardio/CardioShareSheet';
+import { chartNeutral } from './contrast';
 import { trainingIcons } from './icons';
 import { Chip, Divider, MoreButton, Note, Segmented } from './parts';
 import { useCardioOverview } from './trainingQueries';
@@ -113,6 +114,8 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
     distanceKey,
   );
   const { selected, metric, value, difference, maximum } = view;
+  // The web's grey bars, darkened where needed to keep 3:1 on the card.
+  const neutral = chartNeutral(colors);
   return (
     <Card accessibilityLabel="Weekly cardio trend">
       <Segmented
@@ -192,7 +195,7 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
                         }
                       : {
                           height: `${Math.max(3, (amount / maximum) * 100)}%`,
-                          backgroundColor: active ? colors.accent : colors.deemph,
+                          backgroundColor: active ? colors.accent : neutral,
                         },
                   ]}
                 />

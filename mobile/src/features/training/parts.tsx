@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../../ui/Icon';
+import { toneBadge } from './contrast';
 import { useTheme } from '../../ui/theme';
 import { haptics } from '../../ui/haptics';
 
@@ -79,9 +80,10 @@ export function Badge({
   sentence?: boolean;
 }) {
   const { colors, radius } = useTheme();
-  const ink = tone === 'gold' ? colors.gold : tone === 'good' ? colors.good : colors.muted;
-  const fill =
-    tone === 'gold' ? colors.goldSoft : tone === 'good' ? `${colors.good}26` : colors.surface2;
+  // Tinted badges keep 4.5:1 on their fill on every theme (contrast.ts).
+  const toned = tone === 'neutral' ? null : toneBadge(colors, tone);
+  const ink = toned?.ink ?? colors.muted;
+  const fill = toned?.fill ?? colors.surface2;
   return (
     <View
       style={[

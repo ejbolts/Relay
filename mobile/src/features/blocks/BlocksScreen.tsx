@@ -30,6 +30,7 @@ import { localDate } from '../../../../frontend/src/utils';
 import { Button, Card, ErrorState, errorMessage, IconButton, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { cellInk } from '../training/contrast';
 import { trainingIcons } from '../training/icons';
 import { Badge } from '../training/parts';
 import { useBlockSummary, useTrainingBlocks } from './blockQueries';
@@ -417,33 +418,30 @@ function BlockNowCard({
             style={[styles.weeks, { borderRadius: radius.sm, backgroundColor: colors.surface2 }]}
             importantForAccessibility="no-hide-descendants"
           >
-            {cells.map((cell, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.week,
-                  cell.state === 'done' && { backgroundColor: tint(color, 'b3') },
-                  cell.state === 'now' && { backgroundColor: tint(color, '4d') },
-                ]}
-              >
-                {!!cell.label && (
-                  <Text
-                    style={[
-                      styles.weekLabel,
-                      {
-                        color:
-                          cell.state === 'done' || cell.state === 'now'
-                            ? colors.text
-                            : colors.secondary,
-                      },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {cell.label}
-                  </Text>
-                )}
-              </View>
-            ))}
+            {cells.map((cell, index) => {
+              const fill =
+                cell.state === 'done'
+                  ? tint(color, 'b3')
+                  : cell.state === 'now'
+                    ? tint(color, '4d')
+                    : null;
+              return (
+                <View key={index} style={[styles.week, fill !== null && { backgroundColor: fill }]}>
+                  {!!cell.label && (
+                    <Text
+                      style={[
+                        styles.weekLabel,
+                        // Ink chosen against the block colour as painted, for any custom colour.
+                        { color: fill === null ? colors.secondary : cellInk(colors, fill) },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {cell.label}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
         {now && before && previous && before.block.workout_count > 0 && (
