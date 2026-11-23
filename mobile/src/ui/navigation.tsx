@@ -60,6 +60,11 @@ export function sheetScreenOptions({
  * form sheet sized to its content needs a content-sized root, not `flex: 1`), and filling the
  * sheet for fraction detents. Android gets the same bottom sheet drawn here, over a dimmed
  * backdrop that closes it when tapped.
+ *
+ * Android's sheet can't be dragged between detents, so it opens at the tallest one, and it never
+ * covers the status bar: it is at most 92% of the screen and keeps 48 pt below the safe area at
+ * the top. A detent of `1` therefore opens at that cap, not the full screen; size scrolling
+ * content to the sheet (`flex: 1`), not to the screen.
  */
 export function SheetFrame({
   detents = 'fitToContents',
@@ -93,8 +98,7 @@ export function SheetFrame({
             paddingBottom: insets.bottom,
             marginTop: insets.top + 48,
           },
-          // Fraction detents set the sheet's height. This sheet can't be dragged between them,
-          // so it opens at the tallest.
+          // Fraction detents set the sheet's height: the tallest, within the 92% cap above.
           fill && { height: `${Math.round(Math.max(...detents) * 100)}%` },
         ]}
       >

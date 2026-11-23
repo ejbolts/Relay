@@ -7,6 +7,7 @@ import type {
   AccountLimitsSettings,
   AdminUser,
   AppFeedback,
+  FriendPresence,
   ServerSettings,
   ServerSettingsUpdate,
   ServerStatus,
@@ -28,10 +29,29 @@ export const adminKeys = {
 
 const user = (id: string) => `/api/admin/users/${encodeURIComponent(id)}`;
 
-export const adminApi = {
+/**
+ * Live activity heard from the socket, numbered in arrival order. An account list that was
+ * requested before an update arrived is older than it, so loading that list keeps the update
+ * (as the web's useAdminUsers does) instead of showing the account idle again.
+ */
+let activityRevision = 0;
+const liveActivity = new Map<string, { revision: number; presence: FriendPresence }>();
+let activityScreens = 0;
+
+async function loadUsers(signal?: AbortSignal) {
+  const before = activityRevision;
+  const users = await apiGet<AdminUser[]>('/api/admin/users', signal);
   // Sorted only when the list loads, so a card keeps its place after its request is handled.
-  users: (signal?: AbortSignal) =>
-    apiGet<AdminUser[]>('/api/admin/users', signal).then(requestsFirst),
+  return requestsFirst(users).map((account) => {
+    const update = liveActivity.get(account.id);
+    return update && update.revision > before
+      ? withAdminActivity(account, update.presence)
+      : account;
+  });
+}
+
+export const adminApi = {
+  users: loadUsers,
   feedback: (signal?: AbortSignal) => apiGet<AppFeedback[]>('/api/admin/feedback', signal),
   settings: (signal?: AbortSignal) => apiGet<ServerSettings>('/api/admin/settings', signal),
   status: (signal?: AbortSignal) => apiGet<ServerStatus>('/api/admin/status', signal),
@@ -97,12 +117,17 @@ export function patchAccount(
 export function useAdminActivity() {
   const client = useQueryClient();
   useEffect(() => {
+    activityScreens += 1;
     const reload = () => void client.invalidateQueries({ queryKey: adminKeys.users });
     const stop = onAdminActivity((activity) => {
       if (!activity) {
         reload();
         return;
       }
+      liveActivity.set(activity.userId, {
+        revision: ++activityRevision,
+        presence: activity.presence,
+      });
       patchAccount(client, activity.userId, (account) =>
         withAdminActivity(account, activity.presence),
       );
@@ -113,6 +138,9 @@ export function useAdminActivity() {
     return () => {
       stop();
       app.remove();
+      // Forgotten once no admin screen is open, so nothing carries over to another sign-in.
+      activityScreens -= 1;
+      if (activityScreens === 0) liveActivity.clear();
     };
   }, [client]);
 }
