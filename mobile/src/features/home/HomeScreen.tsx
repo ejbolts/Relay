@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { homeDateLine } from '../../../../frontend/src/homeDateLine';
@@ -9,6 +10,7 @@ import type { HeatmapDay } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { queryKeys, useDashboard } from '../../data/queries';
 import { Button } from '../../ui/components';
+import { haptics } from '../../ui/haptics';
 import { useTheme } from '../../ui/theme';
 import { LaunchNotices } from '../review';
 import { bodyKeys } from '../body/bodyQueries';
@@ -51,6 +53,8 @@ const HOME_QUERIES = [
  */
 export function HomeScreen() {
   const client = useQueryClient();
+  const router = useRouter();
+  const focused = useIsFocused();
   const workout = useWorkout();
   const { colors, type } = useTheme();
   const home = useHomeLayout();
@@ -111,6 +115,14 @@ export function HomeScreen() {
           liveDate={liveDate}
           onPressDay={pressDay}
           onOpenLive={workout.open}
+          onHoldToEdit={
+            canEdit && focused
+              ? () => {
+                  haptics.press();
+                  router.push('/home-layout');
+                }
+              : undefined
+          }
         />
         {visible.length === 0 && (
           <Text style={[type.footnote, { color: colors.muted, textAlign: 'center' }]}>
