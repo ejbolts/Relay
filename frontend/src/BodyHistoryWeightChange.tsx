@@ -2,20 +2,14 @@ import { Icon } from './Icon';
 import {
   bodyGoalKind,
   bodyGoalName,
+  goalStartLabel,
   weightChangeAmount,
+  weightChangeLabel,
   type BodyHistoryGoal,
   type BodyHistoryWeightChange as WeightChange,
 } from './bodyMeasurementHistory';
 import type { WeightUnit } from './weightUnits';
 import './bodyMeasurementHistory.css';
-
-function goalComparison(change: WeightChange): string {
-  if (!change.goalDirection || change.status === 'neutral') return '';
-  if (change.goalDirection === 'maintain') {
-    return `; ${change.status === 'favorable' ? 'closer to' : 'further from'} maintenance weight`;
-  }
-  return `; ${change.status === 'favorable' ? 'in line with' : 'opposite to'} weight-${change.goalDirection} goal`;
-}
 
 export function BodyHistoryWeightChange({
   change,
@@ -34,7 +28,7 @@ export function BodyHistoryWeightChange({
 }) {
   if (!change) return null;
   const amount = weightChangeAmount(change, unit, decimals, fixed);
-  const label = `Weight ${change.direction === 'up' ? 'increased' : 'decreased'} by ${amount} ${unit} since ${comparison}${goalComparison(change)}`;
+  const label = weightChangeLabel(change, amount, unit, comparison);
   return (
     <span
       className={`body-history-weight-change ${change.status}`}
@@ -60,12 +54,7 @@ export function BodyHistoryGoalDivider({
 }) {
   const kind = bodyGoalKind(goal);
   const name = bodyGoalName(goal, unit);
-  const start = new Date(`${goal.start_date}T12:00:00`);
-  const date = new Intl.DateTimeFormat(undefined, {
-    day: 'numeric',
-    month: 'short',
-    ...(start.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
-  }).format(start);
+  const date = goalStartLabel(goal.start_date);
   return (
     <div
       className={`body-history-goal-divider ${kind}`}

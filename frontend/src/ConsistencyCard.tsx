@@ -1,5 +1,5 @@
 import { useId, type ReactNode } from 'react';
-import { CONSISTENCY_WEEKS } from './consistencyWeeks';
+import { averagePerWeek, CONSISTENCY_WEEKS } from './consistencyWeeks';
 import { Icon } from './Icon';
 export function ConsistencyCard({
   streak,
@@ -42,7 +42,7 @@ export function ConsistencyCard({
         </div>
         <div>
           <span>Avg / week</span>
-          <b>{(trainingDays / weeks).toFixed(1)}</b>
+          <b>{averagePerWeek(trainingDays, weeks)}</b>
         </div>
       </div>
       {children}

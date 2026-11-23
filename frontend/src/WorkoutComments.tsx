@@ -9,20 +9,15 @@ import { ProfileAvatar } from './ProfileAvatar';
 import { PopupDialog } from './PopupDialog';
 import { ShowMoreButton } from './ShowMoreButton';
 import type { WorkoutComment, WorkoutReactions } from './types';
-import { localDate, localDateOf } from './utils';
-
-/** A comment's time, with its day when it was not posted today. */
-function commentTime(createdAt: string): string {
-  const posted = new Date(createdAt);
-  const time = posted.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (localDateOf(createdAt) === localDate()) return time;
-  const day = posted.toLocaleDateString([], {
-    day: 'numeric',
-    month: 'short',
-    ...(posted.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
-  });
-  return `${day}, ${time}`;
-}
+import {
+  canSendComment,
+  clampComment,
+  commentLength,
+  commentThreads,
+  commentTime,
+  COMMENT_MAX_LENGTH,
+  deleteCommentMessage,
+} from './commentDisplay';
 
 export function WorkoutComments({
   workoutId,
@@ -316,11 +311,7 @@ export function WorkoutComments({
             </>
           }
         >
-          <p>
-            {items.some((item) => item.parent_id === deleting.id)
-              ? 'This comment and its replies will be permanently deleted.'
-              : 'This comment will be permanently deleted.'}
-          </p>
+          <p>{deleteCommentMessage(items, deleting)}</p>
           {error && (
             <p className="inline-error" role="alert">
               {error}
@@ -331,16 +322,12 @@ export function WorkoutComments({
       {loading ? (
         <p role="status">Loading comments…</p>
       ) : (
-        items
-          .filter((item) => !item.parent_id)
-          .map((root) => (
-            <div key={root.id}>
-              {renderComment(root)}
-              <div className="comment-replies">
-                {items.filter((item) => item.parent_id === root.id).map(renderComment)}
-              </div>
-            </div>
-          ))
+        commentThreads(items).map(({ root, replies }) => (
+          <div key={root.id}>
+            {renderComment(root)}
+            <div className="comment-replies">{replies.map(renderComment)}</div>
+          </div>
+        ))
       )}
       {next !== null && (
         <ShowMoreButton
@@ -377,7 +364,7 @@ export function WorkoutComments({
         className="comment-composer"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!body.trim() || Array.from(body).length > 280) return;
+          if (!canSendComment(body)) return;
           void run(async () => {
             if (editing) await api.sharing.editComment(editing.id, body);
             else await api.sharing.addComment(workoutId, body, reply?.id ?? null, null);
@@ -394,7 +381,7 @@ export function WorkoutComments({
           placeholder={reply ? 'Write a reply…' : 'Write a comment…'}
           value={body}
           rows={2}
-          onChange={(event) => setBody(Array.from(event.target.value).slice(0, 280).join(''))}
+          onChange={(event) => setBody(clampComment(event.target.value))}
           disabled={loading || busy}
         />
         <button
@@ -405,7 +392,7 @@ export function WorkoutComments({
           {busy ? 'Saving…' : editing ? 'Save' : 'Send'}
         </button>
         <span className="comment-length" aria-live="polite">
-          {Array.from(body).length}/280
+          {commentLength(body)}/{COMMENT_MAX_LENGTH}
         </span>
       </form>
       {error && (

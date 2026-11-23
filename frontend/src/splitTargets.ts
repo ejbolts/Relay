@@ -1,3 +1,4 @@
+import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
 import type { Exercise, RoutineDay } from './types';
 
 export interface PlannedMuscleVolume {
@@ -129,4 +130,76 @@ export function exerciseMuscles(exercise: Exercise) {
   return exerciseSetCredits(exercise)
     .map(({ muscle, sets }) => (sets < 1 ? `${muscle} ½` : muscle))
     .join(' · ');
+}
+
+/** The selection key for the cardio row of the weekly volume chart. */
+export const CARDIO_ROW = '__cardio';
+
+export const TARGET_MARKS: Record<TargetStatus, string> = { met: '✓', close: '~', under: '!' };
+export const TARGET_LABELS: Record<TargetStatus, string> = {
+  met: 'on target',
+  close: 'nearly there',
+  under: 'under target',
+};
+
+/** One row of a split's weekly volume: a muscle's sets, or planned cardio minutes. */
+export interface VolumeRow {
+  key: string;
+  name: string;
+  value: number;
+  goal: number | null;
+  unit: 'sets' | 'min';
+  status: TargetStatus | null;
+}
+
+/** Sets keep one decimal place for part credits; cardio shows whole minutes. */
+export const volumeRowValue = (row: VolumeRow) =>
+  row.unit === 'min' ? Math.round(row.value).toLocaleString() : formatVolume(row.value);
+
+/** A row as one sentence, for screen readers. */
+export function describeVolumeRow(row: VolumeRow) {
+  const unit = row.unit === 'min' ? 'minutes' : 'sets';
+  return row.goal == null
+    ? `${row.name}: ${volumeRowValue(row)} ${unit} a week`
+    : `${row.name}: ${volumeRowValue(row)} of ${row.goal} ${unit} a week, ${TARGET_LABELS[row.status!]}`;
+}
+
+/**
+ * A split's planned weekly volume against the account's goals: a row per muscle, the cardio row
+ * when there is a cardio goal or planned cardio, and how many goals the plan meets.
+ */
+export function splitVolumeRows(
+  days: RoutineDay[],
+  muscleGoal: number,
+  muscleGoals: MuscleSetGoals | undefined,
+  cardioGoal: number | null,
+) {
+  const volume = plannedWeeklyVolume(days);
+  const rows: VolumeRow[] = volume.muscles.map(({ muscle, sets }) => ({
+    key: muscle,
+    name: muscle,
+    value: sets,
+    goal: muscleSetGoal(muscle, muscleGoal, muscleGoals),
+    unit: 'sets',
+    status: targetStatus(sets, muscleSetGoal(muscle, muscleGoal, muscleGoals)),
+  }));
+  const cardio: VolumeRow | null =
+    cardioGoal || volume.cardioMinutes > 0
+      ? {
+          key: CARDIO_ROW,
+          name: 'Cardio',
+          value: volume.cardioMinutes,
+          goal: cardioGoal || null,
+          unit: 'min',
+          status: cardioGoal ? targetStatus(volume.cardioMinutes, cardioGoal) : null,
+        }
+      : null;
+  const goals = [...rows, ...(cardio ? [cardio] : [])].filter((row) => row.status);
+  return {
+    cycleDays: volume.cycleDays,
+    rows,
+    cardio,
+    goals: goals.length,
+    met: goals.filter((row) => row.status === 'met').length,
+  };
 }
