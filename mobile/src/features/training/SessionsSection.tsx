@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
   groupWorkoutsByWeek,
@@ -27,7 +27,13 @@ import { useCreateWorkoutOn } from '../home/calendarActions';
 import { PlannedDaySheet } from '../home/PlannedDaySheet';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { CalendarDaySheet } from './CalendarDaySheet';
-import { calendarBounds, calendarMonthView, monthOf, monthsBetween } from './calendarModel';
+import {
+  calendarBounds,
+  entriesByMonth,
+  monthOf,
+  monthsBetween,
+  monthViews,
+} from './calendarModel';
 import { Divider, MoreButton, Note } from './parts';
 import { RepeatWorkoutButton } from './RepeatWorkoutButton';
 import { trainingKeys, type useTrainingHistory } from './trainingQueries';
@@ -58,19 +64,11 @@ export function SessionsSection({ history }: { history: History }) {
   // The split's planned days ahead and missed days behind, as the web's calendar shows them.
   const split = useDashboard().data?.training_split;
   const splitDays = useMemo(() => splitCalendarDays(split, today, 42), [split, today]);
-  const viewFor = useCallback(
-    (month: string) =>
-      calendarMonthView({
-        month,
-        entries: heatmap,
-        types,
-        categoryColors,
-        hidden,
-        weekStartDay,
-        today,
-        splitDays,
-      }),
-    [heatmap, types, categoryColors, hidden, weekStartDay, today, splitDays],
+  // History is grouped by month once; each month's view is then built at most once.
+  const byMonth = useMemo(() => entriesByMonth(heatmap), [heatmap]);
+  const viewFor = useMemo(
+    () => monthViews({ byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays }),
+    [byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays],
   );
   const months = useMemo(
     () => monthsBetween(bounds.first, bounds.last),

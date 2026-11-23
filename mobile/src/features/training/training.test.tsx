@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
-import { Alert } from 'react-native';
+import { AccessibilityInfo, Alert, I18nManager } from 'react-native';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { prettyDate } from '../../../../frontend/src/appShared';
@@ -251,6 +251,73 @@ test('going back past the loaded months reads older history', async () => {
     '/api/workouts/snapshot?start=2026-02-01&end=2026-07-31',
     expect.anything(),
   );
+});
+
+/** A swipe of the measured month pager settling on a page (`x` is the raw scroll offset). */
+async function settleCalendar(x: number) {
+  const list = screen.getByTestId('calendar-months');
+  await fireEvent(list, 'momentumScrollEnd', {
+    nativeEvent: {
+      contentOffset: { x, y: 0 },
+      contentSize: { width: 9 * 300, height: 300 },
+      layoutMeasurement: { width: 300, height: 300 },
+    },
+  });
+}
+
+test('the calendar swipes between months, landing on the month it settles on', async () => {
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  await open(<TrainingTabScreen />);
+  await screen.findByText('This week');
+  await fireEvent(screen.getByTestId('calendar-pager'), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 300 } },
+  });
+  expect(screen.getByTestId('calendar-months')).toBeOnTheScreen();
+  expect(screen.getByRole('header', { name: 'November 2026' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Next month' })).toBeDisabled();
+
+  // Nine months, March to November: the first page is the oldest.
+  await settleCalendar(0);
+  expect(screen.getByRole('header', { name: 'March 2026' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Previous month' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Next month' })).toBeEnabled();
+  expect(announce).toHaveBeenLastCalledWith('March 2026');
+  expect(
+    await screen.findByRole('button', { name: `View 1 workout for ${prettyDate('2026-03-02')}` }),
+  ).toBeVisible();
+  // Reaching months before the loaded window reads older history.
+  expect(apiGet).toHaveBeenCalledWith(
+    '/api/workouts/snapshot?start=2026-02-01&end=2026-07-31',
+    expect.anything(),
+  );
+
+  // A day chosen on a page stays chosen after swiping away and back.
+  const day = screen.getByRole('button', {
+    name: `View 1 workout for ${prettyDate('2026-03-02')}`,
+  });
+  await fireEvent.press(day);
+  await settleCalendar(8 * 300);
+  expect(screen.getByRole('header', { name: 'November 2026' })).toBeVisible();
+  await settleCalendar(0);
+  expect(
+    screen.getByRole('button', { name: `View 1 workout for ${prettyDate('2026-03-02')}` }),
+  ).toBeSelected();
+  announce.mockRestore();
+});
+
+test('a right-to-left calendar maps its pages from the right', async () => {
+  jest.replaceProperty(I18nManager, 'isRTL', true);
+  await open(<TrainingTabScreen />);
+  await screen.findByText('This week');
+  await fireEvent(screen.getByTestId('calendar-pager'), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 300 } },
+  });
+  // In RTL the oldest month is the rightmost page.
+  await settleCalendar(8 * 300);
+  expect(screen.getByRole('header', { name: 'March 2026' })).toBeVisible();
+  await settleCalendar(0);
+  expect(screen.getByRole('header', { name: 'November 2026' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Next month' })).toBeDisabled();
 });
 
 test('Show earlier weeks skips empty weeks, reading older months to reach the next workout', async () => {

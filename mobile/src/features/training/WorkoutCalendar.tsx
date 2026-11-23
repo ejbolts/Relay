@@ -1,5 +1,14 @@
 import { memo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  AccessibilityInfo,
+  ActivityIndicator,
+  FlatList,
+  I18nManager,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import type { WorkoutType, WorkoutTypeColors } from '../../../../frontend/src/types';
@@ -10,6 +19,7 @@ import {
   ringSegments,
   type CalendarDay,
   type CalendarMonthView,
+  settledPage,
   type MonthKey,
 } from './calendarModel';
 import { haptics } from '../../ui/haptics';
@@ -176,51 +186,43 @@ export function WorkoutCalendar({
   const [width, setWidth] = useState(0);
   const pager = useRef<FlatList<MonthKey>>(null);
   const index = Math.max(0, months.indexOf(month));
+  const title = viewFor(month).title;
+  // Lands on a month, from the arrows or a swipe: screen readers hear it, focus stays put.
+  const settle = (next: MonthKey) => {
+    if (next === month) return;
+    haptics.selection();
+    onMonthChange(next);
+    AccessibilityInfo.announceForAccessibility(viewFor(next).title);
+  };
   const go = (delta: number) => {
     const next = months[index + delta];
     if (!next) return;
-    onMonthChange(next);
+    settle(next);
     pager.current?.scrollToIndex({ index: index + delta, animated: true });
   };
   const page = (key: MonthKey) => (
     <MonthPage view={viewFor(key)} selectedDate={selectedDate} onSelectDay={onSelectDay} />
   );
   return (
-    <View onLayout={(event) => setWidth(Math.round(event.nativeEvent.layout.width))}>
-      {width > 0 ? (
-        <FlatList
-          // A new oldest month shifts every page: start again at the month on show.
-          key={months[0]}
-          ref={pager}
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          data={months}
-          keyExtractor={(key) => key}
-          initialScrollIndex={index}
-          getItemLayout={(_, item) => ({ length: width, offset: width * item, index: item })}
-          initialNumToRender={1}
-          windowSize={3}
-          extraData={[selectedDate, viewFor]}
-          onMomentumScrollEnd={(event) => {
-            const shown = months[Math.round(event.nativeEvent.contentOffset.x / width)];
-            if (shown && shown !== month) {
-              haptics.selection();
-              onMonthChange(shown);
-            }
-          }}
-          renderItem={({ item }) => <View style={{ width }}>{page(item)}</View>}
-        />
-      ) : (
-        page(month)
-      )}
-      {/* Over the month's title, on every page. */}
-      <View style={styles.monthControls}>
+    <View style={{ gap: 4 }}>
+      {/* The month and its controls laid out together, before the days for screen readers. */}
+      <View style={styles.monthRow}>
+        <Text
+          accessibilityRole="header"
+          style={[type.headline, styles.monthTitle, { color: colors.text }]}
+        >
+          {title}
+        </Text>
         {loadingOlder && (
           <ActivityIndicator accessibilityLabel="Loading earlier months" color={colors.muted} />
         )}
         {!!olderError && (
-          <Pressable accessibilityRole="button" onPress={onRetryOlder} hitSlop={8}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry loading earlier months"
+            onPress={onRetryOlder}
+            style={styles.retry}
+          >
             <Text style={[type.footnote, { color: colors.danger }]}>Retry</Text>
           </Pressable>
         )}
@@ -236,6 +238,37 @@ export function WorkoutCalendar({
           enabled={index < months.length - 1}
           onPress={() => go(1)}
         />
+      </View>
+      <View
+        testID="calendar-pager"
+        onLayout={(event) => setWidth(Math.round(event.nativeEvent.layout.width))}
+      >
+        {width > 0 ? (
+          <FlatList
+            // A new width or oldest month moves every page: start again at the month on show.
+            key={`${months[0]}:${width}`}
+            ref={pager}
+            testID="calendar-months"
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            data={months}
+            keyExtractor={(key) => key}
+            initialScrollIndex={index}
+            getItemLayout={(_, item) => ({ length: width, offset: width * item, index: item })}
+            initialNumToRender={1}
+            windowSize={3}
+            extraData={[selectedDate, viewFor]}
+            onMomentumScrollEnd={(event) => {
+              const shown =
+                months[settledPage(event.nativeEvent, I18nManager.isRTL, months.length)];
+              if (shown) settle(shown);
+            }}
+            renderItem={({ item }) => <View style={{ width }}>{page(item)}</View>}
+          />
+        ) : (
+          page(month)
+        )}
       </View>
     </View>
   );
@@ -253,11 +286,6 @@ const MonthPage = memo(function MonthPage({
   const { colors, type } = useTheme();
   return (
     <View style={{ gap: 8 }} accessibilityLabel={view.title}>
-      <View style={styles.monthRow}>
-        <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
-          {view.title}
-        </Text>
-      </View>
       <View style={styles.week} importantForAccessibility="no-hide-descendants">
         {view.weekdays.map((weekday, index) => (
           <Text key={index} style={[styles.weekday, type.caption, { color: colors.muted }]}>
@@ -372,15 +400,9 @@ export function CalendarLegend({
 }
 
 const styles = StyleSheet.create({
-  monthRow: { minHeight: 44, justifyContent: 'center', paddingLeft: 4 },
-  monthControls: {
-    position: 'absolute',
-    top: 0,
-    right: -8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
+  monthRow: { flexDirection: 'row', alignItems: 'center', gap: 2, marginRight: -8 },
+  monthTitle: { flex: 1, paddingLeft: 4, paddingVertical: 10 },
+  retry: { minHeight: 44, justifyContent: 'center', paddingHorizontal: 6 },
   monthButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   week: { flexDirection: 'row' },
   weekday: { flex: 1, textAlign: 'center', fontWeight: '600' },
