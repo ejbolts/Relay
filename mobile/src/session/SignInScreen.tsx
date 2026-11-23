@@ -28,6 +28,7 @@ import { ProfilePhoto } from '../ui/ProfilePhoto';
 import { Sheet } from '../ui/Sheet';
 import { showToast, ToastHost } from '../ui/Toast';
 import { useTheme } from '../ui/theme';
+import { queueImportPrompt } from '../features/data/importPrompt';
 import { registerAccount, useRegistrationConfig } from './registration';
 import { useSession } from './SessionProvider';
 
@@ -74,7 +75,9 @@ export function SignInScreen() {
     try {
       if (creating) {
         const fields = registrationFields(values);
-        await registerAccount(fields);
+        const created = await registerAccount(fields);
+        // B5 (data): ask the new account whether to import its history once it signs in.
+        queueImportPrompt(created.id);
         try {
           await signIn(fields.username, password);
         } catch {

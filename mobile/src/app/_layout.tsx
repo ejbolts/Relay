@@ -8,6 +8,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createQueryClient } from '../data/queryClient';
 // W3 (Home): header options for Home's pushed screens.
 import { homeScreenOptions } from '../features/home/routes';
+// B5 (data): asks a new account whether to import its history.
+import { useImportPrompt } from '../features/data';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { useDeferredFriendInvite } from '../session/friendInvite';
@@ -40,6 +42,7 @@ function Navigation() {
   // After an admin reset nothing else works until a new password is chosen, as on the web.
   const mustChangePassword = signedIn && !!status.user.must_change_password;
   useDeferredFriendInvite(signedIn && !mustChangePassword);
+  useImportPrompt();
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
   const theme = {
     ...base,
@@ -102,6 +105,8 @@ function Navigation() {
             <Stack.Screen name="cardio/log" />
             <Stack.Screen name="cardio/metrics/[id]" />
             <Stack.Screen name="cardio/zones" />
+            {/* Mobile batch 4, data stream: CSV import with review and undo, and data export. */}
+            <Stack.Screen name="data" />
           </Stack.Protected>
           <Stack.Protected guard={mustChangePassword}>
             <Stack.Screen name="password-required" />
