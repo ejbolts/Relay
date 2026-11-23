@@ -21,6 +21,7 @@ export function FinishedSummary({
   refused,
   weightUnit,
   onReview,
+  onKeepMine,
   onDiscard,
   onDone,
 }: {
@@ -30,6 +31,7 @@ export function FinishedSummary({
   refused: RefusedSave | null;
   weightUnit: WeightUnit;
   onReview: () => void;
+  onKeepMine: () => void;
   onDiscard: () => void;
   onDone: () => void;
 }) {
@@ -118,7 +120,12 @@ export function FinishedSummary({
         </Text>
       )}
       {refused ? (
-        <RefusedSaveCard save={refused} onReview={onReview} onDiscard={onDiscard} />
+        <RefusedSaveCard
+          save={refused}
+          onReview={onReview}
+          onKeepMine={onKeepMine}
+          onDiscard={onDiscard}
+        />
       ) : (
         <View style={styles.status} accessibilityLiveRegion="polite">
           <Icon name={status.icon} size={16} color={status.color} />

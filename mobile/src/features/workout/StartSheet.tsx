@@ -41,6 +41,7 @@ export function StartSheet() {
           key={save.key}
           save={save}
           onReview={() => workout.review(save.key)}
+          onKeepMine={() => workout.keepMine(save.key)}
           onDiscard={() => workout.discardRefused(save.key)}
         />
       ))}

@@ -3,12 +3,14 @@ import { useNow } from '../../ui/useNow';
 
 /**
  * "12:34" or "1:02:34" of training since `startedAt`, leaving out paused time as the web does,
- * ticking each second while mounted (and standing still while paused).
+ * ticking each second while mounted (and standing still while paused). A resumed workout adds
+ * the minutes it was saved with (`previousMinutes`).
  */
-export function useElapsed(startedAt: number, pause?: WorkoutPause) {
+export function useElapsed(startedAt: number, pause?: WorkoutPause, previousMinutes = 0) {
   const now = useNow();
   return formatElapsed(
-    pause ? activeElapsedSeconds(startedAt, pause, now) * 1000 : now - startedAt,
+    previousMinutes * 60_000 +
+      (pause ? activeElapsedSeconds(startedAt, pause, now) * 1000 : now - startedAt),
   );
 }
 

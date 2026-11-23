@@ -12,10 +12,13 @@ import type { RefusedSave } from './WorkoutProvider';
 export function RefusedSaveCard({
   save,
   onReview,
+  onKeepMine,
   onDiscard,
 }: {
   save: RefusedSave;
   onReview: () => void;
+  /** For a save refused because another device changed the workout: send this one anyway. */
+  onKeepMine: () => void;
   onDiscard: () => void;
 }) {
   const { colors, type, radius } = useTheme();
@@ -61,12 +64,21 @@ export function RefusedSaveCard({
           onPress={confirmDiscard}
           style={{ flex: 1 }}
         />
-        <Button
-          label="Review"
-          accessibilityLabel={`Review ${save.name}`}
-          onPress={onReview}
-          style={{ flex: 1 }}
-        />
+        {save.conflict ? (
+          <Button
+            label="Keep my version"
+            accessibilityLabel={`Keep my version of ${save.name}`}
+            onPress={onKeepMine}
+            style={{ flex: 1 }}
+          />
+        ) : (
+          <Button
+            label="Review"
+            accessibilityLabel={`Review ${save.name}`}
+            onPress={onReview}
+            style={{ flex: 1 }}
+          />
+        )}
       </View>
     </View>
   );

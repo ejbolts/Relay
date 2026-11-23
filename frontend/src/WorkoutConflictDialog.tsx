@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { PopupDialog } from './PopupDialog';
+import type { WorkoutConflictChoice } from './workoutConflict';
 
-export type WorkoutConflictChoice = 'keep-mine' | 'load-latest' | 'cancel';
+export type { WorkoutConflictChoice };
 
 /** Shown when a save is refused because the workout was saved on another device meanwhile. */
 export function WorkoutConflictDialog({

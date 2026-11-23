@@ -444,6 +444,7 @@ import { workoutNameForCategory } from './workoutCategory';
 import {
   machineSelection,
   restoreWorkoutDraftMovements,
+  savedWorkoutMovements,
   type WorkoutDraftMovement as DraftMovement,
   type WorkoutDraftSet as DraftSet,
 } from './workoutMovements';
@@ -3656,41 +3657,7 @@ function WorkoutLogger({
   const recentRemoval = useRef<{ kind: 'set' | 'exercise'; key: string; at: number } | null>(null);
   const [movements, setMovements] = useState<DraftMovement[]>(() =>
     sourceWorkout
-      ? sourceWorkout.movements.map((movement) => ({
-          key: crypto.randomUUID(),
-          exercise: movement.exercise,
-          notes: movement.notes ?? '',
-          machinePhotoIds: movement.machine_photos.map((photo) => photo.id),
-          machinePhotosInitialized: true,
-          machineSettings: movement.machine_settings ?? [],
-          supersetKey: movement.superset_group_id,
-          isComplete: false,
-          sets: movement.sets.map((item) => ({
-            key: crypto.randomUUID(),
-            reps: item.reps,
-            machine_photo_id: item.machine_photo_id,
-            weight_kg: item.weight_kg,
-            rpe: item.rpe,
-            rest_seconds: item.rest_seconds,
-            duration_seconds: item.duration_seconds,
-            distance_km: item.distance_km,
-            calories_kcal: item.calories_kcal,
-            average_heart_rate_bpm: item.average_heart_rate_bpm,
-            incline_percent: item.incline_percent,
-            speed_kph: item.speed_kph,
-            bodyweight_kg: item.bodyweight_kg,
-            percentile: item.percentile,
-            warmup: item.warmup,
-            set_type: item.set_type,
-            failed: item.failed,
-            target_reps: item.target_reps,
-            notes: item.notes,
-            completed: item.completed,
-            // Saved rows have no suggestion provenance. Keep unfinished performance planned
-            // when resuming; logging or editing its values will mark it as entered.
-            fromPrevious: !item.completed,
-          })),
-        }))
+      ? savedWorkoutMovements(sourceWorkout, () => crypto.randomUUID())
       : restoredDraft
         ? restoredDraftMovements
         : templateMovements(template?.exercises ?? []),
