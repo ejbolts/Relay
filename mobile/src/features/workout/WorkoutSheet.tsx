@@ -711,12 +711,16 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         recentIds={recentIds}
         addedIds={addedIds}
         category={identity.category}
-        onAdd={(selected) => {
+        chooseMachines
+        onAdd={(selected, machineChoices) => {
           const target = picker?.swapping;
           if (target) {
             if (selected[0]) swap(target, selected[0]);
-          } else change((latest) => addExercises(latest, selected, context));
+          } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}
+        onCreateSuperset={(selected, machineChoices) =>
+          change((latest) => addExercises(latest, selected, context, machineChoices, newId()))
+        }
         onCreate={logger.createExercise}
         onClose={() => setPicker(null)}
       />
