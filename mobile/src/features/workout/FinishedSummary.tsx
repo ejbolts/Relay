@@ -7,6 +7,7 @@ import type { WeightUnit } from '../../../../frontend/src/weightUnits';
 import { Button } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { ShareReminderAction } from '../guides/ShareReminderAction';
 import type { QueueStatus } from './finishedQueueSender';
 import { loggerIcons } from './icons';
 import { RefusedSaveCard } from './RefusedSaveCard';
@@ -154,6 +155,7 @@ export function FinishedSummary({
           ))}
         </View>
       )}
+      <ShareReminderAction workoutId={savedId} records={records?.length ?? 0} />
       <Button label="Done" onPress={onDone} />
     </ScrollView>
   );

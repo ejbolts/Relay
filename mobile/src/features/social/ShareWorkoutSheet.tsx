@@ -31,15 +31,19 @@ const LAYOUTS: WorkoutCardLayout[] = ['portrait', 'compact'];
 /**
  * The web's Export menu for a saved workout: its share card, with the same styles, layouts and
  * stats, shared as an image, or its sets as a CSV file. The phone's share sheet also saves or
- * copies them, which the web offers as Download PNG and Copy image.
+ * copies them, which the web offers as Download PNG and Copy image. A cardio session shares the
+ * same card (`csv` off), as the web's Cardio history does, since it has no sets to export.
  */
 export function ShareWorkoutSheet({
   workout,
   records,
+  csv = true,
   onClose,
 }: {
   workout: TrackedWorkout;
   records: number;
+  /** Offer Export CSV beside Share image. */
+  csv?: boolean;
   onClose: () => void;
 }) {
   const { colors, type, radius } = useTheme();
@@ -174,12 +178,14 @@ export function ShareWorkoutSheet({
           disabled={busy || svg === null}
           onPress={shareImage}
         />
-        <Button
-          label={action === 'export' ? 'Exporting…' : 'Export CSV'}
-          variant="secondary"
-          disabled={busy}
-          onPress={() => void exportCsv()}
-        />
+        {csv && (
+          <Button
+            label={action === 'export' ? 'Exporting…' : 'Export CSV'}
+            variant="secondary"
+            disabled={busy}
+            onPress={() => void exportCsv()}
+          />
+        )}
       </View>
     </Sheet>
   );

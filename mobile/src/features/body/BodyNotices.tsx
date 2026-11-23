@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   usedMaintenanceRange,
@@ -6,10 +6,10 @@ import {
 } from '../../../../frontend/src/bodyMeasurementHistory';
 import { TIP_DEFINITIONS } from '../../../../frontend/src/tipDefinitions';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
-import { readJson, writeJson } from '../../data/deviceStorage';
 import { Button, Card } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { useTips } from '../guides/tips';
 import { useBodyCheckInStatus } from './BodyCheckInSync';
 import { syncBodyCheckIns } from './bodyCheckInQueue';
 import { bodyIcons } from './bodyIcons';
@@ -58,39 +58,35 @@ export function CheckInSyncCard() {
   );
 }
 
-const tipKey = (account: string) => `relay.mobile.tips.maintenance.v1:${account}`;
-
 /**
  * The web's maintenance tip: once the latest weigh-in reaches a loss or gain goal, and no goal
- * has used a range yet, suggest maintaining a range. Dismissing it, or setting the goal, hides
- * it on this phone.
+ * has used a range yet, suggest maintaining a range. It shares the account's tips on this phone
+ * (features/guides/tips): Show tips switches it off, and dismissing it or setting the goal also
+ * takes it out of Home's bulb, as on the web.
  */
 export function MaintenanceTip({
-  account,
   goals,
   latest,
   ready,
   onSetGoal,
 }: {
-  account: string | null;
   goals: BodyWeightGoal[];
   latest: BodyMeasurement | undefined;
   ready: boolean;
   onSetGoal: () => void;
 }) {
   const { colors, type, radius } = useTheme();
-  const [hidden, setHidden] = useState(
-    () => !account || readJson<boolean>(tipKey(account)) === true,
-  );
+  const tips = useTips();
+  const { learn } = tips;
+  const usedMaintenance = usedMaintenanceRange(goals);
+  useEffect(() => {
+    if (ready && usedMaintenance) learn('maintenance');
+  }, [ready, usedMaintenance, learn]);
   const activeGoal = goals.find((goal) => goal.active) ?? null;
-  const eligible =
-    ready && weightGoalReached(activeGoal, latest?.weight_kg) && !usedMaintenanceRange(goals);
-  if (hidden || !eligible || !account) return null;
+  const eligible = ready && weightGoalReached(activeGoal, latest?.weight_kg) && !usedMaintenance;
+  if (!eligible || !tips.state.enabled || tips.state.seen.maintenance) return null;
   const tip = TIP_DEFINITIONS.maintenance;
-  const hide = () => {
-    writeJson(tipKey(account), true);
-    setHidden(true);
-  };
+  const hide = () => tips.dismiss('maintenance');
   return (
     <View
       accessibilityLabel="Quick tip"

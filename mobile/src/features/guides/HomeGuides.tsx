@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { useUser } from '../../session/SessionProvider';
+import { openLaunchPrompt } from '../review/noticeMemory';
 import { AppTour } from './AppTour';
 import {
   appTourWaiting,
@@ -19,8 +20,12 @@ export function HomeGuides() {
   const user = useUser();
   const tour = useAppTour();
   useEffect(() => {
-    // Opened once for a new account; finishing or skipping it marks it done.
-    if (appTourWaiting(user.id) && !tour) startAppTour();
+    // Opened once for a new account, as this visit's one launch prompt (What's new and the weekly
+    // review wait for a later visit); finishing or skipping it marks it done.
+    if (appTourWaiting(user.id) && !tour) {
+      openLaunchPrompt(user.id, 'onboarding');
+      startAppTour();
+    }
   }, [user.id, tour]);
   useInactiveWorkoutAlert();
   return (

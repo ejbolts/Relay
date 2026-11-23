@@ -48,6 +48,7 @@ import { exerciseMuscles } from './splitTargets';
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { exitGuide, finishGuide, updateGuide, useActiveGuide } from './setupGuides';
+import { splitTemplateStep } from './setupGuideSteps';
 import { formatWeight } from './weightUnits';
 import { NEW_WORKOUT_TYPE_COLOR } from './workoutTypes';
 import { localDate } from './utils';
@@ -802,16 +803,8 @@ function pageGuideStep(
       total: active ? editorGuide('edit', active).total : 3,
     };
   }
-  const rotation = guide.facts.rotation;
   return {
-    step: {
-      title: SPLIT_GUIDE_COPY.template.title,
-      body:
-        rotation.length >= 2
-          ? `Your recent workouts went ${rotation.join(', ')}. Pick the closest template, or New split to build your own.`
-          : SPLIT_GUIDE_COPY.template.body,
-      target: '.split-library-templates',
-    },
+    step: { ...splitTemplateStep(guide.facts.rotation), target: '.split-library-templates' },
     index: 0,
     total: NEW_SPLIT_STEPS,
   };

@@ -17,6 +17,7 @@ import { ToastHost } from '../../ui/Toast';
 import { NotificationsBell } from './NotificationsBell';
 import { SocialScreen } from './SocialScreen';
 import { currentShownWorkoutFocus, dismissWorkoutFocus, requestWorkoutFocus } from './workoutFocus';
+import { memoryKv } from '../../testing/memoryKvStore';
 
 const mockRouter = { push: jest.fn(), navigate: jest.fn(), setParams: jest.fn(), back: jest.fn() };
 jest.mock('expo-router', () => ({
@@ -35,14 +36,7 @@ jest.mock('../../data/authorisedImage', () => ({
   useAuthorisedImage: () => null,
   loadAuthorisedImage: jest.fn(async () => 'data:image/png;base64,AAAA'),
 }));
-const mockStore = new Map<string, string>();
-jest.mock('../../data/deviceStorage', () => ({
-  deviceStorage: {
-    getItem: (key: string) => mockStore.get(key) ?? null,
-    setItem: (key: string, value: string) => mockStore.set(key, value),
-    removeItem: (key: string) => mockStore.delete(key),
-  },
-}));
+jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 const mockUser = {
   id: 'me',
   username: 'preview',
@@ -142,7 +136,7 @@ afterEach(() => {
 });
 beforeEach(() => {
   jest.clearAllMocks();
-  mockStore.clear();
+  memoryKv.clear();
   timeline = {
     items: [
       {

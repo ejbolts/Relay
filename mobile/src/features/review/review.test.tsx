@@ -20,6 +20,7 @@ import { LaunchNotices } from './LaunchNotices';
 import { resetNoticeMemory } from './noticeMemory';
 import { ReleaseNotesScreen } from './ReleaseNotesScreen';
 import { WeeklyReviewScreen } from './WeeklyReviewScreen';
+import { memoryKv } from '../../testing/memoryKvStore';
 
 const mockRouter = {
   push: jest.fn(),
@@ -41,14 +42,7 @@ jest.mock('../../data/api', () => ({
 }));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/authorisedImage', () => ({ useAuthorisedImage: () => null }));
-const mockStore = new Map<string, string>();
-jest.mock('../../data/deviceStorage', () => ({
-  deviceStorage: {
-    getItem: (key: string) => mockStore.get(key) ?? null,
-    setItem: (key: string, value: string) => mockStore.set(key, value),
-    removeItem: (key: string) => mockStore.delete(key),
-  },
-}));
+jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 let mockUser: User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
 
@@ -100,7 +94,7 @@ async function show(ui: ReactNode) {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockStore.clear();
+  memoryKv.clear();
   resetNoticeMemory();
   notices = { release_seen: null, weekly_review_seen: null };
   mockUser = {
@@ -142,14 +136,14 @@ it('opens What’s new once per release, then last week’s review on a later vi
 
   // A later visit, after What's new was closed: the week's review opens and is recorded.
   resetNoticeMemory();
-  mockStore.set(releaseSeenKey('me', version), '1');
+  memoryKv.set(releaseSeenKey('me', version), '1');
   mockRouter.push.mockClear();
   await show(<LaunchNotices />);
   await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/weekly-review'));
   expect(apiSend).toHaveBeenCalledWith('/api/app-notices', 'PUT', {
     weekly_review_seen: thisWeek,
   });
-  expect(mockStore.get(weeklyReviewShownKey('me'))).toBe(thisWeek);
+  expect(memoryKv.get(weeklyReviewShownKey('me'))).toBe(thisWeek);
 });
 
 it('stays quiet when another device has shown this week’s review and seen the release', async () => {
@@ -168,7 +162,7 @@ it('reviews last week against the week before, steps between weeks and opens rec
   expect(screen.getAllByLabelText('up 1 on the week before').length).toBeGreaterThan(0);
   expect(screen.getByText('40 / 150 min')).toBeVisible();
   // Opening it reads the bell's notice.
-  await waitFor(() => expect(mockStore.get(weeklyReviewShownKey('me'))).toBe(thisWeek));
+  await waitFor(() => expect(memoryKv.get(weeklyReviewShownKey('me'))).toBe(thisWeek));
 
   await fireEvent.press(screen.getByRole('button', { name: /^Bench Press/ }));
   expect(mockRouter.back).toHaveBeenCalled();
@@ -209,6 +203,6 @@ it('closing What’s new dismisses it for the account', async () => {
   const screenView = await show(<ReleaseNotesScreen />);
   expect(await screen.findByText('Changes', {}, { timeout: 4000 })).toBeVisible();
   await screenView.unmount();
-  expect(mockStore.get(releaseSeenKey('me', version))).toBe('1');
+  expect(memoryKv.get(releaseSeenKey('me', version))).toBe('1');
   expect(apiSend).toHaveBeenCalledWith('/api/app-notices', 'PUT', { release_seen: version });
 });

@@ -294,6 +294,8 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
             }).state,
         ),
       addSet: (movementKey) => change((latest) => addSet(latest, movementKey, context).state),
+      insertSet: (movementKey, position) =>
+        change((latest) => addSet(latest, movementKey, context, position).state),
       deleteSet: (movementKey, setKey) => {
         const movement = stateRef.current.movements.find((item) => item.key === movementKey);
         if (movement?.sets.length === 1) {
@@ -594,12 +596,16 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         recentIds={recentIds}
         addedIds={addedIds}
         category={identity.category}
-        onAdd={(selected) => {
+        chooseMachines
+        onAdd={(selected, machineChoices) => {
           const target = picker?.swapping;
           if (target) {
             if (selected[0]) change((latest) => swapExercise(latest, target, selected[0], context));
-          } else change((latest) => addExercises(latest, selected, context));
+          } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}
+        onCreateSuperset={(selected, machineChoices) =>
+          change((latest) => addExercises(latest, selected, context, machineChoices, newId()))
+        }
         onCreate={logger.createExercise}
         onClose={() => setPicker(null)}
       />

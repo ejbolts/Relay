@@ -12,9 +12,12 @@ import type {
   TrainingPreferences,
   User,
 } from '../../../../frontend/src/types';
+import { tipStorageKey } from '../../../../frontend/src/tipsState';
 import { localDate } from '../../../../frontend/src/utils';
 import { apiGet, apiSend } from '../../data/api';
+import { memoryKv } from '../../testing/memoryKvStore';
 import { ToastHost } from '../../ui/Toast';
+import { resetTipsForTests } from '../guides/tips';
 import { bodyTrendPreference } from '../settings/devicePreferences';
 import { BodyScreen } from './BodyScreen';
 
@@ -143,6 +146,8 @@ const preferences = { preferred_weight_unit: 'kg', week_start: 'monday' } as Tra
 let responses: Record<string, unknown>;
 beforeEach(() => {
   jest.clearAllMocks();
+  memoryKv.delete(tipStorageKey(mockUser.id));
+  resetTipsForTests();
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   responses = {
     '/api/body-measurements': measurements,
@@ -372,6 +377,24 @@ test('the maintenance tip waits until the goal is reached', async () => {
   await renderBody();
   expect(await screen.findByText('Log weigh-in')).toBeVisible();
   expect(screen.queryByLabelText('Quick tip')).toBeNull();
+});
+
+test('the maintenance tip stays away while tips are switched off', async () => {
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
+  memoryKv.set(tipStorageKey(mockUser.id), JSON.stringify({ enabled: false, seen: {} }));
+  await renderBody('79.6 kg');
+  expect(await screen.findByText('Log weigh-in')).toBeVisible();
+  expect(screen.queryByLabelText('Quick tip')).toBeNull();
+});
+
+test('dismissing the maintenance tip retires it for the account', async () => {
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
+  await renderBody('79.6 kg');
+  const tip = await screen.findByLabelText('Quick tip');
+  await fireEvent.press(within(tip).getByRole('button', { name: 'Dismiss tip' }));
+  expect(screen.queryByLabelText('Quick tip')).toBeNull();
+  // Home's bulb leaves out dismissed tips (homeTipList), so it goes from there too.
+  expect(JSON.parse(memoryKv.get(tipStorageKey(mockUser.id))!).seen.maintenance).toBe('dismissed');
 });
 
 test('the maintenance tip never shows once a goal has used a range', async () => {

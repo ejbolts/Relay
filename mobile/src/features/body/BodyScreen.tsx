@@ -10,7 +10,6 @@ import { dayMonth } from '../../../../frontend/src/trainingSummary';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
 import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
-import { useUser } from '../../session/SessionProvider';
 import { Button, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { showToast } from '../../ui/Toast';
@@ -90,7 +89,6 @@ export function BodyScreen() {
   const measurementsQuery = useBodyMeasurements();
   const goalsQuery = useBodyGoals();
   const removal = useGoalRemoval();
-  const account = useUser().id;
   const [refreshing, setRefreshing] = useState(false);
   const [entry, setEntry] = useState<{ editing: BodyMeasurement | null } | null>(null);
   const [goalRequest, setGoalRequest] = useState<GoalRequest | null>(null);
@@ -159,7 +157,6 @@ export function BodyScreen() {
           <>
             <CheckInSyncCard />
             <MaintenanceTip
-              account={account}
               goals={goals}
               latest={latest}
               ready={!!goalsQuery.data}

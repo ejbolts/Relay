@@ -154,6 +154,17 @@ export function blocksGuideSteps(lift: FavouriteLift | null): GuideStepCopy[] {
   ];
 }
 
+/** The split guide's first step, naming the recent rotation once there is one. */
+export function splitTemplateStep(rotation: string[]): GuideStepCopy {
+  return {
+    title: SPLIT_GUIDE_COPY.template.title,
+    body:
+      rotation.length >= 2
+        ? `Your recent workouts went ${rotation.join(', ')}. Pick the closest template, or New split to build your own.`
+        : SPLIT_GUIDE_COPY.template.body,
+  };
+}
+
 /**
  * The split guide, from choosing a template to making the split active. `weight` formats the
  * favourite lift's latest top set in the person's unit.
@@ -164,13 +175,7 @@ export function splitGuideSteps(
 ): GuideStepCopy[] {
   const { lift, rotation } = facts;
   return [
-    {
-      title: SPLIT_GUIDE_COPY.template.title,
-      body:
-        rotation.length >= 2
-          ? `Your recent workouts went ${rotation.join(', ')}. Pick the closest template, or New split to build your own.`
-          : SPLIT_GUIDE_COPY.template.body,
-    },
+    splitTemplateStep(rotation),
     SPLIT_GUIDE_COPY.plan,
     {
       title: SPLIT_GUIDE_COPY.reps.title,
