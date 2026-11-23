@@ -404,7 +404,10 @@ export function IconButton({
                 { backgroundColor: colors.dangerFill, borderColor: colors.page },
               ]}
             >
-              <Text style={styles.badgeText}>{badge}</Text>
+              {/* Grows with larger text, up to 1.5×, so a count like 9+ isn't clipped. */}
+              <Text style={styles.badgeText} maxFontSizeMultiplier={1.5}>
+                {badge}
+              </Text>
             </View>
           )}
         </View>
@@ -519,8 +522,8 @@ const styles = StyleSheet.create({
     top: -6,
     right: -6,
     minWidth: 18,
-    height: 18,
-    borderRadius: 9,
+    minHeight: 18,
+    borderRadius: 999,
     borderWidth: 2,
     paddingHorizontal: 4,
     alignItems: 'center',
