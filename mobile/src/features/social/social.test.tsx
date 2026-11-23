@@ -427,6 +427,38 @@ test('a removed friend stays removed when the profile opens again, and is sent o
   );
 });
 
+test('a confirmed removal stays removed when the refresh after it fails', async () => {
+  let deleted = false;
+  let profileReads = 0;
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/casey') {
+      profileReads += 1;
+      // The server is unavailable for the refresh after the removal.
+      if (deleted) throw new ApiError(503, 'Relay is busy. Try again.');
+      return { ...casey, friend_status: 'friends' };
+    }
+    if (path === '/api/sharing/friends') return friends;
+    if (path === '/api/sharing') return { visibility: 'public', pending_requests: 0 };
+    if (path.startsWith('/api/sharing/')) return [];
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  jest.mocked(apiSend).mockImplementation(async (_path: string, method: string) => {
+    if (method === 'DELETE') deleted = true;
+    return undefined;
+  });
+  await show(<ProfileScreen profileId="casey" />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Remove friend' }));
+  const reads = profileReads;
+  await fireEvent.press(screen.getByRole('button', { name: 'Removed Casey Kim. Dismiss' }));
+  await waitFor(() => expect(profileReads).toBeGreaterThan(reads));
+  // The refresh failed, but the profile still shows the removal and can't remove again.
+  expect(await screen.findByRole('button', { name: 'Add friend' })).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: 'Remove friend' })).toBeNull();
+  expect(jest.mocked(apiSend).mock.calls.filter(([, method]) => method === 'DELETE')).toHaveLength(
+    1,
+  );
+});
+
 test('your own profile opens Edit profile, sharing choices and your QR code', async () => {
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     if (path === '/api/sharing/profiles/me')
