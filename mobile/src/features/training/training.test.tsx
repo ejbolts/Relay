@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { AccessibilityInfo, Alert, I18nManager } from 'react-native';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -46,6 +46,11 @@ jest.mock('./TrainingHeaderActions', () => {
   const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
   return { TrainingHeaderActions: () => createElement(Text, null, 'Header actions') };
 });
+jest.mock('expo-screen-orientation', () => ({
+  lockAsync: jest.fn(async () => undefined),
+  unlockAsync: jest.fn(async () => undefined),
+  OrientationLock: { LANDSCAPE: 'landscape' },
+}));
 jest.mock('../../ui/prompts', () => ({
   ...jest.requireActual<typeof import('../../ui/prompts')>('../../ui/prompts'),
   showMenu: jest.fn(),
@@ -405,11 +410,19 @@ test('Cardio shows the week, its sessions and zone goals, and opens its editors'
 test('an exercise shows its progress, personal bests and sessions', async () => {
   await open(<ExerciseDetailScreen exerciseId="bench" />);
   expect(await screen.findByLabelText('Personal bests')).toBeVisible();
+  // The chart opens full screen in landscape, and turning back is released on Exit.
+  await fireEvent.press(
+    screen.getByRole('button', { name: 'View Bench Press Est. 1RM full screen in landscape' }),
+  );
+  const exit = await screen.findByRole('button', { name: 'Exit full-screen Bench Press Est. 1RM' });
+  expect(jest.requireMock('expo-screen-orientation').lockAsync).toHaveBeenCalledWith('landscape');
+  await fireEvent.press(exit);
+  await waitFor(() =>
+    expect(jest.requireMock('expo-screen-orientation').unlockAsync).toHaveBeenCalled(),
+  );
   expect(
-    screen.getByRole('button', {
-      name: 'View Bench Press Est. 1RM full screen in landscape',
-    }),
-  ).toBeVisible();
+    screen.queryByRole('button', { name: 'Exit full-screen Bench Press Est. 1RM' }),
+  ).not.toBeOnTheScreen();
   // Dates follow the device's locale ("21 Nov" or "Nov 21"), as on the web.
   const lastDone = formatLastDone('2026-11-21', '2026-11-22');
   expect(screen.getByText(`Chest · Barbell · 2 sessions · Last done ${lastDone}`)).toBeVisible();
