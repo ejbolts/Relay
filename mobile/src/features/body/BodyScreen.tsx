@@ -10,14 +10,15 @@ import { dayMonth } from '../../../../frontend/src/trainingSummary';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
 import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
-import { Button, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
+import { Button, Card, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
+import { HomeHeaderActions } from '../home/HomeHeaderActions';
 import { BodyHistory } from './BodyHistory';
 import { syncBodyCheckIns } from './bodyCheckInQueue';
 import { CheckInSyncCard, MaintenanceTip } from './BodyNotices';
-import { bodyIcons } from './bodyIcons';
 import {
   bodyCheckInApi,
   bodyGoalApi,
@@ -87,7 +88,7 @@ function useGoalRemoval() {
  * goal, the trend, body measurements on a figure and the check-in history.
  */
 export function BodyScreen() {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const client = useQueryClient();
   const unit = useWeightUnit();
   const measurementsQuery = useBodyMeasurements();
@@ -150,6 +151,7 @@ export function BodyScreen() {
             ? `${count} ${count === 1 ? 'check-in' : 'check-ins'}${latest ? ` · latest ${dayMonth(latest.measurement_date)}` : ''}`
             : undefined
         }
+        actions={<HomeHeaderActions />}
         refreshing={refreshing}
         onRefresh={() => void refresh()}
       >
@@ -169,28 +171,30 @@ export function BodyScreen() {
               ready={!!goalsQuery.data}
               onSetGoal={() => setGoalRequest({ goal: null, kind: 'maintain' })}
             />
-            <View style={styles.stats} accessibilityLabel="Bodyweight summary">
+            <Card style={styles.statsCard} accessibilityLabel="Bodyweight summary">
               <Stat
                 label="Bodyweight"
                 value={latest ? formatWeight(latest.weight_kg, unit) : '–'}
               />
+              <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
               {activeGoal ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Edit goal, ${bodyGoalTarget(activeGoal, unit)}`}
-                  onPress={() => setGoalRequest({ goal: activeGoal })}
+                  onPress={() => {
+                    haptics.tap();
+                    setGoalRequest({ goal: activeGoal });
+                  }}
                   style={({ pressed }) => [
                     styles.stat,
-                    {
-                      backgroundColor: colors.surface,
-                      borderRadius: radius.lg,
-                      borderColor: colors.line,
-                    },
-                    pressed && { opacity: 0.7 },
+                    pressed && { backgroundColor: colors.surface2 },
                   ]}
                 >
                   <View style={styles.statLabel}>
-                    <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
+                    <Text
+                      style={[type.caption, { color: colors.muted, fontWeight: '600' }]}
+                      numberOfLines={1}
+                    >
                       {new Date(`${activeGoal.target_date}T12:00:00`).toLocaleDateString(
                         undefined,
                         {
@@ -199,17 +203,18 @@ export function BodyScreen() {
                       )}{' '}
                       goal
                     </Text>
-                    <Icon name="chevronRight" size={11} color={colors.muted} />
+                    <Icon name="chevronRight" size={12} color={colors.muted} />
                   </View>
                   <Text
-                    style={[type.headline, type.number, { color: colors.text }]}
+                    style={[type.title, type.number, { color: colors.text }]}
                     numberOfLines={1}
                     adjustsFontSizeToFit
+                    minimumFontScale={0.75}
                   >
                     {bodyGoalTarget(activeGoal, unit)}
                   </Text>
                   {latest && maintenanceRange(activeGoal) && (
-                    <Text style={[type.caption, { color: colors.secondary }]}>
+                    <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
                       {maintenanceStatus(activeGoal, latest.weight_kg)}
                     </Text>
                   )}
@@ -217,6 +222,7 @@ export function BodyScreen() {
               ) : (
                 <Stat label="Weight goal" value="–" />
               )}
+              <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
               <Stat
                 label="Body fat"
                 value={latestBodyFat ? `${latestBodyFat.body_fat_pct}%` : '–'}
@@ -226,20 +232,18 @@ export function BodyScreen() {
                     : undefined
                 }
               />
-            </View>
+            </Card>
             <View style={styles.actions}>
               <Button
                 label="Log weigh-in"
-                icon={bodyIcons.scale}
                 onPress={() => setEntry({ editing: null })}
                 style={{ flex: 1 }}
               />
               <Button
                 label={activeGoal ? 'New goal' : 'Set a goal'}
                 variant="secondary"
-                icon={bodyIcons.flag}
                 onPress={() => setGoalRequest({ goal: null })}
-                style={{ flex: 1 }}
+                style={{ flex: 1, backgroundColor: colors.surface }}
               />
             </View>
             {count > 1 && <BodyTrendChart measurements={measurements} goals={goals} />}
@@ -276,40 +280,43 @@ export function BodyScreen() {
 }
 
 function Stat({ label, value, detail }: { label: string; value: string; detail?: string }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   return (
     <View
       accessible
       accessibilityLabel={`${label}: ${value}${detail ? `, ${detail}` : ''}`}
-      style={[
-        styles.stat,
-        { backgroundColor: colors.surface, borderRadius: radius.lg, borderColor: colors.line },
-      ]}
+      style={styles.stat}
     >
-      <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
+      <Text style={[type.caption, { color: colors.muted, fontWeight: '600' }]} numberOfLines={1}>
         {label}
       </Text>
       <Text
-        style={[type.headline, type.number, { color: colors.text }]}
+        style={[type.title, type.number, { color: colors.text }]}
         numberOfLines={1}
         adjustsFontSizeToFit
+        minimumFontScale={0.75}
       >
         {value}
       </Text>
-      {!!detail && <Text style={[type.caption, { color: colors.secondary }]}>{detail}</Text>}
+      {!!detail && (
+        <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
+          {detail}
+        </Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  stats: { flexDirection: 'row', gap: 8 },
+  statsCard: { flexDirection: 'row', padding: 0, gap: 0, overflow: 'hidden' },
+  statDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch' },
   stat: {
     flex: 1,
     minWidth: 0,
-    padding: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     gap: 4,
-    borderWidth: StyleSheet.hairlineWidth,
   },
-  statLabel: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  actions: { flexDirection: 'row', gap: 10 },
+  statLabel: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  actions: { flexDirection: 'row', gap: 8 },
 });

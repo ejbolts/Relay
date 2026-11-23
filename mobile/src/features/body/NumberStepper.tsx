@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { decimalNumberOrNull } from '../../../../frontend/src/utils';
@@ -8,12 +7,14 @@ import {
   weightUnitName,
   type WeightUnit,
 } from '../../../../frontend/src/weightUnits';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 
 /**
- * A number with − and + buttons either side, like the web's ±0.1 steppers: each tap steps the
- * value with a light tick, and the number itself can be typed on the decimal keypad.
+ * A number with − and + buttons either side inside one bordered input, matching the web's
+ * input outline with native tactile stepping: each tap steps the value with a selection haptic,
+ * and the number itself can be typed on the decimal keypad.
  *
  * It keeps exactly what is typed (such as "82." on the way to "82.5") and reports the parsed
  * value on every keystroke; a value changed from outside (a step) replaces the text.
@@ -27,6 +28,7 @@ export function NumberStepper({
   unit,
   label,
   stepLabel,
+  placeholder,
   step = 0.1,
   disabled,
   onSubmit,
@@ -43,42 +45,58 @@ export function NumberStepper({
   label: string;
   /** What a step changes, for its buttons: "body fat by 0.1%". Defaults to "by 0.1 kg". */
   stepLabel?: string;
+  placeholder?: string;
   step?: number;
   disabled?: boolean;
   onSubmit?: () => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type, radius, scheme } = useTheme();
   const [text, setText] = useState(() => format(value));
+  const [focused, setFocused] = useState(false);
   const latest = useRef(value);
   useEffect(() => {
     if (value === latest.current) return;
     latest.current = value;
     setText(format(value));
   }, [value, format]);
-  const button = (delta: number) => (
+
+  const showUnit = text.length > 0 || (placeholder !== undefined && placeholder !== 'Optional');
+  const button = (delta: number, side: 'left' | 'right') => (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${delta < 0 ? 'Decrease' : 'Increase'} ${stepLabel ?? `by ${step} ${unit}`}`}
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
-      hitSlop={4}
       onPress={() => {
-        void Haptics.selectionAsync();
+        haptics.selection();
         onStep(delta);
       }}
       style={({ pressed }) => [
         styles.step,
-        { backgroundColor: colors.surface2, borderRadius: radius.md },
-        (pressed || disabled) && { opacity: disabled ? 0.45 : 0.6 },
+        side === 'left'
+          ? { borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.line }
+          : { borderLeftWidth: StyleSheet.hairlineWidth, borderLeftColor: colors.line },
+        pressed && !disabled && { backgroundColor: colors.surface3 },
+        disabled && { opacity: 0.45 },
       ]}
     >
-      <Icon name={delta < 0 ? 'minus' : 'plus'} size={18} color={colors.text} />
+      <Icon name={delta < 0 ? 'minus' : 'plus'} size={17} color={colors.secondary} />
     </Pressable>
   );
+
   return (
-    <View style={styles.row}>
-      {button(-step)}
-      <View style={[styles.value, { backgroundColor: colors.surface2, borderRadius: radius.md }]}>
+    <View
+      style={[
+        styles.shell,
+        {
+          backgroundColor: colors.surface2,
+          borderColor: focused ? colors.accent : colors.lineStrong,
+          borderRadius: radius.md,
+        },
+      ]}
+    >
+      {button(-step, 'left')}
+      <View style={styles.value}>
         <TextInput
           value={text}
           onChangeText={(next) => {
@@ -89,19 +107,31 @@ export function NumberStepper({
             latest.current = parsed;
             if (parsed !== value) onChange(parsed);
           }}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           editable={!disabled}
           keyboardType="decimal-pad"
+          keyboardAppearance={scheme}
+          selectionColor={colors.accent}
+          cursorColor={colors.accent}
           returnKeyType="done"
           selectTextOnFocus
           onSubmitEditing={onSubmit}
-          placeholder="–"
+          placeholder={placeholder ?? '0'}
           placeholderTextColor={colors.muted}
           accessibilityLabel={label}
-          style={[type.title, type.number, styles.input, { color: colors.text }]}
+          style={[
+            text.length > 0 ? type.headline : type.body,
+            type.number,
+            styles.input,
+            { color: colors.text },
+          ]}
         />
-        <Text style={[type.callout, { color: colors.muted, fontWeight: '600' }]}>{unit}</Text>
+        {showUnit && (
+          <Text style={[type.footnote, { color: colors.muted, fontWeight: '600' }]}>{unit}</Text>
+        )}
       </View>
-      {button(step)}
+      {button(step, 'right')}
     </View>
   );
 }
@@ -113,11 +143,12 @@ const parsePlain = (text: string) => decimalNumberOrNull(text);
 export function BodyFatStepper(
   props: Pick<
     Parameters<typeof NumberStepper>[0],
-    'value' | 'onChange' | 'onStep' | 'disabled' | 'onSubmit'
+    'value' | 'onChange' | 'onStep' | 'disabled' | 'onSubmit' | 'placeholder'
   >,
 ) {
   return (
     <NumberStepper
+      placeholder="Optional"
       {...props}
       format={formatPlain}
       parse={parsePlain}
@@ -139,7 +170,7 @@ export function WeightStepper({
   ...props
 }: Pick<
   Parameters<typeof NumberStepper>[0],
-  'onChange' | 'onStep' | 'disabled' | 'onSubmit' | 'step'
+  'onChange' | 'onStep' | 'disabled' | 'onSubmit' | 'step' | 'placeholder'
 > & {
   weightKg: number | null;
   unit: WeightUnit;
@@ -158,16 +189,22 @@ export function WeightStepper({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  step: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
+  shell: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 46,
+    borderWidth: 1,
+    overflow: 'hidden',
+  },
+  step: { width: 44, height: 46, alignItems: 'center', justifyContent: 'center' },
   value: {
     flex: 1,
-    height: 46,
+    minHeight: 46,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     gap: 4,
   },
-  input: { minWidth: 48, textAlign: 'center', paddingVertical: 0 },
+  input: { minWidth: 56, textAlign: 'center', paddingVertical: 0 },
 });

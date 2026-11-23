@@ -46,7 +46,16 @@ jest.mock('../../data/api', () => ({
   apiGet: jest.fn(),
   apiSend: jest.fn(),
 }));
-const mockUser = { id: 'u1', username: 'preview', display_name: 'Preview', sex: null } as User;
+const mockRouter = { navigate: jest.fn(), push: jest.fn() };
+jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useIsFocused: () => true }));
+const mockUser = {
+  id: 'u1',
+  username: 'preview',
+  display_name: 'Preview',
+  sex: null,
+  created_at: '2026-11-01T00:00:00Z',
+  profile_photo_url: null,
+} as unknown as User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
 // A plain text box for the native date picker, so a test can type a date.
 jest.mock('./DateField', () => {
@@ -157,6 +166,9 @@ beforeEach(() => {
     '/api/body-weight-goals': [goal],
     '/api/body-sizes': [] as BodySizeLog[],
     '/api/training-preferences': preferences,
+    '/api/sharing/notifications': { requests: [], accepted: [] },
+    '/api/release': null,
+    '/api/weekly-review': null,
   };
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     const value = responses[path.split('?')[0]];
@@ -212,9 +224,17 @@ test('Body shows the latest weight, goal and body fat, the trend and the history
   expect(
     screen.getByLabelText(`Body fat: 18.5%, ${dayMonth(measurements[1].measurement_date)}`),
   ).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Settings' })).toBeVisible();
+  expect(screen.getByRole('button', { name: /Notifications/i })).toBeVisible();
   expect(screen.getByLabelText('Trend')).toBeVisible();
   expect(screen.getByText('7-day average')).toBeVisible();
-  expect(screen.getByText('Goal 80 kg')).toBeVisible();
+  expect(screen.getByText('Goal')).toBeVisible();
+  await fireEvent(
+    screen.getByLabelText('Bodyweight, 7-day average over daily weigh-ins'),
+    'layout',
+    { nativeEvent: { layout: { width: 340, height: 200 } } },
+  );
+  expect(screen.getByLabelText('Goal 80 kg')).toBeOnTheScreen();
   expect(
     screen.getByLabelText(
       'Weight decreased by 0.4 kg since previous check-in; in line with weight-loss goal',

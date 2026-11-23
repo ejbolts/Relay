@@ -14,6 +14,6 @@ export const bodyIcons = {
   flag: { sf: 'flag', md: 'flag' },
   sparkle: { sf: 'sparkles', md: 'auto-awesome' },
   cloud: { sf: 'icloud.and.arrow.up', md: 'cloud-upload' },
-  expand: { sf: 'arrow.up.left.and.arrow.down.right', md: 'open-in-full' },
+  expand: { sf: 'arrow.up.left.and.arrow.down.right', md: 'fullscreen' },
   rotate: { sf: 'rotate.right', md: 'screen-rotation' },
 } satisfies Record<string, IconPair>;

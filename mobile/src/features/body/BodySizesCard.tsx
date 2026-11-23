@@ -28,12 +28,13 @@ import { apiSend } from '../../data/api';
 import { readJson, writeJson } from '../../data/deviceStorage';
 import { useWeightUnit } from '../../data/queries';
 import { useUser } from '../../session/SessionProvider';
-import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
+import { Button, Card, ErrorState, errorMessage, Loading } from '../../ui/components';
+import { Segmented } from '../../ui/controls';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { MenuButton } from '../../ui/MenuButton';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
-import { Segmented } from '../training/parts';
 import { bodyIcons } from './bodyIcons';
 import { bodyKeys, bodySizeApi, useBodySizes } from './bodyQueries';
 import { BodyFigure } from './BodyFigure';
@@ -101,12 +102,14 @@ export function BodySizesCard() {
     const day = localDate();
     const result = figureEntry({ logs, day, field, typed, shownCm: figureValues[field], size });
     if (result.kind === 'invalid') {
+      haptics.error();
       setInlineError(result.error);
       return false;
     }
     setInlineField(null);
     setInlineError(null);
     if (result.kind === 'unchanged') return true;
+    haptics.success();
     setLogs((items) => withBodySizeLog(items, result.entry));
     setShownDate(day);
     queueSave(result.entry).catch((reason) => {
@@ -121,12 +124,14 @@ export function BodySizesCard() {
     setSaving(true);
     try {
       const saved = await queueSave(entry);
+      haptics.success();
       setLogs((items) => withBodySizeLog(items, saved));
       setShownDate(saved.measurement_date);
       setFormDate(null);
       showToast('Measurements saved');
       return null;
     } catch (reason) {
+      haptics.error();
       return reason instanceof Error ? reason.message : 'Could not save measurements.';
     } finally {
       setSaving(false);
@@ -134,6 +139,7 @@ export function BodySizesCard() {
   }
 
   function confirmDelete(date: string) {
+    haptics.warning();
     Alert.alert('Delete body measurements?', `Delete the measurements for ${shortDate(date)}?`, [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -173,26 +179,34 @@ export function BodySizesCard() {
   }
 
   const header = (
-    <CardHeader
-      title="Body measurements"
-      action={
-        <View style={styles.headerActions}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="About body measurements"
-            hitSlop={8}
-            onPress={() =>
-              Alert.alert(
-                'Body measurements',
-                'Flex each muscle and measure around it with a relaxed tape, using the same position each time. All fields are optional; enter at least one.',
-              )
-            }
-          >
-            <Icon name={bodyIcons.info} size={18} color={colors.muted} />
-          </Pressable>
-        </View>
-      }
-    />
+    <View style={styles.headerRow}>
+      <View style={styles.titleRow}>
+        <Text accessibilityRole="header" style={[type.cardTitle, { color: colors.text }]}>
+          Body measurements
+        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="About body measurements"
+          hitSlop={10}
+          onPress={() => {
+            haptics.tap();
+            Alert.alert(
+              'Body measurements',
+              'Flex each muscle and measure around it with a relaxed tape, using the same position each time. All fields are optional; enter at least one.',
+            );
+          }}
+        >
+          <Icon name={bodyIcons.info} size={17} color={colors.muted} />
+        </Pressable>
+      </View>
+      <Button
+        label="Log measurements"
+        variant="tonal"
+        size="small"
+        disabled={logs === null}
+        onPress={() => setFormDate(localDate())}
+      />
+    </View>
   );
 
   if (!logs) {
@@ -212,31 +226,39 @@ export function BodySizesCard() {
   return (
     <Card accessibilityLabel="Body measurements">
       {header}
-      <Button
-        label="Log measurements"
-        variant="secondary"
-        icon={bodyIcons.ruler}
-        onPress={() => setFormDate(localDate())}
-      />
-      <View style={styles.stepper}>
-        {logs.length > 1 && (
+      <View
+        style={[styles.stepperBar, { backgroundColor: colors.surface2, borderRadius: radius.md }]}
+      >
+        {logs.length > 1 ? (
           <StepButton
             label="Earlier measurements"
             icon="chevronLeft"
             disabled={!previous}
             onPress={() => previous && setShownDate(previous.measurement_date)}
           />
+        ) : (
+          <View style={styles.stepSpacer} />
         )}
-        <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '600' }]}>
+        <Text
+          style={[
+            type.callout,
+            type.number,
+            styles.stepperDate,
+            { color: colors.text, fontWeight: '600' },
+          ]}
+          numberOfLines={1}
+        >
           {shortDate(shownDay)}
         </Text>
-        {logs.length > 1 && (
+        {logs.length > 1 ? (
           <StepButton
             label="Later measurements"
             icon="chevronRight"
             disabled={shownIndex === 0}
             onPress={() => setShownDate(logs[shownIndex - 1].measurement_date)}
           />
+        ) : (
+          <View style={styles.stepSpacer} />
         )}
       </View>
       <BodyFigure
@@ -275,11 +297,13 @@ export function BodySizesCard() {
         <View
           accessible
           accessibilityLabel={`${SEX_LABELS[profileSex]}, set on your profile`}
-          style={[styles.locked, { backgroundColor: colors.surface2, borderRadius: radius.pill }]}
+          style={[styles.locked, { backgroundColor: colors.surface2, borderRadius: radius.sm }]}
         >
-          <Icon name={bodyIcons[profileSex]} size={14} color={colors.secondary} />
-          <Text style={[type.footnote, { color: colors.secondary }]}>{SEX_LABELS[profileSex]}</Text>
-          <Icon name={bodyIcons.lock} size={12} color={colors.muted} />
+          <Icon name={bodyIcons[profileSex]} size={15} color={colors.text} />
+          <Text style={[type.footnote, { color: colors.text, fontWeight: '600' }]}>
+            {SEX_LABELS[profileSex]}
+          </Text>
+          <Icon name={bodyIcons.lock} size={13} color={colors.muted} />
         </View>
       ) : (
         <Segmented
@@ -287,14 +311,14 @@ export function BodySizesCard() {
           values={['Male', 'Female']}
           selectedIndex={figure === 'female' ? 1 : 0}
           onChange={(index) => chooseFigure(index === 1 ? 'female' : 'male')}
-          style={{ alignSelf: 'center', width: 200 }}
+          style={styles.figureSegmented}
         />
       )}
       {shown && (
         <>
           {changes.length > 0 && previous && (
             <View style={{ gap: 8 }}>
-              <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
+              <Text style={[type.footnote, { color: colors.text, fontWeight: '600' }]}>
                 Changed since {dayAndMonth(previous.measurement_date)}
               </Text>
               <View style={styles.changes}>
@@ -327,100 +351,111 @@ export function BodySizesCard() {
             <Button
               label="Edit"
               variant="secondary"
+              size="small"
               onPress={() => setFormDate(shown.measurement_date)}
               style={{ flex: 1 }}
             />
             <Button
               label="Delete"
-              variant="secondary"
+              variant="danger-soft"
+              size="small"
               onPress={() => confirmDelete(shown.measurement_date)}
               style={{ flex: 1 }}
             />
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded: historyOpen }}
-            accessibilityLabel={`Measurement history, ${history.length}`}
-            onPress={() => setHistoryOpen((open) => !open)}
-            style={styles.historyHeader}
-          >
-            <Text style={[type.callout, { color: colors.text, fontWeight: '600', flex: 1 }]}>
-              Measurement history{' '}
-              <Text style={{ color: colors.muted, fontWeight: '400' }}>{history.length}</Text>
-            </Text>
-            <Icon name={historyOpen ? 'chevronUp' : 'chevronDown'} size={16} color={colors.muted} />
-          </Pressable>
-          {historyOpen && (
-            <View style={{ gap: 10 }}>
-              <PartFilter
-                part={historyPart}
-                onChange={(part) => {
-                  setHistoryPart(part);
-                  setHistoryRows(HISTORY_PAGE_SIZE);
-                }}
+          <View style={[styles.historySection, { borderTopColor: colors.line }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: historyOpen }}
+              accessibilityLabel={`Measurement history, ${history.length}`}
+              onPress={() => {
+                haptics.selection();
+                setHistoryOpen((open) => !open);
+              }}
+              style={styles.historyHeader}
+            >
+              <Text style={[type.footnote, { color: colors.text, fontWeight: '600', flex: 1 }]}>
+                Measurement history{' '}
+                <Text style={{ color: colors.muted, fontWeight: '400' }}>{history.length}</Text>
+              </Text>
+              <Icon
+                name={historyOpen ? 'chevronUp' : 'chevronDown'}
+                size={16}
+                color={colors.muted}
               />
-              {history.length === 0 && (
-                <Text style={[type.footnote, { color: colors.muted }]}>
-                  No {partLabel?.toLowerCase()} measurements yet.
-                </Text>
-              )}
-              {history.slice(0, historyRows).map((row, index) => (
-                <View
-                  key={row.measurement_date}
-                  style={[styles.historyRow, { borderTopColor: colors.line }]}
-                >
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]}>
-                      {shortDate(row.measurement_date)}
-                    </Text>
-                    {historyPart === 'all' ? (
-                      <Text style={[type.footnote, { color: colors.secondary }]}>
-                        {bodySizeSummary(row, size)}
-                      </Text>
-                    ) : (
-                      <Text style={[type.footnote, type.number, { color: colors.secondary }]}>
-                        <Text style={{ color: colors.text, fontWeight: '600' }}>
-                          {formatBodySize(row[historyPart]!, size)}
-                        </Text>
-                        {'  '}
-                        {bodySizeChangeText(history, index, historyPart, size)}
-                      </Text>
-                    )}
-                  </View>
-                  <MenuButton
-                    accessibilityLabel={`Actions for measurements ${row.measurement_date}`}
-                    items={[
-                      { label: 'Edit', onPress: () => setFormDate(row.measurement_date) },
-                      ...(historyPart === 'all'
-                        ? [
-                            {
-                              label: 'Delete',
-                              destructive: true,
-                              onPress: () => confirmDelete(row.measurement_date),
-                            },
-                          ]
-                        : []),
-                    ]}
-                    trigger={{ sf: 'ellipsis', color: colors.secondary, size: 15 }}
-                    width={32}
-                    height={32}
-                    fill={colors.surface2}
-                  >
-                    <View style={[styles.more, { backgroundColor: colors.surface2 }]}>
-                      <Icon name="more" size={16} color={colors.secondary} />
-                    </View>
-                  </MenuButton>
-                </View>
-              ))}
-              {history.length > historyRows && (
-                <Button
-                  label="Show more"
-                  variant="link"
-                  onPress={() => setHistoryRows((rows) => rows + HISTORY_PAGE_SIZE)}
+            </Pressable>
+            {historyOpen && (
+              <View style={{ gap: 10, marginTop: 10 }}>
+                <PartFilter
+                  part={historyPart}
+                  onChange={(part) => {
+                    setHistoryPart(part);
+                    setHistoryRows(HISTORY_PAGE_SIZE);
+                  }}
                 />
-              )}
-            </View>
-          )}
+                {history.length === 0 && (
+                  <Text style={[type.footnote, { color: colors.muted }]}>
+                    No {partLabel?.toLowerCase()} measurements yet.
+                  </Text>
+                )}
+                {history.slice(0, historyRows).map((row, index) => (
+                  <View
+                    key={row.measurement_date}
+                    style={[styles.historyRow, { borderTopColor: colors.line }]}
+                  >
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]}>
+                        {shortDate(row.measurement_date)}
+                      </Text>
+                      {historyPart === 'all' ? (
+                        <Text style={[type.footnote, { color: colors.secondary }]}>
+                          {bodySizeSummary(row, size)}
+                        </Text>
+                      ) : (
+                        <Text style={[type.footnote, type.number, { color: colors.secondary }]}>
+                          <Text style={{ color: colors.text, fontWeight: '600' }}>
+                            {formatBodySize(row[historyPart]!, size)}
+                          </Text>
+                          {'  '}
+                          {bodySizeChangeText(history, index, historyPart, size)}
+                        </Text>
+                      )}
+                    </View>
+                    <MenuButton
+                      accessibilityLabel={`Actions for measurements ${row.measurement_date}`}
+                      items={[
+                        { label: 'Edit', onPress: () => setFormDate(row.measurement_date) },
+                        ...(historyPart === 'all'
+                          ? [
+                              {
+                                label: 'Delete',
+                                destructive: true,
+                                onPress: () => confirmDelete(row.measurement_date),
+                              },
+                            ]
+                          : []),
+                      ]}
+                      trigger={{ sf: 'ellipsis', color: colors.secondary, size: 15 }}
+                      width={32}
+                      height={32}
+                      fill={colors.surface2}
+                    >
+                      <View style={[styles.more, { backgroundColor: colors.surface2 }]}>
+                        <Icon name="more" size={16} color={colors.secondary} />
+                      </View>
+                    </MenuButton>
+                  </View>
+                ))}
+                {history.length > historyRows && (
+                  <Button
+                    label="Show more"
+                    variant="link"
+                    onPress={() => setHistoryRows((rows) => rows + HISTORY_PAGE_SIZE)}
+                  />
+                )}
+              </View>
+            )}
+          </View>
         </>
       )}
       <BodySizesSheet
@@ -446,22 +481,26 @@ function StepButton({
   disabled: boolean;
   onPress: () => void;
 }) {
-  const { colors } = useTheme();
+  const { colors, radius } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       disabled={disabled}
-      hitSlop={8}
-      onPress={onPress}
+      hitSlop={4}
+      onPress={() => {
+        haptics.selection();
+        onPress();
+      }}
       style={({ pressed }) => [
-        styles.more,
-        { backgroundColor: colors.surface2 },
-        (pressed || disabled) && { opacity: disabled ? 0.35 : 0.6 },
+        styles.stepButton,
+        { borderRadius: radius.sm },
+        pressed && !disabled && { backgroundColor: colors.surface3 },
+        disabled && { opacity: 0.3 },
       ]}
     >
-      <Icon name={icon} size={16} color={colors.text} />
+      <Icon name={icon} size={18} color={colors.secondary} />
     </Pressable>
   );
 }
@@ -492,14 +531,18 @@ function PartFilter({
         ]}
         trigger={{ text: label, color: colors.text }}
         width={170}
-        height={32}
+        height={36}
         fill={colors.surface2}
         cornerRadius={radius.sm}
       >
         <View
           style={[
             styles.filterButton,
-            { backgroundColor: colors.surface2, borderRadius: radius.sm },
+            {
+              backgroundColor: colors.surface2,
+              borderColor: colors.lineStrong,
+              borderRadius: radius.sm,
+            },
           ]}
         >
           <Text style={[type.footnote, { color: colors.text, fontWeight: '600' }]}>{label}</Text>
@@ -511,20 +554,38 @@ function PartFilter({
 }
 
 const styles = StyleSheet.create({
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  stepper: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16 },
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  titleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stepperBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 44,
+    padding: 2,
+  },
+  stepperDate: { flex: 1, textAlign: 'center', fontSize: 14 },
+  stepButton: { width: 44, height: 40, alignItems: 'center', justifyContent: 'center' },
+  stepSpacer: { width: 44, height: 40 },
+  figureSegmented: { alignSelf: 'center', width: 184 },
   locked: {
     flexDirection: 'row',
     alignItems: 'center',
     alignSelf: 'center',
+    minHeight: 36,
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
   },
   changes: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   change: { flexDirection: 'row', gap: 6, paddingHorizontal: 10, paddingVertical: 5 },
-  entryActions: { flexDirection: 'row', gap: 10 },
-  historyHeader: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4 },
+  entryActions: { flexDirection: 'row', gap: 8 },
+  historySection: { borderTopWidth: 1, paddingTop: 12 },
+  historyHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 36 },
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -535,10 +596,11 @@ const styles = StyleSheet.create({
   more: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   filter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   filterButton: {
-    height: 32,
+    height: 36,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 10,
+    borderWidth: 1,
   },
 });
