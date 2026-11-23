@@ -493,7 +493,7 @@ function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlock
             items={items}
             trigger={{ text: `${pill} ▾`, color: colors.text }}
             width={pillWidth}
-            height={40}
+            height={44}
             fill={colors.surface2}
             cornerRadius={radius.md}
           >
@@ -517,8 +517,8 @@ function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlock
             accessibilityLabel={`More options for ${profile.display_name}`}
             items={items}
             trigger={{ sf: 'ellipsis', color: colors.text, size: 16 }}
-            width={40}
-            height={40}
+            width={44}
+            height={44}
             fill={colors.surface2}
             cornerRadius={radius.md}
           >
@@ -840,7 +840,7 @@ const styles = StyleSheet.create({
   badge: { paddingHorizontal: 8, paddingVertical: 2 },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   pill: {
-    minHeight: 40,
+    minHeight: 44,
     paddingHorizontal: 14,
     borderWidth: 1,
     flexDirection: 'row',
@@ -848,8 +848,8 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   more: {
-    width: 40,
-    height: 40,
+    width: 44,
+    height: 44,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',

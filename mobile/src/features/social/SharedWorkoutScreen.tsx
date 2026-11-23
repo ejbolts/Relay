@@ -29,6 +29,7 @@ import { Avatar } from './Avatar';
 import { CommentComposer, CommentList, useCommentThread } from './Comments';
 import { useSocialNavigation } from './navigation';
 import { ReactionBar } from './ReactionBar';
+import { useScrollToComment } from './scrollToComment';
 import { useSharedProfile, useSharedWorkout } from './socialQueries';
 import { WorkoutPhotoActions } from './WorkoutPhotoActions';
 import { WorkoutPhotos } from './WorkoutPhotos';
@@ -62,7 +63,11 @@ export function SharedWorkoutScreen({
   const thread = useCommentThread(workoutId, data?.reactions ?? null);
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const composer = useRef<ComponentRef<typeof TextInput>>(null);
-  const scrolled = useRef(false);
+  const toComment = useScrollToComment({
+    enabled: showComments,
+    commentId: highlightCommentId,
+    scroll,
+  });
   const header = <Stack.Screen options={pushedScreenOptions(colors, 'Workout')} />;
 
   if (!data) {
@@ -182,22 +187,18 @@ export function SharedWorkoutScreen({
             />
           </Card>
         )}
-        <View
-          onLayout={(event) => {
-            if (!showComments || scrolled.current) return;
-            scrolled.current = true;
-            const y = event.nativeEvent.layout.y;
-            requestAnimationFrame(() => scroll.current?.scrollTo({ y, animated: true }));
-          }}
-        >
+        <View testID="comments-box" onLayout={toComment.onBox}>
           <Card style={{ gap: space.md }}>
             <CardHeader title="Comments" detail={comments > 0 ? `${comments}` : undefined} />
-            <CommentList
-              thread={thread}
-              highlightId={highlightCommentId}
-              onOpenPerson={nav.openProfile}
-              onCompose={() => composer.current?.focus()}
-            />
+            <View testID="comments-list" onLayout={toComment.onList}>
+              <CommentList
+                thread={thread}
+                highlightId={highlightCommentId}
+                onTarget={toComment.onTarget}
+                onOpenPerson={nav.openProfile}
+                onCompose={() => composer.current?.focus()}
+              />
+            </View>
           </Card>
         </View>
       </ScrollView>

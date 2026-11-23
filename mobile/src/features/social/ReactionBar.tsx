@@ -18,6 +18,7 @@ import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
+import { isToastAccountCurrent, toastAccount } from '../../ui/Toast';
 import { Avatar } from './Avatar';
 import { socialIcons } from './icons';
 import { queueReaction, usePendingReaction } from './pendingReactions';
@@ -84,7 +85,10 @@ export function useReactionControl({
     },
     // Offline, the choice still goes to the queue rather than waiting for a connection.
     networkMode: 'always',
-    onSuccess: (updated) => {
+    // The session the reaction started in: a late answer mustn't show in another account.
+    onMutate: () => ({ account: toastAccount() }),
+    onSuccess: (updated, _kind, context) => {
+      if (!context || !isToastAccountCurrent(context.account)) return;
       if (updated) show(updated);
       setPicking(false);
     },
@@ -158,17 +162,16 @@ export function ReactionPicker({
                 haptics.tap();
                 react.mutate(item.kind);
               }}
-              style={({ pressed }) => [
-                styles.choice,
-                mine && {
-                  backgroundColor: colors.accentSoft,
-                  borderColor: colors.accent,
-                  borderWidth: 1,
-                },
-                pressed && { transform: [{ scale: 1.18 }] },
-              ]}
+              style={({ pressed }) => [styles.choice, pressed && { transform: [{ scale: 1.18 }] }]}
             >
-              <Text style={styles.emojiLarge}>{item.emoji}</Text>
+              <View
+                style={[
+                  styles.choiceFace,
+                  mine && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+                ]}
+              >
+                <Text style={styles.emojiLarge}>{item.emoji}</Text>
+              </View>
             </Pressable>
           );
         })}
@@ -239,7 +242,6 @@ export function ReactionActions({
       accessibilityLabel={reactLabel}
       accessibilityState={{ expanded: picking, disabled: waiting }}
       disabled={waiting}
-      hitSlop={4}
       onPress={togglePicker}
       style={({ pressed }) => [
         styles.iconButton,
@@ -252,24 +254,27 @@ export function ReactionActions({
     </Pressable>
   );
 
+  // Each half is its own 44 pt target; the pill drawn behind them stays 36 pt.
   const joinedReactions = !ownWorkout && summary.total > 0 && (
-    <View
-      style={[
-        styles.joinedPill,
-        !compact && {
-          backgroundColor: selected ? colors.accentSoft : colors.surface2,
-          borderColor: selected ? colors.accent : colors.lineStrong,
-          borderWidth: 1,
-          borderRadius: radius.pill,
-        },
-      ]}
-    >
+    <View style={styles.joinedPill}>
+      {!compact && (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.pillFace,
+            {
+              backgroundColor: selected ? colors.accentSoft : colors.surface2,
+              borderColor: selected ? colors.accent : colors.lineStrong,
+              borderRadius: radius.pill,
+            },
+          ]}
+        />
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={reactLabel}
         accessibilityState={{ expanded: picking, disabled: waiting }}
         disabled={waiting}
-        hitSlop={4}
         onPress={togglePicker}
         style={({ pressed }) => [
           styles.joinedPart,
@@ -284,7 +289,6 @@ export function ReactionActions({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`View ${reactionCount} on ${subject}`}
-        hitSlop={4}
         onPress={() => {
           haptics.tap();
           setPeople(true);
@@ -315,25 +319,32 @@ export function ReactionActions({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`View ${reactionCount} on ${subject}`}
-      hitSlop={4}
       onPress={() => {
         haptics.tap();
         setPeople(true);
       }}
       style={({ pressed }) => [
-        compact ? styles.iconButton : styles.summaryPill,
-        !compact && {
-          backgroundColor: colors.surface2,
-          borderColor: colors.lineStrong,
-          borderRadius: radius.pill,
-        },
+        compact ? styles.iconButton : styles.summaryTouch,
         pressed && { opacity: 0.6 },
       ]}
     >
-      <Text style={styles.emojiSmall}>{summary.emojis.slice(0, SUMMARY_EMOJIS).join('')}</Text>
-      <Text style={[type.footnote, type.number, { color: colors.secondary, fontWeight: '700' }]}>
-        {summary.total}
-      </Text>
+      <View
+        style={[
+          styles.summaryFace,
+          !compact && {
+            backgroundColor: colors.surface2,
+            borderColor: colors.lineStrong,
+            borderRadius: radius.pill,
+            borderWidth: 1,
+            paddingHorizontal: 10,
+          },
+        ]}
+      >
+        <Text style={styles.emojiSmall}>{summary.emojis.slice(0, SUMMARY_EMOJIS).join('')}</Text>
+        <Text style={[type.footnote, type.number, { color: colors.secondary, fontWeight: '700' }]}>
+          {summary.total}
+        </Text>
+      </View>
     </Pressable>
   );
 
@@ -345,7 +356,6 @@ export function ReactionActions({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${comments} ${comments === 1 ? 'comment' : 'comments'} on ${subject}`}
-          hitSlop={4}
           onPress={() => {
             haptics.tap();
             onOpenComments();
@@ -506,32 +516,33 @@ export function ReactionPeopleSheet({
 const styles = StyleSheet.create({
   wrap: { gap: 8 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  compactRow: { flexWrap: 'nowrap', gap: 2 },
+  compactRow: { flexWrap: 'nowrap', gap: 0 },
   iconButton: {
-    minWidth: 40,
-    minHeight: 40,
+    minWidth: 44,
+    minHeight: 44,
     paddingHorizontal: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
   },
-  summaryPill: {
+  summaryTouch: { minHeight: 44, minWidth: 44, justifyContent: 'center' },
+  summaryFace: {
     minHeight: 34,
-    paddingHorizontal: 10,
-    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 5,
   },
   joinedPill: {
-    minHeight: 36,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
   },
+  pillFace: { ...StyleSheet.absoluteFill, top: 4, bottom: 4, borderWidth: 1 },
   joinedPart: {
-    minHeight: 36,
+    minHeight: 44,
+    minWidth: 44,
     paddingLeft: 10,
     paddingRight: 4,
     flexDirection: 'row',
@@ -539,9 +550,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 3,
   },
-  compactPart: { paddingLeft: 6, paddingRight: 3, minHeight: 40 },
+  compactPart: { paddingLeft: 6, paddingRight: 3 },
   joinedCount: {
-    minHeight: 36,
+    minHeight: 44,
+    minWidth: 44,
     paddingLeft: 4,
     paddingRight: 10,
     flexDirection: 'row',
@@ -549,7 +561,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 4,
   },
-  compactCount: { paddingLeft: 3, paddingRight: 6, minHeight: 40 },
+  compactCount: { paddingLeft: 3, paddingRight: 6 },
   emoji: { fontSize: 18 },
   emojiSmall: { fontSize: 15, letterSpacing: -2 },
   emojiLarge: { fontSize: 24 },
@@ -567,9 +579,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     alignSelf: 'flex-start',
     borderWidth: 1,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    gap: 2,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
   },
   floatingPicker: {
     shadowOffset: { width: 0, height: 8 },
@@ -577,10 +588,20 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 10,
   },
+  // 44 pt touch frames, side by side; the selected ring stays a compact circle inside.
   choice: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  choiceFace: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
   },

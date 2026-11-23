@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ComponentRef, type RefOb
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { FriendActivity, TimelineItem } from '../../../../frontend/src/types';
+import { profileBadgeText } from '../../../../frontend/src/profileButton';
 import { localDate } from '../../../../frontend/src/utils';
 import { workoutFocusStep } from '../../../../frontend/src/workoutFocusRequest';
 import { useUser } from '../../session/SessionProvider';
@@ -115,10 +116,10 @@ export function SocialScreen() {
               importantForAccessibility="no-hide-descendants"
               style={[
                 styles.requestBadge,
-                { backgroundColor: colors.danger, borderColor: colors.page },
+                { backgroundColor: colors.dangerFill, borderColor: colors.page },
               ]}
             >
-              <Text style={styles.requestBadgeText}>{requests > 9 ? '9+' : requests}</Text>
+              <Text style={styles.requestBadgeText}>{profileBadgeText(requests)}</Text>
             </View>
           )}
         </View>

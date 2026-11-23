@@ -25,7 +25,7 @@ import { useUser } from '../../session/SessionProvider';
 import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Switch } from '../../ui/controls';
 import { haptics } from '../../ui/haptics';
-import { showToast } from '../../ui/Toast';
+import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { pushedScreenOptions } from '../../ui/navigation';
 import { Avatar } from './Avatar';
@@ -36,6 +36,13 @@ import { refreshSocial, socialKeys, useSharingChoices } from './socialQueries';
  * Who can see your profile and what it shares, as the web's Settings section. A new visibility
  * waits for its confirm button; share switches save at once while the profile is shared.
  */
+/** The label for a saved visibility, or `null` for one this release doesn't know. */
+function visibilityLabel(value: string): string | null {
+  return Object.prototype.hasOwnProperty.call(VISIBILITY_LABELS, value)
+    ? VISIBILITY_LABELS[value as keyof typeof VISIBILITY_LABELS]
+    : null;
+}
+
 export function SharingSettingsScreen() {
   const { colors, radius, space, type } = useTheme();
   const insets = useSafeAreaInsets();
@@ -48,8 +55,13 @@ export function SharingSettingsScreen() {
   const save = useMutation({
     mutationFn: ({ next }: { next: SharingChoices; message: string }) =>
       socialApi.updateChoices(next),
-    onMutate: ({ next }) => setDraft(next),
-    onSuccess: (stored, { message }) => {
+    onMutate: ({ next }) => {
+      setDraft(next);
+      // The session the save started in: a late answer mustn't land in another account's cache.
+      return { account: toastAccount() };
+    },
+    onSuccess: (stored, { message }, context) => {
+      if (!context || !isToastAccountCurrent(context.account)) return;
       client.setQueryData(socialKeys.choices, stored);
       setDraft(null);
       haptics.success();
@@ -80,7 +92,9 @@ export function SharingSettingsScreen() {
     else setDraft(next);
   };
   const preview = livePreview(current, null);
-  const shared = saved.visibility !== 'private';
+  // A newer server can send a visibility this release doesn't know: show it neutrally.
+  const savedLabel = visibilityLabel(saved.visibility);
+  const shared = savedLabel !== null && saved.visibility !== 'private';
 
   return (
     <ScrollView
@@ -112,7 +126,7 @@ export function SharingSettingsScreen() {
                   { color: shared ? colors.accentText : colors.muted },
                 ]}
               >
-                {VISIBILITY_LABELS[saved.visibility].toUpperCase()}
+                {savedLabel ?? 'Other'}
               </Text>
             </View>
           }
@@ -279,7 +293,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 3,
   },
-  statusPillText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  statusPillText: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
   radioGroup: { gap: 8 },
   optionCard: {
     flexDirection: 'row',
