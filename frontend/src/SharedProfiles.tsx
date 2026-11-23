@@ -63,6 +63,7 @@ import {
   forgetSharedProfile,
   pendingSharedProfile,
   storeSharedProfile,
+  updateCachedReactions,
   workoutsFromCache,
   type SharedProfileData,
 } from './sharedProfileCache';
@@ -83,6 +84,7 @@ import type {
   SharingConnection,
   TrackedWorkout,
   User,
+  WorkoutReactions,
   WorkoutType,
 } from './types';
 
@@ -1103,6 +1105,11 @@ export interface SharedWorkoutListProps {
   onLoadMore?: () => void;
   /** The member's own workout types, so the list matches the colours of their calendar. */
   workoutTypes?: WorkoutType[];
+  /** Each listed workout's reactions and comment count, by workout id. */
+  reactions?: Record<string, WorkoutReactions>;
+  onReactionsChange?: (workoutId: string, reactions: WorkoutReactions) => void;
+  /** Whose workouts these are, to name them to screen readers: "Riley's Push day". */
+  owner?: { display_name: string; is_you: boolean };
 }
 
 function SharedConsistencyCalendar({
@@ -1271,6 +1278,9 @@ export function SharedProfileScreen({
   const [profile, setProfile] = useState<SharedProfile | null>(seed?.profile ?? null);
   const [workouts, setWorkouts] = useState<TrackedWorkout[]>(seed?.page?.workouts ?? []);
   const [records, setRecords] = useState<PersonalRecord[]>(seed?.page?.personal_records ?? []);
+  const [reactions, setReactions] = useState<Record<string, WorkoutReactions>>(
+    seed?.page?.reactions ?? {},
+  );
   const [total, setTotal] = useState(seed?.page?.total ?? 0);
   const [state, setState] = useState<LoadState>(seed ? 'ready' : 'loading');
   const [unblocking, setUnblocking] = useState(false);
@@ -1435,6 +1445,7 @@ export function SharedProfileScreen({
       onLoadedRef.current?.(nextProfile);
       setWorkouts(page.workouts);
       setRecords(page.personal_records);
+      setReactions(page.reactions ?? {});
       setTotal(page.total);
       setFilterOptions(options);
       setState('ready');
@@ -1489,6 +1500,7 @@ export function SharedProfileScreen({
         ...page.workouts.filter((item) => !current.some((existing) => existing.id === item.id)),
       ]);
       setRecords((current) => [...current, ...page.personal_records]);
+      setReactions((current) => ({ ...current, ...page.reactions }));
       // Pages read on demand stop once the server has nothing new, even if its total disagrees.
       setTotal(added.length ? page.total : workouts.length);
     } catch (reason) {
@@ -1841,6 +1853,12 @@ export function SharedProfileScreen({
                     focusWorkoutId: linkedWorkoutId,
                     personalRecords: records,
                     workoutTypes: profile.consistency?.workout_types,
+                    reactions,
+                    owner: profile,
+                    onReactionsChange: (workoutId, next) => {
+                      if (cacheable) updateCachedReactions(viewerId, profileId, workoutId, next);
+                      setReactions((current) => ({ ...current, [workoutId]: next }));
+                    },
                     onFilterMachine: (photo) => {
                       setFilters((current) => ({ ...current, machine_photo_id: photo.id }));
                       setFiltersOpen(true);
