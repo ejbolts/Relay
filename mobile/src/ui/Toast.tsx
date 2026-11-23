@@ -1,5 +1,13 @@
-import { useEffect, useState } from 'react';
-import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import {
+  AccessibilityInfo,
+  Animated,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReduceMotion } from '../features/settings/devicePreferences';
 import { Icon } from './Icon';
@@ -7,12 +15,16 @@ import { useTheme } from './theme';
 
 // Brief, non-blocking confirmations such as "Workout saved". Any screen calls `showToast`; the
 // most recently mounted <ToastHost /> shows it (a sheet mounts its own, since native sheets sit
-// above the app's root view), then it clears by itself or when tapped.
+// above the app's root view), then it clears by itself or when tapped. A toast with an action
+// (Undo) stays longer, waits while someone is touching or focused on it, and stays until it is
+// dismissed while a screen reader is on, so the action can always be reached.
 
 interface Toast {
   id: number;
   message: string;
   action?: ToastAction;
+  /** How long it shows, before any pause. */
+  ms: number;
 }
 
 export interface ToastAction {
@@ -24,24 +36,50 @@ type Host = (toast: Toast | null) => void;
 const hosts: Host[] = [];
 let nextId = 0;
 
-export function showToast(message: string, action?: ToastAction) {
-  const toast = { id: ++nextId, message, action };
-  hosts.at(-1)?.(toast);
-  AccessibilityInfo.announceForAccessibility(message);
+const VISIBLE_MS = 3200;
+/** Long enough to read the message and reach an Undo. */
+const ACTION_VISIBLE_MS = 8000;
+
+/** What a screen reader hears: the message, and the action when there is one. */
+export function toastAnnouncement(message: string, action?: ToastAction) {
+  return action ? `${message}. ${action.label} available.` : message;
 }
 
-const VISIBLE_MS = 3200;
-/** Long enough to reach an Undo. */
-const ACTION_VISIBLE_MS = 5000;
+export function showToast(message: string, action?: ToastAction) {
+  const toast: Toast = {
+    id: ++nextId,
+    message,
+    action,
+    ms: action ? ACTION_VISIBLE_MS : VISIBLE_MS,
+  };
+  const host = hosts.at(-1);
+  host?.(toast);
+  AccessibilityInfo.announceForAccessibility(toastAnnouncement(message, action));
+  // Android lets people ask for more time in its accessibility settings.
+  if (Platform.OS === 'android' && host) {
+    Promise.resolve(AccessibilityInfo.getRecommendedTimeoutMillis?.(toast.ms))
+      .then((ms) => {
+        if (typeof ms === 'number' && ms > toast.ms) host({ ...toast, ms });
+      })
+      .catch(() => undefined);
+  }
+}
 
 export function ToastHost({ bottom = 24 }: { bottom?: number }) {
   const [toast, setToast] = useState<Toast | null>(null);
   const insets = useSafeAreaInsets();
-  const { colors, type, radius } = useTheme();
+  const { colors, type, radius, scheme } = useTheme();
   const reduced = useReduceMotion();
   const [shown] = useState(() => new Animated.Value(0));
   // The web's timer bar along the bottom edge, shrinking until the toast clears.
   const [left] = useState(() => new Animated.Value(1));
+  const [reader, setReader] = useState(false);
+  const [touched, setTouched] = useState(false);
+  const clock = useRef({ id: -1, total: 0, remaining: 0 });
+  const id = toast?.id;
+  // The countdown waits while it's being touched or focused, and for a screen reader user an
+  // action toast waits until it is dismissed.
+  const held = touched || (reader && !!toast?.action);
 
   useEffect(() => {
     const host: Host = setToast;
@@ -52,21 +90,58 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
   }, []);
 
   useEffect(() => {
-    if (!toast) return;
+    let live = true;
+    // Promise.resolve: a test's mock may answer without a promise.
+    Promise.resolve(AccessibilityInfo.isScreenReaderEnabled?.())
+      .then((on) => {
+        if (live) setReader(!!on);
+      })
+      .catch(() => undefined);
+    const subscription = AccessibilityInfo.addEventListener?.('screenReaderChanged', setReader);
+    return () => {
+      live = false;
+      subscription?.remove();
+    };
+  }, []);
+
+  // A new toast slides in.
+  useEffect(() => {
+    if (id === undefined) return;
     shown.setValue(reduced ? 1 : 0);
     if (!reduced) {
       Animated.timing(shown, { toValue: 1, duration: 180, useNativeDriver: true }).start();
     }
-    const ms = toast.action ? ACTION_VISIBLE_MS : VISIBLE_MS;
-    left.setValue(1);
-    const bar = Animated.timing(left, { toValue: 0, duration: ms, useNativeDriver: false });
+  }, [id, shown, reduced]);
+
+  useEffect(() => {
+    if (!toast) return;
+    if (clock.current.id !== toast.id) {
+      clock.current = { id: toast.id, total: toast.ms, remaining: toast.ms };
+      left.setValue(1);
+    } else if (clock.current.total !== toast.ms) {
+      // A longer time arrived for the same toast (Android's accessibility timeout).
+      clock.current.remaining += toast.ms - clock.current.total;
+      clock.current.total = toast.ms;
+    }
+    if (held) return;
+    const remaining = clock.current.remaining;
+    const started = Date.now();
+    const bar = Animated.timing(left, { toValue: 0, duration: remaining, useNativeDriver: false });
     if (!reduced) bar.start();
-    const timer = setTimeout(() => setToast(null), ms);
+    const timer = setTimeout(() => setToast(null), remaining);
     return () => {
       bar.stop();
       clearTimeout(timer);
+      clock.current.remaining = Math.max(0, remaining - (Date.now() - started));
     };
-  }, [toast, shown, left, reduced]);
+  }, [toast, held, left, reduced]);
+
+  const hold = {
+    onPressIn: () => setTouched(true),
+    onPressOut: () => setTouched(false),
+    onFocus: () => setTouched(true),
+    onBlur: () => setTouched(false),
+  };
 
   if (!toast) return null;
   return (
@@ -88,7 +163,8 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
         style={[
           styles.toast,
           {
-            backgroundColor: colors.surface2,
+            // The web's toast: the raised surface in light mode, a step up from the cards in dark.
+            backgroundColor: scheme === 'light' ? colors.surfaceRaised : colors.surface2,
             borderColor: colors.lineStrong,
             borderRadius: radius.toast,
             boxShadow: `0 14px 36px ${colors.shadow}`,
@@ -98,7 +174,11 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${toast.message}. Dismiss`}
-          onPress={() => setToast(null)}
+          {...hold}
+          onPress={() => {
+            setTouched(false);
+            setToast(null);
+          }}
           style={styles.message}
         >
           <Text
@@ -117,7 +197,9 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
           <Pressable
             accessibilityRole="button"
             hitSlop={8}
+            {...hold}
             onPress={() => {
+              setTouched(false);
               setToast(null);
               toast.action?.run();
             }}

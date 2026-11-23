@@ -14,7 +14,8 @@ import { errorMessage, ErrorState, Loading } from '../../ui/components';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { Section, SectionError, SettingsPage } from '../settings/SettingsList';
-import { refreshAccountData, undoImport, useImportBatches } from './dataApi';
+import { evictAccountData, undoImport, useImportBatches } from './dataApi';
+import { undoBlocker, useLocalWorkoutWrites } from './localWrites';
 
 /** Tracked imports, newest first, each with Undo behind a confirmation, as on the web. */
 export function ImportHistoryScreen() {
@@ -25,6 +26,7 @@ export function ImportHistoryScreen() {
   const [error, setError] = useState<string | null>(null);
   // Only a pull shows the spinner; refreshes after an undo run quietly.
   const [pulling, setPulling] = useState(false);
+  const writes = useLocalWorkoutWrites();
 
   if (batches.isPending) return <Loading label="Loading imports" />;
   if (batches.error && !batches.data)
@@ -37,7 +39,7 @@ export function ImportHistoryScreen() {
     setError(null);
     try {
       const result = await undoImport(batch.id);
-      await refreshAccountData(client);
+      await evictAccountData(client);
       showToast(importUndoneMessage(result));
     } catch (caught) {
       setError(errorMessage(caught));
@@ -47,6 +49,10 @@ export function ImportHistoryScreen() {
   }
 
   function confirm(batch: ImportBatch) {
+    // A workout this phone still has to send may be one the undo deletes.
+    const blocked = batch.workouts > 0 ? undoBlocker(writes) : null;
+    if (blocked) return setError(blocked);
+    setError(null);
     const lines = [
       importBatchCounts(batch) || NOTHING_LEFT_TO_REMOVE,
       importBatchDetails(batch),

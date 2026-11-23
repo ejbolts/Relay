@@ -1,11 +1,10 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { reactionEmoji } from '../../../../frontend/src/friendFeedData';
 import {
   ADMIN_REQUEST_TEXT,
-  adminAccountPath,
   commentNoticeText,
   notificationCount,
   notificationDate,
@@ -32,7 +31,6 @@ import type {
   SharingNotifications,
 } from '../../../../frontend/src/types';
 import { notificationWorkoutFocus } from '../../../../frontend/src/workoutFocusRequest';
-import { serverOrigin } from '../../data/api';
 import { Button, errorMessage } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon, type IconPair } from '../../ui/Icon';
@@ -40,6 +38,7 @@ import { Sheet } from '../../ui/Sheet';
 import { reviewRoutes, useBellNotices } from '../review';
 import { reviewIcons } from '../review/routes';
 import { useTheme } from '../../ui/theme';
+import { adminRoutes } from '../admin';
 import { Avatar } from './Avatar';
 import { useFriendAction } from './FriendsSection';
 import { socialIcons } from './icons';
@@ -155,8 +154,8 @@ function NotificationsSheet({
     } else if (row.kind === 'weekly-review') {
       router.push(reviewRoutes.weeklyReview);
     } else {
-      // The admin console stays on the web; it opens at the account, as a reset alert does.
-      void Linking.openURL(new URL(adminAccountPath(row.item.user_id), serverOrigin()).href);
+      // An administrator's request opens that account in the app's admin console.
+      router.push(adminRoutes.account(row.item.user_id));
     }
   };
   const openWorkout = (row: SocialNotificationRow) => {

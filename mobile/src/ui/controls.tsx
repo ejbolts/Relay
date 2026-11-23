@@ -7,6 +7,7 @@ import SegmentedControl, {
 import { useState, type ComponentType } from 'react';
 import {
   Platform,
+  Pressable,
   Switch as NativeSwitch,
   StyleSheet,
   Text,
@@ -25,7 +26,11 @@ import { useTheme } from './theme';
 // The package's class typings predate React 19's JSX types; the component itself is fine.
 const NativeSegmentedControl = SegmentedControl as unknown as ComponentType<SegmentedControlProps>;
 
-/** A native segmented control, as the web's .segmented-control. */
+/**
+ * A segmented control, as the web's .segmented-control: UISegmentedControl on iOS; on Android the
+ * web's own look drawn here, since the package's Android control names its choices "0", "1"…
+ * for screen readers. Both are 44 pt tall, the web's control with its border and padding.
+ */
 export function Segmented({
   values,
   selectedIndex,
@@ -42,6 +47,50 @@ export function Segmented({
   style?: StyleProp<ViewStyle>;
 }) {
   const { scheme, colors } = useTheme();
+  const choose = (index: number) => {
+    if (index === selectedIndex) return;
+    haptics.selection();
+    onChange(index);
+  };
+  if (Platform.OS !== 'ios')
+    return (
+      <View
+        accessibilityRole="radiogroup"
+        accessibilityLabel={accessibilityLabel}
+        style={[
+          styles.segments,
+          { backgroundColor: colors.surface, borderColor: colors.line },
+          !enabled && { opacity: 0.45 },
+          style,
+        ]}
+      >
+        {values.map((label, index) => {
+          const selected = index === selectedIndex;
+          return (
+            <Pressable
+              key={`${index}-${label}`}
+              accessibilityRole="radio"
+              accessibilityLabel={label}
+              accessibilityState={{ selected, checked: selected, disabled: !enabled }}
+              disabled={!enabled}
+              onPress={() => choose(index)}
+              style={({ pressed }) => [
+                styles.segment,
+                selected && { backgroundColor: colors.surface3 },
+                pressed && !selected && { opacity: 0.7 },
+              ]}
+            >
+              <Text
+                numberOfLines={1}
+                style={[styles.segmentText, { color: selected ? colors.text : colors.muted }]}
+              >
+                {label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    );
   return (
     <NativeSegmentedControl
       accessibilityLabel={accessibilityLabel}
@@ -49,16 +98,10 @@ export function Segmented({
       selectedIndex={selectedIndex}
       enabled={enabled}
       appearance={scheme}
-      // Android draws the control itself: give it the web's surfaces.
-      backgroundColor={Platform.OS === 'android' ? colors.surface : undefined}
-      tintColor={Platform.OS === 'android' ? colors.surface3 : undefined}
       fontStyle={{ color: colors.muted, fontSize: 13, fontWeight: '600' }}
       activeFontStyle={{ color: colors.text, fontSize: 13, fontWeight: '600' }}
-      onChange={(event) => {
-        haptics.selection();
-        onChange(event.nativeEvent.selectedSegmentIndex);
-      }}
-      style={[{ height: 36 }, style]}
+      onChange={(event) => choose(event.nativeEvent.selectedSegmentIndex)}
+      style={[{ height: 44 }, style]}
     />
   );
 }
@@ -116,7 +159,7 @@ export function Slider({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors, scheme } = useTheme();
-  const clamp = (next: number) => Math.min(max, Math.max(min, Math.round(next / step) * step));
+  const clamp = (next: number) => snapToStep(next, min, max, step);
   const [last, setLast] = useState(value);
   const change = (next: number) => {
     const snapped = clamp(next);
@@ -235,8 +278,25 @@ export function TextField({
   );
 }
 
+/** The nearest value on the slider's grid, which starts at `min`, kept within the range. */
+export function snapToStep(value: number, min: number, max: number, step: number) {
+  const snapped = min + Math.round((value - min) / step) * step;
+  // Drop float noise such as 0.30000000000000004 from decimal steps.
+  return Math.min(max, Math.max(min, Number(snapped.toFixed(10))));
+}
+
 const styles = StyleSheet.create({
-  slider: { flex: 1, height: 40, justifyContent: 'center' },
+  slider: { flex: 1, height: 44, justifyContent: 'center' },
+  segments: { flexDirection: 'row', gap: 4, borderWidth: 1, borderRadius: 13, padding: 3 },
+  segment: {
+    flex: 1,
+    minHeight: 36,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  segmentText: { fontSize: 13, fontWeight: '600' },
   input: { minHeight: 46, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 11 },
   multiline: { minHeight: 92, textAlignVertical: 'top' },
 });
