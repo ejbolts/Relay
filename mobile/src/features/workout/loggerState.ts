@@ -46,6 +46,7 @@ import {
   pauseWorkout,
   resumeWorkout,
   RUNNING,
+  withElapsedSeconds,
   type WorkoutPause,
 } from '../../../../frontend/src/workoutPause';
 import {
@@ -812,6 +813,19 @@ export function togglePause(state: LoggerState, now: number): LoggerState {
       state.pause.pausedAt === null
         ? pauseWorkout(state.pause, now)
         : resumeWorkout(state.pause, now),
+  };
+}
+
+/**
+ * Corrects the live clock to read `seconds` now, for a timer started late or left running, as
+ * the web's clock correction does: the session keeps its real start (and its draft identity),
+ * a pause stays as it is, and a fixed total kept from an earlier finish attempt gives way to it.
+ */
+export function correctWorkoutTime(state: LoggerState, seconds: number, now: number): LoggerState {
+  return {
+    ...state,
+    durationOverrideMinutes: null,
+    pause: withElapsedSeconds(state.pause, state.startedAt, seconds, now),
   };
 }
 

@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { activeElapsedSeconds, type WorkoutPause } from '../../../../frontend/src/workoutPause';
 import { useNow } from '../../ui/useNow';
 
@@ -7,7 +8,15 @@ import { useNow } from '../../ui/useNow';
  * the minutes it was saved with (`previousMinutes`).
  */
 export function useElapsed(startedAt: number, pause?: WorkoutPause, previousMinutes = 0) {
-  const now = useNow();
+  const ticked = useNow();
+  // A pause, resume or clock correction shows straight away, as on the web, rather than at the
+  // next tick: the clock reads the time again on the next frame.
+  const [synced, setSynced] = useState<{ pause?: WorkoutPause; at: number } | null>(null);
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => setSynced({ pause, at: Date.now() }));
+    return () => cancelAnimationFrame(frame);
+  }, [pause]);
+  const now = synced && synced.pause === pause ? Math.max(ticked, synced.at) : ticked;
   return formatElapsed(
     previousMinutes * 60_000 +
       (pause ? activeElapsedSeconds(startedAt, pause, now) * 1000 : now - startedAt),

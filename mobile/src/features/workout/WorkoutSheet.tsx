@@ -25,6 +25,7 @@ import {
   type DraftPrBadges,
   type PrCelebrations,
 } from '../../../../frontend/src/workoutPr';
+import { activeElapsedSeconds } from '../../../../frontend/src/workoutPause';
 import { newId } from '../../data/deviceStorage';
 import { useDashboard, useTrainingPreferences } from '../../data/queries';
 import { Button } from '../../ui/components';
@@ -44,6 +45,7 @@ import {
   addExercises,
   chooseMachines,
   completeExercise,
+  correctWorkoutTime,
   deleteSet,
   loggerToDraft,
   groupSuperset,
@@ -71,6 +73,7 @@ import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { restMenuItems } from './restChoices';
 import { useElapsed } from './useElapsed';
+import { WorkoutTimeSheet } from './WorkoutTimeSheet';
 import { useLogger, useWorkout, type LoggerApi } from './WorkoutProvider';
 
 /**
@@ -148,6 +151,17 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const { change, types, context, getState, updateSet: applySetUpdate } = logger;
   const identity = workoutIdentity(state, types);
   const elapsed = useElapsed(state.startedAt, state.pause, state.previousDurationMinutes);
+  // The clock correction opens on the clock as it reads then (this session's training time).
+  const [timeEditor, setTimeEditor] = useState({ open: false, seconds: 0, key: 0 });
+  const openTimeEditor = () => {
+    const latest = getState() ?? state;
+    setTimeEditor((current) => ({
+      open: true,
+      seconds: activeElapsedSeconds(latest.startedAt, latest.pause, Date.now()),
+      key: current.key + 1,
+    }));
+  };
+  const closeTimeEditor = () => setTimeEditor((current) => ({ ...current, open: false }));
   const paused = state.pause.pausedAt !== null;
   const { ticked } = setCounts(state);
   const restShown = !!(logger.rest.timer || logger.rest.done);
@@ -449,6 +463,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   function openMenu() {
     showMenu(identity.name, [
       { label: 'Rename workout', onPress: rename },
+      { label: 'Adjust workout time', onPress: openTimeEditor },
       { label: 'Workout type', onPress: chooseType },
       {
         label: paused ? 'Resume workout' : 'Pause workout',
@@ -524,39 +539,53 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
         </Pressable>
         <View style={styles.headerRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${identity.name}, ${paused ? `${elapsed}, paused` : `live ${elapsed}`}, ${ticked} ${ticked === 1 ? 'set' : 'sets'}`}
-            accessibilityHint="Renames the workout"
-            onPress={rename}
-            style={styles.titleBlock}
-          >
-            <Text
-              accessibilityRole="header"
-              style={[styles.title, { color: colors.text }]}
-              numberOfLines={1}
+          <View style={styles.titleBlock}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={identity.name}
+              accessibilityHint="Renames the workout"
+              onPress={rename}
             >
-              {identity.name}
-            </Text>
-            <View style={styles.meta}>
-              <View
-                style={[styles.liveDot, { backgroundColor: paused ? colors.muted : colors.good }]}
-              />
               <Text
-                style={[
-                  styles.metaText,
-                  type.number,
-                  { color: paused ? colors.muted : colors.good },
-                ]}
+                accessibilityRole="header"
+                style={[styles.title, { color: colors.text }]}
+                numberOfLines={1}
               >
-                {paused ? elapsed : `Live ${elapsed}`}
+                {identity.name}
               </Text>
+            </Pressable>
+            <View style={styles.meta}>
+              {/* Tapping the clock corrects it, as on the web, for a timer started late or left running. */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Correct workout time, ${paused ? elapsed : `Live ${elapsed}`}`}
+                hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }}
+                onPress={() => {
+                  haptics.tap();
+                  openTimeEditor();
+                }}
+                style={({ pressed }) => [styles.clock, pressed && styles.pressed]}
+              >
+                <View
+                  style={[styles.liveDot, { backgroundColor: paused ? colors.muted : colors.good }]}
+                />
+                <Text
+                  style={[
+                    styles.metaText,
+                    styles.clockText,
+                    type.number,
+                    { color: paused ? colors.muted : colors.good },
+                  ]}
+                >
+                  {paused ? elapsed : `Live ${elapsed}`}
+                </Text>
+              </Pressable>
               {paused && <Text style={[styles.metaText, { color: colors.muted }]}>· Paused</Text>}
               <Text style={[styles.metaText, type.number, { color: colors.muted }]}>
                 · {ticked} {ticked === 1 ? 'set' : 'sets'}
               </Text>
             </View>
-          </Pressable>
+          </View>
           {restTimerOn && (
             <MenuButton
               accessibilityLabel="Rest timer"
@@ -724,6 +753,16 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           change((latest) => mergeMachines(latest, mergedId, awayIds))
         }
         onClose={() => setMachinesFor(null)}
+      />
+      <WorkoutTimeSheet
+        key={timeEditor.key}
+        visible={timeEditor.open}
+        elapsedSeconds={timeEditor.seconds}
+        onClose={closeTimeEditor}
+        onSave={(seconds) => {
+          change((latest) => correctWorkoutTime(latest, seconds, Date.now()));
+          closeTimeEditor();
+        }}
       />
       <SwapSheet
         exercise={swapMovement?.exercise ?? null}
@@ -943,6 +982,8 @@ const styles = StyleSheet.create({
   meta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   metaText: { fontSize: 13, fontWeight: '600' },
   liveDot: { width: 6, height: 6, borderRadius: 3 },
+  clock: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  clockText: { textDecorationLine: 'underline', textDecorationStyle: 'dotted' },
   square: {
     width: 44,
     height: 44,
