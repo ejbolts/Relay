@@ -28,6 +28,7 @@ import {
   setInactiveWorkoutLimitMinutes,
 } from '../../../../frontend/src/activeWorkoutTimeout';
 import {
+  addFinishedWorkout,
   finishedWorkoutKey,
   readFinishedWorkouts,
   removeFinishedWorkout,
@@ -35,6 +36,7 @@ import {
 } from '../../../../frontend/src/finishedWorkoutQueue';
 import {
   moveDraftToFinishedQueue,
+  rebasedFinishedWorkout,
   reviewedFinishedWorkout,
 } from '../../../../frontend/src/finishedWorkoutSend';
 import { buildFinishSummary, type FinishSummary } from '../../../../frontend/src/finishSummary';
@@ -89,6 +91,7 @@ import {
   chooseWorkoutType,
   continueWorkout,
   finishInput,
+  resumeLogger,
   inactiveEndAt,
   isInactive,
   loggerFromDraft,
@@ -144,11 +147,17 @@ export interface RefusedSave {
   message: string;
   /** Changes to a saved workout that was resumed, rather than a new workout. */
   resumed: boolean;
+  /** Refused because that saved workout changed on another device; this version can still win. */
+  conflict: boolean;
 }
 
 /** What the rest of the app may know about the workout in progress. */
 export interface LiveWorkout {
   name: string;
+  /** The saved workout being resumed, or null for a new workout. */
+  resumedWorkoutId: string | null;
+  /** A resumed workout's saved minutes, which its clock adds to. */
+  previousDurationMinutes: number;
   startedAt: number;
   pause: WorkoutPause;
   loggedSets: number;
@@ -175,6 +184,10 @@ export interface WorkoutApi {
   review: (key: string) => void;
   /** Drops a refused workout that has not synced. */
   discardRefused: (key: string) => void;
+  /** Sends a refused resumed workout again over the version another device saved since. */
+  keepMine: (key: string) => void;
+  /** Reopens a saved workout to log more, as the web's Resume does. */
+  resume: (workout: TrackedWorkout) => void;
   /** The workout in progress was changed on two devices at once; a choice is needed. */
   syncConflict: WorkoutSyncConflict | null;
   /** Whether that choice is showing; closing it leaves a button to bring it back. */
@@ -259,6 +272,7 @@ const EMPTY_QUEUE: QueueStatus = {
   waiting: 0,
   sending: false,
   refusals: {},
+  conflicts: [],
   outdated: false,
 };
 /** Which account the active draft belongs to, so another account never opens it. */
@@ -298,6 +312,8 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
       refused: [],
       review: () => undefined,
       discardRefused: () => undefined,
+      keepMine: () => undefined,
+      resume: () => undefined,
       syncConflict: null,
       syncConflictOpen: false,
       showSyncConflict: () => undefined,
@@ -584,6 +600,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
         status: error instanceof ApiError ? error.status : undefined,
         outdated: error instanceof ApiError && error.status === 426,
         message: error instanceof Error ? error.message : 'Relay could not save this workout.',
+        conflict:
+          error instanceof ApiError && error.status === 409 && error.code === 'workout_conflict',
       }),
       onSaved: (workout, item, remaining) => {
         if (remaining === 0) void refreshTraining(client);
@@ -1175,11 +1193,12 @@ const WorkoutEngine = memo(function WorkoutEngine({
               durationMinutes: item.pendingSave.payload.duration_minutes,
               message: queue.refusals[key],
               resumed: item.pendingSave.workoutId !== null,
+              conflict: queue.conflicts.includes(key),
             },
           ]
         : [];
     });
-  }, [queue.refusals]);
+  }, [queue.refusals, queue.conflicts]);
 
   const review = useCallback(
     (key: string) => {
@@ -1220,6 +1239,48 @@ const WorkoutEngine = memo(function WorkoutEngine({
     removeFinishedWorkout(key, deviceStorage);
     senderRef.current?.forget(key);
   }, []);
+
+  const keepMine = useCallback((key: string) => {
+    const item = readFinishedWorkouts(deviceStorage).find(
+      (entry) => finishedWorkoutKey(entry) === key,
+    );
+    const workoutId = item?.pendingSave.workoutId;
+    if (!item || !workoutId) return;
+    apiGet<TrackedWorkout>(`/api/workouts/${encodeURIComponent(workoutId)}`)
+      .then((latest) => {
+        if (!addFinishedWorkout(rebasedFinishedWorkout(item, latest.revision), deviceStorage))
+          throw new Error('Could not store the workout on the phone. Free some storage.');
+        senderRef.current?.forget(key);
+        senderRef.current?.wake();
+      })
+      .catch((reason) =>
+        showToast(
+          reason instanceof ApiError && reason.status === 404
+            ? 'This workout was deleted on another device.'
+            : reason instanceof Error
+              ? reason.message
+              : 'Could not check the latest version. Try again.',
+        ),
+      );
+  }, []);
+
+  const resume = useCallback(
+    (workout: TrackedWorkout) => {
+      const current = loggerRef.current;
+      if (current) {
+        if (current.resumingWorkoutId !== workout.id)
+          showToast('Finish your current workout to resume this one.');
+        router.push('/workout');
+        return;
+      }
+      addedSetKeys.current.clear();
+      closeFinished();
+      commit(resumeLogger(workout, { now: Date.now(), clientSessionId: newId() }, newId));
+      commitRest(NO_REST);
+      router.push('/workout');
+    },
+    [closeFinished, commit, commitRest, router],
+  );
   const getState = useCallback(() => loggerRef.current, []);
 
   const identityName = logger ? workoutIdentity(logger, types).name : null;
@@ -1229,6 +1290,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
       logger && identityName
         ? {
             name: identityName,
+            resumedWorkoutId: logger.resumingWorkoutId,
+            previousDurationMinutes: logger.previousDurationMinutes,
             startedAt: logger.startedAt,
             pause: logger.pause,
             loggedSets,
@@ -1248,6 +1311,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
       refused,
       review,
       discardRefused,
+      keepMine,
+      resume,
       syncConflict: syncState.conflict,
       syncConflictOpen: !!syncState.conflict && !conflictHidden,
       showSyncConflict,
@@ -1265,6 +1330,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
       refused,
       review,
       discardRefused,
+      keepMine,
+      resume,
       syncState.conflict,
       conflictHidden,
       showSyncConflict,

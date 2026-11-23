@@ -4,13 +4,14 @@ import { workoutDisplayName } from '../../../../frontend/src/trainingSummary';
 import { effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
 import { Button, Card, errorMessage, Loading } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
+import { SavedWorkoutActions } from '../workout/SavedWorkoutActions';
 import { Badge, Note } from './parts';
 import { RepeatWorkoutButton } from './RepeatWorkoutButton';
 import { useSavedWorkout } from './trainingQueries';
 import { useTrainingContext } from './useTrainingContext';
 import { workoutMeta, workoutMetric, WorkoutDetails } from './WorkoutCard';
 
-/** One saved workout in full, with a way to repeat it. */
+/** One saved workout in full, with ways to edit, resume, delete or repeat it. */
 export function SessionDetailScreen({
   workoutId,
   exerciseId,
@@ -92,7 +93,9 @@ export function SessionDetailScreen({
                 }
               />
             </Card>
-            <RepeatWorkoutButton workout={workout} unit={context.unit} />
+            <SavedWorkoutActions workout={workout}>
+              <RepeatWorkoutButton workout={workout} unit={context.unit} />
+            </SavedWorkoutActions>
           </>
         )}
       </ScrollView>

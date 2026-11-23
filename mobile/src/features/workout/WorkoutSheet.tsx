@@ -110,7 +110,7 @@ export function WorkoutSheet() {
 }
 
 function FinishedView({ logger, onDone }: { logger: LoggerApi; onDone: () => void }) {
-  const { queue, refused, review, discardRefused } = useWorkout();
+  const { queue, refused, review, discardRefused, keepMine } = useWorkout();
   const finished = logger.finished!;
   const mine = refused.find((save) => save.key === finished.sessionId) ?? null;
   return (
@@ -120,6 +120,7 @@ function FinishedView({ logger, onDone }: { logger: LoggerApi; onDone: () => voi
       refused={mine}
       weightUnit={logger.weightUnit}
       onReview={() => review(finished.sessionId)}
+      onKeepMine={() => keepMine(finished.sessionId)}
       onDiscard={() => {
         discardRefused(finished.sessionId);
         onDone();
@@ -150,7 +151,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const [machinesFor, setMachinesFor] = useState<string | null>(null);
   const { change, types, context, getState, updateSet: applySetUpdate } = logger;
   const identity = workoutIdentity(state, types);
-  const elapsed = useElapsed(state.startedAt, state.pause);
+  const elapsed = useElapsed(state.startedAt, state.pause, state.previousDurationMinutes);
   const paused = state.pause.pausedAt !== null;
   const { ticked } = setCounts(state);
   const restShown = !!(logger.rest.timer || logger.rest.done);
@@ -172,9 +173,9 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       exerciseLastDoneDates(
         logger.history,
         olderHistoryFor(logger.context, state.workoutDate),
-        null,
+        state.resumingWorkoutId,
       ),
-    [logger.history, logger.context, state.workoutDate],
+    [logger.history, logger.context, state.workoutDate, state.resumingWorkoutId],
   );
   const swapMovement = state.movements.find((item) => item.key === swapping) ?? null;
   const machineMovement = state.movements.find((item) => item.key === machinesFor) ?? null;
@@ -613,6 +614,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
                 ?.latest ?? null
             }
             prBadges={prBadges.get(movement.key)}
+            excludedWorkoutId={state.resumingWorkoutId ?? undefined}
             workoutDate={state.workoutDate}
             weightUnit={logger.weightUnit}
             skipHighRepWarning={state.skipHighRepWarning}
@@ -730,14 +732,22 @@ function useLivePrBadges(logger: LoggerApi, state: LoggerState): DraftPrBadges {
       calculateScopedDraftPrs(
         state.movements,
         logger.history,
-        null,
+        state.resumingWorkoutId,
         state.workoutDate,
         older,
         blocks?.blocks ?? [],
         measurements ?? [],
         blocks?.fresh_starts ?? [],
       ),
-    [state.movements, state.workoutDate, logger.history, older, blocks, measurements],
+    [
+      state.movements,
+      state.workoutDate,
+      state.resumingWorkoutId,
+      logger.history,
+      older,
+      blocks,
+      measurements,
+    ],
   );
   // Records already showing when the logger opens are never celebrated again.
   const celebrations = useRef<PrCelebrations | null>(null);

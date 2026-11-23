@@ -1,13 +1,13 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import { api, isWorkoutConflict } from './api';
 import type { TrackedWorkout, WorkoutInput } from './types';
-import { WorkoutConflictDialog, type WorkoutConflictChoice } from './WorkoutConflictDialog';
+import { WorkoutConflictDialog } from './WorkoutConflictDialog';
+import { WORKOUT_CONFLICT_UNSAVED, type WorkoutConflictChoice } from './workoutConflict';
+
+export { WORKOUT_CONFLICT_UNSAVED };
 
 /** The user chose the other device's version; their own edits are dropped. */
 export class WorkoutEditDiscarded extends Error {}
-
-export const WORKOUT_CONFLICT_UNSAVED =
-  'Not saved. This workout was changed on another device; your changes are still here.';
 
 /**
  * Saves an edit and, when the server refuses it because the workout changed elsewhere, asks which

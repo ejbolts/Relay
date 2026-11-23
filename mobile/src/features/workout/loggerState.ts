@@ -35,6 +35,7 @@ import {
 import {
   machineSelection,
   restoreWorkoutDraftMovements,
+  savedWorkoutMovements,
   type WorkoutDraftMovement,
   type WorkoutDraftSet,
 } from '../../../../frontend/src/workoutMovements';
@@ -169,6 +170,37 @@ export function startLogger(options: StartOptions, context: LoggerContext): Logg
       defaultRest: context.defaultRest,
       newKey: context.newKey,
     }),
+  };
+}
+
+/**
+ * A saved workout reopened to log more, as the web's Resume does: its exercises and sets (sets
+ * not ticked stay planned), a fresh clock that adds to its saved duration, and its revision, so
+ * the save can't replace a version another device saved meanwhile.
+ */
+export function resumeLogger(
+  workout: TrackedWorkout,
+  { now, clientSessionId }: { now: number; clientSessionId: string },
+  newKey: () => string,
+): LoggerState {
+  return {
+    clientSessionId,
+    resumingWorkoutId: workout.id,
+    ...(workout.revision !== undefined && { resumingWorkoutRevision: workout.revision }),
+    previousDurationMinutes: workout.duration_minutes ?? 0,
+    startedAt: now,
+    lastActiveAt: now,
+    inactiveFinishAt: inactiveWorkoutFinishAt(now, now),
+    durationOverrideMinutes: null,
+    pause: RUNNING,
+    name: workout.name,
+    workoutDate: workout.workout_date,
+    category: workout.category,
+    workoutTypeId: workout.workout_type_id ?? null,
+    workoutTypeExplicit: true,
+    skipHighRepWarning: false,
+    notes: workout.notes ?? '',
+    movements: savedWorkoutMovements(workout, newKey),
   };
 }
 
@@ -326,6 +358,50 @@ export function finishState(
   };
 }
 
+/** A saved workout's own times, which an edit keeps unless they are changed. */
+export interface EditTimes {
+  durationMinutes: number;
+  /** "HH:MM", or empty when the workout has no recorded times. */
+  startTime: string;
+  endTime: string;
+  /** The revision the editor loaded, so a save can't replace a newer one unasked. */
+  baseRevision?: number;
+}
+
+/** What the shared finish rules read when editing a saved workout, as the web's editor does. */
+export function editFinishState(
+  state: LoggerState,
+  types: WorkoutType[],
+  times: EditTimes,
+): WorkoutFinishState {
+  const live = finishState(state, types, false);
+  return {
+    ...live,
+    // A removed type the workout already had stays selectable while editing it.
+    typeOptions: types.filter((item) => !item.archived || item.id === live.selectedType.id),
+    editing: true,
+    resumedWorkoutId: null,
+    editedDurationMinutes: times.durationMinutes,
+    startTime: times.startTime,
+    endTime: times.endTime,
+    baseRevision: times.baseRevision,
+  };
+}
+
+export function checkEdit(state: LoggerState, types: WorkoutType[], times: EditTimes) {
+  return checkWorkoutFinish(editFinishState(state, types, times));
+}
+
+/** The full saved workout an edit sends: every field it loaded, so nothing is dropped. */
+export function editInput(
+  state: LoggerState,
+  types: WorkoutType[],
+  times: EditTimes,
+  check: Extract<WorkoutFinishCheck, { kind: 'ready' }>,
+) {
+  return finishedWorkoutInput(editFinishState(state, types, times), check);
+}
+
 export function workoutIdentity(state: LoggerState, types: WorkoutType[]) {
   return liveWorkoutIdentity(finishState(state, types, false));
 }
@@ -407,7 +483,7 @@ export function addExercises(
         context.workouts,
         exercise,
         state.workoutDate,
-        undefined,
+        state.resumingWorkoutId ?? undefined,
         olderHistoryFor(context, state.workoutDate),
         context.defaultRest,
         context.newKey,
@@ -504,16 +580,23 @@ export interface SetUpdateResult {
   nextInRound: WorkoutDraftMovement | null;
 }
 
-/** Applies an edit or tick to one set, as the web logger's updateSet does. */
+/**
+ * Applies an edit or tick to one set, as the web logger's updateSet does. Editing a saved
+ * workout (`editing`) never starts a rest or carries the workout on.
+ */
 export function updateSet(
   state: LoggerState,
   movementKey: string,
   setKey: string,
   update: Partial<WorkoutDraftSet>,
-  { addedByHand, workoutBodyweight }: { addedByHand: boolean; workoutBodyweight: number | null },
+  {
+    addedByHand,
+    workoutBodyweight,
+    editing = false,
+  }: { addedByHand: boolean; workoutBodyweight: number | null; editing?: boolean },
 ): SetUpdateResult {
   const movement = state.movements.find((item) => item.key === movementKey);
-  const effects = setUpdateEffects(movement, setKey, update, false);
+  const effects = setUpdateEffects(movement, setKey, update, editing);
   const nextInRound =
     effects.loggingSet && movement?.supersetKey
       ? nextInSupersetRound(

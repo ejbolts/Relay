@@ -18,7 +18,7 @@ export function LiveWorkoutAccessory() {
 function Accessory({ live, onPress }: { live: LiveWorkout; onPress: () => void }) {
   const placement = NativeTabs.BottomAccessory.usePlacement();
   const { colors, type } = useTheme();
-  const elapsed = useElapsed(live.startedAt, live.pause);
+  const elapsed = useElapsed(live.startedAt, live.pause, live.previousDurationMinutes);
   return (
     <Pressable
       accessibilityRole="button"

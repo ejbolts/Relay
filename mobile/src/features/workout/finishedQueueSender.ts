@@ -18,6 +18,8 @@ export interface QueueStatus {
   sending: boolean;
   /** Workouts the server refused, by queue key, with its reason; they wait for review. */
   refusals: Record<string, string>;
+  /** Refused because the saved workout changed on another device; this version can still win. */
+  conflicts: string[];
   /** The server needs a newer app before it accepts these saves. */
   outdated: boolean;
 }
@@ -32,6 +34,8 @@ export interface SenderDependencies {
     status: number | undefined;
     outdated: boolean;
     message: string;
+    /** The saved workout changed on another device since it was loaded. */
+    conflict?: boolean;
   };
   onSaved: (workout: TrackedWorkout, item: FinishedWorkout, remaining: number) => void;
   onChange: (status: QueueStatus) => void;
@@ -54,6 +58,7 @@ export class FinishedQueueSender {
   // Acknowledged in this run; never resent even if storage could not drop them.
   private sent = new Set<string>();
   private refusals: Record<string, string> = {};
+  private conflicts = new Set<string>();
   private outdated = false;
   private sending = false;
   private readonly setTimer: NonNullable<SenderDependencies['setTimer']>;
@@ -84,6 +89,7 @@ export class FinishedQueueSender {
       waiting: this.mine().filter((item) => !this.sent.has(finishedWorkoutKey(item))).length,
       sending: this.sending,
       refusals: { ...this.refusals },
+      conflicts: [...this.conflicts],
       outdated: this.outdated,
     };
   }
@@ -113,6 +119,7 @@ export class FinishedQueueSender {
     const refusals = { ...this.refusals };
     delete refusals[key];
     this.refusals = refusals;
+    this.conflicts.delete(key);
     this.report();
   }
 
@@ -154,6 +161,8 @@ export class FinishedQueueSender {
           }
           if (action === 'refused') {
             this.refusals = { ...this.refusals, [key]: failure.message };
+            if (failure.conflict) this.conflicts.add(key);
+            else this.conflicts.delete(key);
             this.report();
             continue;
           }
