@@ -2,7 +2,6 @@ import { useQuery } from '@tanstack/react-query';
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { acceptedVideoName } from '../../../../frontend/src/videoSessions';
 import type {
-  Clip,
   ClipUploadStatus,
   Health,
   WorkoutSession,
@@ -10,7 +9,7 @@ import type {
 } from '../../../../frontend/src/types';
 import { apiGet, apiSend } from '../../data/api';
 import { newId } from '../../data/deviceStorage';
-import { uploadFile } from '../../data/uploadFile';
+import { startClipUpload } from './clipUpload';
 
 /** A clip picked on this phone, waiting to upload or uploading. */
 export interface PhoneClip {
@@ -32,8 +31,6 @@ export const videoKeys = {
 };
 
 const session = (id: string) => `/api/sessions/${encodeURIComponent(id)}`;
-// A phone video can be hundreds of megabytes on a slow connection.
-const CLIP_UPLOAD_TIMEOUT_MS = 30 * 60_000;
 
 export const videoApi = {
   youtube: (signal?: AbortSignal) => apiGet<YouTubeConnection>('/api/youtube/connection', signal),
@@ -53,27 +50,22 @@ export const videoApi = {
     apiSend<WorkoutSession>(`${session(id)}/retry-youtube-processing`, 'POST'),
   cancel: (id: string) => apiSend<WorkoutSession>(`${session(id)}/cancel`, 'POST'),
   remove: (id: string) => apiSend<void>(session(id), 'DELETE'),
-  /** Streams one clip from the phone, with the same form fields as the web's upload. */
+  /** Streams one clip from its file, with the web's form fields; `stop` cancels it. */
   uploadClip: (
     sessionId: string,
     clip: PhoneClip,
     orderIndex: number,
     onProgress: (percent: number) => void,
   ) =>
-    uploadFile<Clip>(
+    startClipUpload(
       `${session(sessionId)}/clips`,
-      'POST',
       { uri: clip.uri, name: clip.name, type: clip.type },
       {
-        fields: {
-          client_clip_id: clip.clientId,
-          order_index: String(orderIndex),
-          exercise_label: clip.exerciseLabel,
-        },
-        failure: 'Upload failed.',
-        timeoutMs: CLIP_UPLOAD_TIMEOUT_MS,
-        onProgress,
+        client_clip_id: clip.clientId,
+        order_index: String(orderIndex),
+        exercise_label: clip.exerciseLabel,
       },
+      onProgress,
     ),
 };
 

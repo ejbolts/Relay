@@ -1,11 +1,16 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useEffect, useState, type ReactNode } from 'react';
+import { usePreventRemove } from 'expo-router';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import type { WorkoutSession } from '../../../../frontend/src/types';
+import { ApiError } from '../../data/api';
+import { UploadStopped } from '../../data/uploadFile';
 import { formatBytes, formatSeconds, localDate } from '../../../../frontend/src/utils';
 import {
   canDeleteSession,
+  ALREADY_PROCESSING_CODES,
   moveItem,
+  newerSession,
   overallUploadProgress,
   SESSION_POLL_MS,
   sessionRetryLabel,
@@ -21,8 +26,10 @@ import { Button, Card, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { showMenu } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
+import { useAccountGuard } from '../admin/accountGuard';
 import { DateField } from '../body/DateField';
 import { SettingsPage } from '../settings/SettingsList';
+import type { ClipTransfer } from './clipUpload';
 import { videoIcons } from './icons';
 import {
   clipFromAsset,
@@ -65,23 +72,78 @@ function VideoUploader() {
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // Every clip uploaded but the request to start processing failed: offer to start it again.
+  const [processFailed, setProcessFailed] = useState(false);
   const ready = youtubeReady(youtube.data ?? null);
+  const guard = useAccountGuard();
+  // The batch's uploads: `stopped` keeps workers from starting another clip, and each transfer
+  // in flight can be cancelled. Both outlive renders, so a stop reaches every worker at once.
+  const stopped = useRef(false);
+  const transfers = useRef(new Set<ClipTransfer>());
+
+  function stopUploads() {
+    stopped.current = true;
+    for (const transfer of transfers.current) transfer.stop();
+    transfers.current.clear();
+  }
+
+  // The batch exists only on this screen, so it can't be left while it is uploading or waiting to
+  // start processing: leaving asks first, then stops every upload and cancels the batch on the
+  // server, so nothing keeps sending clips to a session nobody can see.
+  usePreventRemove(step === 'progress', ({ repeat }) =>
+    Alert.alert('Stop this upload?', 'The clips sent so far are discarded with the session.', [
+      { text: 'Keep uploading', style: 'cancel' },
+      {
+        text: 'Stop and leave',
+        style: 'destructive',
+        onPress: () => {
+          const target = session;
+          stopUploads();
+          if (target) void videoApi.cancel(target.id).catch(() => undefined);
+          setStep('upload');
+          repeat();
+        },
+      },
+    ]),
+  );
+
+  // Signing out unmounts the screen: stop sending this account's clips.
+  useEffect(() => {
+    const running = transfers.current;
+    return () => {
+      stopped.current = true;
+      for (const transfer of running) transfer.stop();
+    };
+  }, []);
   const inputStyle = useInputStyle();
 
+  const sessionId = session?.id ?? null;
+  const finished = session ? TERMINAL_SESSION_STATUSES.includes(session.status) : false;
   useEffect(() => {
-    if (!session || step !== 'processing' || TERMINAL_SESSION_STATUSES.includes(session.status))
-      return;
-    const timer = setInterval(() => {
-      videoApi
-        .get(session.id)
-        .then((next) => {
-          setSession(next);
-          if (next.status === 'complete') setStep('complete');
-        })
-        .catch((reason: unknown) => setMessage(errorMessage(reason)));
-    }, SESSION_POLL_MS);
-    return () => clearInterval(timer);
-  }, [session, step]);
+    // One status check at a time: the next starts only after the last has answered, and a reply
+    // that arrives after leaving this state is dropped. A late reply can't move a finished
+    // session back (newerSession).
+    if (!sessionId || step !== 'processing' || finished) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const check = async () => {
+      try {
+        const next = await videoApi.get(sessionId);
+        if (!active) return;
+        setSession((current) => newerSession(current, next));
+        if (next.status === 'complete') setStep('complete');
+      } catch (reason) {
+        if (active) setMessage(errorMessage(reason));
+      } finally {
+        if (active) timer = setTimeout(() => void check(), SESSION_POLL_MS);
+      }
+    };
+    timer = setTimeout(() => void check(), SESSION_POLL_MS);
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [sessionId, step, finished]);
 
   function updateClip(clientId: string, update: Partial<PhoneClip>) {
     setClips((current) =>
@@ -133,32 +195,65 @@ function VideoUploader() {
     let next = 0;
     let failed = false;
     async function worker() {
-      while (next < selected.length) {
+      while (next < selected.length && !stopped.current) {
         const clip = selected[next++];
+        if (stopped.current) return;
         updateClip(clip.clientId, { status: 'uploading', progress: 0, error: undefined });
+        const transfer = videoApi.uploadClip(
+          target.id,
+          clip,
+          clips.findIndex((item) => item.clientId === clip.clientId),
+          (progress) => {
+            if (!stopped.current) updateClip(clip.clientId, { progress });
+          },
+        );
+        transfers.current.add(transfer);
         try {
-          await videoApi.uploadClip(
-            target.id,
-            clip,
-            clips.findIndex((item) => item.clientId === clip.clientId),
-            (progress) => updateClip(clip.clientId, { progress }),
-          );
-          updateClip(clip.clientId, { status: 'uploaded', progress: 100 });
+          await transfer.done;
+          if (!stopped.current) updateClip(clip.clientId, { status: 'uploaded', progress: 100 });
         } catch (reason) {
           failed = true;
+          if (stopped.current || reason instanceof UploadStopped) return;
           updateClip(clip.clientId, { status: 'failed', error: errorMessage(reason) });
+        } finally {
+          transfers.current.delete(transfer);
         }
       }
     }
     await Promise.all(Array.from({ length: Math.min(concurrency, selected.length) }, worker));
-    return !failed;
+    return !failed && !stopped.current;
   }
 
+  /**
+   * Starts processing the uploaded batch. When the answer is lost or refused, the session is read
+   * back first: if the server already started it, the screen follows it; otherwise Start
+   * processing stays offered. Retrying asks the same session again, so it can't make another.
+   */
   async function beginProcessing(target: WorkoutSession) {
+    const current = guard();
+    setProcessFailed(false);
     try {
-      setSession(await videoApi.process(target.id));
+      const started = await videoApi.process(target.id);
+      if (!current()) return;
+      setSession(started);
       setStep('processing');
+      return;
     } catch (reason) {
+      if (!current()) return;
+      const alreadyStarted =
+        reason instanceof ApiError && ALREADY_PROCESSING_CODES.includes(reason.code ?? '');
+      try {
+        const latest = await videoApi.get(target.id);
+        if (!current()) return;
+        if (alreadyStarted || !['draft', 'uploading', 'upload_failed'].includes(latest.status)) {
+          setSession(latest);
+          setStep(latest.status === 'complete' ? 'complete' : 'processing');
+          return;
+        }
+      } catch {
+        // Still unreachable: offer Start processing again below.
+      }
+      setProcessFailed(true);
       setMessage(errorMessage(reason));
     }
   }
@@ -168,6 +263,7 @@ function VideoUploader() {
     setBusy(true);
     setMessage(null);
     try {
+      stopped.current = false;
       const created = await videoApi.create({
         name: name.trim(),
         workout_date: date,
@@ -177,6 +273,7 @@ function VideoUploader() {
       setSession(created);
       setStep('progress');
       if (await uploadClips(created, clips)) await beginProcessing(created);
+      else if (stopped.current) return;
     } catch (reason) {
       setMessage(errorMessage(reason));
     } finally {
@@ -189,6 +286,7 @@ function VideoUploader() {
     setBusy(true);
     setMessage(null);
     try {
+      stopped.current = false;
       const failed = clips.filter((clip) => clip.status === 'failed');
       if (await uploadClips(session, failed)) await beginProcessing(session);
     } finally {
@@ -198,11 +296,25 @@ function VideoUploader() {
 
   async function cancelSession() {
     if (!session) return;
+    // Stops the uploads still running first, so none reach the session after it is cancelled.
+    stopUploads();
+    setProcessFailed(false);
     try {
       setSession(await videoApi.cancel(session.id));
       setStep('processing');
     } catch (reason) {
       setMessage(errorMessage(reason));
+    }
+  }
+
+  async function retryProcessingStart(target: WorkoutSession) {
+    if (busy) return;
+    setBusy(true);
+    setMessage(null);
+    try {
+      await beginProcessing(target);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -215,6 +327,8 @@ function VideoUploader() {
   }
 
   function reset() {
+    stopUploads();
+    setProcessFailed(false);
     setClips([]);
     setSession(null);
     setName('');
@@ -297,12 +411,10 @@ function VideoUploader() {
             onPress={() => void retryFailedUploads()}
           />
         )}
-        <Button
-          label="Cancel session"
-          variant="secondary"
-          disabled={busy}
-          onPress={() => void cancelSession()}
-        />
+        {processFailed && !failed && !busy && (
+          <Button label="Start processing" onPress={() => void retryProcessingStart(session)} />
+        )}
+        <Button label="Cancel session" variant="secondary" onPress={() => void cancelSession()} />
       </SettingsPage>
     );
   }
