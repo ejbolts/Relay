@@ -171,7 +171,6 @@ import {
   nextOnboardingPrompt,
 } from './appGuideState';
 import { ImportHistoryPrompt } from './ImportHistoryPrompt';
-import { plural } from './sharedProfileDisplay';
 import { CONTRIBUTING_URL, PROJECT_URL } from './appGuideSteps';
 import { CreateExerciseDialog } from './CreateExerciseDialog';
 import { BackgroundActivityBar } from './BackgroundActivityBar';
@@ -260,6 +259,9 @@ import { TrendChart, type TrendPoint } from './PulseCharts';
 import { PageHeader, SettingsButton, TodayScreen, TodaySkeleton } from './TodayScreen';
 import { FeedbackForm } from './FeedbackForm';
 import { WorkoutCsvImport } from './WorkoutCsvImport';
+// B5 (data): the import's confirmations, shared with the app.
+import { importSavedMessage, importUndoneMessage } from './workoutImport';
+import { exportWorkoutDates } from './dataExport';
 import { DataExportDialog } from './DataExportDialog';
 import { WorkoutShareCard } from './WorkoutShareCard';
 import { WorkoutPhotoEditor, WorkoutPhotos } from './WorkoutPhotos';
@@ -1814,9 +1816,7 @@ function AppContent() {
       await refreshData({ activityLabel: null });
       return undone;
     });
-    showToast(
-      `Import undone: removed ${plural(result.workouts_removed, 'session')} and ${plural(result.body_measurements_removed, 'check-in')}.${result.body_measurements_preserved ? ` Kept ${plural(result.body_measurements_preserved, 'edited check-in')}.` : ''}`,
-    );
+    showToast(importUndoneMessage(result));
   }
 
   async function importWorkoutCsv(file: File, options?: WorkoutImportOptions) {
@@ -1827,23 +1827,7 @@ function AppContent() {
       await refreshData({ activityLabel: null });
       return imported;
     });
-    const bodyweightCount = result.body_measurements_created + result.body_measurements_updated;
-    showToast(
-      !result.sets_imported &&
-        !result.workouts_created &&
-        !result.workouts_skipped &&
-        bodyweightCount
-        ? `Imported ${plural(bodyweightCount, 'body-weight check-in')}.`
-        : `Imported ${plural(result.sets_imported, 'set')} across ${plural(result.workouts_created, 'workout')}${
-            result.exercises_created
-              ? ` and added ${plural(result.exercises_created, 'exercise')}`
-              : ''
-          }${bodyweightCount ? `; added ${plural(bodyweightCount, 'body-weight check-in')}` : ''}${
-            result.workouts_skipped
-              ? `; skipped ${plural(result.workouts_skipped, 'identical session')}`
-              : ''
-          }.`,
-    );
+    showToast(importSavedMessage(result));
   }
 
   async function restoreAccountArchive(file: File) {
@@ -8627,10 +8611,7 @@ function SettingsScreen({
   }
 
   // Only recent workouts may be loaded; export ranges count back from the latest one logged.
-  const workoutDates = [
-    ...workouts.map((workout) => workout.workout_date),
-    ...(historySummary?.last_workout_date ? [historySummary.last_workout_date] : []),
-  ];
+  const workoutDates = exportWorkoutDates(workouts, historySummary?.last_workout_date);
 
   return (
     <section className="settings-screen content-page" data-settings-page="settings">

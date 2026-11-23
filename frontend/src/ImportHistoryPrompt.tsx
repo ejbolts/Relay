@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
+import { IMPORT_PROMPT_TEXT } from './workoutImport';
 
 /** The step after a new account's tour: bring existing training in, or carry on. */
 export function ImportHistoryPrompt({
@@ -43,11 +44,7 @@ export function ImportHistoryPrompt({
           <h3 ref={titleRef} tabIndex={-1}>
             Already tracking your workouts?
           </h3>
-          <p>
-            Bring your workout CSV straight from Strength Level, Hevy or Strong, or use a
-            spreadsheet or Relay export. Review it before saving so your charts, records and
-            suggestions start from your real training.
-          </p>
+          <p>{IMPORT_PROMPT_TEXT}</p>
           <p className="import-history-later">
             You can do this later in Settings → Data &amp; connections → Import &amp; export.
           </p>

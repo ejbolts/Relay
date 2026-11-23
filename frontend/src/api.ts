@@ -106,6 +106,7 @@ import {
 import { readOffline, writeOffline } from './offlineStore';
 import { withExplicitDayTypes } from './trainingSplit';
 import { dateRangeQuery, type DateRange } from './dateRanges';
+import { importFormFields } from './workoutImport';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
 import { sessionConfirmation } from './sessionGate';
 import { beginWrite, reportClientOutdated, trackWrite } from './appUpdates';
@@ -1294,28 +1295,14 @@ export const api = {
     const form = new FormData();
     form.append('file', file, file.name);
     if (options)
-      Object.entries(options).forEach(([key, value]) => {
-        form.append(
-          key,
-          key === 'exercise_mappings'
-            ? JSON.stringify(Object.fromEntries(Object.entries(value).filter(([, id]) => id)))
-            : (value as string),
-        );
-      });
+      Object.entries(importFormFields(options)).forEach(([key, value]) => form.append(key, value));
     return request<CsvImportResult>('/api/workouts/import', { method: 'POST', body: form });
   },
   previewWorkoutImport: (file: File, options?: WorkoutImportOptions) => {
     const form = new FormData();
     form.append('file', file, file.name);
     if (options)
-      Object.entries(options).forEach(([key, value]) => {
-        form.append(
-          key,
-          key === 'exercise_mappings'
-            ? JSON.stringify(Object.fromEntries(Object.entries(value).filter(([, id]) => id)))
-            : (value as string),
-        );
-      });
+      Object.entries(importFormFields(options)).forEach(([key, value]) => form.append(key, value));
     return request<CsvImportPreview>('/api/workouts/import/preview', {
       method: 'POST',
       body: form,
