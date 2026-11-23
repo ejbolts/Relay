@@ -65,27 +65,39 @@ export function Chip({
   );
 }
 
-export function Badge({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'gold' }) {
+/**
+ * A small status label. Neutral and gold read as the web's uppercase tags; `good` and `gold` with
+ * `sentence` are the web's tinted badges, such as a block's Current and Deload.
+ */
+export function Badge({
+  label,
+  tone = 'neutral',
+  sentence,
+}: {
+  label: string;
+  tone?: 'neutral' | 'gold' | 'good';
+  sentence?: boolean;
+}) {
   const { colors, radius } = useTheme();
+  const ink = tone === 'gold' ? colors.gold : tone === 'good' ? colors.good : colors.muted;
+  const fill =
+    tone === 'gold' ? colors.goldSoft : tone === 'good' ? `${colors.good}26` : colors.surface2;
   return (
     <View
       style={[
         styles.badge,
-        {
-          borderRadius: radius.sm,
-          backgroundColor: tone === 'gold' ? colors.goldSoft : colors.surface2,
-        },
+        { borderRadius: sentence ? 7 : radius.sm, backgroundColor: fill },
+        sentence && styles.sentenceBadge,
       ]}
     >
       <Text
-        style={{
-          fontSize: 10,
-          fontWeight: '700',
-          letterSpacing: 0.8,
-          color: tone === 'gold' ? colors.gold : colors.muted,
-        }}
+        style={
+          sentence
+            ? { fontSize: 12, fontWeight: '600', color: ink }
+            : { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: ink }
+        }
       >
-        {label.toUpperCase()}
+        {sentence ? label : label.toUpperCase()}
       </Text>
     </View>
   );
@@ -179,6 +191,7 @@ const styles = StyleSheet.create({
     minHeight: 35,
   },
   badge: { paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'center' },
+  sentenceBadge: { paddingHorizontal: 7, paddingVertical: 3 },
   more: {
     minHeight: 44,
     flexDirection: 'row',
