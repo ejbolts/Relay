@@ -12,6 +12,7 @@ import {
 import {
   addDays,
   daysBetween,
+  parseLocalDate,
   shortDate,
   weekStartFor,
 } from '../../../../frontend/src/trainingSummary';
@@ -333,6 +334,37 @@ test('the header has the notifications bell, your profile and Settings', async (
     pathname: '/social/profile/[id]',
     params: { id: 'u1' },
   });
+});
+
+test('the header leads with Edit and the Video logger, as on the web', async () => {
+  await open();
+  const labels = screen
+    .getAllByRole('button')
+    .map((button) => button.props.accessibilityLabel)
+    .filter((label) =>
+      ['Edit Home layout', 'Video logger', 'Profile: Preview', 'Settings'].includes(label),
+    );
+  expect(labels).toEqual(['Edit Home layout', 'Video logger', 'Profile: Preview', 'Settings']);
+  await fireEvent.press(screen.getByRole('button', { name: 'Video logger' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/videos');
+});
+
+test('the Video logger is left out for an account that cannot upload', async () => {
+  (mockUser as { can_upload_videos?: boolean }).can_upload_videos = false;
+  try {
+    await open();
+    expect(screen.queryByRole('button', { name: 'Video logger' })).toBeNull();
+  } finally {
+    delete (mockUser as { can_upload_videos?: boolean }).can_upload_videos;
+  }
+});
+
+test('the date line reads as the web, without a comma after the weekday', async () => {
+  await open();
+  const today = parseLocalDate(localDate());
+  const weekday = today.toLocaleDateString('en-GB', { weekday: 'long' });
+  const month = today.toLocaleDateString('en-GB', { month: 'long' });
+  expect(screen.getByText(`${weekday} ${today.getDate()} ${month}`)).toBeVisible();
 });
 
 test('Edit split opens the split screen', async () => {
