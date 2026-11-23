@@ -5,7 +5,12 @@ import { prettyDate, RANGE_LABELS } from '../../../../frontend/src/appShared';
 import { TIME_RANGE_OPTIONS, type TimeRange } from '../../../../frontend/src/dateRanges';
 import { formatLastDone } from '../../../../frontend/src/exerciseLastDone';
 import {
-  personalBestProgressPoint,
+  exerciseProgressView,
+  exerciseRecordWorkoutIds,
+  rangeOutgrowsBlock,
+} from '../../../../frontend/src/exerciseProgressScope';
+import type { MachineView } from '../../../../frontend/src/machineWeights';
+import {
   PROGRESS_METRICS,
   progressPointsForChart,
   type ProgressMetric,
@@ -18,46 +23,64 @@ import {
   isCountedRecord,
   shortDate,
 } from '../../../../frontend/src/trainingSummary';
-import type { ProgressPoint } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { formatWeight, weightFromKg } from '../../../../frontend/src/weightUnits';
 import { useExercises, usePersonalRecords, useWeightUnit } from '../../data/queries';
 import { Button, Card, CardHeader, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { useBlockScope } from '../blocks/blockQueries';
+import { BlockScopeChip } from '../blocks/BlockScopeChip';
+import { ExerciseOptionsMenu } from '../exercises/ExerciseOptionsMenu';
+import { useScopedExerciseProgress, useWeightMapping } from '../exercises/exerciseQueries';
+import { MachineFilter } from '../exercises/MachineFilter';
+import { MergeNudge } from '../exercises/MergeNudge';
+import { exerciseRoutes } from '../exercises/routes';
 import { trainingIcons } from './icons';
 import { Badge, Divider, MoreButton, Note, Segmented, Stat } from './parts';
 import { ProgressChart, type ChartPoint } from './ProgressChart';
-import { useExerciseProgress } from './trainingQueries';
 
 const SESSION_PAGE = 8;
 
-/** An exercise's progress, as the web's exercise detail: chart, personal bests and sessions. */
+/**
+ * An exercise's progress, as the web's exercise detail: chart, personal bests and sessions, for
+ * the chosen training block and machine. A custom exercise can be edited and merged, and any
+ * exercise hidden, from the header's menu.
+ */
 export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
   const { colors, space, type } = useTheme();
   const router = useRouter();
   const unit = useWeightUnit();
-  const exercise = useExercises().data?.find((item) => item.id === exerciseId);
-  const progress = useExerciseProgress(exerciseId);
+  const exercises = useExercises().data;
+  const exercise = exercises?.find((item) => item.id === exerciseId);
+  const blocks = useBlockScope();
+  const block = blocks.block;
+  const progress = useScopedExerciseProgress(exerciseId, block, blocks.known);
+  const mapping = useWeightMapping(exerciseId).data ?? null;
   const allRecords = usePersonalRecords().data;
   const [metric, setMetric] = useState<ProgressMetric>('estimated_1rm');
   const [range, setRange] = useState<TimeRange>('3m');
+  const [machine, setMachine] = useState<MachineView>('all');
   const [shownSessions, setShownSessions] = useState(SESSION_PAGE);
   const today = localDate();
-  const points = useMemo(() => progress.data?.points ?? [], [progress.data]);
   const name = exercise?.name ?? progress.data?.exercise.name ?? 'Exercise';
-  // The whole history's records, as the web shows them without a training block chosen.
+  // The chosen block's records; without a block, the whole history's.
   const records = useMemo(
     () =>
-      recordsForBlock(allRecords ?? [], null).filter(
+      recordsForBlock(allRecords ?? [], block).filter(
         (record) => record.exercise_id === exerciseId && isCountedRecord(record),
       ),
-    [allRecords, exerciseId],
+    [allRecords, block, exerciseId],
   );
   const recordWorkouts = useMemo(
-    () => new Set(records.map((record) => record.workout_id)),
-    [records],
+    () => exerciseRecordWorkoutIds(allRecords ?? [], block, exerciseId),
+    [allRecords, block, exerciseId],
   );
+  const view = useMemo(
+    () => exerciseProgressView(progress.data ?? null, mapping, machine, recordWorkouts),
+    [progress.data, mapping, machine, recordWorkouts],
+  );
+  const { points, approx, referenceMachine } = view;
 
   const metricInfo = PROGRESS_METRICS.find((item) => item.value === metric)!;
   const inRange = progressPointsForChart(points, metric, range);
@@ -66,14 +89,7 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
   const change = latest && first && latest !== first ? latest[metric] - first[metric] : null;
   const changePercent =
     change !== null && first && first[metric] > 0 ? (change / first[metric]) * 100 : null;
-  const heaviest = personalBestProgressPoint(points, 'best_weight_kg');
-  const bestEstimate = personalBestProgressPoint(points, 'estimated_1rm');
-  const bestVolume = personalBestProgressPoint(points, 'volume_kg');
-  const relativeBest = points.reduce<ProgressPoint | null>(
-    (best, point) =>
-      (point.relative_strength ?? 0) > (best?.relative_strength ?? 0) ? point : best,
-    null,
-  );
+  const { heaviest, bestEstimate, bestVolume, relativeBest } = view;
   const formatMetric = (value: number) =>
     metric === 'volume_kg'
       ? Math.round(value).toLocaleString('en-GB')
@@ -83,7 +99,7 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
     date: point.workout_date,
     value: weightFromKg(point[metric], unit),
     id: point.workout_id,
-    detail: `${formatWeight(point.best_weight_kg, unit)} × ${point.best_reps}${point.best_rpe === null ? '' : ` @ RPE ${point.best_rpe}`}`,
+    detail: `${formatWeight(point.raw_best_weight_kg, unit)} × ${point.best_reps}${point.best_rpe === null ? '' : ` @ RPE ${point.best_rpe}`}`,
   }));
   const sessions = points.slice().reverse();
   const sessionCountByYear = new Map(
@@ -92,18 +108,37 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
       group.items.length,
     ]),
   );
+  // Every machine's sessions, whichever machine the chart shows.
+  const allSessions = progress.data?.points ?? [];
+  const lastDone = allSessions.at(-1)?.workout_date;
   const meta = [
     exercise?.muscle_group,
     exercise?.equipment,
-    progress.data ? `${points.length} ${points.length === 1 ? 'session' : 'sessions'}` : null,
-    sessions[0] ? `Last done ${formatLastDone(sessions[0].workout_date, today)}` : null,
+    progress.data
+      ? `${allSessions.length} ${allSessions.length === 1 ? 'session' : 'sessions'}`
+      : null,
+    lastDone ? `Last done ${formatLastDone(lastDone, today)}` : null,
   ]
     .filter(Boolean)
     .join(' · ');
 
+  const chooseRange = (next: TimeRange) => {
+    // Progress scoped to a block can't show more than the block, so a longer range shows all time.
+    if (block && rangeOutgrowsBlock(next, block, today)) blocks.select('all');
+    setRange(next);
+  };
+  const scopeChip = block ? (
+    <BlockScopeChip block={block} config={blocks.config} onClear={() => blocks.select('all')} />
+  ) : null;
+
   return (
     <>
-      <Stack.Screen options={{ title: name }} />
+      <Stack.Screen
+        options={{
+          title: name,
+          headerRight: exercise ? () => <ExerciseOptionsMenu exercise={exercise} /> : undefined,
+        }}
+      />
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.page }}
         contentInsetAdjustmentBehavior="automatic"
@@ -120,6 +155,14 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
         }
       >
         {!!meta && <Text style={[type.footnote, { color: colors.secondary }]}>{meta}</Text>}
+        {exercise?.is_custom && exercises && (
+          <MergeNudge
+            key={exercise.id}
+            exercise={exercise}
+            exercises={exercises}
+            onMerge={(target) => router.push(exerciseRoutes.merge(exercise.id, target))}
+          />
+        )}
         {progress.isPending ? (
           <Loading label="Loading exercise progress" />
         ) : progress.isError ? (
@@ -131,7 +174,21 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
             Could not load exercise progress.
           </Note>
         ) : !points.length ? (
-          <Note>Complete this exercise in a workout to start its progress graph.</Note>
+          <Note
+            action={
+              block ? (
+                <Button
+                  label="Show all time"
+                  variant="secondary"
+                  onPress={() => blocks.select('all')}
+                />
+              ) : undefined
+            }
+          >
+            {block
+              ? `No sessions in ${block.name}.`
+              : 'Complete this exercise in a workout to start its progress graph.'}
+          </Note>
         ) : (
           <>
             <Segmented
@@ -140,15 +197,22 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
               selectedIndex={PROGRESS_METRICS.findIndex((item) => item.value === metric)}
               onChange={(index) => setMetric(PROGRESS_METRICS[index].value)}
             />
+            <MachineFilter
+              machines={view.machineOptions}
+              mapping={mapping}
+              view={view.view}
+              onChange={setMachine}
+              onNormalise={() => router.push(exerciseRoutes.machineWeights(exerciseId))}
+            />
             <Card accessibilityLabel={`${name} ${metricInfo.series}`}>
               <View style={{ gap: 2 }}>
                 <Text style={[type.largeTitle, type.number, { color: colors.text }]}>
-                  {latest ? formatMetricKg(latest[metric]) : '–'}
+                  {latest ? `${approx}${formatMetricKg(latest[metric])}` : '–'}
                   <Text style={[type.headline, { color: colors.muted }]}> {unit}</Text>
                 </Text>
                 <Text style={[type.footnote, { color: colors.secondary }]}>
                   {latest
-                    ? `${metricInfo.series} · latest session ${shortDate(latest.workout_date)}`
+                    ? `${metricInfo.series}${referenceMachine ? ` in ${referenceMachine.caption} weights` : ''} · latest session ${shortDate(latest.workout_date)}`
                     : 'No sessions in this range'}
                 </Text>
                 {change !== null && first && (
@@ -177,12 +241,13 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                     </Text>
                   </View>
                 )}
+                {scopeChip && <View style={{ marginTop: 8 }}>{scopeChip}</View>}
               </View>
               <Segmented
                 accessibilityLabel="Exercise progress graph range"
                 values={TIME_RANGE_OPTIONS.map((option) => RANGE_LABELS[option.value])}
                 selectedIndex={TIME_RANGE_OPTIONS.findIndex((option) => option.value === range)}
-                onChange={(index) => setRange(TIME_RANGE_OPTIONS[index].value)}
+                onChange={(index) => chooseRange(TIME_RANGE_OPTIONS[index].value)}
               />
               <ProgressChart
                 points={chartPoints}
@@ -199,26 +264,28 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                   label="Heaviest set"
                   value={
                     heaviest
-                      ? `${formatWeight(heaviest.best_weight_kg, unit)} × ${heaviest.best_reps}`
+                      ? `${approx}${formatWeight(heaviest.best_weight_kg, unit)} × ${heaviest.best_reps}`
                       : '–'
                   }
                   detail={heaviest ? shortDate(heaviest.workout_date) : 'No sets yet'}
                 />
                 <Stat
                   label="Best est. 1RM"
-                  value={formatWeight(progress.data.personal_best_estimated_1rm, unit, 1)}
+                  value={`${approx}${formatWeight(view.bestEstimatedOneRepMax, unit, 1)}`}
                   detail={bestEstimate ? shortDate(bestEstimate.workout_date) : 'Epley'}
                 />
                 <Stat
                   label="Best session volume"
-                  value={bestVolume ? formatWeight(bestVolume.volume_kg, unit, 0) : '–'}
+                  value={
+                    bestVolume ? `${approx}${formatWeight(bestVolume.volume_kg, unit, 0)}` : '–'
+                  }
                   detail={bestVolume ? shortDate(bestVolume.workout_date) : 'Working sets'}
                 />
                 <Stat
                   label="Relative strength"
                   value={
                     relativeBest?.relative_strength != null
-                      ? `${relativeBest.relative_strength.toFixed(2)}× BW`
+                      ? `${approx}${relativeBest.relative_strength.toFixed(2)}× BW`
                       : '–'
                   }
                   detail={
@@ -278,14 +345,18 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                               <Text style={[type.callout, { color: colors.text }]}>
                                 {shortDate(point.workout_date)}
                               </Text>
-                              {recordWorkouts.has(point.workout_id) && (
+                              {view.recordIds.has(point.workout_id) && (
                                 <Badge
                                   tone="gold"
-                                  label={recordBadgeLabel(
-                                    records.filter(
-                                      (record) => record.workout_id === point.workout_id,
-                                    ),
-                                  )}
+                                  label={
+                                    view.defaultView
+                                      ? recordBadgeLabel(
+                                          records.filter(
+                                            (record) => record.workout_id === point.workout_id,
+                                          ),
+                                        )
+                                      : 'PR'
+                                  }
                                 />
                               )}
                             </View>
@@ -293,7 +364,7 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                               style={[type.footnote, type.number, { color: colors.secondary }]}
                               numberOfLines={1}
                             >
-                              {formatWeight(point.best_weight_kg, unit)} × {point.best_reps}
+                              {formatWeight(point.raw_best_weight_kg, unit)} × {point.best_reps}
                               {point.best_rpe !== null ? ` @${point.best_rpe}` : ''}
                             </Text>
                           </View>
@@ -304,6 +375,7 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                               { color: colors.text, fontWeight: '700' },
                             ]}
                           >
+                            {approx}
                             {formatMetricKg(point[metric])}
                           </Text>
                           <Icon name="chevronRight" size={12} color={colors.muted} />

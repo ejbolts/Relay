@@ -85,6 +85,12 @@ const responses: Record<string, unknown> = {
   '/api/exercises': [bench, squat, running],
   '/api/progress': library,
   '/api/progress/bench': benchProgress,
+  '/api/training-blocks': { blocks: [] },
+  '/api/exercises/bench/weight-mapping': {
+    enabled: false,
+    reference_machine_id: null,
+    machines: [],
+  },
   '/api/cardio': cardio,
   '/api/workouts/w-upper': upper,
 };

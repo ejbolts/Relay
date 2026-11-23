@@ -1,21 +1,19 @@
 import { useMemo, useState } from 'react';
-import { STRONG_MATCH, mergeSuggestions } from './exerciseMergeSuggestions';
+import {
+  DISMISSED_MERGE_SUGGESTIONS_KEY as DISMISSED_KEY,
+  mergeNudgeTarget,
+  mergeTargetDetail,
+  parseDismissedMergeSuggestions,
+} from './exerciseMergeTargets';
 import type { Exercise } from './types';
 import './exerciseMerge.css';
-
-const DISMISSED_KEY = 'gym-logger-dismissed-merge-suggestions';
 
 /** Suggestions marked "Not the same" on this device: custom exercise ID to standard exercise ID. */
 function loadDismissed(): Record<string, string> {
   try {
-    const saved: unknown = JSON.parse(window.localStorage.getItem(DISMISSED_KEY) ?? '{}');
-    return saved && typeof saved === 'object' && !Array.isArray(saved)
-      ? Object.fromEntries(
-          Object.entries(saved).filter(
-            (entry): entry is [string, string] => typeof entry[1] === 'string',
-          ),
-        )
-      : {};
+    return parseDismissedMergeSuggestions(
+      JSON.parse(window.localStorage.getItem(DISMISSED_KEY) ?? '{}'),
+    );
   } catch {
     return {};
   }
@@ -43,20 +41,17 @@ export function ExerciseMergeNudge({
   onMerge: (targetId: string, trigger: HTMLButtonElement) => void;
 }) {
   const [dismissed, setDismissed] = useState(loadDismissed);
-  const [suggestion] = useMemo(
-    () => mergeSuggestions(exercise, exercises, { limit: 1, minimum: STRONG_MATCH }),
-    [exercise, exercises],
+  const target = useMemo(
+    () => mergeNudgeTarget(exercise, exercises, dismissed),
+    [exercise, exercises, dismissed],
   );
-  if (!suggestion || dismissed[exercise.id] === suggestion.exercise.id) return null;
-  const target = suggestion.exercise;
+  if (!target) return null;
 
   return (
     <section className="exercise-merge-nudge" aria-label="Possible duplicate">
       <div className="exercise-merge-nudge-copy">
         <strong>Looks like {target.name}</strong>
-        <small>
-          {['Official', target.muscle_group, target.equipment].filter(Boolean).join(' · ')}
-        </small>
+        <small>{mergeTargetDetail(target)}</small>
       </div>
       <div className="exercise-merge-nudge-actions">
         <button

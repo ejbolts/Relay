@@ -4,32 +4,29 @@ import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { exitGuide, finishGuide, useActiveGuide } from './setupGuides';
-import { blockDay, blockOn, weeksEnd } from './trainingBlocks';
+import {
+  blockFormDraft,
+  blockFormInput,
+  blockFormTitle,
+  blockPlanOptions,
+  blockRemoveMessage,
+  blockStartOptions,
+  createdBlockSelection,
+  type PlanPreset,
+  type StartPreset,
+} from './trainingBlockForm';
+import { weeksEnd } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { addDays } from './trainingSummary';
 import { localDate } from './utils';
 import type { TrainingBlock, TrainingBlocks } from './types';
-import { blockColor, validBlockColor } from './blockColors';
+import { blockColor } from './blockColors';
 import { BlockColorField, TrainingBlockYearView } from './TrainingBlockYear';
 import './trainingBlocks.css';
 
 type View = 'blocks' | 'form' | 'remove';
 /** Where the dialog opens: the blocks overview, or straight into a new block. */
 export type TrainingBlockDialogStart = 'blocks' | 'new';
-type StartPreset = 'today' | 'january' | 'custom';
-type PlanPreset = 'none' | '8' | '12' | 'custom';
-
-function planFor(start: string, end: string | null | undefined): PlanPreset {
-  if (!end) return 'none';
-  if (end === weeksEnd(start, 8)) return '8';
-  return end === weeksEnd(start, 12) ? '12' : 'custom';
-}
-
-function presetFor(start: string): StartPreset {
-  const today = localDate();
-  if (start === today) return 'today';
-  return start === `${today.slice(0, 4)}-01-01` ? 'january' : 'custom';
-}
 
 /** Lists, creates, edits and removes training blocks. */
 export function TrainingBlockDialog({
@@ -59,7 +56,6 @@ export function TrainingBlockDialog({
   const [guideStep, setGuideStep] = useState(0);
   const formId = useId();
   const today = localDate();
-  const january = `${today.slice(0, 4)}-01-01`;
 
   const close = () => {
     if (busyRef.current) return;
@@ -81,13 +77,13 @@ export function TrainingBlockDialog({
         : undefined;
   const startForm = (item: TrainingBlock | null, back: View | null) => {
     setEditing(item);
-    const date = item?.start_date ?? today;
-    setName(item?.name ?? '');
-    setColor(validBlockColor(item?.color));
-    setStart(date);
-    setPreset(presetFor(date));
-    setPlan(planFor(date, item?.planned_end_date));
-    setPlanEnd(item?.planned_end_date ?? weeksEnd(date, 4));
+    const draft = blockFormDraft(item, today);
+    setName(draft.name);
+    setColor(draft.color);
+    setStart(draft.start);
+    setPreset(draft.preset);
+    setPlan(draft.plan);
+    setPlanEnd(draft.planEnd);
     setFormBack(back);
     setError(null);
     setView('form');
@@ -116,12 +112,7 @@ export function TrainingBlockDialog({
   }
   function submit(event: FormEvent) {
     event.preventDefault();
-    const payload = {
-      name: name.trim(),
-      start_date: start,
-      planned_end_date: plannedEnd,
-      color,
-    };
+    const payload = blockFormInput({ name, color, start, preset, plan, planEnd });
     if (editing) {
       void save(
         () => api.trainingBlocks.update(editing.id, payload),
@@ -132,9 +123,8 @@ export function TrainingBlockDialog({
     void save(
       () => api.trainingBlocks.create(payload),
       (next) => {
-        const created = next.blocks.find((item) => item.start_date === start);
-        if (created)
-          select(created.id === blockOn(next.blocks, today)?.id ? 'current' : created.id);
+        const selection = createdBlockSelection(next, start, today);
+        if (selection) select(selection);
         finishGuide('blocks');
         onNotice('Training block started');
         onClose();
@@ -146,13 +136,9 @@ export function TrainingBlockDialog({
   const automaticColor = editing
     ? blockColor(config.blocks, { ...editing, color: null }, today)
     : 'var(--p-accent-text)';
-  const plannedEnd =
-    plan === 'none' ? null : plan === 'custom' ? planEnd : weeksEnd(start, Number(plan));
   const dialogTitle =
     view === 'form'
-      ? editing
-        ? 'Edit block'
-        : 'New training block'
+      ? blockFormTitle(!!editing)
       : view === 'remove'
         ? 'Remove training block?'
         : 'Training blocks';
@@ -286,13 +272,7 @@ export function TrainingBlockDialog({
             <BlockColorField value={color} automatic={automaticColor} onChange={setColor} />
             <div className="training-block-starts" role="radiogroup" aria-label="Starts">
               <span aria-hidden="true">Starts</span>
-              {(
-                [
-                  ['today', 'Today', blockDay(today, false), today],
-                  ['january', '1 January', january.slice(0, 4), january],
-                  ['custom', 'Custom', preset === 'custom' ? blockDay(start, true) : '', start],
-                ] as const
-              ).map(([value, label, detail, date]) => (
+              {blockStartOptions({ start, preset }, today).map(({ value, label, detail, date }) => (
                 <button
                   key={value}
                   type="button"
@@ -322,14 +302,7 @@ export function TrainingBlockDialog({
             )}
             <div className="training-block-starts plan" role="radiogroup" aria-label="Ends">
               <span aria-hidden="true">Ends</span>
-              {(
-                [
-                  ['none', 'No set date', ''],
-                  ['8', '8 weeks', blockDay(weeksEnd(start, 8), false)],
-                  ['12', '12 weeks', blockDay(weeksEnd(start, 12), false)],
-                  ['custom', 'Custom', plan === 'custom' ? blockDay(planEnd, false) : ''],
-                ] as const
-              ).map(([value, label, detail]) => (
+              {blockPlanOptions({ start, plan, planEnd }).map(({ value, label, detail }) => (
                 <button
                   key={value}
                   type="button"
@@ -357,12 +330,7 @@ export function TrainingBlockDialog({
           </fieldset>
         </form>
       )}
-      {view === 'remove' && editing && (
-        <p>
-          Remove “{editing.name}”? Workouts stay saved. Block records will follow the remaining
-          dates.
-        </p>
-      )}
+      {view === 'remove' && editing && <p>{blockRemoveMessage(editing.name)}</p>}
       {error && (
         <p role="alert" className="error-message">
           {error}

@@ -68,8 +68,7 @@ import {
 } from './weightUnits';
 import { TrainingBlockCardSettingsForm } from './TrainingBlockHomeCard';
 import { TrainingBlockHome } from './TrainingBlockSummary';
-import { WEEKS_BEFORE_FIRST_BLOCK, trainedWeeks } from './trainingBlockSuggestion';
-import { blockOn } from './trainingBlocks';
+import { homeBlockCard } from './trainingBlockHome';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import {
   BodyGoalCard,
@@ -298,10 +297,24 @@ export function TodayScreen({
   }
   const weekStartDay = weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
   const trainingBlocks = useTrainingBlocks();
-  const currentBlock = blockOn(trainingBlocks.config.blocks, today);
-  const blockOfferReady = useMemo(
-    () => trainedWeeks(workouts, weekStartDay) >= WEEKS_BEFORE_FIRST_BLOCK,
-    [workouts, weekStartDay],
+  const blockCard = useMemo(
+    () =>
+      homeBlockCard({
+        blocks: trainingBlocks.config.blocks,
+        loading: trainingBlocks.loading,
+        error: !!trainingBlocks.error,
+        workouts,
+        today,
+        weekStartDay,
+      }),
+    [
+      trainingBlocks.config.blocks,
+      trainingBlocks.loading,
+      trainingBlocks.error,
+      workouts,
+      today,
+      weekStartDay,
+    ],
   );
   const layout = home.editing ? home.draft : home.layout;
   const workoutWeeks = activityCardSettings(layout, 'workouts').weeks;
@@ -592,25 +605,18 @@ export function TodayScreen({
       ) : null,
     // Before the first block, the card offers to start one once there are a few weeks of training
     // to build on; people who don't want it hide it.
-    'training-block':
-      currentBlock ||
-      (!trainingBlocks.loading &&
-        !trainingBlocks.error &&
-        trainingBlocks.config.blocks.length === 0 &&
-        blockOfferReady) ? (
-        <TrainingBlockHome
-          block={currentBlock}
-          config={trainingBlocks.config}
-          today={today}
-          style={
-            homeSectionSettings(home.editing ? home.draft : home.layout, 'training_block').style
-          }
-          onOpen={() => {
-            trainingBlocks.select('current');
-            onOpenProgress();
-          }}
-        />
-      ) : null,
+    'training-block': blockCard ? (
+      <TrainingBlockHome
+        block={blockCard.kind === 'block' ? blockCard.block : null}
+        config={trainingBlocks.config}
+        today={today}
+        style={homeSectionSettings(home.editing ? home.draft : home.layout, 'training_block').style}
+        onOpen={() => {
+          trainingBlocks.select('current');
+          onOpenProgress();
+        }}
+      />
+    ) : null,
     workouts: (
       <button type="button" className="pulse-kpi" onClick={onOpenHistory}>
         <span>Workouts</span>

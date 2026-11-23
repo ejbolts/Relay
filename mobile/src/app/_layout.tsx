@@ -80,6 +80,9 @@ function Navigation() {
             <Stack.Screen name="social/sharing" />
             {/* Editing a saved workout from Training's session screen. */}
             <Stack.Screen name="edit-workout/[id]" />
+            {/* Training blocks, over the tabs from Training or Home (mobile batch 3, exercises
+                and blocks stream). */}
+            <Stack.Screen name="blocks" />
           </Stack.Protected>
           <Stack.Protected guard={mustChangePassword}>
             <Stack.Screen name="password-required" />
