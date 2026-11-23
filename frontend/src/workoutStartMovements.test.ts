@@ -3,6 +3,7 @@ import type { SessionTemplate } from './trainingSummary';
 import type { Exercise, TrackedSet, TrackedWorkout } from './types';
 import {
   emptyDraftSet,
+  lastSessionSetsOnMachine,
   suggestedSetsForPickedExercise,
   suggestedSetsFromHistory,
   templateDraftMovements,
@@ -244,5 +245,45 @@ describe('sets for an exercise picked with a machine', () => {
       );
       expect(sets.map((set) => set.weight_kg)).toEqual([40, 80, 80]);
     }
+  });
+  it("finds that machine's last session, leaving out the workout being edited", () => {
+    const later = { ...onMachine, id: 'later', workout_date: '2026-11-15' };
+    const laterSets = later.movements.map((movement) => ({
+      ...movement,
+      sets: [trackedSet(0, { reps: 10, weight_kg: 60 })],
+    }));
+    const edited = { ...later, movements: laterSets };
+    const workouts = [lastBench, edited, onMachine];
+    expect(
+      lastSessionSetsOnMachine(workouts, 'bench', '2026-11-20', undefined, 'press')?.map(
+        (set) => set.weight_kg,
+      ),
+    ).toEqual([60]);
+    expect(
+      lastSessionSetsOnMachine(workouts, 'bench', '2026-11-20', 'later', 'press')?.map(
+        (set) => set.weight_kg,
+      ),
+    ).toEqual([55]);
+    // Before the machine's first session, or on another machine, there is nothing to start from.
+    expect(
+      lastSessionSetsOnMachine(workouts, 'bench', '2026-11-09', undefined, 'press'),
+    ).toBeNull();
+    expect(
+      lastSessionSetsOnMachine(workouts, 'bench', '2026-11-20', undefined, 'other'),
+    ).toBeNull();
+  });
+
+  it('matches a merged photo of the machine through its aliases', () => {
+    const merged = new Map([['press', 'survivor']]);
+    expect(
+      lastSessionSetsOnMachine(
+        [onMachine],
+        'bench',
+        '2026-11-20',
+        undefined,
+        'survivor',
+        merged,
+      )?.map((set) => set.weight_kg),
+    ).toEqual([55]);
   });
 });

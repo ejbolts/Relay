@@ -66,6 +66,7 @@ import {
 import { MachineSheet } from './MachineSheet';
 import { MovementCard, type MovementActions } from './MovementCard';
 import { SwapSheet } from './SwapSheet';
+import { swapOntoMachine } from './swapMachineSetup';
 import { useLogger, type LoggerApi } from './WorkoutProvider';
 
 /**
@@ -568,7 +569,8 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         lastDone={new Map()}
         onChoose={(replacement: Exercise) => {
           const key = swapping;
-          if (key) change((latest) => swapExercise(latest, key, replacement, context));
+          if (key)
+            change((latest) => swapExercise(latest, key, replacement, context, {}, workout.id));
           setSwapping(null);
         }}
         onBrowseAll={() => {
@@ -622,8 +624,13 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
           const target = picker?.swapping;
           if (target) {
             if (selected[0])
-              change((latest) =>
-                swapExercise(latest, target, selected[0], context, machineChoices),
+              void swapOntoMachine(
+                change,
+                target,
+                selected[0],
+                context,
+                machineChoices,
+                workout.id,
               );
           } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}

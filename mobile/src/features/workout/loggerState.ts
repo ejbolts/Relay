@@ -526,13 +526,15 @@ export function swapExercise(
   replacement: Exercise,
   context: LoggerContext,
   machineChoices: ExerciseMachineChoices = {},
+  /** The saved workout being edited, which isn't the replacement's previous session. */
+  excludedWorkoutId?: string,
 ): LoggerState {
   const machine = machineSelection(replacement.id, machineChoices);
   const suggested = suggestedSetsForPickedExercise(
     context.workouts,
     replacement,
     state.workoutDate,
-    undefined,
+    excludedWorkoutId ?? state.resumingWorkoutId ?? undefined,
     olderHistoryFor(context, state.workoutDate),
     context.defaultRest,
     machine.machinePhotoIds[0],

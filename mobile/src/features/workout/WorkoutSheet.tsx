@@ -59,7 +59,6 @@ import {
   mergeMachines,
   setMachineSettings,
   setSetKind,
-  swapExercise,
   ungroupSuperset,
   workoutIdentity,
   type LoggerState,
@@ -68,6 +67,7 @@ import { MovementCard, type MovementActions } from './MovementCard';
 import { RestBar } from './RestBar';
 import { MachineSheet } from './MachineSheet';
 import { SwapSheet } from './SwapSheet';
+import { swapOntoMachine } from './swapMachineSetup';
 import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { restMenuItems } from './restChoices';
@@ -220,7 +220,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     (movementKey: string, replacement: Exercise, machineChoices?: ExerciseMachineChoices) => {
       const before = getState();
       if (!before) return;
-      change((current) => swapExercise(current, movementKey, replacement, context, machineChoices));
+      void swapOntoMachine(change, movementKey, replacement, context, machineChoices);
       showToast(`Swapped to ${replacement.name}`, {
         label: 'Undo',
         run: () => change((current) => ({ ...current, movements: before.movements })),
