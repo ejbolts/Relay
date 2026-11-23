@@ -62,6 +62,7 @@ import { SharingLocked, SmallButton } from './parts';
 import { notFound, sharingRequired, socialApi } from './socialApi';
 import {
   refreshSocial,
+  socialKeys,
   sharedWorkoutList,
   useSharedProfile,
   useSharedWorkouts,
@@ -347,8 +348,9 @@ function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlock
     const id = profile.id;
     const account = toastAccount();
     // Already waiting on an Undo (from this screen or an earlier visit): don't remove twice.
-    if (!pendingActions.add('friend', id, account)) return;
-    const done = () => pendingActions.remove('friend', id, account);
+    const token = pendingActions.add('friend', id, account);
+    if (!token) return;
+    const done = () => pendingActions.remove(token);
     showToast(
       `Removed ${profile.display_name}`,
       {
@@ -358,7 +360,18 @@ function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlock
         // web, so the friend is never removed while Undo is still on screen.
         onDismiss: () =>
           void socialApi.removeFriend(id).then(
-            () => void refreshSocial(client).finally(done),
+            () => {
+              // A session that has ended keeps nothing of this; its cache is already gone.
+              if (isToastAccountCurrent(account)) {
+                // Removed for certain: the cached profile says so before the pending mark goes,
+                // so a refresh that fails can't bring back Remove friend.
+                client.setQueryData<SharedProfile>(socialKeys.profile(id), (cached) =>
+                  cached ? { ...cached, friend_status: 'none' } : cached,
+                );
+              }
+              done();
+              if (isToastAccountCurrent(account)) void refreshSocial(client);
+            },
             () => {
               done();
               showToast('Could not remove this friend. You are still friends.', undefined, {
