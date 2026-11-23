@@ -418,6 +418,7 @@ export function SignInScreen() {
                   <Button
                     label="See a sample profile"
                     variant="link"
+                    align="center"
                     onPress={() => {
                       Keyboard.dismiss();
                       setSampleOpen(true);

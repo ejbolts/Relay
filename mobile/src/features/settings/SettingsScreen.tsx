@@ -39,6 +39,7 @@ import { useTheme } from '../../ui/theme';
 import { HelpSettings } from '../guides/HelpSettings';
 // B5 (data): imports, exports and backups.
 import { DataSection } from '../data';
+import { AdminSettingsSection } from '../admin';
 import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { restTimerPreference, restTimesPreference } from './devicePreferences';
@@ -451,6 +452,8 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
           <NotificationsSection />
           <DataSection />
           <AccountSection />
+          {/* Mobile batch 4, B6: the admin console, for administrators only. */}
+          <AdminSettingsSection />
           <AboutSection />
         </>
       )}

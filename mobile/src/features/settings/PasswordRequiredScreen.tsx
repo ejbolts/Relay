@@ -44,6 +44,7 @@ export function PasswordRequiredScreen() {
               <Button
                 label={signingOut ? 'Signing out…' : 'Sign out'}
                 variant="link"
+                align="center"
                 disabled={signingOut}
                 onPress={() => {
                   setSigningOut(true);

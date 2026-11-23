@@ -409,7 +409,7 @@ describe('Edit profile', () => {
     jest.mocked(apiSend).mockResolvedValue({ ...mockUser, display_name: 'Sam', sex: 'female' });
     await show(<EditProfileScreen />);
     await fireEvent.changeText(screen.getByLabelText('Name'), 'Sam');
-    await fireEvent.press(screen.getByRole('tab', { name: 'Female' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Female' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
     expect(alert.mock.calls[0][0]).toBe('Save your sex as Female?');
     expect(apiSend).not.toHaveBeenCalled();

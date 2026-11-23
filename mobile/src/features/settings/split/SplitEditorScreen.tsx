@@ -446,6 +446,7 @@ function Editor({
           label={typeActions.create.isPending ? 'Adding…' : 'New workout type'}
           icon={settingsIcons.types}
           variant="link"
+          align="center"
           disabled={saving || typeActions.create.isPending}
           onPress={newType}
         />
