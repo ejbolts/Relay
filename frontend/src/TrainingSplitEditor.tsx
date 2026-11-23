@@ -7,7 +7,13 @@ import { WorkoutCalendar } from './WorkoutCalendar';
 import { splitCalendarMonths } from './splitCalendar';
 import { addDays, parseLocalDate, shortDate } from './trainingSummary';
 import { needsSplitProgress, splitPreviewDayLabel, withSplitProgress } from './splitEditing';
-import { followsWorkouts, splitPreview, splitPreviewLabel } from './trainingSplit';
+import {
+  followsWorkouts,
+  splitPreview,
+  splitPreviewLabel,
+  type SplitPreviewDay,
+} from './trainingSplit';
+import { dayStripes } from './dayColors';
 import type { TrainingSplit } from './types';
 import { localDate } from './utils';
 import { useWorkoutTypes } from './workoutTypesContext';
@@ -96,9 +102,13 @@ export function SplitPreview({ split }: { split: TrainingSplit }) {
   const [calendarView, setCalendarView] = useState(false);
   const [previewWeek, setPreviewWeek] = useState(0);
   const { types } = useWorkoutTypes();
-  const typeFor = (id: string | null | undefined) => types.find((t) => t.id === id);
-  const colourFor = (id: string | null | undefined) => typeFor(id)?.color ?? 'var(--p-muted)';
-  const labelFor = (id: string | null | undefined) => splitPreviewDayLabel(types, id);
+  // A mixed day lists each of its types' colours; rest and unstarted days have none.
+  const coloursFor = (ids: string[]) =>
+    ids.map((id) => types.find((t) => t.id === id)?.color ?? 'var(--p-muted)');
+  const colourFor = (ids: string[]) =>
+    ids.length ? dayStripes(coloursFor(ids), 'to right') : 'var(--p-muted)';
+  const labelFor = ({ typeId, typeIds }: SplitPreviewDay) =>
+    splitPreviewDayLabel(types, typeId, typeIds);
   const today = localDate();
   const firstDay = followsWorkouts(split)
     ? (split.next_date ?? split.start_date)
@@ -107,10 +117,10 @@ export function SplitPreview({ split }: { split: TrainingSplit }) {
   const preview = splitPreview(split, previewStart);
   const months = calendarView ? splitCalendarMonths(split, today) : [];
   const plannedDays = months.flatMap((month) =>
-    month.days.map(({ date, typeId }) => ({
-      date,
-      label: labelFor(typeId),
-      color: typeId === undefined ? undefined : colourFor(typeId),
+    month.days.map((day) => ({
+      date: day.date,
+      label: labelFor(day),
+      colors: day.typeId === undefined ? [] : coloursFor(day.typeIds),
     })),
   );
   const monthLabel = (date: string) =>
@@ -166,16 +176,21 @@ export function SplitPreview({ split }: { split: TrainingSplit }) {
         </div>
       ) : (
         <ol className="split-preview">
-          {preview.map(({ date, typeId }) => (
+          {preview.map((day) => (
             <li
-              key={date}
-              style={{ '--split-type-colour': colourFor(typeId) } as CSSProperties}
-              aria-label={`${parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}: ${labelFor(typeId)}`}
+              key={day.date}
+              style={{ '--split-type-colour': colourFor(day.typeIds) } as CSSProperties}
+              aria-label={`${parseLocalDate(day.date).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}: ${labelFor(day)}`}
             >
-              <span>{parseLocalDate(date).toLocaleDateString('en-AU', { weekday: 'short' })}</span>
-              <b>{parseLocalDate(date).getDate()}</b>
+              <span>
+                {parseLocalDate(day.date).toLocaleDateString('en-AU', { weekday: 'short' })}
+              </span>
+              <b>{parseLocalDate(day.date).getDate()}</b>
               <i aria-hidden="true" />
-              <strong title={labelFor(typeId)}>{splitPreviewLabel(labelFor(typeId))}</strong>
+              <strong title={labelFor(day)}>
+                {splitPreviewLabel(splitPreviewDayLabel(types, day.typeId))}
+                {day.typeIds.length > 1 && <small>+{day.typeIds.length - 1}</small>}
+              </strong>
             </li>
           ))}
         </ol>

@@ -124,6 +124,29 @@ describe('planned split days', () => {
   });
 });
 
+describe('mixed planned days', () => {
+  const mixedSplit: TrainingSplit = {
+    ...split,
+    steps: [
+      { workout_type_id: 'upper', extra_workout_type_ids: ['cardio'] },
+      { workout_type_id: 'lower', extra_workout_type_ids: ['custom-gone'] },
+      { workout_type_id: null },
+    ],
+  };
+
+  it('plans a mixed day with its main type first and asks to update a removed extra', () => {
+    expect(plannedDayOn(mixedSplit, '2026-11-19', '2026-11-19', types)).toMatchObject({
+      kind: 'training',
+      type: { id: 'upper' },
+      extraTypes: [{ id: 'cardio' }],
+    });
+    expect(plannedDayOn(mixedSplit, '2026-11-20', '2026-11-19', types).kind).toBe('update');
+    expect(plannedDayTitle(plannedDayOn(mixedSplit, '2026-11-19', '2026-11-19', types))).toBe(
+      'Upper body + Cardio day',
+    );
+  });
+});
+
 describe('the planned-day sheet', () => {
   const today = '2026-11-19';
 

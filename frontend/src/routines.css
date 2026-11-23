@@ -784,6 +784,34 @@
 .routine-day-spacer {
   flex: 1;
 }
+/* A mixed day lists each workout type as its own pill; they wrap before the day's move buttons. */
+.routine-day-types {
+  display: flex;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 70%;
+}
+.routine-day-extra {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 100%;
+}
+.routine-editor .routine-day-types .routine-day-type {
+  max-width: 100%;
+}
+.routine-editor .routine-day-extra .routine-day-extra-remove {
+  width: 24px;
+  min-height: 24px;
+  height: 24px;
+}
+.routine-editor .routine-day-extra-remove .pulse-icon {
+  width: 12px;
+  height: 12px;
+}
 .routine-editor .routine-day-type {
   width: auto;
   max-width: 60%;

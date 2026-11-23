@@ -51,6 +51,8 @@ FIELDS_ADDED_IN: dict[str, dict[str, str]] = {
         "cardio_distance": "1.3.0",
     },
     "routine_movement": {"rep_range": "1.3.0"},
+    # A split day's or saved split day's other workout types (mixed days).
+    "split_day": {"extra_workout_type_ids": "1.4.0"},
     # update_cardio_session keeps every optional metric the saving app leaves out.
     "cardio_session": {"elevation_gain_m": "1.3.0"},
 }
@@ -162,6 +164,22 @@ def preserve_rep_ranges(movements, stored, client: str | None) -> None:
             continue
         if stored[position].exercise_id == movement.exercise_id:
             movement.rep_range = stored[position].rep_range
+
+
+def preserve_day_types(days, stored, client: str | None) -> None:
+    """Keep mixed days' other workout types when the saving app predates them.
+
+    ``days`` are the payload's split days and ``stored`` the saved ones, matched by position
+    while the day keeps its main type. An explicit ``extra_workout_type_ids``, including an
+    empty list, is always taken: it proves the app knows the field, whatever version it reports.
+    """
+    if "extra_workout_type_ids" not in fields_unknown_to(client, "split_day"):
+        return
+    for day, saved in zip(days, stored, strict=False):
+        if "extra_workout_type_ids" in day.model_fields_set:
+            continue
+        if saved.workout_type_id is not None and saved.workout_type_id == day.workout_type_id:
+            day.extra_workout_type_ids = list(saved.extra_workout_type_ids)
 
 
 def preserve_unknown_workout_fields(payload, workout, client: str | None):

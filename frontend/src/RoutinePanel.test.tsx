@@ -532,3 +532,29 @@ it('shows each planned set as a block, with muscles on request', async () => {
   await click('Muscles');
   expect(host.querySelector('.routine-exercise-label small')?.textContent).toBe('Chest');
 });
+
+it('mixes workout types on a day and saves them with it', async () => {
+  await mount(true);
+  await click('Edit split');
+  await click('Add a workout type to day 1');
+  const extra = () =>
+    document.querySelector<HTMLSelectElement>('[aria-label="Day 1 workout type 2"]');
+  // The new type is the first one the day doesn't have; the main type isn't offered again.
+  expect(extra()?.value).toBe('lower');
+  expect([...extra()!.options].map((option) => option.value)).not.toContain('upper');
+  await input('[aria-label="Day 1 workout type 2"]', 'cardio');
+  expect(document.querySelector('.routine-day-toggle strong')?.textContent).toBe(
+    'Day 1 · Upper body + Cardio',
+  );
+  await save();
+  expect(vi.mocked(api.routines.save).mock.calls[0][0].days[0].extra_workout_type_ids).toEqual([
+    'cardio',
+  ]);
+  // Saving closes the editor; the saved split reopens with its mixed day.
+  await click('Edit split');
+  expect(extra()?.value).toBe('cardio');
+  await click('Remove Cardio from day 1');
+  expect(extra()).toBeNull();
+  await save();
+  expect(vi.mocked(api.routines.save).mock.calls[1][0].days[0].extra_workout_type_ids).toEqual([]);
+});

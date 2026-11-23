@@ -52,6 +52,7 @@ from .cardio_zones import (
 from .client_versions import (
     ClientVersion,
     fields_unknown_to,
+    preserve_day_types,
     preserve_fields,
     preserve_unknown_workout_fields,
 )
@@ -1804,8 +1805,15 @@ def get_training_split(
 
 @router.put("/training-split", response_model=TrainingSplitRead)
 def update_training_split(
-    payload: TrainingSplit, db: DbSession, user: CurrentUser, on_date: date | None = None
+    payload: TrainingSplit,
+    db: DbSession,
+    user: CurrentUser,
+    on_date: date | None = None,
+    client_version: ClientVersion = None,
 ) -> TrainingSplitRead:
+    stored = saved_training_split(db, user.id)
+    if stored is not None:
+        preserve_day_types(payload.steps, stored.steps, client_version)
     validate_split_types(db, user.id, payload)
     # Editing the schedule directly returns it to history-based workout suggestions.
     payload.routine_id = None
