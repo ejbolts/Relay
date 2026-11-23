@@ -12,7 +12,16 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { bodyweightOn } from '../../../../frontend/src/relativeStrength';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
+import {
+  calculateScopedDraftPrs,
+  initialPrCelebrations,
+  newPrCelebrations,
+  prToastLines,
+  type DraftPrBadges,
+  type PrCelebrations,
+} from '../../../../frontend/src/workoutPr';
 import { newId } from '../../data/deviceStorage';
 import { Button } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
@@ -20,9 +29,11 @@ import { MenuButton } from '../../ui/MenuButton';
 import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
+import { useBodyMeasurements } from '../training/trainingQueries';
 import { FinishedSummary } from './FinishedSummary';
 import { ExercisePicker } from './ExercisePicker';
 import { loggerIcons } from './icons';
+import { useTrainingBlocks } from './loggerQueries';
 import {
   addExercises,
   completeExercise,
@@ -35,6 +46,7 @@ import {
   selectedType,
   setCounts,
   setMovementNotes,
+  olderHistoryFor,
   setSetKind,
   ungroupSuperset,
   workoutIdentity,
@@ -117,6 +129,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     () => new Set(state.movements.map((movement) => movement.exercise.id)),
     [state.movements],
   );
+  const prBadges = useLivePrBadges(logger, state);
 
   const removeExercise = useCallback(
     (movementKey: string) => {
@@ -438,6 +451,11 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
             movement={movement}
             supersetNames={supersetNames(movement.supersetKey)}
             history={logger.history}
+            olderLatest={
+              olderHistoryFor(logger.context, state.workoutDate)?.get(movement.exercise.id)
+                ?.latest ?? null
+            }
+            prBadges={prBadges.get(movement.key)}
             workoutDate={state.workoutDate}
             weightUnit={logger.weightUnit}
             skipHighRepWarning={state.skipHighRepWarning}
@@ -474,6 +492,55 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       />
     </>
   );
+}
+
+/**
+ * The records each logged set beats, as the web works them out: against the loaded history and
+ * older history, all-time and within the current training block or fresh start. A record set
+ * just logged is celebrated once, with a buzz and a popup.
+ */
+function useLivePrBadges(logger: LoggerApi, state: LoggerState): DraftPrBadges {
+  const blocks = useTrainingBlocks().data;
+  const measurements = useBodyMeasurements().data;
+  const older = olderHistoryFor(logger.context, state.workoutDate);
+  const badges = useMemo(
+    () =>
+      calculateScopedDraftPrs(
+        state.movements,
+        logger.history,
+        null,
+        state.workoutDate,
+        older,
+        blocks?.blocks ?? [],
+        measurements ?? [],
+        blocks?.fresh_starts ?? [],
+      ),
+    [state.movements, state.workoutDate, logger.history, older, blocks, measurements],
+  );
+  // Records already showing when the logger opens are never celebrated again.
+  const celebrations = useRef<PrCelebrations | null>(null);
+  const unit = logger.weightUnit;
+  useEffect(() => {
+    if (!celebrations.current) {
+      celebrations.current = initialPrCelebrations(state.movements, badges);
+      return;
+    }
+    const { entries, next } = newPrCelebrations(
+      state.movements,
+      badges,
+      celebrations.current,
+      (recorded) => bodyweightOn(measurements ?? [], state.workoutDate, recorded),
+    );
+    celebrations.current = next;
+    if (!entries.length) return;
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    showToast(
+      prToastLines(entries, unit)
+        .map((line) => `🏆 ${line.title}\n${line.detail}`)
+        .join('\n'),
+    );
+  }, [state.movements, state.workoutDate, badges, celebrations, measurements, unit]);
+  return badges;
 }
 
 function WorkoutNotes({ notes, onChange }: { notes: string; onChange: (notes: string) => void }) {

@@ -298,7 +298,9 @@ import {
 } from './trainingSummary';
 import {
   historyOnMachine,
+  lastWorkingSessionSets,
   machineAliases,
+  movementHistory,
   machineSuggestionSource,
   recentExerciseHistory,
   withSuggestedSets,
@@ -422,7 +424,6 @@ import {
   completeRemainingSets,
   hasRecordedPerformance,
   isCompletedWorkingSet,
-  isLoggedWorkingSet,
 } from './workoutSets';
 import { restToAdd } from './workoutRestHistory';
 import { completionRecordDetail, recordTypeLabel } from './recordLabels';
@@ -463,8 +464,14 @@ import {
   upsertWorkoutByRecency,
   weekGroupPage,
 } from './workoutHistory';
-import { calculateScopedDraftPrs, prToastLines, type PrToastEntry } from './workoutPr';
-import { cardioSetSummary } from './cardioRecords';
+import {
+  calculateScopedDraftPrs,
+  initialPrCelebrations,
+  newPrCelebrations,
+  prBadgeLabel,
+  prToastLines,
+  type PrToastEntry,
+} from './workoutPr';
 import { bodyweightOn, bodyweightContext, relativeStrength } from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
@@ -577,15 +584,6 @@ function moveItem<T>(items: T[], from: number, to: number): T[] {
 
 function formatDuration(totalSeconds: number): string {
   return formatSeconds(totalSeconds);
-}
-
-/** Identifies a celebrated set's records, so the same ones never celebrate twice. */
-function prSignature(
-  exerciseId: string,
-  item: WorkoutSetInput & { key: string },
-  labels: string[],
-) {
-  return `${exerciseId}:${item.key}:${labels.join(',')}:${item.weight_kg}:${item.reps}:${item.duration_seconds}:${item.distance_km}`;
 }
 
 /** Set just before the reload that follows a backup restore, so it can be confirmed. */
@@ -4127,63 +4125,20 @@ function WorkoutLogger({
       measurements,
     ],
   );
-  const completedSetKeysRef = useRef(
-    new Set(
-      movements.flatMap((movement) =>
-        movement.sets.filter((item) => item.completed).map((item) => item.key),
-      ),
-    ),
-  );
   const [prConfettiBurst, setPrConfettiBurst] = useState(0);
   const [prToastEntries, setPrToastEntries] = useState<PrToastEntry[]>([]);
   const [prToastId, setPrToastId] = useState(0);
-  const celebratedPrsRef = useRef(
-    new Set(
-      movements.flatMap((movement) =>
-        movement.sets.flatMap((item) => {
-          const labels = prBadges.get(movement.key)?.get(item.key);
-          return item.completed && labels ? [prSignature(movement.exercise.id, item, labels)] : [];
-        }),
-      ),
-    ),
-  );
+  const prCelebrationsRef = useRef(initialPrCelebrations(movements, prBadges));
   const closePrToast = useCallback(() => setPrToastEntries([]), []);
 
   useEffect(() => {
-    const completedSetKeys = new Set<string>();
-    const entries: PrToastEntry[] = [];
-    movements.forEach((movement) => {
-      movement.sets.forEach((item) => {
-        if (!item.completed) return;
-        completedSetKeys.add(item.key);
-        if (
-          !completedSetKeysRef.current.has(item.key) &&
-          prBadges.get(movement.key)?.has(item.key)
-        ) {
-          const labels = prBadges.get(movement.key)!.get(item.key)!;
-          const signature = prSignature(movement.exercise.id, item, labels);
-          if (!celebratedPrsRef.current.has(signature)) {
-            celebratedPrsRef.current.add(signature);
-            entries.push(
-              movement.exercise.kind === 'cardio'
-                ? {
-                    exercise: movement.exercise.name,
-                    labels,
-                    summary: cardioSetSummary(item.duration_seconds, item.distance_km),
-                  }
-                : {
-                    exercise: movement.exercise.name,
-                    labels,
-                    reps: item.reps!,
-                    weightKg: item.weight_kg!,
-                    bodyweightKg: bodyweightOn(measurements, workoutDate, item.bodyweight_kg),
-                  },
-            );
-          }
-        }
-      });
-    });
-    completedSetKeysRef.current = completedSetKeys;
+    const { entries, next } = newPrCelebrations(
+      movements,
+      prBadges,
+      prCelebrationsRef.current,
+      (recorded) => bodyweightOn(measurements, workoutDate, recorded),
+    );
+    prCelebrationsRef.current = next;
     if (entries.length) {
       setPrConfettiBurst((current) => current + 1);
       setPrToastId((current) => current + 1);
@@ -5989,15 +5944,11 @@ function MovementCard({
     movement.machinePhotoIds.length > 0 ||
     /machine|cable|smith/i.test(movement.exercise.equipment ?? '');
   // With a machine pinned, its own sessions supply the last date, history and rests.
-  const history = useMemo(() => {
-    const onMachine = historyOnMachine(exerciseHistory, pinnedMachinePhotoId, savedMachineAliases);
-    return (onMachine.length ? onMachine : exerciseHistory).slice(0, 5);
-  }, [exerciseHistory, pinnedMachinePhotoId, savedMachineAliases]);
-  // Hints come from the last session with working sets; one cut short to warm-ups is skipped.
-  const lastSessionSets = useMemo(
-    () => history.find((entry) => entry.sets.some(isLoggedWorkingSet))?.sets ?? [],
-    [history],
+  const history = useMemo(
+    () => movementHistory(exerciseHistory, pinnedMachinePhotoId, savedMachineAliases),
+    [exerciseHistory, pinnedMachinePhotoId, savedMachineAliases],
   );
+  const lastSessionSets = useMemo(() => lastWorkingSessionSets(history), [history]);
   const machineSettingsUnloaded = movement.machineSettings === undefined;
   const onMachineSettingsRef = useRef(onMachineSettings);
 
@@ -6400,13 +6351,7 @@ function MovementCard({
                   </span>
                   {prBadges.has(item.key) && (
                     <b className="pr-badge" title={prBadges.get(item.key)?.join(', ')}>
-                      {prBadges.get(item.key)?.some((label) => label.startsWith('All-time'))
-                        ? 'All-time PR'
-                        : prBadges.get(item.key)?.some((label) => label.startsWith('Fresh start'))
-                          ? 'Fresh start PR'
-                          : prBadges.get(item.key)?.some((label) => label.startsWith('Block'))
-                            ? 'Block PR'
-                            : 'PR'}
+                      {prBadgeLabel(prBadges.get(item.key)!)}
                     </b>
                   )}
                 </>,

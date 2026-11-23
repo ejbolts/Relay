@@ -1,4 +1,4 @@
-import { createSuggestedWorkoutSet } from './workoutSets';
+import { createSuggestedWorkoutSet, isLoggedWorkingSet } from './workoutSets';
 import type {
   ExerciseHistoryBaseline,
   ExerciseKind,
@@ -106,6 +106,22 @@ export function historyOnMachine(
     });
     return sets.length ? [{ ...entry, sets }] : [];
   });
+}
+
+/** A movement's recent sessions: its pinned machine's own when it has any, else all of them. */
+export function movementHistory(
+  history: ExerciseHistoryEntry[],
+  machineId: string | null | undefined,
+  aliases: ReadonlyMap<string, string>,
+  limit = 5,
+): ExerciseHistoryEntry[] {
+  const onMachine = historyOnMachine(history, machineId, aliases);
+  return (onMachine.length ? onMachine : history).slice(0, limit);
+}
+
+/** The sets hints come from: the last session with working sets; one cut short to warm-ups is skipped. */
+export function lastWorkingSessionSets(history: ExerciseHistoryEntry[]): TrackedSet[] {
+  return history.find((entry) => entry.sets.some(isLoggedWorkingSet))?.sets ?? [];
 }
 
 /**

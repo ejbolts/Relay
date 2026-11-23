@@ -17,7 +17,34 @@ export const OFFLINE_QUERIES = [
   'training-preferences',
   'workouts',
   'dashboard',
+  'training-blocks',
 ] as const;
+
+/** Reads under `workouts` kept besides the history window itself (`['workouts', start]`). */
+const KEPT_WORKOUT_READS = ['baselines', 'body-measurements'];
+
+/**
+ * The copy a query keeps, one per family so a newer day's dashboard replaces yesterday's, or null
+ * for a query that is not kept (such as one saved workout or an older page of history).
+ */
+function familyOf(queryKey: QueryKey): string | null {
+  const [first, second] = queryKey;
+  if (first === 'workouts') {
+    if (typeof second === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(second)) return 'workouts';
+    return typeof second === 'string' && KEPT_WORKOUT_READS.includes(second)
+      ? `workouts/${second}`
+      : null;
+  }
+  return OFFLINE_QUERIES.includes(first as (typeof OFFLINE_QUERIES)[number]) ? String(first) : null;
+}
+
+const familyOfEntry = (key: string) => {
+  try {
+    return familyOf(JSON.parse(key.slice(INDEX.length + 1)) as QueryKey);
+  } catch {
+    return null;
+  }
+};
 
 interface Index {
   userId: string;
@@ -29,9 +56,6 @@ interface Entry {
   data: unknown;
   updatedAt: number;
 }
-
-const kept = (queryKey: QueryKey) =>
-  OFFLINE_QUERIES.includes(queryKey[0] as (typeof OFFLINE_QUERIES)[number]);
 
 function readIndex(): Index | null {
   const index = readJson<Index>(INDEX);
@@ -71,11 +95,10 @@ export function saveOfflineQueries(client: QueryClient, userId: string): () => v
   return client.getQueryCache().subscribe((event) => {
     if (event.type !== 'updated' || event.action.type !== 'success') return;
     const { queryKey, state } = event.query;
-    if (!kept(queryKey) || state.data === undefined || state.dataUpdatedAt === 0) return;
+    const family = familyOf(queryKey);
+    if (!family || state.data === undefined || state.dataUpdatedAt === 0) return;
     const key = entryKey(queryKey);
-    // One copy per query: a newer day's dashboard replaces yesterday's.
-    const prefix = `${INDEX}:${JSON.stringify([queryKey[0]]).slice(0, -1)}`;
-    const stale = index.keys.filter((item) => item !== key && item.startsWith(prefix));
+    const stale = index.keys.filter((item) => item !== key && familyOfEntry(item) === family);
     for (const item of stale) writeJson(item, null);
     if (
       !writeJson(key, {

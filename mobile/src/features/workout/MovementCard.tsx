@@ -2,17 +2,27 @@ import * as Haptics from 'expo-haptics';
 import { memo, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
+import {
+  lastWorkingSessionSets,
+  movementHistory,
+  recentExerciseHistory,
+} from '../../../../frontend/src/exerciseHistory';
 import { matchingLastSessionSet } from '../../../../frontend/src/lastSessionSet';
 import { progressionHint, progressionTarget } from '../../../../frontend/src/repProgression';
 import { unusualSetEntryWarning } from '../../../../frontend/src/setEntryConfirmation';
 import {
+  RPE_OPTIONS,
   SET_KINDS,
   setKindOf,
   setNumberLabels,
   type SetKind,
 } from '../../../../frontend/src/setFieldValues';
 import { setLabel } from '../../../../frontend/src/trainingSummary';
-import type { TrackedSet, TrackedWorkout } from '../../../../frontend/src/types';
+import type {
+  ExerciseHistoryBaseline,
+  TrackedSet,
+  TrackedWorkout,
+} from '../../../../frontend/src/types';
 import { formatSeconds } from '../../../../frontend/src/utils';
 import {
   formatWeightNumber,
@@ -24,10 +34,11 @@ import type {
   WorkoutDraftMovement,
   WorkoutDraftSet,
 } from '../../../../frontend/src/workoutMovements';
-import { hasRecordedPerformance, latestExerciseSets } from '../../../../frontend/src/workoutSets';
+import { hasRecordedPerformance } from '../../../../frontend/src/workoutSets';
 import { supersetGroupName } from '../../../../frontend/src/workoutSupersets';
 import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
+import { promptText } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { formatPlain, NumberField, parseDecimal, parseWhole } from './NumberField';
 import { restMenuItems } from './restChoices';
@@ -43,11 +54,17 @@ export interface MovementActions {
   skipHighRepWarning: () => void;
 }
 
+const NO_ALIASES: ReadonlyMap<string, string> = new Map();
+const NO_BADGES: ReadonlyMap<string, string[]> = new Map();
+
 /** One exercise of the live workout: its target, sets and actions. */
 export const MovementCard = memo(function MovementCard({
   movement,
   supersetNames,
   history,
+  olderLatest = null,
+  excludedWorkoutId,
+  prBadges = NO_BADGES,
   workoutDate,
   weightUnit,
   skipHighRepWarning,
@@ -57,6 +74,12 @@ export const MovementCard = memo(function MovementCard({
   /** The names in this exercise's superset, in order, when it is in one. */
   supersetNames: string[] | null;
   history: TrackedWorkout[];
+  /** The exercise's latest session before the loaded history, if any. */
+  olderLatest?: ExerciseHistoryBaseline['latest'];
+  /** A saved workout being resumed, which is not its own last session. */
+  excludedWorkoutId?: string;
+  /** Record labels by set key, for sets that beat a record. */
+  prBadges?: ReadonlyMap<string, string[]>;
   workoutDate: string;
   weightUnit: WeightUnit;
   skipHighRepWarning: boolean;
@@ -64,10 +87,24 @@ export const MovementCard = memo(function MovementCard({
 }) {
   const { colors, type, radius, space } = useTheme();
   const cardio = movement.exercise.kind === 'cardio';
-  // Hints come from the last session with working sets, as on the web.
+  // Hints come from the last session with working sets, as on the web, reaching back into
+  // older history when the loaded workouts don't include the exercise.
   const lastSession = useMemo(
-    () => latestExerciseSets(history, movement.exercise.id, workoutDate),
-    [history, movement.exercise.id, workoutDate],
+    () =>
+      lastWorkingSessionSets(
+        movementHistory(
+          recentExerciseHistory(
+            history.filter((workout) => workout.workout_date <= workoutDate),
+            movement.exercise.id,
+            excludedWorkoutId,
+            Number.POSITIVE_INFINITY,
+            olderLatest,
+          ),
+          null,
+          NO_ALIASES,
+        ),
+      ),
+    [history, movement.exercise.id, workoutDate, excludedWorkoutId, olderLatest],
   );
   const target =
     movement.repRange && !cardio
@@ -168,6 +205,7 @@ export const MovementCard = memo(function MovementCard({
           index={index}
           label={labels[index]}
           previous={matchingLastSessionSet(movement.sets, index, lastSession)}
+          records={prBadges.get(item.key) ?? null}
           weightUnit={weightUnit}
           skipHighRepWarning={skipHighRepWarning}
           actions={actions}
@@ -220,6 +258,7 @@ function SetRow({
   index,
   label,
   previous,
+  records,
   weightUnit,
   skipHighRepWarning,
   actions,
@@ -229,6 +268,8 @@ function SetRow({
   index: number;
   label: string;
   previous: TrackedSet | undefined;
+  /** The records this set beat, once it is logged. */
+  records: string[] | null;
   weightUnit: WeightUnit;
   skipHighRepWarning: boolean;
   actions: MovementActions;
@@ -304,6 +345,18 @@ function SetRow({
     ]);
   }
 
+  // An unlogged set without an RPE offers last time's as a guide, as the web shows it faintly.
+  const lastRpe = item.rpe === null && !item.completed && !cardio ? (previous?.rpe ?? null) : null;
+  const editNote = () =>
+    promptText({
+      title: `Note for set ${number}`,
+      value: item.notes ?? '',
+      placeholder: 'Add a note',
+      submitLabel: 'Save',
+      multiline: true,
+      onSubmit: (notes) => update({ notes: notes.trim() ? notes : null }),
+    });
+
   // The set pill's menu, built each render so it always reflects the set as it is now.
   const setMenu: MenuItem[] = [
     ...(cardio
@@ -325,6 +378,23 @@ function SetRow({
             }),
           },
         ]),
+    {
+      label:
+        item.rpe !== null
+          ? `RPE ${item.rpe}`
+          : lastRpe !== null
+            ? `RPE · ${lastRpe} last time`
+            : 'RPE',
+      items: [
+        { label: 'No RPE', checked: item.rpe === null, onPress: () => update({ rpe: null }) },
+        ...RPE_OPTIONS.map((rpe) => ({
+          label: String(rpe),
+          checked: item.rpe === rpe,
+          onPress: () => update({ rpe }),
+        })),
+      ],
+    },
+    { label: item.notes ? 'Edit note' : 'Add note', onPress: editNote },
     ...(index > 0
       ? [{ label: 'Move up', onPress: () => actions.moveSet(movement.key, index, index - 1) }]
       : []),
@@ -474,6 +544,7 @@ function SetRow({
             <Icon name="check" size={18} color={item.completed ? colors.onAccent : colors.muted} />
           </Pressable>
         </View>
+        <SetDetails item={item} number={number} records={records} onEditNote={editNote} />
         {cardio && (
           <CardioExtras
             item={item}
@@ -486,6 +557,64 @@ function SetRow({
         )}
       </View>
     </ReanimatedSwipeable>
+  );
+}
+
+/** What a set carries besides its numbers: the records it beat, its RPE and its note. */
+function SetDetails({
+  item,
+  number,
+  records,
+  onEditNote,
+}: {
+  item: WorkoutDraftSet;
+  number: number;
+  records: string[] | null;
+  onEditNote: () => void;
+}) {
+  const { colors, type, radius } = useTheme();
+  const note = item.notes?.trim();
+  if (!records && item.rpe === null && !note) return null;
+  return (
+    <View style={styles.details}>
+      {records && (
+        <View
+          accessible
+          accessibilityLabel={`Set ${number}: ${records.join(', ')}`}
+          style={[styles.record, { backgroundColor: colors.goldSoft, borderRadius: radius.sm }]}
+        >
+          <Icon name="trophy" size={12} color={colors.gold} />
+          <Text style={[type.caption, { color: colors.text, fontWeight: '700', flexShrink: 1 }]}>
+            {records.join(' · ')}
+          </Text>
+        </View>
+      )}
+      {(item.rpe !== null || !!note) && (
+        <View style={styles.detailLine}>
+          {item.rpe !== null && (
+            <Text
+              accessibilityLabel={`RPE ${item.rpe} for set ${number}`}
+              style={[type.footnote, type.number, { color: colors.secondary, fontWeight: '600' }]}
+            >
+              RPE {item.rpe}
+            </Text>
+          )}
+          {!!note && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Edit note for set ${number}: ${note}`}
+              onPress={onEditNote}
+              hitSlop={6}
+              style={{ flexShrink: 1 }}
+            >
+              <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={2}>
+                {note}
+              </Text>
+            </Pressable>
+          )}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -642,6 +771,16 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
   },
+  details: { paddingLeft: 44, paddingRight: 4, paddingBottom: 4, gap: 4 },
+  record: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+  },
+  detailLine: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   extrasToggle: { flexDirection: 'row', gap: 6, paddingVertical: 4 },
   extras: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 6 },
   extraField: { width: '46%', gap: 2 },
