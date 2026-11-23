@@ -28,6 +28,7 @@ export default function TabsLayout() {
       backgroundColor={Platform.OS === 'android' ? colors.page : undefined}
       indicatorColor={colors.accentSoft}
       rippleColor={colors.accentSoft}
+      labelVisibilityMode="labeled"
       minimizeBehavior="onScrollDown"
     >
       {live && (
