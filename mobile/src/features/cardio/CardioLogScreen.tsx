@@ -1,6 +1,6 @@
 import * as ImagePicker from 'expo-image-picker';
-import { useLocalSearchParams } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useLocalSearchParams, useNavigation } from 'expo-router';
+import { useEffect, useRef, useState } from 'react';
 import { Text, View } from 'react-native';
 import {
   CARDIO_DURATION,
@@ -41,15 +41,35 @@ import { useCardioWrite } from './useCardioWrite';
 /** Cardio's "Import screenshot" opens this screen straight into the picker it chose. */
 export type CardioImportSource = 'camera' | 'library';
 
+/** The native stack's transition event, which expo-router's navigation type leaves out. */
+type TransitionEvents = {
+  addListener: (
+    type: 'transitionEnd',
+    listener: (event: { data?: { closing?: boolean } }) => void,
+  ) => () => void;
+};
+
 export function CardioLogScreen() {
   const exerciseQuery = useExercises();
   const { import: source } = useLocalSearchParams<{ import?: string }>();
+  // The picker is presented only once this screen has finished sliding in: UIKit can drop a
+  // presentation asked for during a navigation transition.
+  const navigation = useNavigation();
+  const [arrived, setArrived] = useState(false);
+  useEffect(
+    () =>
+      (navigation as unknown as TransitionEvents).addListener('transitionEnd', (event) => {
+        if (!event.data?.closing) setArrived(true);
+      }),
+    [navigation],
+  );
   return (
     <CardioPage title="Log cardio session">
       {exerciseQuery.data ? (
         <CardioLogForm
           exercises={exerciseQuery.data.filter((exercise) => exercise.kind === 'cardio')}
           startImport={source === 'camera' || source === 'library' ? source : undefined}
+          ready={arrived}
         />
       ) : exerciseQuery.isError ? (
         <ErrorState
@@ -97,10 +117,13 @@ function CardioLogForm({
   exercises,
   session,
   startImport,
+  ready = false,
 }: {
   exercises: Exercise[];
   session?: CardioSession;
   startImport?: CardioImportSource;
+  /** The screen has finished its opening transition, so a picker can be presented. */
+  ready?: boolean;
 }) {
   const { colors, type } = useTheme();
   const [initial] = useState(() =>
@@ -127,19 +150,22 @@ function CardioLogForm({
   const metricErrors = checked ? cardioMetricErrors(metrics, activityName) : {};
   const busy = picking || scanning || saving;
 
-  // Opened from Cardio's Import screenshot: go straight to the picker, once.
+  // Opened from Cardio's Import screenshot: go straight to the picker, once, after the screen has
+  // arrived. That pick doesn't lock the form, so if the system never shows the picker, Import
+  // screenshot and every field still work.
   const [autoImport] = useState(startImport);
+  const autoStarted = useRef(false);
   useEffect(() => {
-    if (!autoImport) return;
-    const timer = setTimeout(() => void importScreenshot(autoImport), 0);
-    return () => clearTimeout(timer);
-    // Only on opening: the picker is not offered again when the form changes.
+    if (!autoImport || !ready || autoStarted.current) return;
+    autoStarted.current = true;
+    void importScreenshot(autoImport, { lockForm: false });
+    // Only on arriving: the picker is not offered again when the form changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoImport]);
+  }, [autoImport, ready]);
 
-  async function importScreenshot(source: CardioImportSource) {
+  async function importScreenshot(source: CardioImportSource, { lockForm = true } = {}) {
     if (busy) return;
-    setPicking(true);
+    if (lockForm) setPicking(true);
     setScanError(null);
     try {
       if (source === 'camera' && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
