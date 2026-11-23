@@ -2,9 +2,13 @@ const path = require('node:path');
 const { getDefaultConfig } = require('expo/metro-config');
 
 const config = getDefaultConfig(__dirname);
-// Metro only bundles files in watched folders. The app shares the web's plain TypeScript rules
-// from frontend/src (see frontend/src/upNextSession.ts). Those files import no packages, so
-// nothing resolves against the web's node_modules; the detector's tests enforce it.
-config.watchFolders = [...config.watchFolders, path.resolve(__dirname, '../frontend/src')];
+// The app shares rules in frontend/src and the release metadata beside it. Shared modules
+// import no packages, and the web's dependencies and build output stay outside Metro's graph.
+config.watchFolders = [...config.watchFolders, path.resolve(__dirname, '../frontend')];
+const existing = config.resolver.blockList;
+config.resolver.blockList = [
+  ...(Array.isArray(existing) ? existing : existing ? [existing] : []),
+  /[/\\]frontend[/\\](?:node_modules|dist)(?:[/\\]|$)/,
+];
 
 module.exports = config;

@@ -4,6 +4,7 @@ import type { ReactElement } from 'react';
 import { Alert, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { addDays } from '../../../../../frontend/src/trainingSummary';
+import { calendarMonths } from '../../../../../frontend/src/calendarRange';
 import type {
   Exercise,
   Routine,
@@ -157,6 +158,20 @@ describe('the split library', () => {
       pathname: '/split/edit',
       params: { template: 'upper-lower' },
     });
+  });
+
+  it('shows the same active split in both preview views', async () => {
+    await show(<SplitLibraryScreen />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Show two-month calendar' }));
+    for (const month of calendarMonths(today, 2)) {
+      expect(screen.getByRole('header', { name: month.title })).toBeVisible();
+    }
+    await fireEvent.press(screen.getByRole('button', { name: 'Show next 7 days' }));
+    expect(screen.getByText('NEXT 7 DAYS')).toBeVisible();
+    await fireEvent.press(screen.getByRole('button', { name: 'Splits guide' }));
+    expect(screen.getByRole('header', { name: 'Start from a template' })).toBeVisible();
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByRole('header', { name: 'Plan your days' })).toBeVisible();
   });
 
   it('uses another split from the chosen day', async () => {

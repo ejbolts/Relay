@@ -4,6 +4,7 @@ import { HelpPopup } from './HelpPopup';
 import { Icon } from './Icon';
 import { blockDay } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
+import { freshStartDateError } from './trainingSettings';
 import type { TrainingBlocks } from './types';
 import { localDate } from './utils';
 import './freshStartSetting.css';
@@ -32,12 +33,9 @@ export function FreshStartSetting() {
 
   const add = (event: FormEvent) => {
     event.preventDefault();
-    if (!date || date > today) {
-      setError('Choose a date that is not in the future.');
-      return;
-    }
-    if (freshStarts.includes(date)) {
-      setError('A fresh start already begins on that date.');
+    const error = freshStartDateError(date, today, freshStarts);
+    if (error) {
+      setError(error);
       return;
     }
     void save(api.trainingBlocks.addFreshStart(date), 'Could not add the fresh start.');
