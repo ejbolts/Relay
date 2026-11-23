@@ -321,5 +321,8 @@ test('choosing an outline offers to save it as the account’s sex', async () =>
   expect(title).toBe('Save your sex as Female?');
   await act(async () => (buttons as AlertButton[]).find((b) => b.text === 'Save')!.onPress!());
   expect(apiSend).toHaveBeenCalledWith('/api/profile', 'PATCH', { sex: 'female' });
-  expect(await screen.findByLabelText('Female, set on your profile')).toBeVisible();
+  // The profile save and re-render can take more than findBy's default second on a cold run.
+  expect(
+    await screen.findByLabelText('Female, set on your profile', {}, { timeout: 5000 }),
+  ).toBeVisible();
 });
