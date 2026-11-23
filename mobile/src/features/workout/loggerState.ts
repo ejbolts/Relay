@@ -6,6 +6,7 @@ import { setKindUpdate, type SetKind } from '../../../../frontend/src/setFieldVa
 import type { SessionTemplate } from '../../../../frontend/src/trainingSummary';
 import type {
   Exercise,
+  ExerciseHistoryBaseline,
   TrackedWorkout,
   WorkoutCategory,
   WorkoutType,
@@ -81,6 +82,11 @@ export interface LoggerState {
 export interface LoggerContext {
   /** Recent saved workouts, for last-session suggestions. */
   workouts: TrackedWorkout[];
+  /** Each exercise's history before `workouts`, condensed by the server; null without any. */
+  historyBaselines?: {
+    before: string;
+    byExercise: Map<string, ExerciseHistoryBaseline>;
+  } | null;
   weightUnit: WeightUnit;
   defaultRest: number | null;
   newKey: () => string;
@@ -139,6 +145,7 @@ export function startLogger(options: StartOptions, context: LoggerContext): Logg
     notes: '',
     movements: templateDraftMovements(template?.exercises ?? [], {
       workouts: context.workouts,
+      historyBaselines: context.historyBaselines,
       date: options.date,
       weightUnit: context.weightUnit,
       defaultRest: context.defaultRest,
@@ -311,6 +318,18 @@ const mapMovement = (
   ),
 });
 
+/**
+ * History older than the loaded workouts, for a workout on `date`. It only precedes workouts
+ * inside the window it was condensed for, as on the web.
+ */
+export function olderHistoryFor(
+  context: Pick<LoggerContext, 'historyBaselines'>,
+  date: string,
+): Map<string, ExerciseHistoryBaseline> | null {
+  const baselines = context.historyBaselines;
+  return baselines && date >= baselines.before ? baselines.byExercise : null;
+}
+
 /** Adds exercises from the picker, each with sets suggested from its last session. */
 export function addExercises(
   state: LoggerState,
@@ -335,7 +354,7 @@ export function addExercises(
         exercise,
         state.workoutDate,
         undefined,
-        null,
+        olderHistoryFor(context, state.workoutDate),
         context.defaultRest,
         context.newKey,
       ),

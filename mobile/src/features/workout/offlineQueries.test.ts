@@ -50,6 +50,24 @@ test('one copy per query: a new day replaces yesterday', async () => {
   expect(next.getQueryData(['workout-types'])).toEqual(['types']);
 });
 
+test('a saved workout or older page never replaces the history window', async () => {
+  const client = newClient();
+  const stop = saveOfflineQueries(client, 'u1');
+  await load(client, ['workouts', '2026-09-01'], ['window']);
+  await load(client, ['workouts', 'detail', 'w1'], { id: 'w1' });
+  await load(client, ['workouts', 'baselines', '2026-09-01'], ['older']);
+  await load(client, ['workouts', 'body-measurements'], ['weigh-ins']);
+  await load(client, ['workouts', '2026-10-01'], ['next window']);
+  stop();
+  const next = newClient();
+  seedOfflineQueries(next, 'u1');
+  expect(next.getQueryData(['workouts', '2026-09-01'])).toBeUndefined();
+  expect(next.getQueryData(['workouts', '2026-10-01'])).toEqual(['next window']);
+  expect(next.getQueryData(['workouts', 'detail', 'w1'])).toBeUndefined();
+  expect(next.getQueryData(['workouts', 'baselines', '2026-09-01'])).toEqual(['older']);
+  expect(next.getQueryData(['workouts', 'body-measurements'])).toEqual(['weigh-ins']);
+});
+
 test('another account never sees the copies, and signing out removes them', async () => {
   const client = newClient();
   const stop = saveOfflineQueries(client, 'u1');

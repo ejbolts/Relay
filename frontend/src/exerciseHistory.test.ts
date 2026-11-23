@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type { Exercise, TrackedSet, TrackedWorkout } from './types';
 import {
   historyOnMachine,
+  lastWorkingSessionSets,
   machineAliases,
   machineSuggestionSource,
+  movementHistory,
   recentExerciseHistory,
   withSuggestedSets,
 } from './exerciseHistory';
@@ -191,6 +193,25 @@ describe('machine history', () => {
     expect(weights('hammer')).toEqual([120]);
     expect(weights('new-machine')).toEqual([100]);
     expect(weights(null)).toEqual([100]);
+  });
+
+  it("keeps a movement's own machine sessions, or all of them while it has none", () => {
+    expect(movementHistory(history, 'hammer', aliases).map((item) => item.workoutId)).toEqual([
+      'merged-hammer',
+    ]);
+    expect(movementHistory(history, 'new-machine', aliases)).toEqual(history);
+    expect(movementHistory(history, null, aliases, 2)).toEqual(history.slice(0, 2));
+  });
+
+  it('hints from the last session with working sets, skipping one cut short to warm-ups', () => {
+    const warmupsOnly = {
+      ...entry('warm-ups', undefined, 60),
+      sets: [{ ...trackedSet('w', 0), weight_kg: 60, set_type: 'warmup' as const, warmup: true }],
+    };
+    expect(lastWorkingSessionSets([warmupsOnly, ...history]).map((item) => item.weight_kg)).toEqual(
+      [100],
+    );
+    expect(lastWorkingSessionSets([warmupsOnly])).toEqual([]);
   });
 
   it('uses only the assigned sets from a mixed session, including merged aliases', () => {

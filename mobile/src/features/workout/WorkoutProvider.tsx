@@ -21,6 +21,7 @@ import {
 import { moveDraftToFinishedQueue } from '../../../../frontend/src/finishedWorkoutSend';
 import { buildFinishSummary, type FinishSummary } from '../../../../frontend/src/finishSummary';
 import { readStoredRestTimer, writeStoredRestTimer } from '../../../../frontend/src/liveRestTimer';
+import { nextSetAfterRest } from '../../../../frontend/src/restComplete';
 import { typeSessionTemplate } from '../../../../frontend/src/routines';
 import { sessionTemplateFor, type SessionTemplate } from '../../../../frontend/src/trainingSummary';
 import type {
@@ -77,7 +78,9 @@ import {
   type LoggerContext,
   type LoggerState,
 } from './loggerState';
+import { useHistoryBaselines } from './loggerQueries';
 import { forgetOfflineQueries, saveOfflineQueries, seedOfflineQueries } from './offlineQueries';
+import { askForRestAlerts, syncRestAlert } from './restAlerts';
 import {
   adjustRest as adjustRestRule,
   NO_REST,
@@ -317,6 +320,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const exercisesQuery = useExercises();
   const preferences = useTrainingPreferences();
   const upNext = useUpNext();
+  const historyBaselines = useHistoryBaselines();
   const history = useMemo(() => historyQuery.data ?? [], [historyQuery.data]);
   const types = typesQuery.data ?? DEFAULT_WORKOUT_TYPES;
   // Only a first load in progress holds up Finish; offline, the saved or built-in types apply.
@@ -326,8 +330,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const fetchedExercises = exercisesQuery.data;
 
   const context = useMemo<LoggerContext>(
-    () => ({ workouts: history, weightUnit, defaultRest, newKey: newId }),
-    [history, weightUnit, defaultRest],
+    () => ({ workouts: history, historyBaselines, weightUnit, defaultRest, newKey: newId }),
+    [history, historyBaselines, weightUnit, defaultRest],
   );
 
   // The workout a closed app left behind, restored before the first frame.
@@ -437,6 +441,20 @@ const WorkoutEngine = memo(function WorkoutEngine({
     };
   }, [rest.timer, commitRest]);
 
+  // The phone alerts when a rest ends in the background; the alert follows every change to it.
+  useEffect(() => {
+    const current = loggerRef.current;
+    const next =
+      current && (rest.timer || rest.done)
+        ? nextSetAfterRest(current.movements, rest.timer?.movementKey ?? null, weightUnit)
+        : null;
+    void syncRestAlert(
+      rest,
+      next ? [next.exercise, next.set, next.target].filter(Boolean).join(' · ') : null,
+    );
+  }, [rest, weightUnit]);
+  useEffect(() => () => void syncRestAlert(NO_REST, null), []);
+
   // Finished workouts send until the server confirms them, retrying when the connection or the
   // app comes back.
   const senderRef = useRef<FinishedQueueSender | null>(null);
@@ -508,6 +526,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
 
   const startRest = useCallback(
     (seconds: number, movementKey: string | null = null) => {
+      void askForRestAlerts();
       commitRest(startRestRule(seconds, movementKey, Date.now(), newId()));
       // A rest started while paused waits for the workout to resume.
       if (loggerRef.current?.pause.pausedAt != null)
