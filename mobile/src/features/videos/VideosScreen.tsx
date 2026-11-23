@@ -25,6 +25,7 @@ import { useUser } from '../../session/SessionProvider';
 import { Button, Card, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { showMenu } from '../../ui/prompts';
+import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { useAccountGuard } from '../admin/accountGuard';
 import { DateField } from '../body/DateField';
@@ -41,6 +42,19 @@ import {
 import { YouTubeCard } from './YouTubeCard';
 
 type Step = 'upload' | 'progress' | 'processing' | 'complete';
+/**
+ * What the batch is doing with the server: creating its session, uploading clips, starting
+ * processing (or reading back whether it started), or stopping. One runs at a time.
+ */
+type Phase = 'idle' | 'creating' | 'uploading' | 'starting' | 'stopping';
+
+// The phases that can't be interrupted: leaving waits for them, with this reason.
+const HOLD_REASONS: Partial<Record<Phase, string>> = {
+  creating: 'Wait while the session is created.',
+  starting: 'Wait until processing has started.',
+  stopping: 'Wait while the upload stops.',
+};
+const STILL_UPLOADABLE: WorkoutSession['status'][] = ['draft', 'uploading', 'upload_failed'];
 
 /**
  * The web's videos tab: record or pick each set's video, upload the batch, then follow it while
@@ -74,6 +88,15 @@ function VideoUploader() {
   const [message, setMessage] = useState<string | null>(null);
   // Every clip uploaded but the request to start processing failed: offer to start it again.
   const [processFailed, setProcessFailed] = useState(false);
+  const [phase, setPhaseState] = useState<Phase>('idle');
+  // Read synchronously, so a second action in the same frame sees the first.
+  const phaseRef = useRef<Phase>('idle');
+  function setPhase(next: Phase) {
+    phaseRef.current = next;
+    setPhaseState(next);
+  }
+  // A function, so a check after an await reads the phase as it is then.
+  const currentPhase = () => phaseRef.current;
   const ready = youtubeReady(youtube.data ?? null);
   const guard = useAccountGuard();
   // The batch's uploads: `stopped` keeps workers from starting another clip, and each transfer
@@ -85,27 +108,108 @@ function VideoUploader() {
     stopped.current = true;
     for (const transfer of transfers.current) transfer.stop();
     transfers.current.clear();
+    // Clips cut off part-way can be sent again with Retry failed uploads.
+    setClips((current) =>
+      current.map((clip) =>
+        clip.status === 'uploading' || clip.status === 'waiting'
+          ? { ...clip, status: 'failed', error: 'Stopped.' }
+          : clip,
+      ),
+    );
   }
 
-  // The batch exists only on this screen, so it can't be left while it is uploading or waiting to
-  // start processing: leaving asks first, then stops every upload and cancels the batch on the
-  // server, so nothing keeps sending clips to a session nobody can see.
-  usePreventRemove(step === 'progress', ({ repeat }) =>
-    Alert.alert('Stop this upload?', 'The clips sent so far are discarded with the session.', [
-      { text: 'Keep uploading', style: 'cancel' },
-      {
-        text: 'Stop and leave',
-        style: 'destructive',
-        onPress: () => {
-          const target = session;
-          stopUploads();
-          if (target) void videoApi.cancel(target.id).catch(() => undefined);
-          setStep('upload');
-          repeat();
+  /** Shows a session as the server reports it, whichever request it came from. */
+  function follow(next: WorkoutSession) {
+    setSession(next);
+    if (next.status === 'complete') setStep('complete');
+    else if (!STILL_UPLOADABLE.includes(next.status)) setStep('processing');
+    else setStep('progress');
+  }
+
+  /**
+   * Stops every upload, then cancels the session once the server confirms it, and with `discard`
+   * deletes it and its clips too. If processing had already started, the session can't be
+   * cancelled: the screen shows its status instead. Resolves true once everything asked is done.
+   */
+  async function stopAndCancel(target: WorkoutSession, discard: boolean): Promise<boolean> {
+    setPhase('stopping');
+    stopUploads();
+    setProcessFailed(false);
+    setMessage(null);
+    const check = guard();
+    try {
+      let cancelled: WorkoutSession;
+      try {
+        cancelled = await videoApi.cancel(target.id);
+      } catch (reason) {
+        if (!check.open()) return false;
+        if (reason instanceof ApiError && reason.code === 'cannot_cancel') {
+          try {
+            follow(await videoApi.get(target.id));
+          } catch {
+            setStep('processing');
+          }
+          setMessage('Processing had already started, so this session carries on.');
+        } else setMessage(errorMessage(reason));
+        return false;
+      }
+      if (!check.open()) return false;
+      follow(cancelled);
+      if (!discard) return true;
+      try {
+        await videoApi.remove(target.id);
+      } catch (reason) {
+        if (check.open())
+          setMessage(`The session is cancelled but couldn’t be deleted. ${errorMessage(reason)}`);
+        return false;
+      }
+      return true;
+    } finally {
+      setPhase('idle');
+    }
+  }
+
+  // The batch exists only on this screen, so it can't be left while it is being created,
+  // uploaded or started. Leaving an upload asks first, then stops every clip, cancels the session
+  // and deletes it, and leaves only once the server has confirmed both. While a session is being
+  // created or processing is starting, leaving waits.
+  const holding = step === 'progress' || phase !== 'idle';
+  const leave = useRef<(() => void) | null>(null);
+  usePreventRemove(holding, ({ repeat }) => {
+    const reason = HOLD_REASONS[currentPhase()];
+    if (reason) {
+      showToast(reason);
+      return;
+    }
+    const target = session;
+    if (!target) {
+      repeat();
+      return;
+    }
+    Alert.alert(
+      'Stop and discard this upload?',
+      'Uploading stops, and this session and the clips sent so far are deleted.',
+      [
+        { text: 'Keep uploading', style: 'cancel' },
+        {
+          text: 'Stop and discard',
+          style: 'destructive',
+          onPress: () => {
+            void stopAndCancel(target, true).then((done) => {
+              // Leaves once the screen no longer holds; otherwise it stays with the reason shown.
+              if (done) leave.current = repeat;
+            });
+          },
         },
-      },
-    ]),
-  );
+      ],
+    );
+  });
+  useEffect(() => {
+    if (holding || !leave.current) return;
+    const go = leave.current;
+    leave.current = null;
+    go();
+  });
 
   // Signing out unmounts the screen: stop sending this account's clips.
   useEffect(() => {
@@ -228,87 +332,92 @@ function VideoUploader() {
    * Starts processing the uploaded batch. When the answer is lost or refused, the session is read
    * back first: if the server already started it, the screen follows it; otherwise Start
    * processing stays offered. Retrying asks the same session again, so it can't make another.
+   * Cancel and leaving wait while this runs.
    */
   async function beginProcessing(target: WorkoutSession) {
-    const current = guard();
+    setPhase('starting');
     setProcessFailed(false);
+    const check = guard();
     try {
-      const started = await videoApi.process(target.id);
-      if (!current()) return;
-      setSession(started);
-      setStep('processing');
-      return;
-    } catch (reason) {
-      if (!current()) return;
-      const alreadyStarted =
-        reason instanceof ApiError && ALREADY_PROCESSING_CODES.includes(reason.code ?? '');
       try {
-        const latest = await videoApi.get(target.id);
-        if (!current()) return;
-        if (alreadyStarted || !['draft', 'uploading', 'upload_failed'].includes(latest.status)) {
-          setSession(latest);
-          setStep(latest.status === 'complete' ? 'complete' : 'processing');
-          return;
+        const started = await videoApi.process(target.id);
+        if (check.open()) follow(started);
+        return;
+      } catch (reason) {
+        if (!check.open()) return;
+        const alreadyStarted =
+          reason instanceof ApiError && ALREADY_PROCESSING_CODES.includes(reason.code ?? '');
+        try {
+          const latest = await videoApi.get(target.id);
+          if (!check.open()) return;
+          if (alreadyStarted || !STILL_UPLOADABLE.includes(latest.status)) {
+            follow(latest);
+            return;
+          }
+        } catch {
+          // Still unreachable: offer Start processing again below.
         }
-      } catch {
-        // Still unreachable: offer Start processing again below.
+        setProcessFailed(true);
+        setMessage(errorMessage(reason));
       }
-      setProcessFailed(true);
-      setMessage(errorMessage(reason));
+    } finally {
+      if (currentPhase() === 'starting') setPhase('idle');
     }
   }
 
   async function startUpload() {
     if (!name.trim() || !date || !clips.length || busy || !ready) return;
+    if (currentPhase() !== 'idle') return;
     setBusy(true);
     setMessage(null);
+    stopped.current = false;
+    setPhase('creating');
+    const check = guard();
     try {
-      stopped.current = false;
       const created = await videoApi.create({
         name: name.trim(),
         workout_date: date,
         notes: notes.trim() || null,
         expected_clip_count: clips.length,
       });
+      if (!check.open()) return;
       setSession(created);
       setStep('progress');
-      if (await uploadClips(created, clips)) await beginProcessing(created);
-      else if (stopped.current) return;
+      setPhase('uploading');
+      const uploaded = await uploadClips(created, clips);
+      if (uploaded && currentPhase() === 'uploading') await beginProcessing(created);
     } catch (reason) {
-      setMessage(errorMessage(reason));
+      if (check.open()) setMessage(errorMessage(reason));
     } finally {
       setBusy(false);
+      if (currentPhase() === 'creating' || currentPhase() === 'uploading') setPhase('idle');
     }
   }
 
   async function retryFailedUploads() {
-    if (!session || busy) return;
+    if (!session || busy || currentPhase() !== 'idle') return;
     setBusy(true);
     setMessage(null);
+    stopped.current = false;
+    setPhase('uploading');
     try {
-      stopped.current = false;
       const failed = clips.filter((clip) => clip.status === 'failed');
-      if (await uploadClips(session, failed)) await beginProcessing(session);
+      const uploaded = await uploadClips(session, failed);
+      if (uploaded && currentPhase() === 'uploading') await beginProcessing(session);
     } finally {
       setBusy(false);
+      if (currentPhase() === 'uploading') setPhase('idle');
     }
   }
 
-  async function cancelSession() {
-    if (!session) return;
-    // Stops the uploads still running first, so none reach the session after it is cancelled.
-    stopUploads();
-    setProcessFailed(false);
-    try {
-      setSession(await videoApi.cancel(session.id));
-      setStep('processing');
-    } catch (reason) {
-      setMessage(errorMessage(reason));
-    }
+  function cancelSession() {
+    // Waits for a start that is on its way, so the two never cross.
+    if (!session || currentPhase() === 'starting' || currentPhase() === 'stopping') return;
+    void stopAndCancel(session, false);
   }
 
   async function retryProcessingStart(target: WorkoutSession) {
-    if (busy) return;
+    if (busy || currentPhase() !== 'idle') return;
     setBusy(true);
     setMessage(null);
     try {
@@ -407,14 +516,22 @@ function VideoUploader() {
         {failed && (
           <Button
             label="Retry failed uploads"
-            disabled={busy}
+            disabled={busy || phase !== 'idle'}
             onPress={() => void retryFailedUploads()}
           />
         )}
-        {processFailed && !failed && !busy && (
+        {phase === 'starting' && (
+          <Text style={[type.callout, { color: colors.secondary }]}>Starting processing…</Text>
+        )}
+        {processFailed && !failed && !busy && phase === 'idle' && (
           <Button label="Start processing" onPress={() => void retryProcessingStart(session)} />
         )}
-        <Button label="Cancel session" variant="secondary" onPress={() => void cancelSession()} />
+        <Button
+          label={phase === 'stopping' ? 'Stopping…' : 'Cancel session'}
+          variant="secondary"
+          disabled={phase === 'starting' || phase === 'stopping'}
+          onPress={cancelSession}
+        />
       </SettingsPage>
     );
   }

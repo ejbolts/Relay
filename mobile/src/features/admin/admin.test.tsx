@@ -19,7 +19,9 @@ import { showToast } from '../../ui/Toast';
 import { AdminAccountScreen } from './AdminAccountScreen';
 import { AdminScreen } from './AdminScreen';
 import { AdminServerScreen } from './AdminServerScreen';
+import { AdminUsernameScreen } from './AdminUsernameScreen';
 import AdminLayout from '../../app/admin/_layout';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
 import { AdminSettingsSection } from './AdminSettingsSection';
 
 // A full parallel run is slow to render the first screen.
@@ -309,21 +311,8 @@ it('disables an account, changes its username and dismisses its request', async 
   await waitFor(() => expect(showToast).toHaveBeenCalledWith('Riley is disabled and signed out.'));
   expect(await screen.findByRole('button', { name: 'Enable account' })).toBeTruthy();
 
-  // The editor stays open with what was typed and shows why beside the field.
   await fireEvent.press(screen.getByRole('button', { name: 'Change username' }));
-  const field = await screen.findByLabelText('Username');
-  await fireEvent.changeText(field, 'x');
-  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-  expect(await screen.findByRole('alert')).toBeTruthy();
-  expect(screen.getByLabelText('Username').props.value).toBe('x');
-  await fireEvent.changeText(screen.getByLabelText('Username'), 'casey');
-  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-  expect(await screen.findByText('This username is already registered.')).toBeTruthy();
-  expect(screen.getByLabelText('Username').props.value).toBe('casey');
-  await fireEvent.changeText(screen.getByLabelText('Username'), 'Riley.R ');
-  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
-  await waitFor(() => expect(showToast).toHaveBeenCalledWith('Riley’s username is now @riley.r.'));
-  await waitFor(() => expect(screen.queryByLabelText('Username')).toBeNull());
+  expect(mockRouter.push).toHaveBeenCalledWith('/admin/username/riley');
 
   await fireEvent.press(screen.getByRole('button', { name: 'Dismiss request' }));
   await waitFor(() =>
@@ -387,13 +376,31 @@ it('drops a settings save and its profile refresh that answer after signing out'
   await fireEvent.press(await screen.findByRole('button', { name: /^Video uploads/ }));
   const options = jest.mocked(showMenu).mock.lastCall![1];
   await act(async () => options.find((option) => option.label === 'Everyone')!.onPress());
-  // Signing out unmounts every signed-in screen and clears the account's cached data.
+  // Signing out moves the provider's session on, unmounts every signed-in screen and clears the
+  // account's cached data (the full provider transition is in accountGuard.test.tsx).
+  nextSessionEpoch();
   await act(async () => screen.unmount());
   client.clear();
   await act(async () => saved.resolve({ ...settings, video_uploads: 'everyone' }));
   expect(client.getQueryData(['admin', 'settings'])).toBeUndefined();
   expect(apiGet).not.toHaveBeenCalledWith('/api/auth/me');
   expect(mockSession.updateUser).not.toHaveBeenCalled();
+  expect(showToast).not.toHaveBeenCalled();
+});
+
+it('still saves a confirmed setting and refreshes the profile after an ordinary Back', async () => {
+  const saved = deferred<ServerSettings>();
+  jest.mocked(apiSend).mockImplementation(() => saved.promise as never);
+  await open(<AdminScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: /^Video uploads/ }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Off')!.onPress());
+  // Back closes the console; the same account is still signed in.
+  await act(async () => screen.unmount());
+  await act(async () => saved.resolve({ ...settings, video_uploads: 'off' }));
+  await waitFor(() => expect(mockSession.updateUser).toHaveBeenCalled());
+  expect(client.getQueryData<ServerSettings>(['admin', 'settings'])?.video_uploads).toBe('off');
+  // The console is gone, so no toast.
   expect(showToast).not.toHaveBeenCalled();
 });
 
@@ -446,6 +453,77 @@ it('keeps the screen and Reset locked until a reset answers, then asks before le
   expect(repeat).toHaveBeenCalledTimes(1);
 });
 
+it('never sends a second reset for an account from another copy of its screen', async () => {
+  jest.spyOn(Alert, 'alert');
+  mockParams = { id: 'riley' };
+  const reset = deferred<{ temporary_password: string }>();
+  jest.mocked(apiSend).mockImplementation(() => reset.promise as never);
+  await open(<AdminAccountScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Reset password' }));
+  await answerAlert('Reset and sign out');
+  // The same account opened again elsewhere, such as from a notice, while the first is waiting.
+  await screen.rerender(
+    wrapped(
+      <>
+        <AdminAccountScreen />
+        <AdminAccountScreen />
+      </>,
+    ),
+  );
+  const buttons = await screen.findAllByRole('button', { name: 'Reset password' });
+  await fireEvent.press(buttons[1]);
+  await answerAlert('Reset and sign out');
+  expect(apiSend).toHaveBeenCalledTimes(1);
+  await act(async () => reset.resolve({ temporary_password: 'brisk-otter-42' }));
+});
+
+it('keeps the typed username and its error beside the field until a name saves', async () => {
+  mockParams = { id: 'riley' };
+  jest.mocked(apiSend).mockImplementation(async (_path, _method, body) => {
+    if ((body as { username: string }).username === 'casey')
+      throw new ApiError(409, 'Taken', 'username_taken');
+    return { ...riley, username: 'riley.r' };
+  });
+  await open(<AdminUsernameScreen />);
+  const field = await screen.findByLabelText('Username');
+  await fireEvent.changeText(field, 'x');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  expect(await screen.findByRole('alert')).toBeTruthy();
+  expect(screen.getByLabelText('Username').props.value).toBe('x');
+  expect(apiSend).not.toHaveBeenCalled();
+  await fireEvent.changeText(screen.getByLabelText('Username'), 'casey');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  expect(await screen.findByText('This username is already registered.')).toBeTruthy();
+  expect(screen.getByLabelText('Username').props.value).toBe('casey');
+  expect(mockRouter.back).not.toHaveBeenCalled();
+  await fireEvent.changeText(screen.getByLabelText('Username'), 'Riley.R ');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(showToast).toHaveBeenCalledWith('Riley’s username is now @riley.r.'));
+  await waitFor(() => expect(mockRouter.back).toHaveBeenCalledTimes(1));
+  expect(
+    client.getQueryData<AdminUser[]>(['admin', 'users'])?.find((row) => row.id === 'riley')
+      ?.username,
+  ).toBe('riley.r');
+});
+
+it('holds leaving the username screen while its save is on its way', async () => {
+  mockParams = { id: 'riley' };
+  const rename = deferred<AdminUser>();
+  jest.mocked(apiSend).mockImplementation(() => rename.promise as never);
+  await open(<AdminUsernameScreen />);
+  await fireEvent.changeText(await screen.findByLabelText('Username'), 'riley.r');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  // A second press while the first is on its way sends nothing.
+  await fireEvent.press(screen.getByRole('button', { name: 'Saving…' }));
+  expect(apiSend).toHaveBeenCalledTimes(1);
+  expect(mockPrevent.blocking).toBe(true);
+  await act(async () => mockPrevent.onLeave?.({ repeat: jest.fn() }));
+  expect(showToast).toHaveBeenCalledWith('Wait for the username to save.');
+  await act(async () => rename.resolve({ ...riley, username: 'riley.r' }));
+  await waitFor(() => expect(mockRouter.back).toHaveBeenCalledTimes(1));
+  expect(mockPrevent.blocking).toBe(false);
+});
+
 it('lets leaving go once the temporary password is dismissed', async () => {
   jest.spyOn(Alert, 'alert');
   mockParams = { id: 'riley' };
@@ -495,4 +573,29 @@ it('keeps live activity that arrived while an older account list was loading', a
   // The list was read before the workout started, so it still shows Casey idle.
   await act(async () => list.resolve([owner, casey, riley]));
   expect(await screen.findByText('Live · Leg day')).toBeTruthy();
+});
+
+it('holds leaving while the reset confirmation is open, so a late answer is never lost', async () => {
+  jest.spyOn(Alert, 'alert');
+  mockParams = { id: 'riley' };
+  jest.mocked(apiSend).mockResolvedValue({ temporary_password: 'brisk-otter-42' });
+  await open(<AdminAccountScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Reset password' }));
+  // Back reaches the screen before the confirmation's answer does.
+  expect(mockPrevent.blocking).toBe(true);
+  const repeat = jest.fn();
+  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  expect(repeat).not.toHaveBeenCalled();
+  await answerAlert('Reset and sign out');
+  expect(await screen.findByText('brisk-otter-42')).toBeTruthy();
+});
+
+it('lets leaving go again when the reset confirmation is cancelled', async () => {
+  jest.spyOn(Alert, 'alert');
+  mockParams = { id: 'riley' };
+  await open(<AdminAccountScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Reset password' }));
+  await answerAlert('Cancel');
+  expect(mockPrevent.blocking).toBe(false);
+  expect(apiSend).not.toHaveBeenCalled();
 });

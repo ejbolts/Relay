@@ -1,27 +1,33 @@
 import { useCallback, useEffect, useRef } from 'react';
-import { useUser } from '../../session/SessionProvider';
+import { sessionEpoch } from '../../session/sessionEpoch';
+
+/** Checks for one request, taken when it starts. */
+export interface AccountCheck {
+  /**
+   * The session that sent the request is still the signed-in one. Results bound to the account,
+   * such as cache writes and a profile refresh, need only this: a confirmed change still lands
+   * after an ordinary Back, but never after a sign-out or another account's sign-in.
+   */
+  sameSession: () => boolean;
+  /** The same session, and the screen that sent it is still open: for local state and toasts. */
+  open: () => boolean;
+}
 
 /**
- * Guards a request's result against a change of account. Call it before the request; the
- * returned check is true only while the same account is still signed in and the screen that sent
- * it is still open. Signing out unmounts every signed-in screen, so a response that arrives after
- * another account signs in is dropped instead of writing the previous account's data.
+ * Guards a request's results against a change of account. Call the returned function when a
+ * request starts; it is based on SessionProvider's session number, not on the screen's lifetime.
  */
 export function useAccountGuard() {
-  const user = useUser();
-  const account = useRef(user.id);
   const mounted = useRef(true);
-  useEffect(() => {
-    account.current = user.id;
-  }, [user.id]);
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
     };
   }, []);
-  return useCallback(() => {
-    const started = account.current;
-    return () => mounted.current && account.current === started;
+  return useCallback((): AccountCheck => {
+    const started = sessionEpoch();
+    const sameSession = () => sessionEpoch() === started;
+    return { sameSession, open: () => sameSession() && mounted.current };
   }, []);
 }
