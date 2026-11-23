@@ -54,7 +54,7 @@ function loadSplitRoutine(split: TrainingSplit): Promise<Routine | null> {
 function titleFor(plan: PlannedDay): string {
   switch (plan.kind) {
     case 'training':
-      return `${plan.type.name} day`;
+      return `${[plan.type, ...plan.extraTypes].map((type) => type.name).join(' + ')} day`;
     case 'rest':
       return 'Rest day';
     case 'update':

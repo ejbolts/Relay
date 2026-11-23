@@ -264,6 +264,48 @@ describe('the split editor', () => {
     expect(apiSend).not.toHaveBeenCalled();
   });
 
+  it('mixes workout types on a day and saves them with it', async () => {
+    mockParams = { id: 'ul' };
+    await show(<SplitEditorScreen />);
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Add a workout type to day 1' }),
+    );
+    const choices = jest.mocked(showMenu).mock.calls.at(-1)![1];
+    // The day's main type isn't offered again.
+    expect(choices.map((item) => item.label)).not.toContain('Upper body');
+    await act(async () => choices.find((item) => item.label === 'Cardio')!.onPress());
+    expect(screen.getByText('Day 1 · Upper body + Cardio')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Day 1 workout type 2: Cardio' })).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Save split' }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    const [, , body] = jest.mocked(apiSend).mock.calls[0];
+    const saved = body as Routine;
+    expect(saved.days.map((item) => item.extra_workout_type_ids)).toEqual([['cardio'], []]);
+  });
+
+  it('removes an extra workout type from a mixed day', async () => {
+    mockParams = { id: 'ul' };
+    const mixed = { ...upper, days: [{ ...day('upper'), extra_workout_type_ids: ['cardio'] }] };
+    jest.mocked(apiGet).mockImplementation(async (path: string) => {
+      const key = path.split('?')[0];
+      if (key === '/api/routines') return [ppl, mixed];
+      if (key === '/api/training-split') return split;
+      if (key === '/api/workout-types') return DEFAULT_WORKOUT_TYPES;
+      if (key === '/api/exercises') return [bench];
+      if (key === '/api/workouts/snapshot') return { revision: '1', workouts: [] };
+      if (key === '/api/training-preferences') return preferences;
+      return { heart_rate_zones: [], goals: [] };
+    });
+    await show(<SplitEditorScreen />);
+    await fireEvent.press(
+      await screen.findByRole('button', { name: 'Day 1 workout type 2: Cardio' }),
+    );
+    const options = jest.mocked(showMenu).mock.calls.at(-1)![1];
+    await act(async () => options.find((item) => item.label === 'Remove from this day')!.onPress());
+    expect(screen.getByText('Day 1 · Upper body')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /workout type 2/ })).toBeNull();
+  });
+
   it('shows the weekly volume against the goals and which days supply it', async () => {
     mockParams = { id: 'ppl' };
     await show(<SplitEditorScreen />);

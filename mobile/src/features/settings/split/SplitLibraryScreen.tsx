@@ -318,9 +318,18 @@ function Cycle({ routine }: { routine: Routine }) {
             <View
               style={[
                 styles.cycleBar,
-                { backgroundColor: day.workout_type?.color ?? colors.deemph },
+                { backgroundColor: day.workout_type?.color ?? colors.deemph, overflow: 'hidden' },
               ]}
-            />
+            >
+              {/* A mixed day stacks a band of each type's colour. */}
+              {(day.extra_workout_types?.length ?? 0) > 0 &&
+                [day.workout_type, ...(day.extra_workout_types ?? [])].map((item, at) => (
+                  <View
+                    key={at}
+                    style={{ flex: 1, backgroundColor: item?.color ?? colors.deemph }}
+                  />
+                ))}
+            </View>
             <Text style={[type.callout, type.number, { color: colors.muted, width: 22 }]}>
               {index + 1}
             </Text>

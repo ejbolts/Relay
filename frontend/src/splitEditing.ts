@@ -2,7 +2,13 @@
 // library and the native app (mobile/). Keep this file free of packages and browser APIs: the
 // app bundles it as it is.
 import { CARDIO_ROW, dayCardioMinutes, daySetCredits, formatVolume } from './splitTargets';
-import { followsWorkouts, MAX_SPLIT_DAYS, SPLIT_TEMPLATES } from './trainingSplit';
+import {
+  followsWorkouts,
+  MAX_EXTRA_DAY_TYPES,
+  MAX_SPLIT_DAYS,
+  SPLIT_TEMPLATES,
+  splitDayTypeIds,
+} from './trainingSplit';
 import type {
   Exercise,
   Routine,
@@ -28,9 +34,34 @@ export const splitFailure = (reason: unknown) =>
 export const splitDayCount = (days: RoutineDay[]) =>
   `${days.length} ${days.length === 1 ? 'day' : 'days'}`;
 
-/** A day's workout type, Rest, or Removed type when its type no longer exists. */
-export function splitDayName(day: RoutineDay): string {
-  return day.workout_type?.name ?? (day.workout_type_id ? 'Removed type' : 'Rest');
+/**
+ * A mixed day's other workout types, from your types or, for a friend's split, the server's;
+ * null where a type no longer exists.
+ */
+export function splitDayExtraTypes(day: RoutineDay, types: WorkoutType[]): (WorkoutType | null)[] {
+  return (day.extra_workout_type_ids ?? []).map(
+    (id) =>
+      types.find((t) => t.id === id) ?? day.extra_workout_types?.find((t) => t.id === id) ?? null,
+  );
+}
+
+/** Every workout type a day plans that still exists, the main one first. */
+export function splitDayTypes(day: RoutineDay, types: WorkoutType[]): WorkoutType[] {
+  if (!day.workout_type_id) return [];
+  return [day.workout_type, ...splitDayExtraTypes(day, types)].filter(
+    (type): type is WorkoutType => !!type,
+  );
+}
+
+/**
+ * A day's workout type, "Upper body + Cardio" on a mixed day, Rest, or Removed type when its
+ * type no longer exists.
+ */
+export function splitDayName(day: RoutineDay, types: WorkoutType[] = []): string {
+  if (!day.workout_type_id) return 'Rest';
+  return [day.workout_type, ...splitDayExtraTypes(day, types)]
+    .map((type) => type?.name ?? 'Removed type')
+    .join(' + ');
 }
 
 /** A template's name in the library; FBEOD reads as what it is. */
@@ -94,6 +125,7 @@ export function legacySplitRoutine(
     days: split.steps.map((step) => ({
       workout_type_id: step.workout_type_id,
       workout_type: types.find((t) => t.id === step.workout_type_id) ?? null,
+      extra_workout_type_ids: step.extra_workout_type_ids ?? [],
       movements: [],
     })),
   };
@@ -109,7 +141,10 @@ export function hasSplitTemplate(routines: Routine[] | null, preset: SplitTempla
   return (routines ?? []).some(
     (routine) =>
       routine.days.length === preset.types.length &&
-      routine.days.every((day, index) => day.workout_type_id === preset.types[index]),
+      routine.days.every(
+        (day, index) =>
+          day.workout_type_id === preset.types[index] && !day.extra_workout_type_ids?.length,
+      ),
   );
 }
 
@@ -153,8 +188,11 @@ export function routineSaveError(routine: Routine, types: WorkoutType[]): string
   )
     return 'Starting weights must be no more than 10,000 kg.';
   if (
-    routine.days.some(
-      (item) => item.workout_type_id && types.find((t) => t.id === item.workout_type_id)?.archived,
+    routine.days.some((item) =>
+      splitDayTypeIds(item).some((id) => {
+        const type = types.find((t) => t.id === id);
+        return !type || type.archived;
+      }),
     )
   )
     return 'Choose an active workout type for every workout day.';
@@ -177,14 +215,61 @@ export function moveSplitDay(days: RoutineDay[], index: number, direction: -1 | 
   return next;
 }
 
-/** A day with another workout type, or Rest (null), which plans no exercises. */
+/**
+ * A day with another main workout type, or Rest (null), which plans no exercises or other types.
+ * A type the day already had as an extra moves up to replace the main one.
+ */
 export function withSplitDayType(day: RoutineDay, type: WorkoutType | null): RoutineDay {
   return {
     ...day,
     workout_type_id: type?.id ?? null,
     workout_type: type,
+    extra_workout_type_ids: type
+      ? (day.extra_workout_type_ids ?? []).filter((id) => id !== type.id)
+      : [],
     movements: type ? day.movements : [],
   };
+}
+
+/** Whether a training day can add another workout type, making or extending a mixed day. */
+export function canAddSplitDayType(day: RoutineDay, types: WorkoutType[]): boolean {
+  return (
+    !!day.workout_type_id &&
+    (day.extra_workout_type_ids?.length ?? 0) < MAX_EXTRA_DAY_TYPES &&
+    !!nextSplitDayType(day, types)
+  );
+}
+
+/** The type a new extra starts as: the first active type the day doesn't plan yet. */
+export function nextSplitDayType(day: RoutineDay, types: WorkoutType[]): WorkoutType | null {
+  const planned = splitDayTypeIds(day);
+  return types.find((t) => !t.archived && !planned.includes(t.id)) ?? null;
+}
+
+/** Workout types a mixed day's extra at `index` can switch to: active ones not already planned. */
+export function splitDayExtraChoices(
+  day: RoutineDay,
+  index: number,
+  types: WorkoutType[],
+): WorkoutType[] {
+  const current = day.extra_workout_type_ids?.[index];
+  const planned = splitDayTypeIds(day);
+  return types.filter((t) => t.id === current || (!t.archived && !planned.includes(t.id)));
+}
+
+/**
+ * A day with its extra workout type at `index` set to `type`, or removed (null). An index past
+ * the end adds the type.
+ */
+export function withSplitDayExtraType(
+  day: RoutineDay,
+  index: number,
+  type: WorkoutType | null,
+): RoutineDay {
+  const extras = [...(day.extra_workout_type_ids ?? [])];
+  if (type) extras.splice(index, 1, type.id);
+  else extras.splice(index, 1);
+  return { ...day, extra_workout_type_ids: extras };
 }
 
 export const emptyRoutineSet = (): RoutineSet => ({
@@ -315,15 +400,23 @@ export function scheduledSplit(
     name: saved.name,
     routine_id: saved.id,
     ...schedule,
-    steps: saved.days.map((day) => ({ workout_type_id: day.workout_type_id })),
+    steps: saved.days.map((day) => ({
+      workout_type_id: day.workout_type_id,
+      extra_workout_type_ids: day.extra_workout_type_ids ?? [],
+    })),
   };
 }
 
-/** A preview day's label: its workout type, Rest, Not started, or Removed type. */
-export function splitPreviewDayLabel(types: WorkoutType[], id: string | null | undefined): string {
-  return id === null
-    ? 'Rest'
-    : id === undefined
-      ? 'Not started'
-      : (types.find((t) => t.id === id)?.name ?? 'Removed type');
+/**
+ * A preview day's label: its workout types ("Upper body + Cardio"), Rest, Not started, or Removed
+ * type. Pass the day's `typeIds` to name every type of a mixed day.
+ */
+export function splitPreviewDayLabel(
+  types: WorkoutType[],
+  id: string | null | undefined,
+  ids: readonly string[] = id ? [id] : [],
+): string {
+  if (id === null) return 'Rest';
+  if (id === undefined) return 'Not started';
+  return ids.map((item) => types.find((t) => t.id === item)?.name ?? 'Removed type').join(' + ');
 }

@@ -18,6 +18,7 @@ import { RoutineMovementList } from './RoutineMovementList';
 import { SplitVolumeChart } from './SplitVolumeChart';
 import {
   canAddSplitDay,
+  canAddSplitDayType,
   hasSplitTemplate,
   legacySplitRoutine,
   moveSplitDay,
@@ -27,15 +28,21 @@ import {
   shareSplitError,
   splitDayContribution as dayContribution,
   splitDayCount as dayCount,
+  splitDayExtraChoices,
+  splitDayExtraTypes,
   splitDayName,
   splitDaySummary as daySummary,
   splitDayTotal,
+  splitDayTypes,
   splitFailure as failure,
   splitsActiveFirst,
   splitTemplateName,
   splitTypeNameError,
+  nextSplitDayType,
+  withSplitDayExtraType,
   withSplitDayType,
 } from './splitEditing';
+import { dayStripes } from './dayColors';
 import { exerciseMuscles } from './splitTargets';
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import { useWorkoutTypes } from './workoutTypesContext';
@@ -44,19 +51,29 @@ import { formatWeight } from './weightUnits';
 import { NEW_WORKOUT_TYPE_COLOR } from './workoutTypes';
 import { localDate } from './utils';
 import { SPLIT_TEMPLATES } from './trainingSplit';
-import type { Exercise, Routine, RoutineDay, TrainingSplit } from './types';
+import type { Exercise, Routine, RoutineDay, TrainingSplit, WorkoutType } from './types';
 import './routines.css';
 
+/** A day's colour: its workout type's, or stripes of each type on a mixed day. */
+function dayColour(day: RoutineDay, types: WorkoutType[], direction?: string): string | null {
+  const colours = splitDayTypes(day, types).map((type) => type.color);
+  return colours.length ? dayStripes(colours, direction) : null;
+}
+
 function RoutinePattern({ days }: { days: RoutineDay[] }) {
+  const { types } = useWorkoutTypes();
   return (
     <span className="routine-pattern" aria-hidden="true">
-      {days.map((day, index) => (
-        <i
-          key={index}
-          className={day.workout_type ? undefined : 'is-rest'}
-          style={day.workout_type ? { background: day.workout_type.color } : undefined}
-        />
-      ))}
+      {days.map((day, index) => {
+        const colour = dayColour(day, types, 'to right');
+        return (
+          <i
+            key={index}
+            className={colour ? undefined : 'is-rest'}
+            style={colour ? { background: colour } : undefined}
+          />
+        );
+      })}
     </span>
   );
 }
@@ -1020,7 +1037,7 @@ function RoutineEditor({
                     .join(' ')}
                   style={
                     {
-                      '--day-colour': item.workout_type?.color ?? 'var(--p-deemph)',
+                      '--day-colour': dayColour(item, types.types) ?? 'var(--p-deemph)',
                     } as CSSProperties
                   }
                 >
@@ -1034,7 +1051,7 @@ function RoutineEditor({
                     <span className="routine-day-bar" aria-hidden="true" />
                     <span className="routine-day-title">
                       <strong>
-                        Day {di + 1} · {splitDayName(item)}
+                        Day {di + 1} · {splitDayName(item, types.types)}
                       </strong>
                       <small>{daySummary(item)}</small>
                     </span>
@@ -1050,26 +1067,86 @@ function RoutineEditor({
                         aria-label={`Day ${di + 1}`}
                       >
                         <div className="routine-day-tools">
-                          <select
-                            className="routine-day-type"
-                            aria-label={`Day ${di + 1} workout type`}
-                            value={item.workout_type_id ?? ''}
-                            onChange={(event) => {
-                              const type =
-                                types.types.find((t) => t.id === event.target.value) ?? null;
-                              day(di, withSplitDayType(item, type));
-                            }}
-                          >
-                            <option value="">Rest</option>
-                            {types.types
-                              .filter((t) => !t.archived || t.id === item.workout_type_id)
-                              .map((t) => (
-                                <option value={t.id} key={t.id}>
-                                  {t.name}
-                                  {t.archived ? ' (removed)' : ''}
-                                </option>
-                              ))}
-                          </select>
+                          <span className="routine-day-types">
+                            <select
+                              className="routine-day-type"
+                              aria-label={`Day ${di + 1} workout type`}
+                              value={item.workout_type_id ?? ''}
+                              onChange={(event) => {
+                                const type =
+                                  types.types.find((t) => t.id === event.target.value) ?? null;
+                                day(di, withSplitDayType(item, type));
+                              }}
+                            >
+                              <option value="">Rest</option>
+                              {types.types
+                                .filter((t) => !t.archived || t.id === item.workout_type_id)
+                                .map((t) => (
+                                  <option value={t.id} key={t.id}>
+                                    {t.name}
+                                    {t.archived ? ' (removed)' : ''}
+                                  </option>
+                                ))}
+                            </select>
+                            {splitDayExtraTypes(item, types.types).map((extra, ei) => {
+                              const name = extra?.name ?? 'Removed type';
+                              return (
+                                <span
+                                  className="routine-day-extra"
+                                  key={item.extra_workout_type_ids?.[ei] ?? ei}
+                                >
+                                  <select
+                                    className="routine-day-type"
+                                    aria-label={`Day ${di + 1} workout type ${ei + 2}`}
+                                    value={item.extra_workout_type_ids?.[ei] ?? ''}
+                                    onChange={(event) => {
+                                      const type = types.types.find(
+                                        (t) => t.id === event.target.value,
+                                      );
+                                      if (type) day(di, withSplitDayExtraType(item, ei, type));
+                                    }}
+                                  >
+                                    {!extra && <option value="">Removed type</option>}
+                                    {splitDayExtraChoices(item, ei, types.types).map((t) => (
+                                      <option value={t.id} key={t.id}>
+                                        {t.name}
+                                        {t.archived ? ' (removed)' : ''}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    className="routine-icon-button routine-day-extra-remove"
+                                    aria-label={`Remove ${name} from day ${di + 1}`}
+                                    title={`Remove ${name}`}
+                                    onClick={() => day(di, withSplitDayExtraType(item, ei, null))}
+                                  >
+                                    <Icon name="close" />
+                                  </button>
+                                </span>
+                              );
+                            })}
+                            {canAddSplitDayType(item, types.types) && (
+                              <button
+                                type="button"
+                                className="routine-icon-button routine-day-add-type"
+                                aria-label={`Add a workout type to day ${di + 1}`}
+                                title="Add a workout type"
+                                onClick={() =>
+                                  day(
+                                    di,
+                                    withSplitDayExtraType(
+                                      item,
+                                      item.extra_workout_type_ids?.length ?? 0,
+                                      nextSplitDayType(item, types.types),
+                                    ),
+                                  )
+                                }
+                              >
+                                <Icon name="plus" />
+                              </button>
+                            )}
+                          </span>
                           <span className="routine-day-spacer" />
                           <button
                             type="button"

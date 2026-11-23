@@ -104,6 +104,7 @@ import {
   reportServerReached,
 } from './connectionStatus';
 import { readOffline, writeOffline } from './offlineStore';
+import { withExplicitDayTypes } from './trainingSplit';
 import { dateRangeQuery, type DateRange } from './dateRanges';
 import { emitAuthExpired, NOT_AUTHENTICATED_CODE } from './authEvents';
 import { sessionConfirmation } from './sessionGate';
@@ -1035,7 +1036,11 @@ export const api = {
       request<Routine>('/api/routines', {
         method: 'POST',
         headers: jsonHeaders,
-        body: JSON.stringify({ ...routine, ...(schedule ? { schedule } : {}) }),
+        body: JSON.stringify({
+          ...routine,
+          days: withExplicitDayTypes(routine.days),
+          ...(schedule ? { schedule } : {}),
+        }),
       }),
     list: () => accountRead<Routine[]>('/api/routines'),
     profile: (id: string) => request<Routine[]>(`/api/routines/profile/${encodeURIComponent(id)}`),
@@ -1047,7 +1052,11 @@ export const api = {
       request<Routine>(`/api/routines/${routine.id}`, {
         method: 'PUT',
         headers: jsonHeaders,
-        body: JSON.stringify({ ...routine, ...(schedule ? { schedule } : {}) }),
+        body: JSON.stringify({
+          ...routine,
+          days: withExplicitDayTypes(routine.days),
+          ...(schedule ? { schedule } : {}),
+        }),
       }),
     remove: (id: string) => request<void>(`/api/routines/${id}`, { method: 'DELETE' }),
     copy: (owner: string, id: string) =>
@@ -1066,7 +1075,7 @@ export const api = {
     request<TrainingSplit>(`/api/training-split?${new URLSearchParams({ on_date: localDate() })}`, {
       method: 'PUT',
       headers: jsonHeaders,
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, steps: withExplicitDayTypes(payload.steps) }),
     }),
   /** Moves the active split to another day: Skip on Up next, or its Undo. */
   moveTrainingSplit: (step: number, { rest_saved = false } = {}) =>

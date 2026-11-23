@@ -90,10 +90,13 @@ export function upNextSession({
           today,
           weightUnit,
         });
-  const label = active
+  const mainLabel = active
     ? isRestDay
       ? 'Rest'
       : (type?.name ?? (active.category === 'cardio' ? 'Cardio' : CATEGORY_LABELS[active.category]))
     : null;
+  // A mixed split day names each of its types: "Upper body + Cardio".
+  const extraNames = isRestDay ? [] : (active?.extra_workout_types ?? []).map((item) => item.name);
+  const label = mainLabel && [mainLabel, ...extraNames].join(' + ');
   return { recommendation: active, label, template, type, isRestDay, needsSplitUpdate };
 }

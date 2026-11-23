@@ -3,6 +3,7 @@ import {
   currentSplitStep,
   nextTrainingStep,
   splitCalendarDays,
+  withExplicitDayTypes,
   splitFromTemplate,
   splitPreview,
   splitPreviewLabel,
@@ -13,6 +14,7 @@ describe('training split calendar cycles', () => {
   it('keeps A/B workout labels distinct in compact previews', () => {
     expect(splitPreviewLabel('Full body A')).toBe('Full A');
     expect(splitPreviewLabel('Full body B')).toBe('Full B');
+    expect(splitPreviewLabel('Lower body + Upper body')).toBe('Lower + Upper');
     expect(splitPreviewLabel('Upper body')).toBe('Upper');
     expect(splitPreviewLabel('Cardio')).toBe('Cardio');
   });
@@ -119,12 +121,12 @@ describe('split days on the calendar', () => {
   it('marks missed past days, then today and the days ahead without rests', () => {
     // The saved rest absorbs the planned rest after Lower, so Upper follows straight on.
     expect([...splitCalendarDays(split, '2026-11-18', 4)]).toEqual([
-      ['2026-11-16', 'lower'],
-      ['2026-11-17', 'lower'],
-      ['2026-11-18', 'lower'],
-      ['2026-11-19', 'upper'],
-      ['2026-11-20', 'lower'],
-      ['2026-11-22', 'upper'],
+      ['2026-11-16', ['lower']],
+      ['2026-11-17', ['lower']],
+      ['2026-11-18', ['lower']],
+      ['2026-11-19', ['upper']],
+      ['2026-11-20', ['lower']],
+      ['2026-11-22', ['upper']],
     ]);
   });
 
@@ -134,11 +136,44 @@ describe('split days on the calendar', () => {
       progression: 'calendar' as const,
     };
     expect([...splitCalendarDays(dated, '2026-11-18', 2)]).toEqual([
-      ['2026-11-19', 'upper'],
-      ['2026-11-20', 'lower'],
+      ['2026-11-19', ['upper']],
+      ['2026-11-20', ['lower']],
     ]);
     expect(splitCalendarDays({ ...split, enabled: false }, '2026-11-18', 4).size).toBe(0);
     expect(splitCalendarDays(null, '2026-11-18', 4).size).toBe(0);
+  });
+
+  it('puts every type of a mixed day on it, planned or missed', () => {
+    const mixed = {
+      ...splitFromTemplate('upper-lower', '2026-11-16'),
+      progression: 'calendar' as const,
+      steps: [
+        { workout_type_id: 'upper', extra_workout_type_ids: ['cardio'] },
+        { workout_type_id: 'lower' },
+        { workout_type_id: null },
+      ],
+      missed_days: [
+        {
+          workout_date: '2026-11-16',
+          workout_type_id: 'upper',
+          workout_type_ids: ['upper', 'cardio'],
+        },
+      ],
+    };
+    expect([...splitCalendarDays(mixed, '2026-11-17', 2)]).toEqual([
+      ['2026-11-16', ['upper', 'cardio']],
+      ['2026-11-17', ['lower']],
+      ['2026-11-19', ['upper', 'cardio']],
+    ]);
+    expect(splitPreview(mixed, '2026-11-19', 1)[0]).toMatchObject({
+      typeId: 'upper',
+      typeIds: ['upper', 'cardio'],
+    });
+    expect(withExplicitDayTypes(mixed.steps)).toEqual([
+      { workout_type_id: 'upper', extra_workout_type_ids: ['cardio'] },
+      { workout_type_id: 'lower', extra_workout_type_ids: [] },
+      { workout_type_id: null, extra_workout_type_ids: [] },
+    ]);
   });
 });
 

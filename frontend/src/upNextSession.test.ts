@@ -54,3 +54,9 @@ it('drops a recommendation whose type was removed, unless a split still names it
 it('has nothing to offer without a recommendation', () => {
   expect(read(null)).toMatchObject({ recommendation: null, label: null, template: null });
 });
+it('names every type of a mixed split day, starting the workout as the main one', () => {
+  const cardio = { ...legs, id: 'cardio', name: 'Cardio' };
+  const result = read({ ...legsDay, split_name: 'My split', extra_workout_types: [cardio] });
+  expect(result.label).toBe('Legs + Cardio');
+  expect(result.type).toBe(legs);
+});

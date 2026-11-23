@@ -309,6 +309,14 @@
   border: 1px solid var(--p-line);
   border-radius: 10px;
   padding: 0.65rem 0.15rem;
+  /* A mixed day's extra line must not push the other tiles' contents down. */
+  align-content: start;
+}
+/* A mixed day counts its other workout types under the main one: "+1". */
+.split-preview strong small {
+  display: block;
+  font-size: inherit;
+  color: var(--p-muted);
 }
 .split-preview li > span {
   font-size: 0.65rem;

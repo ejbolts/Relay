@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from .account_limits import limit_save_rate
 from .accounts import no_store
 from .auth import CurrentUser, get_current_user
-from .client_versions import ClientVersion, preserve_rep_ranges
+from .client_versions import ClientVersion, preserve_day_types, preserve_rep_ranges
 from .database import get_db
 from .exercise_merge import exercise_aliases
 from .models import Exercise, ExerciseMuscleContribution, UserSetting, WorkoutType
@@ -76,6 +76,10 @@ def read_routine(db: Session, user_id: str, routine_id: str, content: RoutineInp
             RoutineDayRead(
                 workout_type_id=day.workout_type_id,
                 workout_type=types.get(day.workout_type_id),
+                extra_workout_type_ids=day.extra_workout_type_ids,
+                extra_workout_types=[
+                    types[item] for item in day.extra_workout_type_ids if item in types
+                ],
                 movements=[
                     RoutineMovementRead(
                         **movement.model_dump(),
@@ -98,12 +102,25 @@ def validate_content(db: Session, user_id: str, content: RoutineInput) -> None:
     for day in content.days:
         for movement in day.movements:
             movement.exercise_id = aliases.get(movement.exercise_id, movement.exercise_id)
-        if day.workout_type_id is not None and (
-            day.workout_type_id not in types or types[day.workout_type_id].archived
+        day_types = [day.workout_type_id, *day.extra_workout_type_ids]
+        if any(
+            type_id is not None and (type_id not in types or types[type_id].archived)
+            for type_id in day_types
         ):
             raise HTTPException(422, "Choose an active workout type for every workout day.")
         if any(movement.exercise_id not in ids for movement in day.movements):
             raise HTTPException(422, "Choose exercises from your own library.")
+
+
+def split_steps(content: RoutineInput) -> list[dict]:
+    """The split days a routine schedules: each day's workout types, in order."""
+    return [
+        {
+            "workout_type_id": day.workout_type_id,
+            "extra_workout_type_ids": day.extra_workout_type_ids,
+        }
+        for day in content.days
+    ]
 
 
 def save_routine(
@@ -127,7 +144,7 @@ def save_routine(
             start_date=schedule.start_date,
             enabled=schedule.enabled,
             progression=schedule.progression,
-            steps=[{"workout_type_id": day.workout_type_id} for day in content.days],
+            steps=split_steps(content),
         )
         set_setting(db, user_id, TRAINING_SPLIT_KEY, active.model_dump_json())
     elif active and active.routine_id == routine_id:
@@ -135,7 +152,7 @@ def save_routine(
         active.steps = TrainingSplit(
             name=content.name,
             start_date=active.start_date,
-            steps=[{"workout_type_id": day.workout_type_id} for day in content.days],
+            steps=split_steps(content),
         ).steps
         set_setting(db, user_id, TRAINING_SPLIT_KEY, active.model_dump_json())
     bump_workout_cache_revision(db, user_id)
@@ -197,6 +214,7 @@ def capture_split(db: Db, user: CurrentUser):
         days.append(
             RoutineDay(
                 workout_type_id=type_id,
+                extra_workout_type_ids=step.extra_workout_type_ids,
                 movements=[
                     RoutineMovement(
                         exercise_id=movement.exercise_id,
@@ -227,6 +245,7 @@ def update_routine(
     stored = routine_content(db, user.id, routine_id)
     for day, saved_day in zip(payload.days, stored.days, strict=False):
         preserve_rep_ranges(day.movements, saved_day.movements, client_version)
+    preserve_day_types(payload.days, stored.days, client_version)
     content = RoutineInput.model_validate(payload.model_dump(exclude={"schedule"}))
     return save_routine(db, user.id, content, routine_id, schedule=payload.schedule)
 
@@ -261,7 +280,7 @@ def use_routine(
         start_date=payload.start_date,
         progression=payload.progression,
         routine_id=routine_id,
-        steps=[{"workout_type_id": day.workout_type_id} for day in content.days],
+        steps=split_steps(content),
     )
     set_setting(db, user.id, TRAINING_SPLIT_KEY, split.model_dump_json())
     bump_workout_cache_revision(db, user.id)
@@ -281,11 +300,10 @@ def copy_routine(user_id: str, routine_id: str, db: Db, user: CurrentUser):
     copied.shared = False
     own_types = workout_type_catalog(db, user.id)
     source_types = {item.id: item for item in workout_type_catalog(db, user_id)}
-    type_map = {}
-    for day in copied.days:
-        if day.workout_type_id is None:
-            continue
-        original = source_types[day.workout_type_id]
+    type_map: dict[str, str] = {}
+
+    def own_type(source_id: str) -> str:
+        original = source_types[source_id]
         match = next(
             (
                 item
@@ -311,7 +329,15 @@ def copy_routine(user_id: str, routine_id: str, db: Db, user: CurrentUser):
                 match = WorkoutTypeRead.model_validate(created)
                 own_types.append(match)
             type_map[original.id] = match.id
-        day.workout_type_id = type_map[original.id]
+        return type_map[original.id]
+
+    for day in copied.days:
+        if day.workout_type_id is not None:
+            day.workout_type_id = own_type(day.workout_type_id)
+        # Two of the friend's types can match one of yours by name; a day keeps each type once.
+        extras = dict.fromkeys(own_type(item) for item in day.extra_workout_type_ids)
+        extras.pop(day.workout_type_id, None)  # type: ignore[arg-type]
+        day.extra_workout_type_ids = list(extras)
     own_exercises = list(db.scalars(select(Exercise).where(Exercise.user_id == user.id)))
     exercise_map = {}
     for day in copied.days:

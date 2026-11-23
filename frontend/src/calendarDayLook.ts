@@ -9,7 +9,7 @@ import { calendarDayTypes } from './workoutTypes';
 /**
  * How a calendar day is drawn: its workout types, the colours of its outline (only the types
  * still switched on in the legend) and, for a day with nothing logged, the split's planned or
- * missed workout as a faint outline.
+ * missed workout as a faint outline, split into arcs on a mixed day.
  */
 export function calendarDayLook({
   date,
@@ -28,27 +28,29 @@ export function calendarDayLook({
   types: WorkoutType[];
   categoryColors?: WorkoutTypeColors;
   hiddenCategories?: ReadonlySet<string>;
-  /** The workout type a split plans on a date: days ahead, and past days it was missed. */
-  splitDays?: ReadonlyMap<string, string>;
+  /** The workout types a split plans on a date: days ahead, and past days it was missed. */
+  splitDays?: ReadonlyMap<string, readonly string[]>;
 }) {
   const dayTypes = entry ? calendarDayTypes(entry, types) : [];
   const ring = dayTypes
     .filter((type) => !hiddenCategories?.has(type.id))
     .map((type) => workoutTypeColor(type, categoryColors));
   const filteredOut = dayTypes.length > 0 && ring.length === 0;
-  const scheduledId = entry || inProgress ? undefined : splitDays?.get(date);
-  const scheduled = scheduledId ? types.find((type) => type.id === scheduledId) : undefined;
-  const scheduledColor =
-    scheduled && !hiddenCategories?.has(scheduled.id)
-      ? workoutTypeColor(scheduled, categoryColors)
-      : null;
+  const scheduledIds = entry || inProgress ? [] : (splitDays?.get(date) ?? []);
+  const scheduled = scheduledIds.flatMap((id) => types.filter((type) => type.id === id));
+  const scheduledRing = scheduled
+    .filter((type) => !hiddenCategories?.has(type.id))
+    .map((type) => workoutTypeColor(type, categoryColors));
   return {
     dayTypes,
     ring,
     filteredOut,
+    /** The split's workout types for the day, several on a mixed day. */
     scheduled,
-    scheduledColor,
-    scheduledNote: scheduled ? `${scheduled.name} ${date < today ? 'missed' : 'planned'}` : null,
+    scheduledRing,
+    scheduledNote: scheduled.length
+      ? `${scheduled.map((type) => type.name).join(' + ')} ${date < today ? 'missed' : 'planned'}`
+      : null,
   };
 }
 

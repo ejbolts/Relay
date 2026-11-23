@@ -18,7 +18,7 @@ export function SplitPattern({
   days,
   size = 10,
 }: {
-  days: Pick<RoutineDay, 'workout_type'>[];
+  days: Pick<RoutineDay, 'workout_type' | 'extra_workout_types'>[];
   size?: number;
 }) {
   const { colors } = useTheme();
@@ -34,8 +34,17 @@ export function SplitPattern({
             backgroundColor: day.workout_type?.color ?? 'transparent',
             borderWidth: day.workout_type ? 0 : 1.5,
             borderColor: colors.deemph,
+            flexDirection: 'row',
+            overflow: 'hidden',
           }}
-        />
+        >
+          {/* A mixed day splits its pip between its types' colours. */}
+          {!!day.workout_type &&
+            !!day.extra_workout_types?.length &&
+            [day.workout_type, ...day.extra_workout_types].map((type) => (
+              <View key={type.id} style={{ flex: 1, backgroundColor: type.color }} />
+            ))}
+        </View>
       ))}
     </View>
   );
@@ -163,8 +172,8 @@ export function SplitPreview({ split, types }: { split: TrainingSplit; types: Wo
         />
       </View>
       <View style={styles.previewDays}>
-        {days.map(({ date, typeId }) => {
-          const name = splitPreviewDayLabel(types, typeId);
+        {days.map(({ date, typeId, typeIds }) => {
+          const name = splitPreviewDayLabel(types, typeId, typeIds);
           return (
             <View
               key={date}
@@ -188,10 +197,20 @@ export function SplitPreview({ split, types }: { split: TrainingSplit; types: Wo
                 style={[
                   styles.previewPip,
                   typeId
-                    ? { backgroundColor: colourFor(typeId) }
+                    ? {
+                        backgroundColor: colourFor(typeId),
+                        flexDirection: 'row',
+                        overflow: 'hidden',
+                      }
                     : { borderWidth: 1.5, borderColor: colors.deemph },
                 ]}
-              />
+              >
+                {/* A mixed day splits the pip between its types' colours. */}
+                {typeIds.length > 1 &&
+                  typeIds.map((id) => (
+                    <View key={id} style={{ flex: 1, backgroundColor: colourFor(id) }} />
+                  ))}
+              </View>
               <Text
                 numberOfLines={2}
                 style={[styles.previewLabel, { color: typeId ? colors.secondary : colors.muted }]}

@@ -21,6 +21,7 @@ import {
 import {
   atPlannedMinimum,
   canAddSplitDay,
+  canAddSplitDayType,
   canPlanMore,
   legacySplitRoutine,
   MAX_PLANNED_EXERCISES,
@@ -33,11 +34,15 @@ import {
   routineSaveError,
   splitDayContribution,
   splitDayCount,
+  splitDayExtraChoices,
+  splitDayExtraTypes,
   splitDayName,
   splitDaySummary,
+  splitDayTypes,
   splitFailure,
   splitTypeNameError,
   swapPlannedExercise,
+  withSplitDayExtraType,
   withSplitDayType,
 } from '../../../../../frontend/src/splitEditing';
 import {
@@ -585,7 +590,11 @@ function DayCard({
   const { colors, type, radius } = useTheme();
   const contribution = splitDayContribution(creditDay, selected);
   const label = `Day ${index + 1}`;
+  const name = splitDayName(day, types);
   const colour = day.workout_type?.color ?? colors.deemph;
+  // A mixed day's bar stacks a band of each type's colour.
+  const dayColours = splitDayTypes(day, types).map((item) => item.color);
+  const extras = splitDayExtraTypes(day, types);
   const chooseType = () =>
     showMenu(`${label} workout type`, [
       {
@@ -599,6 +608,27 @@ function DayCard({
           onPress: () => onChange(withSplitDayType(day, item)),
         })),
     ]);
+  const extraIds = day.extra_workout_type_ids ?? [];
+  const chooseExtra = (at: number) =>
+    showMenu(`${label} workout type ${at + 2}`, [
+      ...splitDayExtraChoices(day, at, types).map((item) => ({
+        label: `${item.name}${item.archived ? ' (removed)' : ''}${item.id === extraIds[at] ? ' ✓' : ''}`,
+        onPress: () => onChange(withSplitDayExtraType(day, at, item)),
+      })),
+      {
+        label: 'Remove from this day',
+        destructive: true,
+        onPress: () => onChange(withSplitDayExtraType(day, at, null)),
+      },
+    ]);
+  const addExtra = () =>
+    showMenu(
+      `Add a workout type to ${label.toLowerCase()}`,
+      splitDayExtraChoices(day, extraIds.length, types).map((item) => ({
+        label: item.name,
+        onPress: () => onChange(withSplitDayExtraType(day, extraIds.length, item)),
+      })),
+    );
   const movement = (i: number, next: RoutineMovement | null) =>
     onChange({
       ...day,
@@ -619,14 +649,19 @@ function DayCard({
       <Pressable
         accessibilityRole="button"
         accessibilityState={{ expanded: open }}
-        accessibilityLabel={`${label} · ${splitDayName(day)}, ${splitDaySummary(day)}`}
+        accessibilityLabel={`${label} · ${name}, ${splitDaySummary(day)}`}
         onPress={onToggle}
         style={styles.dayHeader}
       >
-        <View style={[styles.dayBar, { backgroundColor: colour }]} />
+        <View style={[styles.dayBar, { backgroundColor: colour }]}>
+          {dayColours.length > 1 &&
+            dayColours.map((item, at) => (
+              <View key={at} style={{ flex: 1, backgroundColor: item }} />
+            ))}
+        </View>
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={[type.callout, { color: colors.text, fontWeight: '700' }]}>
-            {label} · {splitDayName(day)}
+            {label} · {name}
           </Text>
           <Text style={[type.footnote, { color: colors.muted }]}>{splitDaySummary(day)}</Text>
         </View>
@@ -642,25 +677,59 @@ function DayCard({
       {open && (
         <View style={styles.dayBody}>
           <View style={styles.dayTools}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`${label} workout type: ${splitDayName(day)}`}
-              disabled={disabled}
-              onPress={chooseType}
-              style={[
-                styles.typeButton,
-                { backgroundColor: colors.surface2, borderRadius: radius.md },
-              ]}
-            >
-              <View style={[styles.typeDot, { backgroundColor: colour }]} />
-              <Text
-                style={[type.callout, { color: colors.text, fontWeight: '600' }]}
-                numberOfLines={1}
+            <View style={styles.dayTypes}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${label} workout type: ${splitDayName({ ...day, extra_workout_type_ids: [] })}`}
+                disabled={disabled}
+                onPress={chooseType}
+                style={[
+                  styles.typeButton,
+                  { backgroundColor: colors.surface2, borderRadius: radius.md },
+                ]}
               >
-                {splitDayName(day)}
-              </Text>
-              <Icon name="chevronDown" size={12} color={colors.muted} />
-            </Pressable>
+                <View style={[styles.typeDot, { backgroundColor: colour }]} />
+                <Text
+                  style={[type.callout, { color: colors.text, fontWeight: '600', flexShrink: 1 }]}
+                  numberOfLines={1}
+                >
+                  {splitDayName({ ...day, extra_workout_type_ids: [] })}
+                </Text>
+                <Icon name="chevronDown" size={12} color={colors.muted} />
+              </Pressable>
+              {extras.map((extra, at) => (
+                <Pressable
+                  key={extraIds[at] ?? at}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${label} workout type ${at + 2}: ${extra?.name ?? 'Removed type'}`}
+                  disabled={disabled}
+                  onPress={() => chooseExtra(at)}
+                  style={[
+                    styles.typeButton,
+                    { backgroundColor: colors.surface2, borderRadius: radius.md },
+                  ]}
+                >
+                  <View
+                    style={[styles.typeDot, { backgroundColor: extra?.color ?? colors.deemph }]}
+                  />
+                  <Text
+                    style={[type.callout, { color: colors.text, fontWeight: '600', flexShrink: 1 }]}
+                    numberOfLines={1}
+                  >
+                    {extra?.name ?? 'Removed type'}
+                  </Text>
+                  <Icon name="chevronDown" size={12} color={colors.muted} />
+                </Pressable>
+              ))}
+              {canAddSplitDayType(day, types) && (
+                <StepButton
+                  icon="plus"
+                  label={`Add a workout type to day ${index + 1}`}
+                  disabled={disabled}
+                  onPress={addExtra}
+                />
+              )}
+            </View>
             <View style={{ flex: 1 }} />
             <MoveButton
               icon={settingsIcons.up}
@@ -879,9 +948,16 @@ const styles = StyleSheet.create({
   volumeValue: { minWidth: 48, textAlign: 'right' },
   day: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
-  dayBar: { width: 5, alignSelf: 'stretch', borderRadius: 3 },
+  dayBar: { width: 5, alignSelf: 'stretch', borderRadius: 3, overflow: 'hidden' },
   dayBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },
   dayTools: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dayTypes: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: 6,
+    flexShrink: 1,
+  },
   typeButton: {
     flexDirection: 'row',
     alignItems: 'center',
