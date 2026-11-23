@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
   Pressable,
   StyleSheet,
@@ -364,19 +364,23 @@ export function HomeLayoutGrid({
               );
             })}
             {row.gap && (
-              <EmptyDropSpace
-                gap={row.gap}
-                afterTitle={title(row.gap.after)}
-                highlighted={overTarget?.kind === 'gap' && overTarget.after === row.gap.after}
-                disabled={disabled || draggingId !== null}
-                onLayout={(event) => {
+              <View
+                onLayout={(event: LayoutChangeEvent) => {
                   slotLayoutsRef.current[`gap:${row.gap!.after}`] = {
                     rowKey,
                     box: event.nativeEvent.layout,
                   };
                 }}
-                onPress={() => onAddInGap(row.gap!)}
-              />
+                style={{ flex: row.gap.span, minWidth: 0 }}
+              >
+                <EmptyDropSpace
+                  gap={row.gap}
+                  afterTitle={title(row.gap.after)}
+                  highlighted={overTarget?.kind === 'gap' && overTarget.after === row.gap.after}
+                  disabled={disabled || draggingId !== null}
+                  onPress={() => onAddInGap(row.gap!)}
+                />
+              </View>
             )}
           </View>
         );
@@ -429,15 +433,40 @@ function DraggableSectionCard({
 }) {
   const { colors, type } = useTheme();
   const controlsDisabled = disabled || anyDragging;
-  const pan = usePanGesture({
-    enabled: !disabled && (!anyDragging || isDragged),
-    activateAfterLongPress: 250,
-    runOnJS: true,
-    onActivate: (event) => onDragStart(id, event.x, event.y, event.absoluteY),
-    onUpdate: (event) => onDragMove(id, event.translationX, event.translationY, event.absoluteY),
-    onDeactivate: (event) => onDragEnd(id, event.canceled),
-    onFinalize: (event) => onDragEnd(id, event.canceled),
+  const dragCallbacksRef = useRef({ id, onDragStart, onDragMove, onDragEnd });
+  useEffect(() => {
+    dragCallbacksRef.current = { id, onDragStart, onDragMove, onDragEnd };
   });
+  // Keep the gesture config stable across drag state updates so RNGH never resets the active
+  // native handler mid-drag when draggingId or overTarget changes.
+  const panConfig = useMemo(
+    () => ({
+      enabled: !disabled,
+      activateAfterLongPress: 250,
+      shouldCancelWhenOutside: false,
+      runOnJS: true,
+      onActivate: (event: { x: number; y: number; absoluteY: number }) =>
+        dragCallbacksRef.current.onDragStart(
+          dragCallbacksRef.current.id,
+          event.x,
+          event.y,
+          event.absoluteY,
+        ),
+      onUpdate: (event: { translationX: number; translationY: number; absoluteY: number }) =>
+        dragCallbacksRef.current.onDragMove(
+          dragCallbacksRef.current.id,
+          event.translationX,
+          event.translationY,
+          event.absoluteY,
+        ),
+      onDeactivate: (event: { canceled: boolean }) =>
+        dragCallbacksRef.current.onDragEnd(dragCallbacksRef.current.id, event.canceled),
+      onFinalize: (event: { canceled: boolean }) =>
+        dragCallbacksRef.current.onDragEnd(dragCallbacksRef.current.id, event.canceled),
+    }),
+    [disabled],
+  );
+  const pan = usePanGesture(panConfig);
 
   const surface = cardSurface(colors);
   const highlightStyle = isDropTarget
@@ -526,21 +555,18 @@ function DraggableSectionCard({
             disabled={controlsDisabled}
             onPress={onHide}
           />
-          <Text
-            style={[type.callout, { color: colors.text, fontWeight: '600', flex: 1 }]}
-            numberOfLines={2}
-          >
-            {title}
-          </Text>
+          <View style={{ flex: 1, alignItems: 'center' }} accessible={false}>
+            <Icon name={homeIcons.grip} size={15} color={colors.muted} />
+          </View>
           {menu(true)}
         </View>
+        <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]} numberOfLines={2}>
+          {title}
+        </Text>
         <View style={styles.compactBottom}>
-          <View style={styles.gripLabel}>
-            <Icon name={homeIcons.grip} size={14} color={colors.muted} />
-            <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
-              {widthName(span)}
-            </Text>
-          </View>
+          <Text style={[type.caption, { color: colors.muted, flex: 1 }]} numberOfLines={1}>
+            {widthName(span)}
+          </Text>
           <View style={styles.stepButtons}>
             <RoundButton
               icon="chevronUp"
@@ -613,15 +639,18 @@ function DraggableSectionCard({
     );
   }
 
+  // GestureDetector stays on a stationary wrapper so translating the card never shifts its own
+  // touch coordinate frame while dragging.
   return (
     <GestureDetector gesture={pan}>
-      <Animated.View
-        testID={`home-layout-card-${id}`}
-        accessibilityHint="Hold and drag to reorder or move into an empty space"
-        style={[surface, styles.cardFrame, highlightStyle, isDragged && dragAnimatedStyle]}
-      >
-        {content}
-      </Animated.View>
+      <View style={{ flex: 1 }} testID={`home-layout-card-${id}`}>
+        <Animated.View
+          accessibilityHint="Hold and drag to reorder or move into an empty space"
+          style={[surface, styles.cardFrame, highlightStyle, isDragged && dragAnimatedStyle]}
+        >
+          {content}
+        </Animated.View>
+      </View>
     </GestureDetector>
   );
 }
@@ -631,14 +660,12 @@ function EmptyDropSpace({
   afterTitle,
   highlighted,
   disabled,
-  onLayout,
   onPress,
 }: {
   gap: HomeSectionGap;
   afterTitle: string;
   highlighted: boolean;
   disabled: boolean;
-  onLayout: (event: LayoutChangeEvent) => void;
   onPress: () => void;
 }) {
   const { colors, type, radius } = useTheme();
@@ -649,12 +676,11 @@ function EmptyDropSpace({
       accessibilityLabel={`Add a section after ${afterTitle}`}
       accessibilityState={{ disabled }}
       disabled={disabled}
-      onLayout={onLayout}
       onPress={onPress}
       style={({ pressed }) => [
         styles.dropSpace,
         {
-          flex: gap.span,
+          flex: 1,
           borderRadius: radius.lg,
           borderColor: highlighted ? colors.accent : colors.lineStrong,
           borderWidth: highlighted ? 2 : 1.5,

@@ -25,7 +25,9 @@ const mockPanGestures = new Map<string, MockPanConfig>();
 
 jest.mock('react-native-gesture-handler', () => {
   const { isValidElement } = jest.requireActual<typeof import('react')>('react');
+  const { ScrollView } = jest.requireActual<typeof import('react-native')>('react-native');
   return {
+    ScrollView,
     GestureDetector: ({
       gesture,
       children,
@@ -321,7 +323,7 @@ test('dragging a card into an empty half-row fills the space and saves the layou
     widths: { consistency: 'compact', friends: 'full' },
   };
   await show(<HomeLayoutScreen />);
-  const dropSpace = await screen.findByTestId('home-drop-space-consistency');
+  const dropSpace = (await screen.findByTestId('home-drop-space-consistency')).parent!;
   const consistencySlot = screen.getByTestId('home-layout-card-consistency').parent!;
   const row0 = consistencySlot.parent!;
   const friendsSlot = screen.getByTestId('home-layout-card-friends').parent!;

@@ -4,12 +4,12 @@ import {
   ActivityIndicator,
   Alert,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   View,
   type ScrollViewInstance,
 } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   defaultHomeLayout,
@@ -145,7 +145,6 @@ function Editor({ saved }: { saved: HomeLayout }) {
       />
       <ScrollView
         ref={scrollRef}
-        scrollEnabled={!dragging}
         scrollEventThrottle={16}
         onLayout={(event) => {
           scrollMetricsRef.current.height = event.nativeEvent.layout.height;
