@@ -14,6 +14,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { bodyweightOn } from '../../../../frontend/src/relativeStrength';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
+import { warmupOnlyMovements, warmupSetLabel } from '../../../../frontend/src/workingSetCheck';
 import {
   calculateScopedDraftPrs,
   initialPrCelebrations,
@@ -84,12 +85,20 @@ export function WorkoutSheet() {
 }
 
 function FinishedView({ logger, onDone }: { logger: LoggerApi; onDone: () => void }) {
-  const { queue } = useWorkout();
+  const { queue, refused, review, discardRefused } = useWorkout();
+  const finished = logger.finished!;
+  const mine = refused.find((save) => save.key === finished.sessionId) ?? null;
   return (
     <FinishedSummary
-      finished={logger.finished!}
+      finished={finished}
       queue={queue}
+      refused={mine}
       weightUnit={logger.weightUnit}
+      onReview={() => review(finished.sessionId)}
+      onDiscard={() => {
+        discardRefused(finished.sessionId);
+        onDone();
+      }}
       onDone={onDone}
     />
   );
@@ -320,6 +329,27 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     };
     if (blocker) {
       Alert.alert("Can't finish yet", blocker, [{ text: 'Keep working out' }]);
+      return;
+    }
+    // Exercises logged with only warm-ups are named first; this doubles as the confirmation.
+    const warmupOnly = warmupOnlyMovements(state.movements);
+    if (warmupOnly.length) {
+      Alert.alert(
+        'No working sets',
+        warmupOnly
+          .map(
+            (movement) =>
+              `${movement.exercise.name}: ${movement.sets
+                .filter((item) => item.completed)
+                .map((item, index) => `W ${warmupSetLabel(item, logger.weightUnit, index + 1)}`)
+                .join(', ')}`,
+          )
+          .join('\n'),
+        [
+          { text: 'Keep working out', style: 'cancel' },
+          { text: 'Finish anyway', onPress: run },
+        ],
+      );
       return;
     }
     if (unticked > 0) {

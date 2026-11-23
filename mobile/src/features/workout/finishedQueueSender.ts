@@ -104,6 +104,18 @@ export class FinishedQueueSender {
     this.clearTimer(this.timer);
   }
 
+  /**
+   * Lets go of a refused workout after it was reopened for review or discarded; it has already
+   * left the queue in storage.
+   */
+  forget(key: string) {
+    if (!(key in this.refusals)) return;
+    const refusals = { ...this.refusals };
+    delete refusals[key];
+    this.refusals = refusals;
+    this.report();
+  }
+
   private stillQueued(key: string) {
     return readFinishedWorkouts(this.deps.storage).some((item) => finishedWorkoutKey(item) === key);
   }

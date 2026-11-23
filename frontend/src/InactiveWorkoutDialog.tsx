@@ -1,21 +1,5 @@
+import { inactiveWorkoutTimes } from './activeWorkoutTimeout';
 import { PopupDialog } from './PopupDialog';
-
-function startedLabel(startedAt: number): string {
-  return new Date(startedAt).toLocaleString(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
-/** The end time alone on the day it started, or with its own day after midnight. */
-function endedLabel(endedAt: number, startedAt: number): string {
-  if (new Date(endedAt).toDateString() !== new Date(startedAt).toDateString())
-    return startedLabel(endedAt);
-  return new Date(endedAt).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' });
-}
 
 /** Asks what to do with a workout left running, instead of saving it unasked. */
 export function InactiveWorkoutDialog({
@@ -43,6 +27,7 @@ export function InactiveWorkoutDialog({
   /** Closing keeps the workout running without opening it. */
   onClose: () => void;
 }) {
+  const times = inactiveWorkoutTimes(startedAt, endedAt);
   return (
     <PopupDialog
       title="Unfinished workout"
@@ -70,8 +55,8 @@ export function InactiveWorkoutDialog({
       <p>
         <strong>{name}</strong>
         <span>
-          Started {startedLabel(startedAt)} · ended&nbsp;{endedLabel(endedAt, startedAt)} ·{' '}
-          {loggedSets}&nbsp;{loggedSets === 1 ? 'set' : 'sets'}&nbsp;logged
+          Started {times.started} · ended&nbsp;{times.ended} · {loggedSets}&nbsp;
+          {loggedSets === 1 ? 'set' : 'sets'}&nbsp;logged
         </span>
       </p>
     </PopupDialog>

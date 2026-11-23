@@ -9,7 +9,8 @@ import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import type { QueueStatus } from './finishedQueueSender';
 import { loggerIcons } from './icons';
-import type { FinishedView } from './WorkoutProvider';
+import { RefusedSaveCard } from './RefusedSaveCard';
+import type { FinishedView, RefusedSave } from './WorkoutProvider';
 
 const signed = (value: number, text: string) => `${value > 0 ? '+' : ''}${text}`;
 
@@ -17,12 +18,19 @@ const signed = (value: number, text: string) => `${value > 0 ? '+' : ''}${text}`
 export function FinishedSummary({
   finished,
   queue,
+  refused,
   weightUnit,
+  onReview,
+  onDiscard,
   onDone,
 }: {
   finished: FinishedView;
   queue: QueueStatus;
+  /** This workout, when the server refused it. */
+  refused: RefusedSave | null;
   weightUnit: WeightUnit;
+  onReview: () => void;
+  onDiscard: () => void;
   onDone: () => void;
 }) {
   const { colors, type, radius, space } = useTheme();
@@ -109,10 +117,14 @@ export function FinishedSummary({
           {change} vs last time
         </Text>
       )}
-      <View style={styles.status} accessibilityLiveRegion="polite">
-        <Icon name={status.icon} size={16} color={status.color} />
-        <Text style={[type.footnote, { color: status.color, flexShrink: 1 }]}>{status.text}</Text>
-      </View>
+      {refused ? (
+        <RefusedSaveCard save={refused} onReview={onReview} onDiscard={onDiscard} />
+      ) : (
+        <View style={styles.status} accessibilityLiveRegion="polite">
+          <Icon name={status.icon} size={16} color={status.color} />
+          <Text style={[type.footnote, { color: status.color, flexShrink: 1 }]}>{status.text}</Text>
+        </View>
+      )}
       {!!records?.length && (
         <View
           style={[styles.records, { backgroundColor: colors.goldSoft, borderRadius: radius.card }]}

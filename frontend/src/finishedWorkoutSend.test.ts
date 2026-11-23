@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { readFinishedWorkouts } from './finishedWorkoutQueue';
+import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
+import type { FinishedWorkout } from './finishedWorkoutQueue';
 import {
   finishedSaveFailure,
   finishedSaveRetryDelayMs,
   moveDraftToFinishedQueue,
+  rebasedFinishedWorkout,
+  reviewedFinishedWorkout,
 } from './finishedWorkoutSend';
 import type { WorkoutInput } from './types';
 import {
@@ -116,5 +120,48 @@ describe('queueing a finished workout', () => {
     expect([0, 1, 2, 3, 4].map(finishedSaveRetryDelayMs)).toEqual([
       5000, 10_000, 20_000, 40_000, 60_000,
     ]);
+  });
+});
+
+describe('reviewing a refused save', () => {
+  const finished = {
+    version: 1,
+    clientSessionId: '1b4e28ba-2fa1-41d2-883f-0016d3cca427',
+    startedAt: 1_000,
+    updatedAt: 2_000,
+    lastActiveAt: 2_000,
+    inactiveFinishAt: 3_000,
+    name: 'Push',
+    workoutDate: '2026-11-23',
+    category: 'push',
+    notes: '',
+    movements: [],
+    resumingWorkoutId: 'w1',
+    resumingWorkoutRevision: 2,
+    pendingSave: {
+      userId: 'u1',
+      finishedAt: 2_500,
+      workoutId: 'w1',
+      payload: { name: 'Push', duration_minutes: 42, base_revision: 2 } as WorkoutInput,
+    },
+  } as FinishedWorkout;
+
+  it('reopens the draft with the duration it finished with and a fresh cutoff', () => {
+    const now = 10_000_000;
+    const draft = reviewedFinishedWorkout(finished, now);
+    expect(draft).not.toHaveProperty('pendingSave');
+    expect(draft).toMatchObject({
+      clientSessionId: finished.clientSessionId,
+      durationOverrideMinutes: 42,
+      lastActiveAt: now,
+      inactiveFinishAt: inactiveWorkoutFinishAt(1_000, now),
+    });
+  });
+
+  it('keeping this version rebases the waiting save on the revision now saved', () => {
+    const rebased = rebasedFinishedWorkout(finished, 5);
+    expect(rebased.resumingWorkoutRevision).toBe(5);
+    expect(rebased.pendingSave.payload.base_revision).toBe(5);
+    expect(finished.pendingSave.payload.base_revision).toBe(2);
   });
 });

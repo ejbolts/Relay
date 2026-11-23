@@ -137,7 +137,7 @@ import { WorkoutReactionControl } from './WorkoutReactionControl';
 import { ExercisePicker } from './ExercisePicker';
 import { SupersetPicker } from './SupersetPicker';
 import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
-import { loggedOnlyWarmups } from './workingSetCheck';
+import { loggedOnlyWarmups, warmupOnlyMovements as warmupOnly } from './workingSetCheck';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
@@ -480,7 +480,7 @@ import { recordsForBlock } from './trainingBlocks';
 import { recordBadgeLabel, recordScopeLabel } from './recordScope';
 import { setResult } from './historySetFormat';
 import { canResumeWorkout } from './workoutResume';
-import { isWorkoutSetAutoSavable, workoutSetAfterEdit } from './workoutAutoSave';
+import { loggedSetCount as loggedSetCountRule, workoutSetAfterEdit } from './workoutAutoSave';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
@@ -4636,14 +4636,12 @@ function WorkoutLogger({
     }
   }
 
-  const warmupOnlyMovements: WarmupOnlyMovement[] = movements
-    .filter((movement) => movement.exercise.kind !== 'cardio' && loggedOnlyWarmups(movement.sets))
-    .map((movement) => ({
-      key: movement.key,
-      name: movement.exercise.name,
-      iconUrl: exerciseIconFor(movement.exercise),
-      sets: movement.sets,
-    }));
+  const warmupOnlyMovements: WarmupOnlyMovement[] = warmupOnly(movements).map((movement) => ({
+    key: movement.key,
+    name: movement.exercise.name,
+    iconUrl: exerciseIconFor(movement.exercise),
+    sets: movement.sets,
+  }));
 
   const tickedSetCount = movements.reduce(
     (total, movement) => total + movement.sets.filter((item) => item.completed).length,
@@ -4821,15 +4819,7 @@ function WorkoutLogger({
     return check.kind === 'ready' ? finishedWorkoutInput(check) : null;
   };
 
-  const loggedSetCount = initialWorkout
-    ? 0
-    : movements.reduce(
-        (total, movement) =>
-          total +
-          movement.sets.filter((item) => isWorkoutSetAutoSavable(movement.exercise.kind, item))
-            .length,
-        0,
-      );
+  const loggedSetCount = initialWorkout ? 0 : loggedSetCountRule(movements);
   hasLoggedSetRef.current = loggedSetCount > 0;
 
   useEffect(() => {

@@ -1,9 +1,11 @@
-import { addFinishedWorkout } from './finishedWorkoutQueue';
+import { inactiveWorkoutFinishAt } from './activeWorkoutTimeout';
+import { addFinishedWorkout, type FinishedWorkout } from './finishedWorkoutQueue';
 import type { WorkoutInput } from './types';
 import {
   clearActiveWorkoutDraft,
   isActiveWorkoutDraft,
   readActiveWorkoutDraft,
+  type ActiveWorkoutDraft,
   type DraftStorage,
   type PendingWorkoutSave,
 } from './workoutDraft';
@@ -66,4 +68,39 @@ export function finishedSaveFailure(
 /** The wait before the next attempt after `failures` failed connections in a row. */
 export function finishedSaveRetryDelayMs(failures: number): number {
   return Math.min(60_000, 5000 * 2 ** failures);
+}
+
+/**
+ * A refused finished workout reopened in the logger for review: its draft, keeping the duration
+ * it was finished with, with a fresh inactivity cutoff from now.
+ */
+export function reviewedFinishedWorkout(
+  finished: FinishedWorkout,
+  now: number,
+): ActiveWorkoutDraft {
+  const { pendingSave, ...draft } = finished;
+  return {
+    ...draft,
+    durationOverrideMinutes: pendingSave.payload.duration_minutes,
+    lastActiveAt: now,
+    inactiveFinishAt: inactiveWorkoutFinishAt(draft.startedAt, now),
+  };
+}
+
+/**
+ * Keeping this device's version after another device changed the saved workout: the waiting save
+ * is rebased onto `revision`, the version now on the server, and sent again.
+ */
+export function rebasedFinishedWorkout(
+  finished: FinishedWorkout,
+  revision: number | undefined,
+): FinishedWorkout {
+  return {
+    ...finished,
+    resumingWorkoutRevision: revision,
+    pendingSave: {
+      ...finished.pendingSave,
+      payload: { ...finished.pendingSave.payload, base_revision: revision },
+    },
+  };
 }

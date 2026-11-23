@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { createWorkoutSet } from './workoutSets';
 import {
   isStoredSetLogged,
+  loggedSetCount,
   isWorkoutSetAutoSavable,
   workoutSetAfterEdit,
   workoutSetForAutoSave,
@@ -124,5 +125,19 @@ describe('automatic workout saving', () => {
     expect(planned.fromPrevious).toBe(true);
     expect(isWorkoutSetAutoSavable('strength', planned)).toBe(false);
     expect(workoutSetForAutoSave('strength', planned)).toBe(planned);
+  });
+});
+
+describe('logged sets', () => {
+  it('counts ticked sets and sets entered by hand, not untouched suggestions', () => {
+    const entered = { ...createWorkoutSet('strength'), reps: 8 };
+    const suggested = { ...entered, fromPrevious: true };
+    const ticked = { ...suggested, completed: true };
+    expect(
+      loggedSetCount([
+        { exercise: { kind: 'strength' }, sets: [entered, suggested, ticked] },
+        { exercise: { kind: 'cardio' }, sets: [createWorkoutSet('cardio')] },
+      ]),
+    ).toBe(2);
   });
 });
