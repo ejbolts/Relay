@@ -1,6 +1,6 @@
 import { Host, Picker, Text as SwiftText } from '@expo/ui/swift-ui';
 import { disabled as swiftDisabled, pickerStyle, tag, tint } from '@expo/ui/swift-ui/modifiers';
-import { Children, Fragment, isValidElement, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, type ReactNode, type Ref } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -10,6 +10,7 @@ import {
   StyleSheet,
   Text,
   View,
+  type ScrollViewInstance,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
@@ -30,15 +31,19 @@ export function SettingsPage({
   children,
   refreshing,
   onRefresh,
+  scrollRef,
 }: {
   children: ReactNode;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** For screens that scroll to one of their sections, such as Settings' search. */
+  scrollRef?: Ref<ScrollViewInstance>;
 }) {
   const { colors, space } = useTheme();
   const insets = useSafeAreaInsets();
   return (
     <ScrollView
+      ref={scrollRef}
       style={{ flex: 1, backgroundColor: colors.page }}
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"

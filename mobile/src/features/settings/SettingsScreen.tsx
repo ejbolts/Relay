@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Alert,
   AppState,
@@ -12,8 +12,8 @@ import {
   Text,
   TextInput,
   View,
+  type ScrollViewInstance,
 } from 'react-native';
-import { searchWords, typoMatch } from '../../../../frontend/src/fuzzyText';
 import { formatReleaseVersion, announcedVersion } from '../../../../frontend/src/releaseMetadata';
 import {
   autoSaveChoiceLabel,
@@ -32,7 +32,7 @@ import { apiOrigin, ApiError } from '../../data/api';
 import { useTrainingPreferences, useWorkoutTypes } from '../../data/queries';
 import { useSession, useUser } from '../../session/SessionProvider';
 import { cardSurface, errorMessage, ErrorState, Loading } from '../../ui/components';
-import { Icon, type IconName, type IconPair } from '../../ui/Icon';
+import { Icon } from '../../ui/Icon';
 import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
@@ -42,7 +42,7 @@ import { DataSection } from '../data';
 import { AdminSettingsSection } from '../admin';
 import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
-import { restTimerPreference, restTimesPreference } from './devicePreferences';
+import { restTimerPreference, restTimesPreference, useReduceMotion } from './devicePreferences';
 import { settingsIcons } from './icons';
 import {
   useAutoSave,
@@ -61,28 +61,15 @@ import {
   SwitchRow,
   type Choice,
 } from './SettingsList';
+import {
+  settingsSearchResults,
+  SettingsSearchBar,
+  SettingsSearchResults,
+  type SearchTarget,
+  type SettingsAnchor,
+} from './SettingsSearch';
 
 const NO_REST = -1;
-
-interface SearchEntry {
-  id: string;
-  title: string;
-  group: string;
-  keywords: string;
-  icon: IconName | IconPair;
-  route?: string;
-  /** Renders an inline interactive row directly in search results when present. */
-  render?: () => ReactNode;
-}
-
-function matchesSearch(query: string, entry: Pick<SearchEntry, 'title' | 'group' | 'keywords'>) {
-  const words = searchWords(query);
-  if (!words.length) return false;
-  const haystack = searchWords(`${entry.title} ${entry.group} ${entry.keywords}`);
-  return words.every((word) =>
-    haystack.some((token) => token.startsWith(word) || typoMatch(word, token) !== null),
-  );
-}
 
 /** Settings, as on the web: training, unfinished workouts, notifications, account and about. */
 export function SettingsScreen() {
@@ -100,6 +87,9 @@ export function SettingsScreen() {
 
 function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
   const router = useRouter();
+  const user = useUser();
+  const { space } = useTheme();
+  const reducedMotion = useReduceMotion();
   const types = useWorkoutTypes();
   const split = useTrainingSplit();
   const save = useSavePreferences();
@@ -129,316 +119,117 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
     })),
   ];
 
-  const weightUnitRow = (
-    <ChoiceRow
-      key="weight-unit"
-      label="Weight unit"
-      icon={settingsIcons.unit}
-      value={shown.preferred_weight_unit}
-      choices={WEIGHT_UNIT_CHOICES}
-      onChange={(unit) => change({ ...preferences, preferred_weight_unit: unit })}
-    />
-  );
-  const weekStartsRow = (
-    <ChoiceRow
-      key="week-starts"
-      label="Week starts"
-      icon={settingsIcons.week}
-      value={shown.week_start}
-      choices={WEEK_START_CHOICES}
-      onChange={(weekStart) => change({ ...preferences, week_start: weekStart })}
-    />
-  );
-  const weeklyGoalRow = (
-    <WeeklyGoalRow
-      key="weekly-goal"
-      goal={shown.weekly_muscle_set_goal}
-      onSave={(goal) => change({ ...preferences, weekly_muscle_set_goal: goal })}
-      onInvalid={() => setTrainingError(WEEKLY_GOAL_ERROR)}
-    />
-  );
-  const restTimerRow = (
-    <SwitchRow
-      key="rest-timer"
-      label="Rest timer"
-      icon={settingsIcons.rest}
-      value={restTimer}
-      onChange={restTimerPreference.set}
-    />
-  );
-  const restTimesRow = (
-    <SwitchRow
-      key="rest-times"
-      label="Show rest times"
-      icon={settingsIcons.show}
-      value={restTimes}
-      onChange={restTimesPreference.set}
-    />
-  );
-  const defaultRestRow = (
-    <ChoiceRow
-      key="default-rest"
-      label="Default rest"
-      disabled={save.isPending}
-      value={shown.default_rest_seconds ?? NO_REST}
-      choices={restChoices}
-      onChange={(seconds) =>
-        change(
-          { ...preferences, default_rest_seconds: seconds === NO_REST ? null : seconds },
-          'Default rest saved.',
-        )
-      }
-    />
-  );
-
-  const searchEntries: SearchEntry[] = [
-    {
-      id: 'profile',
-      title: 'Edit profile',
-      group: 'Profile',
-      keywords: 'username display name photo picture avatar sex male female',
-      icon: settingsIcons.people,
-      route: '/settings/profile',
-    },
-    {
-      id: 'split',
-      title: 'Your split',
-      group: 'Training',
-      keywords: 'schedule rotation routine routines upper lower push pull legs ppl templates cycle',
-      icon: settingsIcons.split,
-      route: '/split',
-    },
-    {
-      id: 'weight-unit',
-      title: 'Weight unit',
-      group: 'Training',
-      keywords: 'kg lb kilograms pounds units',
-      icon: settingsIcons.unit,
-      render: () => weightUnitRow,
-    },
-    {
-      id: 'week-starts',
-      title: 'Week starts',
-      group: 'Training',
-      keywords: 'monday sunday schedule calendar',
-      icon: settingsIcons.week,
-      render: () => weekStartsRow,
-    },
-    {
-      id: 'weekly-goal',
-      title: 'Weekly sets per muscle',
-      group: 'Training',
-      keywords: 'muscle sets goal targets volume default',
-      icon: settingsIcons.goal,
-      render: () => weeklyGoalRow,
-    },
-    {
-      id: 'muscle-goals',
-      title: 'Muscle goals',
-      group: 'Training',
-      keywords: 'per muscle targets volume chest back legs',
-      icon: settingsIcons.goal,
-      route: '/muscle-goals',
-    },
-    {
-      id: 'workout-types',
-      title: 'Workout types',
-      group: 'Training',
-      keywords: 'colour color category calendar legend custom add remove',
-      icon: settingsIcons.types,
-      route: '/settings/workout-types',
-    },
-    {
-      id: 'fresh-starts',
-      title: 'Fresh starts',
-      group: 'Training',
-      keywords: 'personal records pr prs reset baseline restart',
-      icon: settingsIcons.freshStart,
-      route: '/settings/fresh-starts',
-    },
-    {
-      id: 'bodyweight',
-      title: 'Bodyweight chart',
-      group: 'Training',
-      keywords: 'body weight average median duration trend measurements',
-      icon: settingsIcons.unit,
-      route: '/settings/bodyweight',
-    },
-    {
-      id: 'heart-rate',
-      title: 'Heart-rate zones',
-      group: 'Training',
-      keywords: 'cardio zone zones hr bpm zone 2 weekly goal minutes',
-      icon: settingsIcons.heartRate,
-      route: '/cardio/zones',
-    },
-    {
-      id: 'rest-timer',
-      title: 'Rest timer',
-      group: 'Between sets',
-      keywords: 'automatic countdown between sets timer',
-      icon: settingsIcons.rest,
-      render: () => restTimerRow,
-    },
-    {
-      id: 'rest-times',
-      title: 'Show rest times',
-      group: 'Between sets',
-      keywords: 'hide display between sets rest duration',
-      icon: settingsIcons.show,
-      render: () => restTimesRow,
-    },
-    {
-      id: 'default-rest',
-      title: 'Default rest',
-      group: 'Between sets',
-      keywords: 'between sets new set standard length duration timer',
-      icon: settingsIcons.rest,
-      render: () => defaultRestRow,
-    },
-    {
-      id: 'appearance',
-      title: 'Theme and motion',
-      group: 'Appearance',
-      keywords:
-        'appearance light dark mode automatic system colour color palette accent blue emerald plum coral amber neutral stained oled animations reduce motion',
-      icon: settingsIcons.appearance,
-      route: '/settings/appearance',
-    },
-    {
-      id: 'guides',
-      title: 'Guides',
-      group: 'Help',
-      keywords: 'setup walkthrough tour how to normalise machine weights blocks',
-      icon: settingsIcons.guides,
-      route: '/settings/guides',
-    },
-    {
-      id: 'import',
-      title: 'Import workouts',
-      group: 'Data',
-      keywords: 'csv import history upload backup',
-      icon: settingsIcons.data,
-      route: '/data/import',
-    },
-    {
-      id: 'export',
-      title: 'Export data',
-      group: 'Data',
-      keywords: 'csv export download backup archive',
-      icon: settingsIcons.data,
-      route: '/data/export',
-    },
-    {
-      id: 'sharing',
-      title: 'Profile sharing',
-      group: 'Account',
-      keywords: 'privacy private public friends visibility live activity',
-      icon: settingsIcons.people,
-      route: socialRoutes.sharing,
-    },
-    {
-      id: 'password',
-      title: 'Change password',
-      group: 'Account',
-      keywords: 'security login account password',
-      icon: settingsIcons.password,
-      route: '/settings/password',
-    },
-    {
-      id: 'delete-account',
-      title: 'Delete account',
-      group: 'Account',
-      keywords: 'remove permanently danger account',
-      icon: 'trash',
-      route: '/settings/delete-account',
-    },
-    {
-      id: 'whats-new',
-      title: "What's new",
-      group: 'About',
-      keywords: 'version updates release changelog changes',
-      icon: settingsIcons.whatsNew,
-      route: '/settings/whats-new',
-    },
-    {
-      id: 'tips',
-      title: 'Tips',
-      group: 'About',
-      keywords: 'hints learn disable suggestions',
-      icon: settingsIcons.tips,
-      route: '/settings/tips',
-    },
-    {
-      id: 'feedback',
-      title: 'Send feedback',
-      group: 'About',
-      keywords: 'suggestion bug report feature request ideas support',
-      icon: settingsIcons.feedback,
-      route: '/settings/feedback',
-    },
-  ];
-
   const searching = query.trim().length > 0;
-  const matches = searching ? searchEntries.filter((entry) => matchesSearch(query, entry)) : [];
+  const results = searching ? settingsSearchResults(query, user.id, user.is_admin) : [];
+  const scroll = useRef<ScrollViewInstance>(null);
+  const [jump, setJump] = useState<SettingsAnchor | null>(null);
 
+  function choose(target: SearchTarget) {
+    setQuery('');
+    if ('route' in target) router.push(target.route);
+    else setJump(target.section);
+  }
+  function placed(anchor: SettingsAnchor, y: number) {
+    if (jump !== anchor) return;
+    setJump(null);
+    scroll.current?.scrollTo({ y: Math.max(0, y - space.sm), animated: !reducedMotion });
+  }
   return (
-    <SettingsPage>
+    <SettingsPage scrollRef={scroll}>
       <ProfileHeader />
-      <SettingsSearchBar value={query} onChange={setQuery} />
+      <SettingsSearchBar
+        value={query}
+        onChange={setQuery}
+        onSubmit={() => results[0] && choose(results[0].target)}
+      />
       {searching ? (
-        <SearchResults
-          matches={matches}
-          onNavigate={(route) => {
-            setQuery('');
-            router.push(route as never);
-          }}
-        />
+        <SettingsSearchResults results={results} onChoose={(target) => choose(target)} />
       ) : (
         <>
-          <Section title="Training">
-            <Row
-              label="Your split"
-              icon={settingsIcons.split}
-              value={split.isPending ? null : splitName}
-              onPress={() => router.push('/split')}
-            />
-            {weightUnitRow}
-            {weekStartsRow}
-            {weeklyGoalRow}
-            <Row
-              label="Muscle goals"
-              icon={settingsIcons.goal}
-              onPress={() => router.push('/muscle-goals')}
-            />
-            <Row
-              label="Workout types"
-              icon={settingsIcons.types}
-              value={types.data ? String(activeTypes) : null}
-              onPress={() => router.push('/settings/workout-types')}
-            />
-            <Row
-              label="Fresh starts"
-              icon={settingsIcons.freshStart}
-              onPress={() => router.push('/settings/fresh-starts')}
-            />
-            <Row
-              label="Bodyweight chart"
-              icon={settingsIcons.unit}
-              onPress={() => router.push('/settings/bodyweight')}
-            />
-            <Row
-              label="Heart-rate zones"
-              icon={settingsIcons.heartRate}
-              onPress={() => router.push('/cardio/zones')}
-            />
-          </Section>
-          <Section title="Between sets">
-            {restTimerRow}
-            {restTimesRow}
-            {defaultRestRow}
-          </Section>
-          <SectionError message={trainingError} />
+          <SettingsSection anchor="training" onPlaced={placed}>
+            <Section title="Training">
+              <Row
+                label="Your split"
+                icon={settingsIcons.split}
+                value={split.isPending ? null : splitName}
+                onPress={() => router.push('/split')}
+              />
+              <ChoiceRow
+                label="Weight unit"
+                icon={settingsIcons.unit}
+                value={shown.preferred_weight_unit}
+                choices={WEIGHT_UNIT_CHOICES}
+                onChange={(unit) => change({ ...preferences, preferred_weight_unit: unit })}
+              />
+              <ChoiceRow
+                label="Week starts"
+                icon={settingsIcons.week}
+                value={shown.week_start}
+                choices={WEEK_START_CHOICES}
+                onChange={(weekStart) => change({ ...preferences, week_start: weekStart })}
+              />
+              <WeeklyGoalRow
+                goal={shown.weekly_muscle_set_goal}
+                onSave={(goal) => change({ ...preferences, weekly_muscle_set_goal: goal })}
+                onInvalid={() => setTrainingError(WEEKLY_GOAL_ERROR)}
+              />
+              <Row
+                label="Muscle goals"
+                icon={settingsIcons.goal}
+                onPress={() => router.push('/muscle-goals')}
+              />
+              <Row
+                label="Workout types"
+                icon={settingsIcons.types}
+                value={types.data ? String(activeTypes) : null}
+                onPress={() => router.push('/settings/workout-types')}
+              />
+              <Row
+                label="Fresh starts"
+                icon={settingsIcons.freshStart}
+                onPress={() => router.push('/settings/fresh-starts')}
+              />
+              <Row
+                label="Bodyweight chart"
+                icon={settingsIcons.unit}
+                onPress={() => router.push('/settings/bodyweight')}
+              />
+              <Row
+                label="Heart-rate zones"
+                icon={settingsIcons.heartRate}
+                onPress={() => router.push('/cardio/zones')}
+              />
+            </Section>
+          </SettingsSection>
+          <SettingsSection anchor="between-sets" onPlaced={placed}>
+            <Section title="Between sets">
+              <SwitchRow
+                label="Rest timer"
+                icon={settingsIcons.rest}
+                value={restTimer}
+                onChange={restTimerPreference.set}
+              />
+              <SwitchRow
+                label="Show rest times"
+                icon={settingsIcons.show}
+                value={restTimes}
+                onChange={restTimesPreference.set}
+              />
+              <ChoiceRow
+                label="Default rest"
+                disabled={save.isPending}
+                value={shown.default_rest_seconds ?? NO_REST}
+                choices={restChoices}
+                onChange={(seconds) =>
+                  change(
+                    { ...preferences, default_rest_seconds: seconds === NO_REST ? null : seconds },
+                    'Default rest saved.',
+                  )
+                }
+              />
+            </Section>
+            <SectionError message={trainingError} />
+          </SettingsSection>
           <Section title="Appearance">
             <Row
               label="Theme and motion"
@@ -446,12 +237,22 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
               onPress={() => router.push('/settings/appearance')}
             />
           </Section>
-          {/* B4 (guides): Help and Workout sharing. */}
-          <HelpSettings />
-          <AutoSaveSection />
-          <NotificationsSection />
-          <DataSection />
-          <AccountSection />
+          <SettingsSection anchor="help" onPlaced={placed}>
+            {/* B4 (guides): Help and Workout sharing. */}
+            <HelpSettings />
+          </SettingsSection>
+          <SettingsSection anchor="auto-save" onPlaced={placed}>
+            <AutoSaveSection />
+          </SettingsSection>
+          <SettingsSection anchor="notifications" onPlaced={placed}>
+            <NotificationsSection />
+          </SettingsSection>
+          <SettingsSection anchor="data" onPlaced={placed}>
+            <DataSection />
+          </SettingsSection>
+          <SettingsSection anchor="account" onPlaced={placed}>
+            <AccountSection />
+          </SettingsSection>
           {/* Mobile batch 4, B6: the admin console, for administrators only. */}
           <AdminSettingsSection />
           <AboutSection />
@@ -461,88 +262,24 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
   );
 }
 
-function SettingsSearchBar({
-  value,
-  onChange,
+/** A part of Settings that a search result can scroll to. */
+function SettingsSection({
+  anchor,
+  onPlaced,
+  children,
 }: {
-  value: string;
-  onChange: (value: string) => void;
+  anchor: SettingsAnchor;
+  onPlaced: (anchor: SettingsAnchor, y: number) => void;
+  children: ReactNode;
 }) {
-  const { colors, type, radius } = useTheme();
-  const [focused, setFocused] = useState(false);
+  const { space } = useTheme();
   return (
     <View
-      style={[
-        styles.searchBar,
-        {
-          backgroundColor: colors.surface,
-          borderColor: focused ? colors.accent : colors.lineStrong,
-          borderRadius: radius.md,
-        },
-      ]}
+      style={{ gap: space.xl }}
+      onLayout={(event) => onPlaced(anchor, event.nativeEvent.layout.y)}
     >
-      <Icon name="search" size={18} color={colors.muted} />
-      <TextInput
-        accessibilityLabel="Search settings and profile"
-        placeholder="Rest timer, username, theme…"
-        placeholderTextColor={colors.muted}
-        value={value}
-        onChangeText={onChange}
-        onFocus={() => setFocused(true)}
-        onBlur={() => setFocused(false)}
-        autoCorrect={false}
-        autoCapitalize="none"
-        returnKeyType="search"
-        clearButtonMode="never"
-        style={[type.body, styles.searchInput, { color: colors.text }]}
-      />
-      {value.length > 0 && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Clear search"
-          hitSlop={8}
-          onPress={() => onChange('')}
-          style={styles.clearButton}
-        >
-          <Icon name="close" size={16} color={colors.muted} />
-        </Pressable>
-      )}
+      {children}
     </View>
-  );
-}
-
-function SearchResults({
-  matches,
-  onNavigate,
-}: {
-  matches: SearchEntry[];
-  onNavigate: (route: string) => void;
-}) {
-  const { colors, type } = useTheme();
-  if (!matches.length) {
-    return (
-      <Text style={[type.callout, { color: colors.muted, paddingHorizontal: 16 }]}>
-        No settings found. Try “timer” or “username”.
-      </Text>
-    );
-  }
-  return (
-    <Section title={`${matches.length} ${matches.length === 1 ? 'result' : 'results'}`}>
-      {matches.map((entry) =>
-        entry.render ? (
-          entry.render()
-        ) : (
-          <Row
-            key={entry.id}
-            label={entry.title}
-            subtitle={entry.group}
-            icon={entry.icon}
-            destructive={entry.id === 'delete-account'}
-            onPress={() => entry.route && onNavigate(entry.route)}
-          />
-        ),
-      )}
-    </Section>
   );
 }
 

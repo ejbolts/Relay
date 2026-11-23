@@ -175,16 +175,30 @@ describe('Settings', () => {
     expect(screen.getByRole('radio', { name: 'Automatic' })).toBeChecked();
   });
 
-  it('filters settings by keyword from the search bar and opens matching subpages', async () => {
+  it('finds settings with the web search and opens their screen or section', async () => {
     await show(<SettingsScreen />);
     const search = await screen.findByLabelText('Search settings and profile');
     await fireEvent.changeText(search, 'theme');
-    await fireEvent.press(screen.getByRole('button', { name: 'Theme and motion' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'App theme, Appearance' }));
     expect(mockRouter.push).toHaveBeenLastCalledWith('/settings/appearance');
+    expect(search).toHaveDisplayValue('');
+
+    await fireEvent.changeText(search, 'pasword');
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Change password, Account & privacy' }),
+    );
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/settings/password');
+
+    // Settings on this page clear the search and show the page again.
     await fireEvent.changeText(search, 'timer');
-    expect(screen.getByLabelText('Rest timer')).toBeTruthy();
-    await fireEvent.changeText(search, 'zzzzzz');
-    expect(screen.getByText('No settings found. Try “timer” or “username”.')).toBeVisible();
+    expect(screen.getByText('1 section found')).toBeVisible();
+    await fireEvent.press(screen.getByRole('button', { name: 'Rest timer, Training' }));
+    expect(screen.getByLabelText('Rest timer')).toBeVisible();
+    expect(screen.queryByText('1 section found')).toBeNull();
+
+    // Places the app doesn't have stay out of its results.
+    await fireEvent.changeText(search, 'youtube');
+    expect(screen.getByText('No sections found. Try “timer” or “username”.')).toBeVisible();
   });
 
   it('saves each bodyweight default independently', async () => {
