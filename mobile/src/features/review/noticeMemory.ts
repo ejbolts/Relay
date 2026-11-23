@@ -83,7 +83,8 @@ export function openLaunchPrompt(userId: string, prompt: LaunchPrompt) {
   launchPrompt = { userId, prompt };
 }
 
-/** Forgets the visit's prompt, for tests. */
-export function resetLaunchPrompt() {
+/** Starts a new visit, forgetting what this one kept in memory, for tests. */
+export function resetNoticeMemory() {
   launchPrompt = null;
+  session.clear();
 }
