@@ -2,6 +2,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { usePreventRemove } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { plural } from '../../../../frontend/src/adminDisplay';
 import type { WorkoutSession } from '../../../../frontend/src/types';
 import { ApiError } from '../../data/api';
 import { UploadStopped } from '../../data/uploadFile';
@@ -14,6 +15,7 @@ import {
   PROCESSING_SESSION_STATUSES,
   overallUploadProgress,
   SESSION_POLL_MS,
+  sessionKicker,
   sessionRetryLabel,
   sessionStatusDetail,
   sessionStatusText,
@@ -596,7 +598,7 @@ function VideoUploader() {
     const detail = sessionStatusDetail(session.status);
     return (
       <SettingsPage>
-        <Heading eyebrow="Processing session" title={session.name} />
+        <Heading eyebrow={sessionKicker(session.status)} title={session.name} />
         {banner}
         <Card>
           <Text style={[type.headline, { color: colors.text }]}>
@@ -711,7 +713,9 @@ function VideoUploader() {
       {clips.length > 0 && (
         <View style={{ gap: 12 }}>
           <View style={styles.between}>
-            <Text style={[type.headline, { color: colors.text }]}>{clips.length} clips</Text>
+            <Text style={[type.headline, { color: colors.text }]}>
+              {plural(clips.length, 'clip')}
+            </Text>
             <Text style={[type.footnote, { color: colors.muted }]}>
               {formatBytes(totalBytes)} total
             </Text>

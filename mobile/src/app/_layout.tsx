@@ -10,6 +10,7 @@ import { createQueryClient } from '../data/queryClient';
 import { BodyCheckInSync } from '../features/body/BodyCheckInSync';
 // B5 (data): asks a new account whether to import its history.
 import { useImportPrompt } from '../features/data';
+import { AppTourHost } from '../features/guides/AppTourHost';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { useDeferredFriendInvite } from '../session/friendInvite';
@@ -124,6 +125,8 @@ function Navigation() {
             <Stack.Screen name="sign-in" />
           </Stack.Protected>
         </Stack>
+        {/* Mobile batch 4, B4: the quick tour, above the tabs so it stays open as it opens each. */}
+        {signedIn && !mustChangePassword && <AppTourHost />}
         {/* Android's menu sheets and text dialogs for every screen. The logger, a separate native
             sheet, mounts its own. */}
         <PromptHost />
