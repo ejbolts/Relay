@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   bodyGoalTarget,
@@ -12,7 +12,8 @@ import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
 import { Button, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
-import { showToast } from '../../ui/Toast';
+import { pendingActions, usePendingActions } from '../../ui/pendingActions';
+import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { BodyHistory } from './BodyHistory';
 import { syncBodyCheckIns } from './bodyCheckInQueue';
@@ -32,54 +33,45 @@ import { GoalSheet, type GoalRequest } from './GoalSheet';
 import { clearMaintainGoalRequest, useMaintainGoalRequested } from './maintainGoalRequest';
 import { WeighInSheet } from './WeighInSheet';
 
-/** How long a removed goal can be brought back: the Undo toast's time on screen. */
-const GOAL_UNDO_MS = 5000;
 /** The goal form on Maintain, as Home's maintenance tip asks for. */
 const MAINTAIN_GOAL: GoalRequest = { goal: null, kind: 'maintain' };
 
 /**
- * Removes a goal from view at once and deletes it only when its Undo window closes, as the
- * web's goal removal does, so Undo never has to recreate it. A newer removal sends the
- * waiting one straight away.
+ * Removes a goal from view at once and deletes it only when its Undo toast ends without Undo
+ * (it times out, is dismissed or a newer toast replaces it), as the web's goal removal does, so
+ * Undo never has to recreate it and the goal is never deleted while Undo is still on screen.
  */
 function useGoalRemoval() {
   const client = useQueryClient();
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const pending = useRef<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const commit = useCallback(() => {
-    const id = pending.current;
-    clearTimeout(timer.current);
-    if (!id) return;
-    pending.current = null;
-    bodyGoalApi.remove(id).then(
-      () => client.invalidateQueries({ queryKey: bodyKeys.goals }).then(() => setPendingId(null)),
-      () => {
-        setPendingId(null);
-        showToast('Could not remove this goal. It has been restored.');
-      },
-    );
-  }, [client]);
-  useEffect(() => commit, [commit]);
-
-  const undo = useCallback(() => {
-    clearTimeout(timer.current);
-    pending.current = null;
-    setPendingId(null);
-  }, []);
-
+  // Shared across mounts, so a Body opened again while the Undo shows still hides the goal.
+  const pendingIds = usePendingActions('goal');
   const start = useCallback(
     (goal: BodyWeightGoal) => {
-      commit();
-      pending.current = goal.id;
-      setPendingId(goal.id);
-      timer.current = setTimeout(commit, GOAL_UNDO_MS);
-      showToast('Goal removed', { label: 'Undo', run: undo });
+      const account = toastAccount();
+      if (!pendingActions.add('goal', goal.id, account)) return;
+      const done = () => pendingActions.remove('goal', goal.id, account);
+      showToast(
+        'Goal removed',
+        {
+          label: 'Undo',
+          run: done,
+          onDismiss: () =>
+            void bodyGoalApi.remove(goal.id).then(
+              () => void client.invalidateQueries({ queryKey: bodyKeys.goals }).finally(done),
+              () => {
+                done();
+                showToast('Could not remove this goal. It has been restored.', undefined, {
+                  account,
+                });
+              },
+            ),
+        },
+        { account },
+      );
     },
-    [commit, undo],
+    [client],
   );
-  return { pendingId, start };
+  return { pendingIds, start };
 }
 
 /**
@@ -98,7 +90,7 @@ export function BodyScreen() {
   const [goalRequest, setGoalRequest] = useState<GoalRequest | null>(null);
   const maintainRequested = useMaintainGoalRequested();
   const measurements = measurementsQuery.data ?? [];
-  const goals = (goalsQuery.data ?? []).filter((goal) => goal.id !== removal.pendingId);
+  const goals = (goalsQuery.data ?? []).filter((goal) => !removal.pendingIds.includes(goal.id));
   const latest = measurements[0];
   // The newest reading, which may come from an earlier check-in than the latest weigh-in.
   const latestBodyFat = measurements.find((item) => item.body_fat_pct !== null);
@@ -117,26 +109,36 @@ export function BodyScreen() {
 
   /** Deletes a check-in at once; Undo saves it back as it was. */
   function deleteCheckIn(measurement: BodyMeasurement) {
+    // The account deleting it: if the session changes before the delete answers, the result is
+    // not shown and its Undo never saves into another account.
+    const account = toastAccount();
     bodyCheckInApi.deleteBodyMeasurement(measurement.id).then(
       () => {
+        if (!isToastAccountCurrent(account)) return;
         void refreshBodyMeasurements(client);
-        showToast('Check-in deleted', {
-          label: 'Undo',
-          run: () =>
-            void bodyCheckInApi
-              .saveBodyMeasurement({
-                measurement_date: measurement.measurement_date,
-                weight_kg: measurement.weight_kg,
-                body_fat_pct: measurement.body_fat_pct,
-                notes: measurement.notes,
-              })
-              .then(
-                () => refreshBodyMeasurements(client),
-                (reason) => showToast(errorMessage(reason)),
-              ),
-        });
+        showToast(
+          'Check-in deleted',
+          {
+            label: 'Undo',
+            run: () =>
+              void bodyCheckInApi
+                .saveBodyMeasurement({
+                  measurement_date: measurement.measurement_date,
+                  weight_kg: measurement.weight_kg,
+                  body_fat_pct: measurement.body_fat_pct,
+                  notes: measurement.notes,
+                })
+                .then(
+                  () => {
+                    if (isToastAccountCurrent(account)) void refreshBodyMeasurements(client);
+                  },
+                  (reason) => showToast(errorMessage(reason), undefined, { account }),
+                ),
+          },
+          { account },
+        );
       },
-      (reason) => showToast(errorMessage(reason)),
+      (reason) => showToast(errorMessage(reason), undefined, { account }),
     );
   }
 
