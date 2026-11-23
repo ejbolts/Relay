@@ -1,4 +1,3 @@
-import { getLinkingURL } from 'expo-linking';
 import { usePathname, useRootNavigationState, useRouter } from 'expo-router';
 import { useEffect, useSyncExternalStore } from 'react';
 import { friendInviteIdFromHash } from '../../../frontend/src/friendInviteLink';
@@ -6,8 +5,11 @@ import { readJson, writeJson } from '../data/deviceStorage';
 import { socialRoutes } from '../features/social/navigation';
 
 const KEY = 'relay.pendingFriendInvite';
+/** The screens a visitor sees before the signed-in routes open. */
+const SIGNED_OUT_PATHS = new Set(['/sign-in', '/password-required']);
 const listeners = new Set<() => void>();
 let pending: string | null | undefined;
+let canOpenNow = false;
 
 const currentInvite = () => {
   if (pending === undefined) pending = readJson<string>(KEY);
@@ -35,13 +37,17 @@ export function friendInviteFromUrl(url: string): string | null {
   return friendInviteIdFromHash(`#friend=${route[1]}`);
 }
 
+/**
+ * Keeps an invite link that arrives before its route can open (from `+native-intent`, which sees
+ * every system link, the launch link included). A signed-in app opens the link itself.
+ */
 export function captureFriendInvite(url: string) {
+  if (canOpenNow) return;
   const id = friendInviteFromUrl(url);
-  console.info('invite probe', url.includes('social/profile/'), url.includes('/--/'), !!id);
   if (id && currentInvite() !== id) saveInvite(id);
 }
 
-/** Keep an invite while Expo's protected routes send the visitor through authentication. */
+/** Opens a kept invite once the visitor has signed in or created an account. */
 export function useDeferredFriendInvite(canOpen: boolean) {
   const router = useRouter();
   const pathname = usePathname();
@@ -49,23 +55,14 @@ export function useDeferredFriendInvite(canOpen: boolean) {
   const invite = useSyncExternalStore(subscribe, currentInvite);
 
   useEffect(() => {
-    // Expo can hold the launch URL in its native module before the React Native listener mounts.
-    const initial = getLinkingURL();
-    if (initial) captureFriendInvite(initial);
-  }, []);
+    canOpenNow = canOpen;
+  }, [canOpen]);
 
   useEffect(() => {
-    console.info(
-      'invite route probe',
-      canOpen,
-      ready,
-      !!invite,
-      pathname.startsWith('/social/profile/'),
-    );
-    if (!canOpen || !ready || !invite || currentInvite() !== invite) return;
+    // Wait until the route guard has left Sign in: its reset to Home would undo an earlier jump.
+    if (!canOpen || !ready || !invite || SIGNED_OUT_PATHS.has(pathname)) return;
     const id = friendInviteIdFromHash(`#friend=${invite}`);
     saveInvite(null);
-    // Expo may already have opened the initial URL in a restored session.
     if (id && pathname !== `/social/profile/${id}`) router.navigate(socialRoutes.profile(id, true));
   }, [canOpen, pathname, invite, ready, router]);
 }

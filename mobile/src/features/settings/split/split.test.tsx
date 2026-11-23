@@ -260,7 +260,9 @@ describe('the split editor', () => {
     mockParams = { id: 'ppl' };
     await show(<SplitEditorScreen />);
     await fireEvent.press((await screen.findAllByRole('button', { name: 'Add exercise' }))[0]);
-    await fireEvent.changeText(await screen.findByLabelText('Search exercises'), 'Zercher');
+    // The picker sheet can take over a second to mount while the whole suite runs.
+    const search = await screen.findByLabelText('Search exercises', {}, { timeout: 4000 });
+    await fireEvent.changeText(search, 'Zercher');
     expect(screen.queryByRole('button', { name: 'Create new exercise' })).toBeNull();
     expect(screen.queryByRole('button', { name: /^Create / })).toBeNull();
   });
