@@ -39,9 +39,22 @@ const SIDE = BOX - STROKE - 2 * (RADIUS - STROKE / 2);
 const PERIMETER = 4 * SIDE + 2 * Math.PI * (RADIUS - STROKE / 2);
 
 /** A day's border: one colour, or equal arcs around it when the day mixes workout types. */
-export function DayRing({ colors, size = BOX }: { colors: string[]; size?: number }) {
+export function DayRing({
+  colors,
+  size = BOX,
+  opacity = 1,
+}: {
+  colors: string[];
+  size?: number;
+  opacity?: number;
+}) {
   return (
-    <Svg width={size} height={size} viewBox={`0 0 ${BOX} ${BOX}`} style={StyleSheet.absoluteFill}>
+    <Svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${BOX} ${BOX}`}
+      style={[StyleSheet.absoluteFill, { opacity }]}
+    >
       {ringSegments(colors, PERIMETER).map((segment, index) => (
         <Path
           key={index}
@@ -74,13 +87,12 @@ const DayCell = memo(function DayCell({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ disabled: !trained, selected }}
+      accessibilityState={{ selected }}
       accessibilityLabel={
         trained
           ? `View ${count} ${count === 1 ? 'workout' : 'workouts'} for ${prettyDate(day.date)}`
-          : prettyDate(day.date)
+          : `${prettyDate(day.date)}${day.scheduledNote ? `, ${day.scheduledNote}` : ''}`
       }
-      disabled={!trained}
       onPress={() => {
         void Haptics.selectionAsync();
         onPress(day);
@@ -96,8 +108,13 @@ const DayCell = memo(function DayCell({
             pressed && { opacity: 0.6 },
           ]}
         >
-          {ring.length > 0 && <DayRing colors={ring} />}
-          {day.today && !ring.length && (
+          {ring.length > 0 ? (
+            <DayRing colors={ring} />
+          ) : day.scheduled.length > 0 ? (
+            // A planned day's outline, faint once it has passed unlogged (missed), as on the web.
+            <DayRing colors={day.scheduled} opacity={day.future || day.today ? 1 : 0.32} />
+          ) : null}
+          {day.today && !ring.length && !day.scheduled.length && (
             <View style={[styles.todayRing, { borderColor: colors.accent }]} />
           )}
           <Text

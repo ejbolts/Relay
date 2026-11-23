@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { homeSectionLists } from '../../../../frontend/src/homeLayout';
-import { calendarCreatePrompt, calendarDayTarget } from '../../../../frontend/src/plannedDay';
+import { calendarDayTarget } from '../../../../frontend/src/plannedDay';
 import { isoLocalDate, parseLocalDate } from '../../../../frontend/src/trainingSummary';
 import type { HeatmapDay } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
@@ -14,6 +14,7 @@ import { useTheme } from '../../ui/theme';
 import { bodyKeys } from '../body/bodyQueries';
 import { trainingKeys } from '../training/trainingQueries';
 import { useWorkout } from '../workout/WorkoutProvider';
+import { useCreateWorkoutOn } from './calendarActions';
 import { DaySheet } from './DaySheet';
 import { homeKeys, useHomeLayout } from './homeData';
 import { HomeHeaderActions } from './HomeHeaderActions';
@@ -49,6 +50,7 @@ export function HomeScreen() {
   const workout = useWorkout();
   const { colors, type } = useTheme();
   const home = useHomeLayout();
+  const createOn = useCreateWorkoutOn();
   const split = useDashboard().data?.training_split;
   const [refreshing, setRefreshing] = useState(false);
   const [day, setDay] = useState<HeatmapDay | null>(null);
@@ -71,23 +73,6 @@ export function HomeScreen() {
     } finally {
       setRefreshing(false);
     }
-  }
-
-  /** Asks before starting a workout dated on an empty day, replacing the live one if any. */
-  function createOn(date: string) {
-    const live = !!workout.live;
-    const prompt = calendarCreatePrompt(date, live);
-    Alert.alert(prompt.title, prompt.message, [
-      { text: prompt.cancel, style: 'cancel' },
-      {
-        text: prompt.confirm,
-        style: prompt.destructive ? 'destructive' : 'default',
-        onPress: () => {
-          if (live) workout.discard();
-          workout.start({ kind: 'empty' }, { date });
-        },
-      },
-    ]);
   }
 
   function pressDay(date: string, entry: HeatmapDay | undefined) {

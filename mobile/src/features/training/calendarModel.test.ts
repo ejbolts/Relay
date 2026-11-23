@@ -3,7 +3,11 @@ import { calendarBounds, calendarMonthView, ringSegments, shiftMonth } from './c
 import { chartModel, nearestPoint } from './ProgressChart';
 import { dashboard } from './trainingFixtures';
 
-const view = (hidden: string[] = [], weekStartDay = 1) =>
+const view = (
+  hidden: string[] = [],
+  weekStartDay = 1,
+  splitDays?: ReadonlyMap<string, readonly string[]>,
+) =>
   calendarMonthView({
     month: '2026-11',
     entries: dashboard.heatmap,
@@ -12,9 +16,38 @@ const view = (hidden: string[] = [], weekStartDay = 1) =>
     hidden: new Set(hidden),
     weekStartDay,
     today: '2026-11-22',
+    splitDays,
   });
 const day = (month: ReturnType<typeof view>, date: string) =>
   month.weeks.flat().find((item) => item?.date === date)!;
+
+test('outlines the split’s planned and missed days, a mixed day in each of its types', () => {
+  const month = view(
+    [],
+    1,
+    new Map([
+      ['2026-11-24', ['upper', 'cardio']],
+      ['2026-11-17', ['lower']],
+      ['2026-11-21', ['push']],
+    ]),
+  );
+  expect(day(month, '2026-11-24')).toMatchObject({
+    ring: [],
+    scheduled: ['#8b5cf6', '#22c55e'],
+    scheduledNote: 'Upper body + Cardio planned',
+  });
+  expect(day(month, '2026-11-17')).toMatchObject({
+    scheduled: ['#f59e0b'],
+    scheduledNote: 'Lower body missed',
+  });
+  // A logged day shows what was trained, not the plan.
+  expect(day(month, '2026-11-21')).toMatchObject({ scheduled: [], scheduledNote: null });
+  // A type switched off in the legend leaves the plan's outline too.
+  expect(
+    day(view(['cardio'], 1, new Map([['2026-11-24', ['upper', 'cardio']]])), '2026-11-24')
+      .scheduled,
+  ).toEqual(['#8b5cf6']);
+});
 
 test('pages months across year ends', () => {
   expect(shiftMonth('2026-01', -1)).toBe('2025-12');
