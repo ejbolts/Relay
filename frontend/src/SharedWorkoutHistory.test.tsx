@@ -139,13 +139,11 @@ it('puts reaction and comment buttons on each profile workout, without opening i
     yours: null,
     comment_count: 3,
   };
-  const react = vi
-    .spyOn(api.sharing, 'react')
-    .mockResolvedValue({
-      counts: [{ reaction: 'fire', count: 1 }],
-      yours: 'fire',
-      comment_count: 0,
-    });
+  const react = vi.spyOn(api.sharing, 'react').mockResolvedValue({
+    counts: [{ reaction: 'fire', count: 1 }],
+    yours: 'fire',
+    comment_count: 0,
+  });
   const onReactionsChange = vi.fn();
   const owner = { display_name: 'Riley', is_you: false };
   const pair = workouts.slice(0, 2);
