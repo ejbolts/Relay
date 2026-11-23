@@ -337,7 +337,12 @@ test('Cardio shows the week, its sessions and zone goals, and opens its editors'
 
 test('an exercise shows its progress, personal bests and sessions', async () => {
   await open(<ExerciseDetailScreen exerciseId="bench" />);
-  expect(await screen.findByText('Personal bests')).toBeVisible();
+  expect(await screen.findByLabelText('Personal bests')).toBeVisible();
+  expect(
+    screen.getByRole('button', {
+      name: 'View Bench Press Est. 1RM full screen in landscape',
+    }),
+  ).toBeVisible();
   // Dates follow the device's locale ("21 Nov" or "Nov 21"), as on the web.
   const lastDone = formatLastDone('2026-11-21', '2026-11-22');
   expect(screen.getByText(`Chest · Barbell · 2 sessions · Last done ${lastDone}`)).toBeVisible();

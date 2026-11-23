@@ -26,7 +26,7 @@ import {
 import { localDate } from '../../../../frontend/src/utils';
 import { formatWeight, weightFromKg } from '../../../../frontend/src/weightUnits';
 import { useExercises, usePersonalRecords, useWeightUnit } from '../../data/queries';
-import { Button, Card, CardHeader, Loading } from '../../ui/components';
+import { Button, Card, CardHeader, IconButton, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { useBlockScope } from '../blocks/blockQueries';
@@ -37,7 +37,8 @@ import { MachineFilter } from '../exercises/MachineFilter';
 import { MergeNudge } from '../exercises/MergeNudge';
 import { exerciseRoutes } from '../exercises/routes';
 import { trainingIcons } from './icons';
-import { Badge, Divider, MoreButton, Note, Segmented, Stat } from './parts';
+import { LandscapeChartView } from '../body/LandscapeChart';
+import { Badge, Divider, MoreButton, Note, Segmented } from './parts';
 import { ProgressChart, type ChartPoint } from './ProgressChart';
 
 const SESSION_PAGE = 8;
@@ -64,6 +65,7 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
   const [shownSessions, setShownSessions] = useState(SESSION_PAGE);
   // Only a pull shows the spinner; refreshes after a change happen quietly.
   const [refreshing, setRefreshing] = useState(false);
+  const [landscape, setLandscape] = useState(false);
   const today = localDate();
   const name = exercise?.name ?? progress.data?.exercise.name ?? 'Exercise';
   // The chosen block's records; without a block, the whole history's.
@@ -248,12 +250,21 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                 )}
                 {scopeChip && <View style={{ marginTop: 8 }}>{scopeChip}</View>}
               </View>
-              <Segmented
-                accessibilityLabel="Exercise progress graph range"
-                values={TIME_RANGE_OPTIONS.map((option) => RANGE_LABELS[option.value])}
-                selectedIndex={TIME_RANGE_OPTIONS.findIndex((option) => option.value === range)}
-                onChange={(index) => chooseRange(TIME_RANGE_OPTIONS[index].value)}
-              />
+              {/* The range beside the full-screen button, as on the web. */}
+              <View style={styles.rangeRow}>
+                <Segmented
+                  accessibilityLabel="Exercise progress graph range"
+                  values={TIME_RANGE_OPTIONS.map((option) => RANGE_LABELS[option.value])}
+                  selectedIndex={TIME_RANGE_OPTIONS.findIndex((option) => option.value === range)}
+                  onChange={(index) => chooseRange(TIME_RANGE_OPTIONS[index].value)}
+                  style={{ flex: 1 }}
+                />
+                <IconButton
+                  icon={trainingIcons.expand}
+                  accessibilityLabel={`View ${name} ${metricInfo.series} full screen in landscape`}
+                  onPress={() => setLandscape(true)}
+                />
+              </View>
               <ProgressChart
                 points={chartPoints}
                 label={`${name} ${metricInfo.series}`}
@@ -262,10 +273,10 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                 formatValue={formatMetric}
               />
             </Card>
-            <Card accessibilityLabel="Personal bests">
-              <CardHeader title="Personal bests" />
-              <View style={styles.stats}>
-                <Stat
+            {/* The web's 2 × 2 grid of bests, divided by hairlines in one card. */}
+            <Card accessibilityLabel="Personal bests" style={styles.bests}>
+              <View style={styles.bestsRow}>
+                <Best
                   label="Heaviest set"
                   value={
                     heaviest
@@ -274,19 +285,24 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                   }
                   detail={heaviest ? shortDate(heaviest.workout_date) : 'No sets yet'}
                 />
-                <Stat
+                <View style={[styles.bestsDivider, { backgroundColor: colors.line }]} />
+                <Best
                   label="Best est. 1RM"
                   value={`${approx}${formatWeight(view.bestEstimatedOneRepMax, unit, 1)}`}
                   detail={bestEstimate ? shortDate(bestEstimate.workout_date) : 'Epley'}
                 />
-                <Stat
+              </View>
+              <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: colors.line }} />
+              <View style={styles.bestsRow}>
+                <Best
                   label="Best session volume"
                   value={
                     bestVolume ? `${approx}${formatWeight(bestVolume.volume_kg, unit, 0)}` : '–'
                   }
                   detail={bestVolume ? shortDate(bestVolume.workout_date) : 'Working sets'}
                 />
-                <Stat
+                <View style={[styles.bestsDivider, { backgroundColor: colors.line }]} />
+                <Best
                   label="Relative strength"
                   value={
                     relativeBest?.relative_strength != null
@@ -400,13 +416,35 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
           </>
         )}
       </ScrollView>
+      {points.length > 0 && (
+        <LandscapeChartView
+          title={`${name} ${metricInfo.series}`}
+          visible={landscape}
+          onClose={() => setLandscape(false)}
+        >
+          {(size) => (
+            <ProgressChart
+              points={chartPoints}
+              label={`${name} ${metricInfo.series}`}
+              unit={unit}
+              height={Math.max(140, size.height - 30)}
+              markRecords={metric !== 'volume_kg'}
+              formatValue={formatMetric}
+            />
+          )}
+        </LandscapeChartView>
+      )}
     </>
   );
 }
 
 const styles = StyleSheet.create({
   delta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', rowGap: 16, columnGap: 12 },
+  rangeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  bests: { padding: 0, gap: 0 },
+  bestsRow: { flexDirection: 'row' },
+  bestsDivider: { width: StyleSheet.hairlineWidth },
+  best: { flex: 1, gap: 3, paddingHorizontal: 16, paddingVertical: 14 },
   year: { flexDirection: 'row', alignItems: 'baseline', gap: 8, marginTop: 4 },
   session: {
     flexDirection: 'row',
@@ -417,3 +455,27 @@ const styles = StyleSheet.create({
   sessionCopy: { flex: 1, gap: 2 },
   sessionDate: { flexDirection: 'row', alignItems: 'center', gap: 6 },
 });
+
+/** One of the bests: a muted label, the value large, and when it was set. */
+function Best({ label, value, detail }: { label: string; value: string; detail?: string }) {
+  const { colors, type } = useTheme();
+  return (
+    <View style={styles.best}>
+      <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
+        {label}
+      </Text>
+      <Text
+        style={[type.title, type.number, { color: colors.text }]}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+      >
+        {value}
+      </Text>
+      {!!detail && (
+        <Text style={[type.caption, { color: colors.muted }]} numberOfLines={2}>
+          {detail}
+        </Text>
+      )}
+    </View>
+  );
+}
