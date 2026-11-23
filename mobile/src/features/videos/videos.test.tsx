@@ -4,24 +4,33 @@ import * as ImagePicker from 'expo-image-picker';
 import type { ReactElement } from 'react';
 import { Alert, Linking, type AlertButton } from 'react-native';
 import type { User, WorkoutSession, YouTubeConnection } from '../../../../frontend/src/types';
-import { apiGet, apiSend } from '../../data/api';
-import { uploadFile } from '../../data/uploadFile';
+import { ApiError, apiGet, apiSend } from '../../data/api';
 import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
+import { startClipUpload } from './clipUpload';
 import { clipFromAsset } from './videoData';
 import { VideosScreen } from './VideosScreen';
 
 // A full parallel run is slow to render the first screen.
 configure({ asyncUtilTimeout: 8000 });
 
-jest.mock('expo-router', () => ({ useRouter: () => ({ push: jest.fn() }) }));
+// The last leave guard the screen set: whether it blocks, and what it does when leaving is tried.
+let mockPrevent: { blocking: boolean; onLeave?: (event: { repeat: () => void }) => void } = {
+  blocking: false,
+};
+jest.mock('expo-router', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+  usePreventRemove: (blocking: boolean, onLeave?: (event: { repeat: () => void }) => void) => {
+    mockPrevent = { blocking, onLeave };
+  },
+}));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
   serverOrigin: () => 'https://relay.test',
   apiGet: jest.fn(),
   apiSend: jest.fn(),
 }));
-jest.mock('../../data/uploadFile', () => ({ uploadFile: jest.fn() }));
+jest.mock('./clipUpload', () => ({ startClipUpload: jest.fn() }));
 jest.mock('../../ui/prompts', () => ({ showMenu: jest.fn() }));
 jest.mock('../../ui/Toast', () => ({ showToast: jest.fn() }));
 jest.mock('../body/DateField', () => ({ DateField: () => null }));
@@ -123,9 +132,9 @@ it('picks set videos, uploads them in order with labels, then follows processing
       },
     ],
   } as ImagePicker.ImagePickerResult);
-  jest.mocked(uploadFile).mockImplementation(async (_path, _method, _file, options) => {
-    options?.onProgress?.(100);
-    return {};
+  jest.mocked(startClipUpload).mockImplementation((_path, _file, _fields, onProgress) => {
+    onProgress(100);
+    return { done: Promise.resolve({} as never), stop: jest.fn() };
   });
   jest.mocked(apiSend).mockImplementation(async (path: string) => {
     if (path === '/api/sessions') return session;
@@ -150,10 +159,10 @@ it('picks set videos, uploads them in order with labels, then follows processing
     'POST',
     expect.objectContaining({ name: 'Leg day', expected_clip_count: 2 }),
   );
-  const sent = jest.mocked(uploadFile).mock.calls.map(([path, , file, options]) => ({
+  const sent = jest.mocked(startClipUpload).mock.calls.map(([path, file, fields]) => ({
     path,
     name: file.name,
-    fields: options?.fields,
+    fields,
   }));
   expect(sent).toEqual([
     {
@@ -213,4 +222,192 @@ it('tells an account without video access to ask the administrator', async () =>
   await open(<VideosScreen />);
   expect(screen.getByText(/Video uploads are disabled for this account/)).toBeTruthy();
   mockUser.can_upload_videos = true;
+});
+
+// Review fixes (Sol review of #469).
+
+const twoClips = {
+  canceled: false,
+  assets: [
+    { uri: 'file:///one.mp4', fileName: 'one.mp4', mimeType: 'video/mp4', width: 1, height: 1 },
+    { uri: 'file:///two.mp4', fileName: 'two.mp4', mimeType: 'video/mp4', width: 1, height: 1 },
+  ],
+} as ImagePicker.ImagePickerResult;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+/** Names the session, picks two clips and presses Upload session. */
+async function pickAndUpload() {
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue(twoClips);
+  await open(<VideosScreen />);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Leg day');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('2 clips');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+}
+
+it('stops every upload and cancels the batch when leaving mid-upload', async () => {
+  jest.spyOn(Alert, 'alert');
+  const stops: jest.Mock[] = [];
+  jest.mocked(startClipUpload).mockImplementation(() => {
+    const stop = jest.fn();
+    stops.push(stop);
+    return { done: new Promise<never>(() => undefined), stop };
+  });
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/cancel') return { ...session, status: 'cancelled' };
+    throw new Error(`Unexpected ${path}`);
+  });
+  await pickAndUpload();
+  expect(await screen.findByText('UPLOADING SESSION')).toBeTruthy();
+  expect(mockPrevent.blocking).toBe(true);
+
+  const repeat = jest.fn();
+  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  let buttons = jest.mocked(Alert.alert).mock.lastCall?.[2] as AlertButton[];
+  await act(async () => buttons.find((button) => button.text === 'Keep uploading')?.onPress?.());
+  expect(repeat).not.toHaveBeenCalled();
+  expect(stops.every((stop) => stop.mock.calls.length === 0)).toBe(true);
+
+  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  buttons = jest.mocked(Alert.alert).mock.lastCall?.[2] as AlertButton[];
+  await act(async () => buttons.find((button) => button.text === 'Stop and leave')?.onPress?.());
+  expect(stops).toHaveLength(2);
+  expect(stops.every((stop) => stop.mock.calls.length > 0)).toBe(true);
+  expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/cancel', 'POST');
+  expect(repeat).toHaveBeenCalledTimes(1);
+});
+
+it('stops the uploads when the screen closes, such as on signing out', async () => {
+  const stops: jest.Mock[] = [];
+  jest.mocked(startClipUpload).mockImplementation(() => {
+    const stop = jest.fn();
+    stops.push(stop);
+    return { done: new Promise<never>(() => undefined), stop };
+  });
+  jest.mocked(apiSend).mockResolvedValue(session);
+  await pickAndUpload();
+  await screen.findByText('UPLOADING SESSION');
+  await act(async () => screen.unmount());
+  expect(stops.length).toBeGreaterThan(0);
+  expect(stops.every((stop) => stop.mock.calls.length > 0)).toBe(true);
+});
+
+it('offers Start processing after a failed start, on the same session', async () => {
+  jest.mocked(startClipUpload).mockImplementation(() => ({
+    done: Promise.resolve({} as never),
+    stop: jest.fn(),
+  }));
+  let starts = 0;
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/process') {
+      starts += 1;
+      if (starts === 1)
+        throw new Error('Could not reach Relay. Check your connection, then try again.');
+      return { ...session, status: 'queued' };
+    }
+    throw new Error(`Unexpected ${path}`);
+  });
+  const fetched = jest.mocked(apiGet).getMockImplementation()!;
+  jest
+    .mocked(apiGet)
+    .mockImplementation(async (path: string) =>
+      path === '/api/sessions/s1' ? { ...session, status: 'uploading' } : fetched(path),
+    );
+  await pickAndUpload();
+  await fireEvent.press(await screen.findByRole('button', { name: 'Start processing' }));
+  expect(await screen.findByText('Queued')).toBeTruthy();
+  expect(starts).toBe(2);
+  expect(jest.mocked(apiSend).mock.calls.filter(([path]) => path === '/api/sessions')).toHaveLength(
+    1,
+  );
+});
+
+it('follows a batch the server had already started when its answer was lost', async () => {
+  jest.mocked(startClipUpload).mockImplementation(() => ({
+    done: Promise.resolve({} as never),
+    stop: jest.fn(),
+  }));
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/process')
+      throw new ApiError(409, 'This session is already processing.', 'already_processing');
+    throw new Error(`Unexpected ${path}`);
+  });
+  const fetched = jest.mocked(apiGet).getMockImplementation()!;
+  jest
+    .mocked(apiGet)
+    .mockImplementation(async (path: string) =>
+      path === '/api/sessions/s1' ? { ...session, status: 'stitching' } : fetched(path),
+    );
+  await pickAndUpload();
+  expect(await screen.findByText('Stitching your workout')).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Start processing' })).toBeNull();
+});
+
+it('checks the status one request at a time', async () => {
+  jest.mocked(startClipUpload).mockImplementation(() => ({
+    done: Promise.resolve({} as never),
+    stop: jest.fn(),
+  }));
+  jest
+    .mocked(apiSend)
+    .mockImplementation(async (path: string) =>
+      path === '/api/sessions' ? session : { ...session, status: 'queued' },
+    );
+  const fetched = jest.mocked(apiGet).getMockImplementation()!;
+  const check = deferred<WorkoutSession>();
+  jest
+    .mocked(apiGet)
+    .mockImplementation(async (path: string) =>
+      path === '/api/sessions/s1' ? check.promise : fetched(path),
+    );
+  await pickAndUpload();
+  await screen.findByText('Queued');
+  // Two poll intervals pass while the first check is still unanswered.
+  await act(async () => new Promise((done) => setTimeout(done, 5600)));
+  const checks = () =>
+    jest.mocked(apiGet).mock.calls.filter(([path]) => path === '/api/sessions/s1').length;
+  expect(checks()).toBe(1);
+  await act(async () => check.resolve({ ...session, status: 'stitching' }));
+  expect(await screen.findByText('Stitching your workout')).toBeTruthy();
+}, 30000);
+
+it('says so when the browser for connecting YouTube will not open', async () => {
+  jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('No browser'));
+  await open(<VideosScreen />);
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'Reconnect YouTube on the web' }),
+  );
+  expect(await screen.findByText(/Could not open the browser/)).toBeTruthy();
+});
+
+it('drops a disconnect reply that arrives after signing out', async () => {
+  jest.spyOn(Alert, 'alert');
+  const reply = deferred<YouTubeConnection>();
+  jest.mocked(apiSend).mockImplementation(() => reply.promise as never);
+  await open(<VideosScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Disconnect' }));
+  const buttons = jest.mocked(Alert.alert).mock.lastCall?.[2] as AlertButton[];
+  await act(async () =>
+    buttons.find((button) => button.text === 'Disconnect YouTube')?.onPress?.(),
+  );
+  await act(async () => screen.unmount());
+  client.clear();
+  await act(async () => reply.resolve({ ...connected, status: 'not_connected', message: 'Bye' }));
+  expect(client.getQueryData(['videos', 'youtube'])).toBeUndefined();
+  expect(showToast).not.toHaveBeenCalled();
 });
