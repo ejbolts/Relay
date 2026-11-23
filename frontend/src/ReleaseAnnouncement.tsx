@@ -4,6 +4,7 @@ import { PopupDialog } from './PopupDialog';
 import {
   formatReleaseDate,
   formatReleaseVersion,
+  releaseChangeParts,
   type Release,
   type ReleaseHighlight,
   type ReleaseVideo,
@@ -166,10 +167,10 @@ function ReleaseDetails({ release, linkLabel }: { release: Release; linkLabel: s
 
 /** Only a leading bold title is supported; all content remains escaped React text. */
 function ReleaseChange({ text }: { text: string }) {
-  const titled = text.match(/^\*\*([^*\n]+)\*\*\s+(.+)$/);
-  return titled ? (
+  const parts = releaseChangeParts(text);
+  return parts.title ? (
     <>
-      <strong>{titled[1]}</strong> {titled[2]}
+      <strong>{parts.title}</strong> {parts.text}
     </>
   ) : (
     <>{text}</>
