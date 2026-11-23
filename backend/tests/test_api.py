@@ -188,3 +188,92 @@ def test_failed_processing_can_be_requeued_without_reuploading(client, fake_uplo
     response = client.post(f"/api/sessions/{session['id']}/retry-processing")
     assert response.status_code == 202
     assert response.json()["status"] == "queued"
+
+
+def _store_then(fake_upload, monkeypatch, meanwhile):
+    """A clip upload that streams, while `meanwhile` changes the session, then finishes."""
+    stored_paths = []
+
+    async def store(**kwargs):
+        stored = await fake_upload(**kwargs)
+        stored_paths.append(stored.path)
+        meanwhile(kwargs["session_id"])
+        return stored
+
+    monkeypatch.setattr("app.main.stream_upload_to_disk", store)
+    return stored_paths
+
+
+def test_a_clip_finishing_after_its_session_was_cancelled_is_refused_and_discarded(
+    client, fake_upload, monkeypatch
+):
+    session = create_session(client, expected=2)
+    assert upload(client, session["id"], "first", 0).status_code == 200
+    from app.database import SessionLocal
+    from app.models import Clip, SessionStatus, WorkoutSession
+
+    def cancel(session_id):
+        with SessionLocal() as db:
+            row = db.get(WorkoutSession, session_id)
+            assert row
+            row.status = SessionStatus.CANCELLED
+            db.commit()
+
+    stored = _store_then(fake_upload, monkeypatch, cancel)
+    response = upload(client, session["id"], "second", 1)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "uploads_not_allowed"
+    assert not stored[0].exists()
+    with SessionLocal() as db:
+        row = db.get(WorkoutSession, session["id"])
+        assert row and row.status == SessionStatus.CANCELLED
+        assert row.uploaded_clip_count == 1
+        assert db.query(Clip).filter_by(session_id=session["id"]).count() == 1
+
+
+def test_a_clip_finishing_after_its_session_was_deleted_leaves_nothing_behind(
+    client, fake_upload, monkeypatch
+):
+    session = create_session(client)
+    from app.database import SessionLocal
+    from app.models import Clip, WorkoutSession
+
+    def delete(session_id):
+        with SessionLocal() as db:
+            row = db.get(WorkoutSession, session_id)
+            assert row
+            db.delete(row)
+            db.commit()
+
+    stored = _store_then(fake_upload, monkeypatch, delete)
+    response = upload(client, session["id"], "first", 0)
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "uploads_not_allowed"
+    assert not stored[0].exists()
+    assert not stored[0].parent.exists()
+    with SessionLocal() as db:
+        assert db.get(WorkoutSession, session["id"]) is None
+        assert db.query(Clip).filter_by(session_id=session["id"]).count() == 0
+
+
+def test_a_rejected_clip_does_not_reopen_a_session_cancelled_while_it_streamed(client, monkeypatch):
+    session = create_session(client)
+    from app.database import SessionLocal
+    from app.models import SessionStatus, WorkoutSession
+    from app.storage import UploadValidationError
+
+    async def reject(*, session_id, **_):
+        with SessionLocal() as db:
+            row = db.get(WorkoutSession, session_id)
+            assert row
+            row.status = SessionStatus.CANCELLED
+            db.commit()
+        raise UploadValidationError("unsupported_file", "That file type is not supported.")
+
+    monkeypatch.setattr("app.main.stream_upload_to_disk", reject)
+    assert upload(client, session["id"], "first", 0).status_code == 400
+    with SessionLocal() as db:
+        row = db.get(WorkoutSession, session["id"])
+        assert row and row.status == SessionStatus.CANCELLED

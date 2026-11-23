@@ -524,3 +524,96 @@ it('drops a disconnect reply that arrives after signing out', async () => {
   expect(client.getQueryData(['videos', 'youtube'])).toBeUndefined();
   expect(showToast).not.toHaveBeenCalled();
 });
+
+// Second re-check of #469.
+
+/** Transfers the test finishes by hand, as uploads that complete while a question is open. */
+function finishableTransfers() {
+  const finishers: (() => void)[] = [];
+  jest.mocked(startClipUpload).mockImplementation(() => {
+    let finish!: () => void;
+    const done = new Promise<never>((resolve) => (finish = () => resolve({} as never)));
+    finishers.push(finish);
+    return { done, stop: jest.fn() };
+  });
+  return finishers;
+}
+
+it('holds the start while Stop and discard is open, so a clip finishing behind it never races', async () => {
+  jest.spyOn(Alert, 'alert');
+  const finishers = finishableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/cancel') return { ...session, status: 'cancelled' };
+    if (path === '/api/sessions/s1') return undefined;
+    if (path === '/api/sessions/s1/process') return { ...session, status: 'queued' };
+    throw new Error(`Unexpected ${path}`);
+  });
+  await pickAndUpload();
+  await screen.findByText('UPLOADING SESSION');
+  const repeat = jest.fn();
+  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  // Every clip finishes while the question is open: processing doesn't start.
+  await act(async () => finishers.forEach((finish) => finish()));
+  expect(apiSend).not.toHaveBeenCalledWith('/api/sessions/s1/process', 'POST');
+  await alertButton('Stop and discard');
+  await waitFor(() => expect(repeat).toHaveBeenCalledTimes(1));
+  expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/cancel', 'POST');
+  expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1', 'DELETE');
+  expect(apiSend).not.toHaveBeenCalledWith('/api/sessions/s1/process', 'POST');
+});
+
+it('starts the batch once Keep uploading is chosen, if it finished behind the question', async () => {
+  jest.spyOn(Alert, 'alert');
+  const finishers = finishableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/process') return { ...session, status: 'queued' };
+    throw new Error(`Unexpected ${path}`);
+  });
+  await pickAndUpload();
+  await screen.findByText('UPLOADING SESSION');
+  await act(async () => mockPrevent.onLeave?.({ repeat: jest.fn() }));
+  await act(async () => finishers.forEach((finish) => finish()));
+  expect(apiSend).not.toHaveBeenCalledWith('/api/sessions/s1/process', 'POST');
+  await alertButton('Keep uploading');
+  expect(await screen.findByText('Queued')).toBeTruthy();
+  expect(apiSend).not.toHaveBeenCalledWith('/api/sessions/s1/cancel', 'POST');
+});
+
+it('finishes discarding after a lost cancel reply, a refusal and a cancelled read-back', async () => {
+  jest.spyOn(Alert, 'alert');
+  stoppableTransfers();
+  let cancels = 0;
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/cancel') {
+      cancels += 1;
+      // The first cancel reaches the server, but its answer is lost; the retry is refused.
+      if (cancels === 1)
+        throw new Error('Could not reach Relay. Check your connection, then try again.');
+      throw new ApiError(409, 'Only a session still uploading can be cancelled.', 'cannot_cancel');
+    }
+    if (path === '/api/sessions/s1') return undefined;
+    throw new Error(`Unexpected ${path}`);
+  });
+  const fetched = jest.mocked(apiGet).getMockImplementation()!;
+  jest
+    .mocked(apiGet)
+    .mockImplementation(async (path: string) =>
+      path === '/api/sessions/s1' ? { ...session, status: 'cancelled' } : fetched(path),
+    );
+  await pickAndUpload();
+  await screen.findByText('UPLOADING SESSION');
+  const repeat = jest.fn();
+  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  await alertButton('Stop and discard');
+  expect(await screen.findByText(/Could not reach Relay/)).toBeTruthy();
+  expect(repeat).not.toHaveBeenCalled();
+
+  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  await alertButton('Stop and discard');
+  await waitFor(() => expect(repeat).toHaveBeenCalledTimes(1));
+  expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1', 'DELETE');
+  expect(screen.queryByText(/Processing had already started/)).toBeNull();
+});

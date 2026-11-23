@@ -8,7 +8,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -115,12 +115,24 @@ def load_session(db: Session, user_id: str, session_id: str) -> WorkoutSession:
     return session
 
 
+ACCEPTING_UPLOADS = (SessionStatus.DRAFT, SessionStatus.UPLOADING, SessionStatus.UPLOAD_FAILED)
+
+
 def can_accept_uploads(session: WorkoutSession) -> bool:
-    return session.status in {
-        SessionStatus.DRAFT,
-        SessionStatus.UPLOADING,
-        SessionStatus.UPLOAD_FAILED,
-    }
+    return session.status in ACCEPTING_UPLOADS
+
+
+def move_if_accepting(db: Session, session_id: str, status: SessionStatus) -> bool:
+    """Moves the session to `status` only while it still accepts uploads, as one conditional
+    write. A clip streams for a long time after its session was checked; if the session was
+    cancelled or deleted meanwhile, nothing changes and the caller refuses the clip."""
+    result = db.execute(
+        update(WorkoutSession)
+        .where(WorkoutSession.id == session_id, WorkoutSession.status.in_(ACCEPTING_UPLOADS))
+        .values(status=status)
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount == 1
 
 
 def check_youtube_connection(db: Session, settings: Settings, session: WorkoutSession) -> None:
@@ -492,15 +504,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 settings=settings,
             )
         except UploadValidationError as error:
-            session.status = SessionStatus.UPLOAD_FAILED
+            # Marks the batch failed unless it was cancelled or deleted while the clip streamed.
+            move_if_accepting(db, session_id, SessionStatus.UPLOAD_FAILED)
             db.commit()
             raise api_error(400, error.code, error.message) from error
 
         if (int(existing_bytes or 0) + stored.file_size) > settings.max_session_size_bytes:
             stored.path.unlink(missing_ok=True)
-            session.status = SessionStatus.UPLOAD_FAILED
+            move_if_accepting(db, session_id, SessionStatus.UPLOAD_FAILED)
             db.commit()
             raise api_error(413, "session_too_large", "This upload exceeds the session size limit.")
+
+        # The session was checked before the clip streamed. Record the clip only if it still
+        # accepts uploads: a cancel or delete that landed meanwhile wins, and the file goes.
+        if not move_if_accepting(db, session_id, SessionStatus.UPLOADING):
+            db.rollback()
+            stored.path.unlink(missing_ok=True)
+            if db.scalar(select(WorkoutSession.id).where(WorkoutSession.id == session_id)) is None:
+                remove_session_files(session_id, settings)
+            raise api_error(
+                409, "uploads_not_allowed", "This session is no longer accepting uploads."
+            )
 
         clip = Clip(
             client_clip_id=client_clip_id,
@@ -526,7 +550,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 or 0
             )
-            session.status = SessionStatus.UPLOADING
             db.commit()
             db.refresh(clip)
             return clip
