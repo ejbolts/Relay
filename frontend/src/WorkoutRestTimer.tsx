@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Icon } from './Icon';
 import { restOvertimeLabel, type RestNextSet } from './restComplete';
-import { restTimerProgress } from './restTimer';
+import { restTimerProgress } from './restProgress';
 import { formatSeconds } from './utils';
 
 /**

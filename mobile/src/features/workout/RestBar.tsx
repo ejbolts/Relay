@@ -1,6 +1,6 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { nextSetAfterRest, restOvertimeLabel } from '../../../../frontend/src/restComplete';
-import { restTimerProgress } from '../../../../frontend/src/restTimer';
+import { restTimerProgress } from '../../../../frontend/src/restProgress';
 import { formatSeconds } from '../../../../frontend/src/utils';
 import type { WeightUnit } from '../../../../frontend/src/weightUnits';
 import { haptics } from '../../ui/haptics';
