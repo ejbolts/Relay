@@ -2,21 +2,20 @@ import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from 
 import { api } from './api';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
+import { blockChange, blockFinished, nextBlockName } from './trainingBlocks';
 import {
-  blockChange,
-  blockDay,
-  blockFinished,
-  blockProgress,
-  blockRange,
-  nextBlockName,
-  weeksEnd,
-} from './trainingBlocks';
+  deloadBlockInput,
+  deloadMessage,
+  nextBlockInput,
+  nextBlockPlanOptions,
+  type NextBlockPlan,
+} from './trainingBlockForm';
+import { summaryRange, summaryTiles } from './trainingBlockStats';
 import { TrainingBlockDialog, type TrainingBlockDialogStart } from './TrainingBlockDialog';
 import { TrainingBlockHomeCard, TrainingBlockStartCard } from './TrainingBlockHomeCard';
 import { useToast } from './Toast';
 import type { TrainingBlockCardStyle } from './homeLayout';
 import { useTrainingBlocks } from './trainingBlocksContext';
-import { formatVolume, addDays } from './trainingSummary';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type {
   BlockStats,
@@ -28,13 +27,6 @@ import type {
 import './trainingBlocks.css';
 
 type View = 'summary' | 'next' | 'deload';
-type Plan = 'none' | '8' | '12';
-
-const PLANS: { id: Plan; label: string }[] = [
-  { id: 'none', label: 'No set date' },
-  { id: '8', label: '8 weeks' },
-  { id: '12', label: '12 weeks' },
-];
 
 function Tile({
   label,
@@ -63,26 +55,9 @@ function Tiles({ stats, previous }: { stats: BlockStats; previous: BlockStats | 
   const unit = useWeightUnit();
   return (
     <dl className="training-block-tiles">
-      <Tile
-        label="Volume"
-        value={formatVolume(stats.volume_kg, unit)}
-        change={blockChange(stats.volume_kg, previous?.volume_kg, true)}
-      />
-      <Tile
-        label="PRs"
-        value={stats.pr_count.toLocaleString()}
-        change={blockChange(stats.pr_count, previous?.pr_count)}
-      />
-      <Tile
-        label="Workouts"
-        value={stats.workout_count.toLocaleString()}
-        change={blockChange(stats.workout_count, previous?.workout_count)}
-      />
-      <Tile
-        label="Sets"
-        value={stats.set_count.toLocaleString()}
-        change={blockChange(stats.set_count, previous?.set_count)}
-      />
+      {summaryTiles(stats, previous, unit).map((tile) => (
+        <Tile key={tile.label} label={tile.label} value={tile.value} change={tile.change} />
+      ))}
     </dl>
   );
 }
@@ -108,13 +83,12 @@ export function TrainingBlockSummaryDialog({
   const [summary, setSummary] = useState<TrainingBlockSummary | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
   const [name, setName] = useState(() => nextBlockName(blocks));
-  const [plan, setPlan] = useState<Plan>('none');
+  const [plan, setPlan] = useState<NextBlockPlan>('none');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const nextFormId = useId();
   const [error, setError] = useState<string | null>(null);
   const generation = useRef(0);
-  const deloadEnd = weeksEnd(today, 1);
 
   const load = useCallback(() => {
     const request = ++generation.current;
@@ -153,20 +127,9 @@ export function TrainingBlockSummaryDialog({
   }
   function submitNext(event: FormEvent) {
     event.preventDefault();
-    void start(
-      {
-        name: name.trim(),
-        start_date: today,
-        planned_end_date: plan === 'none' ? null : weeksEnd(today, Number(plan)),
-      },
-      'Training block started',
-    );
+    void start(nextBlockInput(name, plan, today), 'Training block started');
   }
 
-  const weeks = blockProgress(block, today).weeks;
-  const range = block.planned_end_date
-    ? blockRange(block.start_date, addDays(block.planned_end_date, 1))
-    : blockRange(block.start_date, block.end_date);
   const title =
     view === 'next' ? 'Start next block' : view === 'deload' ? 'Deload week' : block.name;
 
@@ -224,17 +187,7 @@ export function TrainingBlockSummaryDialog({
               type="button"
               className="popup-primary-action"
               disabled={busy}
-              onClick={() =>
-                void start(
-                  {
-                    name: 'Deload week',
-                    start_date: today,
-                    planned_end_date: deloadEnd,
-                    deload: true,
-                  },
-                  'Deload week started',
-                )
-              }
+              onClick={() => void start(deloadBlockInput(today), 'Deload week started')}
             >
               {busy ? 'Starting…' : 'Start deload'}
             </button>
@@ -244,10 +197,7 @@ export function TrainingBlockSummaryDialog({
     >
       {view === 'summary' && (
         <div className="training-block-summary-body">
-          <p className="training-block-summary-range">
-            {range}
-            {weeks ? ` · ${weeks} week${weeks === 1 ? '' : 's'}` : ''}
-          </p>
+          <p className="training-block-summary-range">{summaryRange(block, today)}</p>
           {summary && (
             <>
               <Tiles stats={summary.block} previous={summary.previous} />
@@ -287,7 +237,7 @@ export function TrainingBlockSummaryDialog({
             </label>
             <div className="training-block-starts plan three" role="radiogroup" aria-label="Ends">
               <span aria-hidden="true">Ends</span>
-              {PLANS.map((item) => (
+              {nextBlockPlanOptions(today).map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -296,9 +246,7 @@ export function TrainingBlockSummaryDialog({
                   onClick={() => setPlan(item.id)}
                 >
                   <strong>{item.label}</strong>
-                  {item.id !== 'none' && (
-                    <small>{blockDay(weeksEnd(today, Number(item.id)), false)}</small>
-                  )}
+                  {item.detail && <small>{item.detail}</small>}
                 </button>
               ))}
             </div>
@@ -307,10 +255,7 @@ export function TrainingBlockSummaryDialog({
       )}
       {view === 'deload' && (
         <div className="training-block-summary-body">
-          <p>
-            A 7-day deload block starts today and runs to {blockDay(deloadEnd, false)}. Start your
-            next block when it ends.
-          </p>
+          <p>{deloadMessage(today)}</p>
         </div>
       )}
       {error && (

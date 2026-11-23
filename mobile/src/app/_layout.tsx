@@ -92,6 +92,9 @@ function Navigation() {
             <Stack.Screen name="social/sharing" />
             {/* Editing a saved workout from Training's session screen. */}
             <Stack.Screen name="edit-workout/[id]" />
+            {/* Training blocks, over the tabs from Training or Home (mobile batch 3, exercises
+                and blocks stream). */}
+            <Stack.Screen name="blocks" />
             {/* W3 (Home): per-muscle weekly goals and the Home layout editor, with headers. */}
             <Stack.Screen name="muscle-goals" options={homeScreenOptions(colors, 'Muscle goals')} />
             <Stack.Screen name="home-layout" options={homeScreenOptions(colors, 'Edit Home')} />

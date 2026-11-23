@@ -1,9 +1,13 @@
 import { useRef, useState } from 'react';
 import { api } from './api';
 import { PopupDialog } from './PopupDialog';
-import { exerciseSearchAllowsTypos, exerciseSearchScore } from './exerciseSearch';
-import { canMergeExercises, mergeChanges, mergeDistance } from './exerciseMergeCompatibility';
-import { isMatchedWord, mergeSuggestions } from './exerciseMergeSuggestions';
+import { canMergeExercises } from './exerciseMergeCompatibility';
+import {
+  matchedNameParts,
+  mergeSources,
+  mergeTargetDetail,
+  mergeTargets,
+} from './exerciseMergeTargets';
 import type { Exercise } from './types';
 import './exerciseMerge.css';
 
@@ -34,35 +38,7 @@ export function ExerciseMergeDialog({
   const busy = useRef(false);
   const all = exercises.map((item) => changed[item.id] ?? item);
   const source = all.find((item) => item.id === sourceId);
-  const typos = exerciseSearchAllowsTypos(all, query);
-  const candidates = source
-    ? all
-        .map((item) => ({ item, changes: mergeChanges(source, item) }))
-        .filter(
-          (entry): entry is typeof entry & { changes: NonNullable<typeof entry.changes> } =>
-            entry.changes !== null && exerciseSearchScore(entry.item, query, typos) !== null,
-        )
-        .map((entry) => ({
-          ...entry,
-          ready: canMergeExercises(source, entry.item),
-          distance: mergeDistance(source, entry.item),
-          // Before a search, a duplicate usually shares its name: "DB Bench" and
-          // "Dumbbell Bench Press".
-          score: exerciseSearchScore(entry.item, query.trim() || source.name, typos),
-        }))
-        .sort(
-          (a, b) =>
-            Number(b.ready) - Number(a.ready) ||
-            Number(b.score !== null) - Number(a.score !== null) ||
-            (a.score ?? 0) - (b.score ?? 0) ||
-            a.distance - b.distance ||
-            a.item.name.localeCompare(b.item.name),
-        )
-    : [];
-  // Before a search, the likeliest standard exercises are listed first under their own heading.
-  const suggested = source && !query.trim() ? mergeSuggestions(source, all) : [];
-  const suggestedIds = new Set(suggested.map((entry) => entry.exercise.id));
-  const listed = candidates.filter((entry) => !suggestedIds.has(entry.item.id));
+  const { candidates, suggested, listed } = mergeTargets(all, source, query);
   const chosen = candidates.find((entry) => entry.item.id === targetId);
   const target = chosen?.ready ? chosen.item : undefined;
   const needed = chosen && !chosen.ready ? chosen.changes : null;
@@ -146,13 +122,11 @@ export function ExerciseMergeDialog({
               required
             >
               <option value="">Choose a custom exercise</option>
-              {all
-                .filter((item) => item.is_custom)
-                .map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
+              {mergeSources(all).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
             </select>
           </label>
           {source && (
@@ -289,23 +263,17 @@ function MergeTarget({
       <input type="radio" name="merge-target" checked={selected} onChange={onSelect} />
       <span>
         <strong>
-          {matchedWords?.length
-            ? exercise.name.split(/([^\p{L}\p{N}]+)/u).map((part, index) =>
-                isMatchedWord(part, matchedWords) ? (
-                  <b className="exercise-search-match" key={index}>
-                    {part}
-                  </b>
-                ) : (
-                  part
-                ),
-              )
-            : exercise.name}
+          {matchedNameParts(exercise.name, matchedWords).map((part, index) =>
+            part.matched ? (
+              <b className="exercise-search-match" key={index}>
+                {part.text}
+              </b>
+            ) : (
+              part.text
+            ),
+          )}
         </strong>
-        <small>
-          {[exercise.is_custom ? 'Custom' : 'Official', exercise.muscle_group, exercise.equipment]
-            .filter(Boolean)
-            .join(' · ')}
-        </small>
+        <small>{mergeTargetDetail(exercise)}</small>
         {!ready && <em className="exercise-merge-tag">Needs changes</em>}
       </span>
     </label>

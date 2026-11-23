@@ -42,13 +42,7 @@ import { hasUnassignedMachineSets, movementWithMachines } from './setMachines';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
 import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { MachineWeightsDialog } from './MachineWeightsDialog';
-import {
-  isNormalised,
-  machinesWithSessions,
-  progressViewPoints,
-  runningBestIds,
-  type MachineView,
-} from './machineWeights';
+import { type MachineView } from './machineWeights';
 import { WorkoutBrowser, WorkoutNavigationArrows, type WorkoutNavigation } from './WorkoutBrowser';
 import { saveBodyFatCheckIn, saveBodyweightCheckIn } from './bodyweightCheckIn';
 import { useBodyMeasurementSync } from './useBodyMeasurementSync';
@@ -198,12 +192,7 @@ import { swapMovementExercise } from './exerciseSwap';
 import { useExerciseLibrary, type ExerciseLibraryState } from './useExerciseLibrary';
 import { ExerciseSessionSheet } from './ExerciseSessionSheet';
 import { ProgressExerciseSearch } from './ProgressExerciseSearch';
-import {
-  personalBestProgressPoint,
-  PROGRESS_METRICS,
-  progressPointsForChart,
-  type ProgressMetric,
-} from './progressChart';
+import { PROGRESS_METRICS, progressPointsForChart, type ProgressMetric } from './progressChart';
 import {
   restTimerPreferenceEnabled,
   saveRestTimerPreference,
@@ -283,7 +272,6 @@ import {
   groupByYear,
   groupWorkoutsByWeek,
   mostTrainedExerciseId,
-  isCountedRecord,
   recordCountsByWorkout,
   setLabel,
   sessionTemplateFor,
@@ -479,7 +467,6 @@ import { bodyweightOn, bodyweightContext, relativeStrength } from './relativeStr
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
-import { recordsForBlock } from './trainingBlocks';
 import { recordBadgeLabel, recordScopeLabel } from './recordScope';
 import { setResult } from './historySetFormat';
 import { canResumeWorkout } from './workoutResume';
@@ -488,7 +475,12 @@ import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
 import { TIME_RANGE_OPTIONS } from './dateRanges';
-import { rangeOutgrowsBlock, withNormalisedRelativeStrength } from './exerciseProgressScope';
+import { exerciseHiddenNotice } from './exerciseEdit';
+import {
+  exerciseProgressView,
+  exerciseRecordWorkoutIds,
+  rangeOutgrowsBlock,
+} from './exerciseProgressScope';
 import { useRangePinchZoom } from './rangePinchZoom';
 import {
   captureFriendInvite,
@@ -7802,7 +7794,7 @@ export function ProgressScreen({
         await api.updateExercise(exercise.id, { hidden });
         await onExercisesMerged?.();
         showToast({
-          message: hidden ? 'Hidden from exercise lists' : 'Shown in exercise lists',
+          message: exerciseHiddenNotice(hidden),
           action: undoable
             ? {
                 label: 'Undo',
@@ -7916,19 +7908,27 @@ export function ProgressScreen({
     };
   }, [exerciseId, dataRevision, libraryMode]);
 
-  const machineOptions = progress ? machinesWithSessions(progress, mapping) : [];
-  const view =
-    machineView.exerciseId === exerciseId &&
-    machineOptions.some((machine) => machine.id === machineView.view)
-      ? machineView.view
-      : 'all';
-  const normalised = isNormalised(mapping, view);
-  const referenceMachine = normalised
-    ? mapping?.machines.find((machine) => machine.id === mapping.reference_machine_id)
-    : undefined;
-  const viewPoints = useMemo(
-    () => (progress ? progressViewPoints(progress, mapping, view) : []),
-    [progress, mapping, view],
+  const machineChoice = machineView.exerciseId === exerciseId ? machineView.view : 'all';
+  const tableRecordIds = useMemo(
+    () => exerciseRecordWorkoutIds(personalRecords, block, exerciseId),
+    [personalRecords, exerciseId, block],
+  );
+  const {
+    machineOptions,
+    view,
+    referenceMachine,
+    points: viewPoints,
+    defaultView,
+    approx,
+    heaviest: heaviestSetPoint,
+    bestEstimate: estimatedOneRepMaxPoint,
+    bestVolume: volumePoint,
+    bestEstimatedOneRepMax,
+    relativeBest,
+    recordIds,
+  } = useMemo(
+    () => exerciseProgressView(progress, mapping, machineChoice, tableRecordIds),
+    [progress, mapping, machineChoice, tableRecordIds],
   );
   const viewDates = useMemo(() => viewPoints.map((point) => point.workout_date), [viewPoints]);
   const { pinchZoom, pinchStart, selectRange } = useRangePinchZoom(
@@ -7936,8 +7936,6 @@ export function ProgressScreen({
     displayRange,
     setDisplayRange,
   );
-  const defaultView = view === 'all' && !normalised;
-  const approx = normalised ? '≈ ' : '';
   const metricInfo = PROGRESS_METRICS.find((item) => item.value === metric)!;
   const inRange = progress
     ? progressPointsForChart(viewPoints, metric, displayRange, pinchStart)
@@ -7954,38 +7952,6 @@ export function ProgressScreen({
     change !== null && firstPoint && firstPoint[metric] > 0
       ? (change / firstPoint[metric]) * 100
       : null;
-  const heaviestSetPoint = progress
-    ? personalBestProgressPoint(viewPoints, 'best_weight_kg')
-    : null;
-  const estimatedOneRepMaxPoint = progress
-    ? personalBestProgressPoint(viewPoints, 'estimated_1rm')
-    : null;
-  const volumePoint = progress ? personalBestProgressPoint(viewPoints, 'volume_kg') : null;
-  const bestEstimatedOneRepMax = defaultView
-    ? (progress?.personal_best_estimated_1rm ?? 0)
-    : (estimatedOneRepMaxPoint?.estimated_1rm ?? 0);
-  const relativePoints = useMemo(
-    () =>
-      progress && normalised
-        ? withNormalisedRelativeStrength(viewPoints, progress, mapping)
-        : viewPoints,
-    [progress, normalised, viewPoints, mapping],
-  );
-  const relativeBest = relativePoints.reduce<(typeof viewPoints)[number] | null>(
-    (best, point) =>
-      (point.relative_strength ?? 0) > (best?.relative_strength ?? 0) ? point : best,
-    null,
-  );
-  const tableRecordIds = useMemo(
-    () =>
-      new Set(
-        recordsForBlock(personalRecords, block)
-          .filter((record) => record.exercise_id === exerciseId && isCountedRecord(record))
-          .map((record) => record.workout_id),
-      ),
-    [personalRecords, exerciseId, block],
-  );
-  const recordIds = defaultView ? tableRecordIds : runningBestIds(viewPoints);
   const sessionsNewestFirst = viewPoints.slice().reverse();
   const sessionPages = Math.max(1, Math.ceil(sessionsNewestFirst.length / HISTORY_PAGE_SIZE));
   const currentSessionPage = Math.min(sessionPage, sessionPages);

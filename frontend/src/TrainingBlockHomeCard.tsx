@@ -1,7 +1,8 @@
 import type { Ref } from 'react';
 import type { TrainingBlockCardSettings, TrainingBlockCardStyle } from './homeLayout';
 import { Icon } from './Icon';
-import { blockDay, blockProgress, daysLeftLabel } from './trainingBlocks';
+import { blockEndedLabel, blockWeekLabel } from './trainingBlockHome';
+import { blockProgress, daysLeftLabel } from './trainingBlocks';
 import { BlockTimeline } from './TrainingBlockTimeline';
 import type { TrainingBlock, TrainingBlocks } from './types';
 
@@ -51,19 +52,9 @@ export function TrainingBlockHomeCard({
   onSummary?: () => void;
   buttonRef?: Ref<HTMLButtonElement>;
 }) {
-  const { week, weeks, daysLeft, progress } = blockProgress(block, today);
-  const since = blockDay(block.start_date, block.start_date.slice(0, 4) !== today.slice(0, 4));
-  const weekLabel =
-    weeks === null
-      ? `Week ${week} · since ${since}`
-      : week > weeks
-        ? `Week ${week} · planned ${weeks}`
-        : `Week ${week} of ${weeks}`;
+  const { daysLeft, progress } = blockProgress(block, today);
+  const weekLabel = blockWeekLabel(block, today);
   if (onSummary && block.planned_end_date) {
-    const ended = blockDay(
-      block.planned_end_date,
-      block.planned_end_date.slice(0, 4) !== today.slice(0, 4),
-    );
     return (
       <button
         ref={buttonRef}
@@ -77,7 +68,7 @@ export function TrainingBlockHomeCard({
         </span>
         <strong>{block.name}</strong>
         <span className="training-block-home-week">
-          {`${weeks} week${weeks === 1 ? '' : 's'} · ended ${ended}`}
+          {blockEndedLabel({ ...block, planned_end_date: block.planned_end_date }, today)}
         </span>
         <span className="training-block-home-cta">
           See your summary <Icon name="chevron-right" />

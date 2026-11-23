@@ -17,87 +17,32 @@ import {
   blockRange,
   daysLeftLabel,
 } from './trainingBlocks';
+import {
+  blockYearSegments,
+  blocksInYear,
+  firstBlockYear,
+  joinedDetails,
+  lastBlockYear,
+  toggledBlock,
+  workoutCountLabel,
+} from './trainingBlockSegments';
+import {
+  blockWeekCells,
+  comparedBlockName,
+  prComparison,
+  previousRegularBlock,
+  signedPercent,
+  weeklyVolumeChange,
+} from './trainingBlockStats';
 import { addDays, daysBetween, parseLocalDate } from './trainingSummary';
 import type { BlockStats, TrainingBlock, TrainingBlocks } from './types';
 import './trainingBlockYear.css';
 
-type Segment = {
-  key: string;
-  blockId?: string;
-  name: string;
-  start: string;
-  end: string;
-  /** Null for the history before the first block. */
-  color: string | null;
-  planned?: boolean;
-};
-
-const workouts = (count: number | undefined) =>
-  count === undefined ? '' : `${count.toLocaleString()} workout${count === 1 ? '' : 's'}`;
-const joined = (...parts: string[]) => parts.filter(Boolean).join(' · ');
+const workouts = workoutCountLabel;
+const joined = joinedDetails;
 const colorStyle = (color: string): CSSProperties =>
   ({ '--block-color': color, '--block-ink': blockInk(color) }) as CSSProperties;
 const DEFAULT_CUSTOM = '#3a7bd5';
-
-/** Every stretch of history drawn on the year bar, including the planned rest of the block. */
-function segments(config: TrainingBlocks, today: string): Segment[] {
-  const first = config.blocks[0];
-  const tomorrow = addDays(today, 1);
-  const list: Segment[] = [];
-  if (
-    first &&
-    config.history_start &&
-    config.history_start < first.start_date &&
-    config.earlier_workout_count
-  ) {
-    list.push({
-      key: 'earlier',
-      name: 'Before blocks',
-      start: config.history_start,
-      end: first.start_date,
-      color: null,
-    });
-  }
-  for (const block of config.blocks) {
-    const color = blockColor(config.blocks, block, today);
-    list.push({
-      key: block.id,
-      blockId: block.id,
-      name: block.name,
-      start: block.start_date,
-      end: block.end_date ?? tomorrow,
-      color,
-    });
-    if (!block.end_date && block.planned_end_date && block.planned_end_date >= tomorrow) {
-      list.push({
-        key: `${block.id}-planned`,
-        blockId: block.id,
-        name: `${block.name} (planned)`,
-        start: tomorrow,
-        end: addDays(block.planned_end_date, 1),
-        color,
-        planned: true,
-      });
-    }
-  }
-  return list;
-}
-
-function firstYear(config: TrainingBlocks, today: string) {
-  return Number(
-    [config.history_start, config.blocks[0]?.start_date]
-      .filter((day): day is string => !!day)
-      .sort()[0]
-      ?.slice(0, 4) ?? today.slice(0, 4),
-  );
-}
-
-function lastYear(config: TrainingBlocks, today: string) {
-  return Math.max(
-    Number(today.slice(0, 4)),
-    Number(blockOn(config.blocks, today)?.planned_end_date?.slice(0, 4) ?? 0),
-  );
-}
 
 /** Width of the timeline's scroller, kept current as it resizes. */
 function useScrollerWidth(ref: React.RefObject<HTMLDivElement | null>) {
@@ -140,8 +85,8 @@ export function ScrollTimeline({
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const width = useScrollerWidth(scroller);
-  const first = firstYear(config, today);
-  const last = lastYear(config, today);
+  const first = firstBlockYear(config, today);
+  const last = lastBlockYear(config, today);
   const start = `${first}-01-01`;
   const end = `${last + 1}-01-01`;
   const total = daysBetween(start, end);
@@ -289,7 +234,7 @@ export function ScrollTimeline({
       if (day.slice(8) !== '01') lines.push({ key: `w${day}`, left: x(day), kind: 'week' });
     }
   }
-  const shown = segments(config, today);
+  const shown = blockYearSegments(config, today);
   return (
     <div
       ref={scroller}
@@ -425,9 +370,7 @@ function BlockNowCard({
   today: string;
 }) {
   const { week, weeks, daysLeft } = blockProgress(block, today);
-  const previous = block.deload
-    ? undefined
-    : [...config.blocks].filter((item) => item.start_date < block.start_date && !item.deload).pop();
+  const previous = previousRegularBlock(config, block);
   const [stats, setStats] = useState<{ now: BlockStats; before: BlockStats } | null>(null);
   const previousId = previous?.id;
   useEffect(() => {
@@ -443,19 +386,10 @@ function BlockNowCard({
     };
   }, [block.id, previousId]);
 
-  const perWeek = (volume: number, days: number) => volume / Math.max(1, days / 7);
   const change =
-    stats && previous
-      ? (() => {
-          const now = perWeek(stats.now.volume_kg, daysBetween(block.start_date, today) + 1);
-          const before = perWeek(
-            stats.before.volume_kg,
-            daysBetween(previous.start_date, previous.end_date ?? today),
-          );
-          return before > 0 ? Math.round((now / before - 1) * 100) : null;
-        })()
-      : null;
+    stats && previous ? weeklyVolumeChange(stats.now, stats.before, block, previous, today) : null;
   const color = colorStyle(blockColor(config.blocks, block, today));
+  const cells = blockWeekCells(week, weeks);
   return (
     <div className="training-block-now" style={color}>
       <header>
@@ -470,40 +404,30 @@ function BlockNowCard({
           )}
         </em>
       </header>
-      {weeks && weeks <= 26 && (
+      {cells.length > 0 && (
         <div
           className="training-block-weeks"
           style={{ gridTemplateColumns: `repeat(${weeks}, minmax(0, 1fr))` }}
           role="img"
           aria-label={`Week ${week} of ${weeks}`}
         >
-          {Array.from({ length: weeks }, (_, index) => (
-            <span
-              key={index}
-              className={index + 1 < week ? 'done' : index + 1 === week ? 'now' : ''}
-            >
-              {weeks <= 12 ? `W${index + 1}` : ''}
+          {cells.map((cell, index) => (
+            <span key={index} className={cell.state === 'next' ? '' : cell.state}>
+              {cell.label}
             </span>
           ))}
         </div>
       )}
       {stats && previous && stats.before.workout_count > 0 && (
         <p className="training-block-vs">
-          vs {previous.name}
-          {previous.start_date.slice(0, 4) !== block.start_date.slice(0, 4)
-            ? ` ${previous.start_date.slice(0, 4)}`
-            : ''}
-          :{' '}
+          {comparedBlockName(previous, block)}:{' '}
           {change !== null && (
             <>
-              <b className={change >= 0 ? 'up' : 'down'}>
-                {change > 0 ? '+' : change < 0 ? '−' : ''}
-                {Math.abs(change)}%
-              </b>{' '}
-              volume per week ·{' '}
+              <b className={change >= 0 ? 'up' : 'down'}>{signedPercent(change)}</b> volume per week
+              ·{' '}
             </>
           )}
-          {stats.now.pr_count} PR{stats.now.pr_count === 1 ? '' : 's'} vs {stats.before.pr_count}
+          {prComparison(stats.now, stats.before)}
         </p>
       )}
     </div>
@@ -523,8 +447,8 @@ export function TrainingBlockYearView({
   onEdit: (block: TrainingBlock) => void;
 }) {
   const thisYear = Number(today.slice(0, 4));
-  const first = firstYear(config, today);
-  const last = lastYear(config, today);
+  const first = firstBlockYear(config, today);
+  const last = lastBlockYear(config, today);
   const [year, setYear] = useState(thisYear);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [scrollRequest, setScrollRequest] = useState<{ date: string; key: number } | null>(null);
@@ -535,22 +459,13 @@ export function TrainingBlockYearView({
     setScrollRequest((request) => ({ date: `${next}-01-01`, key: (request?.key ?? 0) + 1 }));
   };
   const current = blockOn(config.blocks, today);
-  const yearStart = `${year}-01-01`;
-  const yearEnd = `${year + 1}-01-01`;
-  // A block belongs to the year it starts in; the bar still shows any overlap into this year.
-  const inYear = config.blocks.filter((block) => block.start_date.slice(0, 4) === String(year));
-  const listed = [...inYear].reverse();
-  const earlier =
-    !!config.earlier_workout_count &&
-    !!config.history_start &&
-    !!config.blocks[0] &&
-    config.history_start < yearEnd &&
-    config.blocks[0].start_date > yearStart;
+  const { count: inYearCount, listed, earlier } = blocksInYear(config, year);
   const selected = config.blocks.some((block) => block.id === selectedId) ? selectedId : null;
   // Tapping a block on the timeline highlights it and brings its card into view.
   const choose = (blockId: string) => {
-    const block = config.blocks.find((item) => item.id === blockId);
-    if (!block || blockId === selected) {
+    const next = toggledBlock(config.blocks, selected, blockId);
+    const block = config.blocks.find((item) => item.id === next);
+    if (!block) {
       setSelectedId(null);
       return;
     }
@@ -575,7 +490,7 @@ export function TrainingBlockYearView({
       <div aria-live="polite">
         <strong>{year}</strong>
         <small>
-          {inYear.length} block{inYear.length === 1 ? '' : 's'}
+          {inYearCount} block{inYearCount === 1 ? '' : 's'}
         </small>
       </div>
       <button
