@@ -36,6 +36,9 @@ jest.mock('../../data/api', () => ({
 function machine(id: string, caption: string, images = 1): MachinePhotoUsage {
   const image = (n: number) => ({
     id: `${id}-${n}`,
+    exercise_id: 'bench',
+    caption,
+    created_at: '',
     thumbnail_url: '',
     full_url: `/full/${id}-${n}`,
     width: 1,
