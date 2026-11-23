@@ -33,6 +33,7 @@ function AdminStack() {
       <Stack.Screen name="index" options={{ title: 'Admin', headerLargeTitle: true }} />
       <Stack.Screen name="account/[id]" options={{ title: '' }} />
       <Stack.Screen name="server" options={{ title: 'Server' }} />
+      <Stack.Screen name="username/[id]" options={{ title: 'Change username' }} />
     </Stack>
   );
 }

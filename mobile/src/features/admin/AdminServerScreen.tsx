@@ -146,14 +146,14 @@ function LimitsSection({ limits }: { limits: AccountLimitsSettings }) {
     if (!parsed || !changed || saving) return;
     setSaving(true);
     setError(null);
-    const current = guard();
+    const check = guard();
     try {
       const saved = await adminApi.updateLimits(parsed);
-      if (!current()) return;
+      if (!check.sameSession()) return;
       client.setQueryData(adminKeys.limits, saved);
-      showToast('Limits saved.');
+      if (check.open()) showToast('Limits saved.');
     } catch (reason) {
-      setError(errorMessage(reason));
+      if (check.open()) setError(errorMessage(reason));
       setSaving(false);
     }
   }

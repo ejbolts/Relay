@@ -9,6 +9,7 @@ import {
 } from '../../../../frontend/src/videoSessions';
 import type { YouTubeConnection } from '../../../../frontend/src/types';
 import { serverOrigin } from '../../data/api';
+import { useUser } from '../../session/SessionProvider';
 import { Button, Card, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { showToast } from '../../ui/Toast';
@@ -26,6 +27,7 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
   const client = useQueryClient();
   const connection = useYouTubeConnection();
   const { colors, type, radius } = useTheme();
+  const user = useUser();
   const guard = useAccountGuard();
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,6 +39,21 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
     });
     return () => app.remove();
   }, [client]);
+
+  /**
+   * The web connects whichever Relay account is signed in there, which may not be this one, so
+   * the hand-off names the account to use before it opens the browser.
+   */
+  function confirmConnectOnWeb() {
+    Alert.alert(
+      `${youtubeConnectLabel(data)} on the web`,
+      `Sign in to the web as @${user.username} to connect YouTube.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Continue', onPress: () => void connectOnWeb() },
+      ],
+    );
+  }
 
   async function connectOnWeb() {
     setError(null);
@@ -64,14 +81,14 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
     setError(null);
     // A reply that arrives after this account signed out mustn't recreate its connection for
     // the next account.
-    const current = guard();
+    const check = guard();
     try {
       const next = await videoApi.disconnect();
-      if (!current()) return;
+      if (!check.sameSession()) return;
       client.setQueryData<YouTubeConnection>(videoKeys.youtube, next);
-      showToast(next.message);
+      if (check.open()) showToast(next.message);
     } catch (reason) {
-      if (current()) setError(errorMessage(reason));
+      if (check.open()) setError(errorMessage(reason));
     } finally {
       setWorking(false);
     }
@@ -128,7 +145,7 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
             icon={videoIcons.web}
             variant={connected ? 'secondary' : 'primary'}
             disabled={disabled || working}
-            onPress={() => void connectOnWeb()}
+            onPress={confirmConnectOnWeb}
           />
         )}
         {data?.channel_id && (
