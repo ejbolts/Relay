@@ -23,6 +23,8 @@ export function ImportHistoryScreen() {
   const { colors, type } = useTheme();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Only a pull shows the spinner; refreshes after an undo run quietly.
+  const [pulling, setPulling] = useState(false);
 
   if (batches.isPending) return <Loading label="Loading imports" />;
   if (batches.error && !batches.data)
@@ -58,7 +60,13 @@ export function ImportHistoryScreen() {
 
   const list = batches.data ?? [];
   return (
-    <SettingsPage refreshing={batches.isRefetching} onRefresh={() => void batches.refetch()}>
+    <SettingsPage
+      refreshing={pulling}
+      onRefresh={() => {
+        setPulling(true);
+        void batches.refetch().finally(() => setPulling(false));
+      }}
+    >
       {list.length === 0 ? (
         <Text style={[type.callout, { color: colors.secondary }]}>{NO_TRACKED_IMPORTS}</Text>
       ) : (

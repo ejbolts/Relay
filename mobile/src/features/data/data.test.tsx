@@ -58,7 +58,12 @@ jest.mock('expo-file-system', () => ({
 const mockSession = { status: { kind: 'signed-in', user: { id: 'u1' } } };
 jest.mock('../../session/SessionProvider', () => ({ useSession: () => mockSession }));
 
-const csv = { uri: 'file:///picked/history.csv', name: 'history.csv', mimeType: 'text/csv' };
+// Android's name for a CSV, which the server refuses; the upload sends text/csv.
+const csv = {
+  uri: 'file:///picked/history.csv',
+  name: 'history.csv',
+  mimeType: 'text/comma-separated-values',
+};
 const preview: CsvImportPreview = {
   exercise_matches: [{ incoming_name: 'Bench', exercise_id: null, exercise_name: 'Bench' }],
   available_exercises: [

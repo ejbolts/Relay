@@ -37,7 +37,23 @@ export async function pickFile(types: string[], fallbackType: string): Promise<P
   });
   if (result.canceled || !result.assets?.[0]) return null;
   const asset = result.assets[0];
-  return { uri: asset.uri, name: asset.name, type: asset.mimeType || fallbackType };
+  return { uri: asset.uri, name: asset.name, type: uploadType(asset.name, fallbackType) };
+}
+
+const TYPES_BY_EXTENSION: Record<string, string> = {
+  csv: 'text/csv',
+  tsv: 'text/tab-separated-values',
+  txt: 'text/plain',
+  zip: 'application/zip',
+};
+
+/**
+ * The type to upload a picked file as. Android calls a CSV `text/comma-separated-values`, which
+ * the server refuses, so the type comes from the extension, as a browser's file input sends it.
+ */
+export function uploadType(name: string, fallbackType: string): string {
+  const extension = name.split('.').pop()?.toLowerCase() ?? '';
+  return TYPES_BY_EXTENSION[extension] ?? fallbackType;
 }
 
 const UTIS: Record<string, string> = {
