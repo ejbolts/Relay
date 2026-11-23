@@ -15,4 +15,5 @@ export const socialIcons = {
   camera: { sf: 'camera', md: 'photo-camera' },
   link: { sf: 'link', md: 'link' },
   reply: { sf: 'arrowshape.turn.up.left', md: 'reply' },
+  edit: { sf: 'pencil', md: 'edit' },
 } satisfies Record<string, IconPair>;

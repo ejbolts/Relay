@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 import { Alert, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -108,6 +108,7 @@ beforeEach(() => {
     '/api/training-split': null,
     '/api/workout-auto-save': { after_minutes: null },
     '/release.json': null,
+    '/api/sharing': { visibility: 'followers', pending_requests: 0 },
   };
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     const key = path.split('?')[0];
@@ -215,6 +216,16 @@ describe('Settings', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'Sign out' }));
     expect(alert).not.toHaveBeenCalled();
     await waitFor(() => expect(mockSession.signOut).toHaveBeenCalled());
+  });
+});
+
+describe('Settings links', () => {
+  it('shows who sees your profile and opens the sharing choices', async () => {
+    await show(<SettingsScreen />);
+    const row = await screen.findByRole('button', { name: /^Profile sharing/ });
+    await waitFor(() => expect(within(row).getByText('Friends only')).toBeVisible());
+    await fireEvent.press(row);
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/social/sharing');
   });
 });
 

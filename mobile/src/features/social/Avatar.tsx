@@ -1,37 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Image, StyleSheet, Text, View, type ImageStyle, type StyleProp } from 'react-native';
 import { profileInitial } from '../../../../frontend/src/profileDisplay';
 import { presenceDot, type PresenceStatus } from '../../../../frontend/src/presenceStatus';
-import { apiOrigin } from '../../data/api';
-import { sessionToken } from '../../data/session';
+import { useAuthorisedImage } from '../../data/authorisedImage';
 import { useTheme } from '../../ui/theme';
 
-type Source = { uri: string; headers: Record<string, string> };
+type Source = { uri: string };
 
 /**
  * A server image (a profile or workout photo), read with the session token: photos are only
- * served to signed-in members who can see them.
+ * served to signed-in members who can see them. Android's <Image> drops request headers, so the
+ * image is loaded as a data URI (see data/authorisedImage).
  */
 export function useAuthSource(url: string | null | undefined): Source | null {
-  const [source, setSource] = useState<Source | null>(null);
-  useEffect(() => {
-    if (!url || !apiOrigin) return;
-    let cancelled = false;
-    const origin = new URL(apiOrigin).origin;
-    void sessionToken(origin)
-      .then((token) => {
-        if (cancelled || !token) return;
-        setSource({
-          uri: /^https?:/.test(url) ? url : origin + url,
-          headers: { Authorization: `Bearer ${token}` },
-        });
-      })
-      .catch(() => undefined);
-    return () => {
-      cancelled = true;
-    };
-  }, [url]);
-  return url ? source : null;
+  const uri = useAuthorisedImage(url);
+  return uri ? { uri } : null;
 }
 
 export function AuthImage({

@@ -1,5 +1,5 @@
-import { apiOrigin, ApiError } from '../../data/api';
-import { sessionToken } from '../../data/session';
+import { apiOrigin, ApiError } from './api';
+import { sessionToken } from './session';
 
 const TIMEOUT_MS = 60_000;
 const UNREACHABLE = 'Could not reach Relay. Check your connection, then try again.';

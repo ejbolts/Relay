@@ -329,6 +329,19 @@ test('an invite sends the friend request once, with Undo', async () => {
   expect(apiSend).toHaveBeenCalledTimes(2);
 });
 
+test('your own profile opens Edit profile, sharing choices and your QR code', async () => {
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/me')
+      return { ...casey, id: 'me', display_name: 'Preview', is_you: true, visibility: 'public' };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  await show(<ProfileScreen profileId="me" />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Edit profile' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/settings/profile');
+  await fireEvent.press(screen.getByRole('button', { name: 'Sharing: Public' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/social/sharing');
+});
+
 test('scanning a friend code opens their invite, and other codes say why not', async () => {
   const onScanned = jest.fn();
   await show(

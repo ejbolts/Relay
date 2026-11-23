@@ -11,6 +11,7 @@ import { localDate } from '../../../../frontend/src/utils';
 import { weightFromKg, weightUnitName } from '../../../../frontend/src/weightUnits';
 import { useDashboard, useWeightUnit } from '../../data/queries';
 import { useTheme } from '../../ui/theme';
+import { trainingRoute } from '../training/routes';
 import { useBodyMeasurements } from '../body/bodyQueries';
 import { Meter, Sparkline } from './Sparks';
 import { useWeekStartDay } from './StatCards';
@@ -66,7 +67,10 @@ export function CardioGoalCard() {
   const title = single ? `Zone ${single.zone} cardio` : 'Cardio zone goals';
   const status = dashboard.data ? cardioGoalStatus(tracked, daysLeft) : ' ';
   return (
-    <HalfCard label={`${title}. ${status}`} onPress={() => router.navigate('/training')}>
+    <HalfCard
+      label={`${title}. ${status}`}
+      onPress={() => router.navigate(trainingRoute('cardio'))}
+    >
       <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
         {title}
       </Text>

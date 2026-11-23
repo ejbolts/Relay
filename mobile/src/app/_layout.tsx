@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createQueryClient } from '../data/queryClient';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { SessionProvider, useSession } from '../session/SessionProvider';
+import { PromptHost } from '../ui/prompts';
 import { useTheme } from '../ui/theme';
 
 export default function RootLayout() {
@@ -85,6 +86,9 @@ function Navigation() {
             <Stack.Screen name="sign-in" />
           </Stack.Protected>
         </Stack>
+        {/* Android's menu sheets and text dialogs for every screen. The logger, a separate native
+            sheet, mounts its own. */}
+        <PromptHost />
       </WorkoutProvider>
     </ThemeProvider>
   );

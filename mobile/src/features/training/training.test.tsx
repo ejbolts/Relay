@@ -93,7 +93,12 @@ let client: QueryClient;
 function open(children: ReactNode) {
   // No garbage-collection timers, so Jest can exit when the tests finish.
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  return render(
+  return render(withProviders(children));
+}
+
+/** The screen inside the app's providers, sharing the client `open` made. */
+function withProviders(children: ReactNode) {
+  return (
     <SafeAreaProvider
       initialMetrics={{
         frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -101,7 +106,7 @@ function open(children: ReactNode) {
       }}
     >
       <QueryClientProvider client={client}>{children}</QueryClientProvider>
-    </SafeAreaProvider>,
+    </SafeAreaProvider>
   );
 }
 
@@ -222,6 +227,19 @@ test('Show earlier weeks skips empty weeks, reading older months to reach the ne
   await fireEvent.press(await screen.findByRole('button', { name: 'Show earlier weeks' }));
   expect(await screen.findByRole('button', { name: /^Old push/ })).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Show earlier weeks' })).toBeNull();
+});
+
+test('another screen can open Training at its Cardio section, again after leaving it', async () => {
+  await open(<TrainingTabScreen requestedSection="cardio" requestId="1" />);
+  expect(await screen.findByRole('tab', { name: 'Cardio', selected: true })).toBeVisible();
+
+  await fireEvent.press(screen.getByRole('tab', { name: 'Sessions' }));
+  expect(screen.getByRole('tab', { name: 'Sessions', selected: true })).toBeVisible();
+  // The same section asked for again is a new request.
+  await screen.rerender(
+    withProviders(<TrainingTabScreen requestedSection="cardio" requestId="2" />),
+  );
+  expect(screen.getByRole('tab', { name: 'Cardio', selected: true })).toBeVisible();
 });
 
 test('Exercises searches the library and opens an exercise', async () => {

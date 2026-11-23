@@ -5,7 +5,6 @@ import { localDate } from '../../../../frontend/src/utils';
 import { useUser } from '../../session/SessionProvider';
 import { Button, Card, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
-import { PromptHost } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { Segmented } from '../training/parts';
 import { Avatar } from './Avatar';
@@ -128,7 +127,6 @@ export function SocialScreen() {
         onChooseSharing={nav.openSharing}
         onScanned={nav.openInvite}
       />
-      <PromptHost />
     </>
   );
 }

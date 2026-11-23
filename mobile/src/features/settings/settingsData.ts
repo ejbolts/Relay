@@ -11,7 +11,7 @@ import type {
 import { localDate } from '../../../../frontend/src/utils';
 import { apiGet, apiSend } from '../../data/api';
 import { queryKeys } from '../../data/queries';
-import { uploadFile } from './uploadFile';
+import { uploadFile } from '../../data/uploadFile';
 
 /** Settings' own reads, beside the shared account queries in data/queries.ts. */
 export const settingsKeys = {

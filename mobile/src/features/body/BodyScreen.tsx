@@ -12,7 +12,6 @@ import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
 import { Button, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
-import { PromptHost } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { BodyHistory } from './BodyHistory';
@@ -254,8 +253,6 @@ export function BodyScreen() {
         onClose={() => setGoalRequest(null)}
         onRemove={removal.start}
       />
-      {/* Android draws the history's row and goal menus here; iOS uses native menus. */}
-      <PromptHost />
     </>
   );
 }

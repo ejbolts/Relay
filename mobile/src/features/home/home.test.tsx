@@ -29,8 +29,8 @@ jest.mock('../../data/api', () => ({
   apiSend: jest.fn(),
 }));
 jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: jest.fn() }));
-const mockRouter = { navigate: jest.fn() };
-jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
+const mockRouter = { navigate: jest.fn(), push: jest.fn() };
+jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useIsFocused: () => true }));
 const mockUser = {
   id: 'u1',
   username: 'preview',
@@ -211,6 +211,8 @@ beforeEach(() => {
     '/api/training-preferences': preferences,
     '/api/personal-records': [record],
     '/api/body-measurements': measurements,
+    '/api/sharing': { visibility: 'followers', pending_requests: 2 },
+    '/api/sharing/feed': { items: [], friends: 0, with_sessions: 0 },
   };
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     const key = Object.keys(responses).find((prefix) => path.split('?')[0] === prefix);
@@ -276,6 +278,40 @@ test('Up next shows the split day and its exercises, and starts it', async () =>
   expect(workout.start).toHaveBeenLastCalledWith({ kind: 'up-next' });
   await fireEvent.press(screen.getByRole('button', { name: 'Start empty workout' }));
   expect(workout.start).toHaveBeenLastCalledWith({ kind: 'empty' });
+});
+
+test('the header opens your profile, badged with friend requests, and Settings', async () => {
+  await open();
+  const profile = await screen.findByRole('button', {
+    name: 'Profile: Preview, 2 friend requests',
+  });
+  expect(within(profile).getByText('2')).toBeVisible();
+  await fireEvent.press(profile);
+  expect(mockRouter.push).toHaveBeenLastCalledWith({
+    pathname: '/social/profile/[id]',
+    params: { id: 'u1' },
+  });
+  await fireEvent.press(screen.getByRole('button', { name: 'Settings' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/settings');
+  // The profile card's photo opens the same profile.
+  mockRouter.push.mockClear();
+  await fireEvent.press(screen.getByRole('button', { name: 'Open profile' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith({
+    pathname: '/social/profile/[id]',
+    params: { id: 'u1' },
+  });
+});
+
+test('Edit split opens the split screen', async () => {
+  await open();
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit split' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/split');
+});
+
+test('Recent Friends Activity follows Recent records', async () => {
+  await open();
+  expect(await screen.findByText('Add friends to see their latest workouts here.')).toBeVisible();
+  expect(screen.getByText('Recent Friends Activity')).toBeVisible();
 });
 
 test('Skip moves the split to the next workout day, with an Undo toast', async () => {
@@ -405,28 +441,39 @@ test('a failed load shows each card’s error with a retry, never a blank screen
   expect(await screen.findByText('Upper body day')).toBeVisible();
 });
 
-test('the stat cards count this week and open Training or Body', async () => {
+test('the stat cards count this week and open Training’s sessions or cardio, or Body', async () => {
   await open();
   const workouts = screen.getByRole('button', { name: /^Workouts: / });
   // One workout in the window, a week ago: none this week, an 8-week average of 0.1.
   expect(workouts).toHaveAccessibleName('Workouts: 0, 8-wk avg 0.1');
   await fireEvent.press(workouts);
-  expect(mockRouter.navigate).toHaveBeenLastCalledWith('/training');
-  expect(screen.getByRole('button', { name: /^Cardio sessions: 0/ })).toBeVisible();
+  expect(mockRouter.navigate).toHaveBeenLastCalledWith({
+    pathname: '/training',
+    params: { section: 'sessions', request: expect.any(String) },
+  });
+  await fireEvent.press(screen.getByRole('button', { name: /^Cardio sessions: 0/ }));
+  expect(mockRouter.navigate).toHaveBeenLastCalledWith({
+    pathname: '/training',
+    params: { section: 'cardio', request: expect.any(String) },
+  });
   const body = screen.getByRole('button', { name: 'Body weight: 84.6 kg, −1.5 kg / 4 wk' });
   await fireEvent.press(body);
   expect(mockRouter.navigate).toHaveBeenLastCalledWith('/body');
 });
 
-test('Zone 2 and the bodyweight trend sit side by side', async () => {
+test('Zone 2, which opens Training’s cardio, sits beside the bodyweight trend', async () => {
   await open();
   const left = daysBetween(today, addDays(monday, 6)) + 1;
-  expect(
-    screen.getByRole('button', {
-      name: `Zone 2 cardio. 90 min to go · ${left} ${left === 1 ? 'day' : 'days'} left`,
-    }),
-  ).toBeVisible();
+  const zone2 = screen.getByRole('button', {
+    name: `Zone 2 cardio. 90 min to go · ${left} ${left === 1 ? 'day' : 'days'} left`,
+  });
+  expect(zone2).toBeVisible();
   expect(screen.getByText('60 / 150 min')).toBeVisible();
+  await fireEvent.press(zone2);
+  expect(mockRouter.navigate).toHaveBeenLastCalledWith({
+    pathname: '/training',
+    params: { section: 'cardio', request: expect.any(String) },
+  });
   expect(
     screen.getByRole('button', { name: 'Bodyweight: 84.6 kg. −1.5 kg in 30 days' }),
   ).toBeVisible();
