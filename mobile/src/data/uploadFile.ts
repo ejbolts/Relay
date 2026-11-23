@@ -19,7 +19,17 @@ export async function uploadFile<T>(
     field = 'file',
     fields = {},
     failure = 'Relay could not complete this request.',
-  }: { field?: string; fields?: Record<string, string>; failure?: string } = {},
+    timeoutMs = TIMEOUT_MS,
+    onProgress,
+  }: {
+    field?: string;
+    fields?: Record<string, string>;
+    failure?: string;
+    /** Large files, such as workout videos, need longer than a photo. */
+    timeoutMs?: number;
+    /** The share sent so far, from 0 to 100. */
+    onProgress?: (percent: number) => void;
+  } = {},
 ): Promise<T> {
   const origin = new URL(apiOrigin!).origin;
   const token = await sessionToken(origin);
@@ -29,7 +39,11 @@ export async function uploadFile<T>(
   return new Promise<T>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open(method, origin + path);
-    xhr.timeout = TIMEOUT_MS;
+    xhr.timeout = timeoutMs;
+    if (onProgress)
+      xhr.upload.onprogress = (event) => {
+        if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+      };
     if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
     // The release and build headers every other request sends, so uploads count and gate alike.
     for (const [name, value] of Object.entries(clientVersionHeaders()))

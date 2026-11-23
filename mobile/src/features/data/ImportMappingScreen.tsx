@@ -2,6 +2,7 @@ import { useLocalSearchParams, useNavigation, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { Pressable, SectionList, StyleSheet, Text, TextInput, View } from 'react-native';
 import { mappedExerciseId, mappingChoices } from '../../../../frontend/src/workoutImport';
+import { useUser } from '../../session/SessionProvider';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { remapExercise, useImportSession } from './importSession';
@@ -17,7 +18,8 @@ export function ImportMappingScreen() {
   const router = useRouter();
   const navigation = useNavigation();
   const { colors, type } = useTheme();
-  const session = useImportSession();
+  const userId = useUser().id;
+  const session = useImportSession(userId);
   const [query, setQuery] = useState('');
   useEffect(() => navigation.setOptions({ title: name }), [navigation, name]);
 
@@ -76,7 +78,7 @@ export function ImportMappingScreen() {
             accessibilityRole="button"
             accessibilityState={{ selected }}
             onPress={() => {
-              if (item.id !== current) remapExercise(name, item.id);
+              if (item.id !== current) remapExercise(userId, name, item.id);
               router.back();
             }}
             style={({ pressed }) => [
