@@ -31,12 +31,8 @@ import { WorkoutComments } from './WorkoutComments';
 import { WorkoutReactionControl } from './WorkoutReactionControl';
 import { WorkoutReactionPeople } from './WorkoutReactionPeople';
 import { clearWorkoutFocus, useWorkoutFocus, type WorkoutFocus } from './workoutFocus';
+import { FOCUS_HIGHLIGHT_MS, workoutFocusStep } from './workoutFocusRequest';
 import './socialFeed.css';
-
-/** Older pages loaded while looking for a workout opened from a notification. */
-const FOCUS_SEARCH_PAGES = 5;
-/** How long a revealed card stays highlighted. */
-const FOCUS_HIGHLIGHT_MS = 2400;
 
 function FeedStats({ workout, records }: { workout: TrackedWorkout; records: number }) {
   const weightUnit = useWeightUnit();
@@ -283,13 +279,18 @@ export function SocialFeed({
     if (!active || !request || loadingMore) return;
     if (state === 'locked') return clearWorkoutFocus(request.key);
     if (!items) return;
-    if (items.some((item) => item.workout.id === request.workoutId)) {
+    if (searched.current.key !== request.key) searched.current = { key: request.key, pages: 0 };
+    const step = workoutFocusStep(request, {
+      workoutIds: items.map((item) => item.workout.id),
+      hasMore,
+      pagesSearched: searched.current.pages,
+    });
+    if (step === 'reveal') {
       setFocus(request);
       clearWorkoutFocus(request.key);
       return;
     }
-    if (searched.current.key !== request.key) searched.current = { key: request.key, pages: 0 };
-    if (hasMore && searched.current.pages < FOCUS_SEARCH_PAGES) {
+    if (step === 'load-more') {
       searched.current.pages += 1;
       void loadMore();
       return;

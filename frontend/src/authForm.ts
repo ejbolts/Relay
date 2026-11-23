@@ -1,29 +1,30 @@
 import { api, ApiError } from './api';
-import { authErrorText, validateNewPassword } from './authRules';
+import {
+  authErrorText,
+  registrationFieldErrors,
+  registrationFields,
+  validateAuthForm,
+  type AuthFieldErrors,
+  type AuthFormValues,
+  type AuthMode,
+} from './authRules';
 import type { AuthConfig, User } from './types';
 
-export { MIN_PASSWORD_LENGTH, validateNewPassword } from './authRules';
-
-export const USERNAME_HINT =
-  '3–32 letters, numbers, dots, underscores or hyphens. Start with a letter or number.';
-
-export type AuthMode = 'sign-in' | 'create-account';
-
-export interface AuthFormValues {
-  displayName: string;
-  username: string;
-  password: string;
-  inviteCode: string;
-}
-
-export type AuthFieldErrors = Partial<Record<keyof AuthFormValues, string>>;
+export {
+  MIN_PASSWORD_LENGTH,
+  USERNAME_HINT,
+  validateAuthForm,
+  validateNewPassword,
+  validateUsername,
+  type AuthFieldErrors,
+  type AuthFormValues,
+  type AuthMode,
+} from './authRules';
 
 export const DEFAULT_AUTH_CONFIG: AuthConfig = {
   registration_open: true,
   invite_code_required: false,
 };
-
-const USERNAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,31}$/;
 
 export function isNetworkFailure(reason: unknown): boolean {
   if (reason instanceof ApiError) return reason.status === 0 && reason.code === 'request_failed';
@@ -37,31 +38,6 @@ export function authErrorMessage(reason: unknown): string {
   }
   if (reason instanceof ApiError) return authErrorText(reason);
   return reason instanceof Error ? reason.message : 'Something went wrong. Try again.';
-}
-
-export function validateUsername(username: string): string | null {
-  return USERNAME_PATTERN.test(username.trim()) ? null : USERNAME_HINT;
-}
-
-export function validateAuthForm(
-  mode: AuthMode,
-  values: AuthFormValues,
-  config: AuthConfig,
-): AuthFieldErrors {
-  const errors: AuthFieldErrors = {};
-  const usernameError = validateUsername(values.username);
-  if (usernameError) errors.username = usernameError;
-  if (mode === 'sign-in') {
-    if (!values.password) errors.password = 'Enter your password.';
-    return errors;
-  }
-  if (!values.displayName.trim()) errors.displayName = 'Enter a name to show in the app.';
-  const passwordError = validateNewPassword(values.password);
-  if (passwordError) errors.password = passwordError;
-  if (config.invite_code_required && !values.inviteCode.trim()) {
-    errors.inviteCode = 'Enter your invite code.';
-  }
-  return errors;
 }
 
 export interface AuthApi {
@@ -105,12 +81,7 @@ export async function submitAuthForm(
     if (mode === 'sign-in') {
       return { ok: true, user: await endpoints.login({ username, password: values.password }) };
     }
-    const created = await endpoints.register({
-      username,
-      password: values.password,
-      display_name: values.displayName.trim(),
-      invite_code: values.inviteCode.trim() || null,
-    });
+    const created = await endpoints.register(registrationFields(values));
     // Registering does not start a session, so sign in to the new account with the same details.
     try {
       return { ok: true, user: await endpoints.login({ username, password: values.password }) };
@@ -122,14 +93,7 @@ export async function submitAuthForm(
     return {
       ok: false,
       message: authErrorMessage(reason),
-      fieldErrors:
-        code === 'username_taken'
-          ? { username: 'This username is already registered.' }
-          : code === 'display_name_taken'
-            ? { displayName: 'This name is already used.' }
-            : code === 'invalid_invite_code'
-              ? { inviteCode: 'This invite code was not accepted.' }
-              : {},
+      fieldErrors: registrationFieldErrors(code),
       needsInviteCode: code === 'invalid_invite_code',
     };
   }

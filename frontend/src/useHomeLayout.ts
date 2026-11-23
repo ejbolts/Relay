@@ -1,7 +1,7 @@
 import { useTips } from './Tips';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
-import { DEFAULT_HOME_SECTION_SETTINGS, defaultHomeLayout, isHomeSectionId } from './homeLayout';
+import { defaultHomeLayout, homeLayoutDraft, isHomeSectionId } from './homeLayout';
 import { useUserSession } from './userContext';
 
 export function useHomeLayout(active = true) {
@@ -86,12 +86,7 @@ export function useHomeLayout(active = true) {
   }, [userId, attempt, learn]);
 
   function edit() {
-    setDraft({
-      order: [...layout.order],
-      hidden: [...layout.hidden],
-      widths: { ...layout.widths },
-      settings: { ...DEFAULT_HOME_SECTION_SETTINGS, ...layout.settings },
-    });
+    setDraft(homeLayoutDraft(layout));
     setError(null);
     setMessage('');
     setEditing(true);

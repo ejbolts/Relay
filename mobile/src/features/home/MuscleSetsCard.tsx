@@ -1,4 +1,5 @@
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
@@ -9,17 +10,23 @@ import {
   setCredits,
   signedSetChange,
 } from '../../../../frontend/src/muscleSetRows';
+import { muscleSetGoal } from '../../../../frontend/src/muscleSetGoals';
 import { useDashboard, useTrainingPreferences } from '../../data/queries';
 import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { homeIcons } from './homeIcons';
+import { MuscleContributionSheet } from './MuscleContributionSheet';
 
 /**
  * Working sets per muscle against each muscle's weekly goal, with the week before behind it, as
- * on the web. Step back through earlier weeks; Show more lists every muscle.
+ * on the web. Step back through earlier weeks; Show more lists every muscle. A muscle opens the
+ * workouts and exercises that supplied its sets, and Muscle goals edits every muscle's goal.
  */
 export function MuscleSetsCard() {
   const { colors, type } = useTheme();
+  const router = useRouter();
+  const [selected, setSelected] = useState<string | null>(null);
   const dashboard = useDashboard();
   const preferences = useTrainingPreferences();
   const [weeksAgo, setWeeksAgo] = useState(0);
@@ -34,6 +41,7 @@ export function MuscleSetsCard() {
     goals,
     expanded,
   });
+  const muscle = view.allMuscles.find((item) => item.muscle_group === selected) ?? null;
   const step = (by: number) => {
     void Haptics.selectionAsync();
     setWeeksAgo(view.weeksAgo + by);
@@ -123,13 +131,15 @@ export function MuscleSetsCard() {
           {view.rows.length > 0 && (
             <View style={{ gap: 14 }}>
               {view.rows.map((row) => (
-                <View
+                <Pressable
                   key={row.muscle_group}
-                  style={styles.row}
-                  accessible
+                  style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
+                  accessibilityRole="button"
                   accessibilityLabel={`${row.muscle_group}: ${setCredits(row.raw_sets)} of ${row.target} sets${
                     row.change === null ? '' : `, ${setChangeLabel(row.change, view.current)}`
                   }`}
+                  accessibilityHint="Shows the exercises that count towards it"
+                  onPress={() => setSelected(row.muscle_group)}
                 >
                   <Text
                     style={[type.footnote, styles.name, { color: colors.text }]}
@@ -198,7 +208,7 @@ export function MuscleSetsCard() {
                       </Text>
                     )}
                   </View>
-                </View>
+                </Pressable>
               ))}
             </View>
           )}
@@ -214,17 +224,35 @@ export function MuscleSetsCard() {
               {view.untrained} muscles not trained{view.current ? ' yet' : ''}
             </Text>
           )}
-          {view.canExpand && (
+          <View style={styles.footer}>
+            {view.canExpand ? (
+              <Button
+                label={expanded ? 'Show less' : 'Show more'}
+                icon={expanded ? 'chevronUp' : 'chevronDown'}
+                variant="link"
+                onPress={() => setExpanded((value) => !value)}
+              />
+            ) : (
+              <View />
+            )}
             <Button
-              label={expanded ? 'Show less' : 'Show more'}
-              icon={expanded ? 'chevronUp' : 'chevronDown'}
+              label="Muscle goals"
+              icon={homeIcons.target}
               variant="link"
-              style={{ alignSelf: 'center' }}
-              onPress={() => setExpanded((value) => !value)}
+              onPress={() => router.push('/muscle-goals')}
             />
-          )}
+          </View>
         </>
       )}
+      <MuscleContributionSheet
+        muscle={muscle}
+        current={view.current}
+        weekLabel={view.name}
+        goal={muscle ? muscleSetGoal(muscle.muscle_group, goal, goals) : goal}
+        defaultGoal={goal}
+        goals={goals}
+        onClose={() => setSelected(null)}
+      />
     </Card>
   );
 }
@@ -261,4 +289,5 @@ const styles = StyleSheet.create({
     zIndex: 2,
   },
   value: { width: 52, alignItems: 'flex-end' },
+  footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
 });

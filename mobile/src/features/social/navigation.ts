@@ -2,6 +2,15 @@ import { useRouter } from 'expo-router';
 import { useCallback, useMemo } from 'react';
 import { useUser } from '../../session/SessionProvider';
 
+/** A shared workout to open: `comments` scrolls to them, at `commentId` when given. */
+export interface WorkoutTarget {
+  id: string;
+  memberId: string;
+  date: string;
+  comments?: boolean;
+  commentId?: string;
+}
+
 /** Social's screens, pushed over the tabs so Home and Social open them the same way. */
 export const socialRoutes = {
   profile: (id: string, invite = false) =>
@@ -9,7 +18,7 @@ export const socialRoutes = {
       pathname: '/social/profile/[id]',
       params: invite ? { id, invite: '1' } : { id },
     }) as const,
-  workout: (workout: { id: string; memberId: string; date: string; comments?: boolean }) =>
+  workout: (workout: WorkoutTarget) =>
     ({
       pathname: '/social/workout/[id]',
       params: {
@@ -17,6 +26,7 @@ export const socialRoutes = {
         member: workout.memberId,
         date: workout.date,
         ...(workout.comments ? { comments: '1' } : {}),
+        ...(workout.commentId ? { comment: workout.commentId } : {}),
       },
     }) as const,
   sharing: '/social/sharing' as const,
@@ -32,8 +42,7 @@ export function useSocialNavigation() {
     [router],
   );
   const openWorkout = useCallback(
-    (workout: { id: string; memberId: string; date: string; comments?: boolean }) =>
-      router.push(socialRoutes.workout(workout)),
+    (workout: WorkoutTarget) => router.push(socialRoutes.workout(workout)),
     [router],
   );
   const openSharing = useCallback(() => router.push(socialRoutes.sharing), [router]);

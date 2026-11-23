@@ -4,6 +4,7 @@ import { workoutDisplayName } from '../../../../frontend/src/trainingSummary';
 import { effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
 import { Button, Card, errorMessage, Loading } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
+import { SavedWorkoutSocial } from '../social';
 import { SavedWorkoutActions } from '../workout/SavedWorkoutActions';
 import { Badge, Note } from './parts';
 import { RepeatWorkoutButton } from './RepeatWorkoutButton';
@@ -93,6 +94,8 @@ export function SessionDetailScreen({
                 }
               />
             </Card>
+            {/* W5 (Social): the workout's photos and Share. */}
+            <SavedWorkoutSocial workout={workout} records={records} inset={space.lg * 2} />
             <SavedWorkoutActions workout={workout}>
               <RepeatWorkoutButton workout={workout} unit={context.unit} />
             </SavedWorkoutActions>

@@ -1,6 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useMemo, type ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text } from 'react-native';
+import type { ActivityCardSettings } from '../../../../frontend/src/homeLayout';
 import {
   activityAverageLabel,
   bodyweightStatCaption,
@@ -16,82 +17,96 @@ import { trainingRoute } from '../training/routes';
 import { useBodyMeasurements } from '../body/bodyQueries';
 import { SparkBars, Sparkline } from './Sparks';
 
-/** Weeks each activity card averages: the web's default Home layout (8). */
-const ACTIVITY_WEEKS = 8;
-
 /** The weekday the account's weeks start on, as the dashboard reports it. */
 export function useWeekStartDay() {
   const data = useDashboard().data;
   return weekStartDayFrom(data?.weekly_sets?.week_start ?? data?.zone2?.week_start);
 }
 
-/**
- * Home's three stat cards in the web's default order: Workouts and Cardio sessions this week
- * with their weekly bars, and the latest body weight with its weekly averages.
- */
-export function StatCards() {
-  const router = useRouter();
-  const unit = useWeightUnit();
+/** The last 12 weeks' workout and cardio counts, oldest first, as the stat cards chart them. */
+export function useActivityWeeks() {
   const today = localDate();
-  const dashboard = useDashboard();
-  const workouts = useWorkoutHistory();
-  const measurements = useBodyMeasurements();
+  const history = useWorkoutHistory().data;
   const weekStartDay = useWeekStartDay();
-  const history = workouts.data;
   const weeks = useMemo(
     () => weeklyTrainingTotals(history ?? [], today, weekStartDay, 12),
     [history, today, weekStartDay],
   );
-  const activity = homeActivityStats({
-    weeks,
-    haveWorkouts: (history?.length ?? 0) > 0,
-    data: dashboard.data,
-    workoutWeeks: ACTIVITY_WEEKS,
-    cardioWeeks: ACTIVITY_WEEKS,
-  });
+  return { weeks, haveWorkouts: (history?.length ?? 0) > 0 };
+}
+
+function useActivity(settings: { workoutWeeks: number; cardioWeeks: number }) {
+  const dashboard = useDashboard();
+  const { weeks, haveWorkouts } = useActivityWeeks();
+  return homeActivityStats({ weeks, haveWorkouts, data: dashboard.data, ...settings });
+}
+
+/** Workouts this week, with the weekly bars and average over the card's saved weeks. */
+export function WorkoutsStat({ settings }: { settings: ActivityCardSettings }) {
+  const router = useRouter();
+  const { weeks } = settings;
+  const activity = useActivity({ workoutWeeks: weeks, cardioWeeks: weeks });
+  return (
+    <Stat
+      label="Workouts"
+      value={activity.workoutsThisWeek ?? '–'}
+      caption={activityAverageLabel(activity.averageWorkouts, weeks)}
+      onPress={() => router.navigate(trainingRoute('sessions'))}
+    >
+      <SparkBars
+        values={activity.workoutHistory}
+        label={`Workouts per week, last ${weeks} weeks`}
+      />
+    </Stat>
+  );
+}
+
+/** Cardio sessions this week, with the weekly bars and average over the card's saved weeks. */
+export function CardioSessionsStat({ settings }: { settings: ActivityCardSettings }) {
+  const router = useRouter();
+  const { weeks } = settings;
+  const activity = useActivity({ workoutWeeks: weeks, cardioWeeks: weeks });
+  return (
+    <Stat
+      label="Cardio sessions"
+      value={activity.cardioSessionsThisWeek ?? '–'}
+      caption={activityAverageLabel(activity.averageCardioSessions, weeks)}
+      onPress={() => router.navigate(trainingRoute('cardio'))}
+    >
+      <SparkBars
+        values={activity.cardioHistory}
+        label={`Cardio sessions per week, last ${weeks} weeks`}
+      />
+    </Stat>
+  );
+}
+
+/** The latest body weight, with its weekly averages. */
+export function BodyweightStat() {
+  const router = useRouter();
+  const unit = useWeightUnit();
+  const today = localDate();
+  const measurements = useBodyMeasurements();
+  const weekStartDay = useWeekStartDay();
   const checkIns = measurements.data;
   const body = useMemo(
     () => homeBodyweightStats(checkIns ?? [], today, weekStartDay),
     [checkIns, today, weekStartDay],
   );
   return (
-    <View style={styles.row}>
-      <Stat
-        label="Workouts"
-        value={activity.workoutsThisWeek ?? '–'}
-        caption={activityAverageLabel(activity.averageWorkouts, ACTIVITY_WEEKS)}
-        onPress={() => router.navigate(trainingRoute('sessions'))}
-      >
-        <SparkBars
-          values={activity.workoutHistory}
-          label={`Workouts per week, last ${ACTIVITY_WEEKS} weeks`}
-        />
-      </Stat>
-      <Stat
-        label="Cardio sessions"
-        value={activity.cardioSessionsThisWeek ?? '–'}
-        caption={activityAverageLabel(activity.averageCardioSessions, ACTIVITY_WEEKS)}
-        onPress={() => router.navigate(trainingRoute('cardio'))}
-      >
-        <SparkBars
-          values={activity.cardioHistory}
-          label={`Cardio sessions per week, last ${ACTIVITY_WEEKS} weeks`}
-        />
-      </Stat>
-      <Stat
-        label="Body weight"
-        value={body.latest ? weightFromKg(body.latest.weight_kg, unit).toFixed(1) : '–'}
-        unit={body.latest ? unit : undefined}
-        caption={checkIns ? bodyweightStatCaption(body.monthChange, checkIns.length, unit) : ' '}
-        onPress={() => router.navigate('/body')}
-      >
-        <Sparkline
-          values={body.weeklyWeights}
-          label="Average body weight per week, last 12 weeks"
-          height={26}
-        />
-      </Stat>
-    </View>
+    <Stat
+      label="Body weight"
+      value={body.latest ? weightFromKg(body.latest.weight_kg, unit).toFixed(1) : '–'}
+      unit={body.latest ? unit : undefined}
+      caption={checkIns ? bodyweightStatCaption(body.monthChange, checkIns.length, unit) : ' '}
+      onPress={() => router.navigate('/body')}
+    >
+      <Sparkline
+        values={body.weeklyWeights}
+        label="Average body weight per week, last 12 weeks"
+        height={26}
+      />
+    </Stat>
   );
 }
 
@@ -138,7 +153,6 @@ function Stat({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 8 },
   stat: {
     flex: 1,
     minWidth: 0,

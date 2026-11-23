@@ -133,7 +133,8 @@ export type StartChoice =
   | { kind: 'cardio' }
   | {
       kind: 'template';
-      template: SessionTemplate;
+      /** Null starts a planned day that has no exercises to suggest yet, keeping its type. */
+      template: SessionTemplate | null;
       name: string;
       /** A planned day's category and type, when it has them. */
       category?: WorkoutCategory | null;
@@ -161,6 +162,8 @@ export interface LiveWorkout {
   /** A resumed workout's saved minutes, which its clock adds to. */
   previousDurationMinutes: number;
   startedAt: number;
+  /** The day it is logged on: today, or the earlier day it was started for. */
+  workoutDate: string;
   pause: WorkoutPause;
   loggedSets: number;
 }
@@ -169,9 +172,10 @@ export interface WorkoutApi {
   live: LiveWorkout | null;
   /**
    * Starts a workout and opens the logger. Ignored while one is already live: use `open`. From
-   * another sheet (the Start menu), pass `replace` so the logger takes that sheet's place.
+   * another sheet (the Start menu), pass `replace` so the logger takes that sheet's place. `date`
+   * logs it on an earlier day, as the web does from an empty calendar day; it starts today without.
    */
-  start: (choice: StartChoice, options?: { replace?: boolean }) => void;
+  start: (choice: StartChoice, options?: { replace?: boolean; date?: string }) => void;
   /** Shows the logger for the live workout. Dismissing the logger only minimises it. */
   open: () => void;
   /** The Start tab: the Start menu, or the logger while a workout is live. */
@@ -755,9 +759,9 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const open = useCallback(() => router.push('/workout'), [router]);
 
   const start = useCallback(
-    (choice: StartChoice, options?: { replace?: boolean }) => {
+    (choice: StartChoice, options?: { replace?: boolean; date?: string }) => {
       if (!loggerRef.current) {
-        const date = localDate();
+        const date = options?.date ?? localDate();
         let template: SessionTemplate | null = null;
         let startCategory: WorkoutCategory | null = null;
         let startType: WorkoutType | null = null;
@@ -1320,6 +1324,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
             resumedWorkoutId: logger.resumingWorkoutId,
             previousDurationMinutes: logger.previousDurationMinutes,
             startedAt: logger.startedAt,
+            workoutDate: logger.workoutDate,
             pause: logger.pause,
             loggedSets,
           }

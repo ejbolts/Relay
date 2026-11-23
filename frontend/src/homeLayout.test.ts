@@ -4,8 +4,12 @@ import {
   defaultHomeLayout,
   HOME_SECTIONS,
   fillHomeSectionGap,
+  homeLayoutDraft,
   homeSectionGaps,
+  homeSectionLists,
+  homeSectionRows,
   homeSectionSpans,
+  stepHomeSection,
   moveHomeSection,
   showHomeSectionAfter,
   toggleHomeSection,
@@ -204,5 +208,64 @@ describe('Home section settings', () => {
     expect(activity.settings?.workouts).toEqual({ weeks: 4 });
     expect(activity.settings?.cardio_sessions).toEqual({ weeks: 12 });
     expect(activity.settings?.zone2).toEqual(zone4.settings?.zone2);
+  });
+});
+
+describe('Home layout for the app', () => {
+  it('lists the shown and hidden sections, skipping retired ids and empty sections', () => {
+    const layout: HomeLayout = {
+      ...defaultHomeLayout(),
+      order: ['weekly-review' as never, 'records', 'profile', 'training-block', 'body-goal'],
+      hidden: ['body-goal'],
+    };
+    expect(homeSectionLists(layout, (id) => id !== 'training-block')).toEqual({
+      visible: ['records', 'profile'],
+      hidden: ['body-goal'],
+    });
+  });
+
+  it('groups the visible sections into rows of the six-column grid', () => {
+    expect(
+      homeSectionRows(['workouts', 'cardio-sessions', 'weekly-bodyweight', 'zone2', 'records']),
+    ).toEqual([
+      [
+        { id: 'workouts', span: 2 },
+        { id: 'cardio-sessions', span: 2 },
+        { id: 'weekly-bodyweight', span: 2 },
+      ],
+      [{ id: 'zone2', span: 6 }],
+      [{ id: 'records', span: 6 }],
+    ]);
+    expect(
+      homeSectionRows(['records', 'friends'], { records: 'compact', friends: 'compact' }),
+    ).toEqual([
+      [
+        { id: 'records', span: 3 },
+        { id: 'friends', span: 3 },
+      ],
+    ]);
+  });
+
+  it('steps a section past its visible neighbour, keeping hidden ones in place', () => {
+    const layout: HomeLayout = {
+      ...defaultHomeLayout(),
+      order: ['records', 'body-goal', 'friends', 'profile'],
+      hidden: ['body-goal'],
+    };
+    const visible = ['records', 'friends', 'profile'] as const;
+    expect(stepHomeSection(layout, [...visible], 'friends', -1).order).toEqual([
+      'friends',
+      'records',
+      'body-goal',
+      'profile',
+    ]);
+    expect(stepHomeSection(layout, [...visible], 'profile', 1)).toBe(layout);
+  });
+
+  it('drafts a copy with every section setting filled in', () => {
+    const saved: HomeLayout = { order: ['records'], hidden: [], settings: undefined };
+    const draft = homeLayoutDraft(saved);
+    expect(draft.settings?.workouts).toEqual({ weeks: 8 });
+    expect(draft.order).not.toBe(saved.order);
   });
 });

@@ -7,7 +7,13 @@ import { optimisePhoto } from './photoOptimise';
 import { PopupDialog } from './PopupDialog';
 import { useToast } from './Toast';
 import type { WorkoutPhoto } from './types';
-import { MAX_WORKOUT_PHOTOS } from './workoutPhotoState';
+import {
+  canAddWorkoutPhoto,
+  MAX_WORKOUT_PHOTOS,
+  PHOTO_UNAVAILABLE,
+  workoutPhotoLabel,
+  workoutPhotoTitle,
+} from './workoutPhotoRules';
 import './profilePhotoViewer.css';
 import './workoutPhotos.css';
 
@@ -74,7 +80,7 @@ export function WorkoutPhotos({
           <button
             type="button"
             key={photo.id}
-            aria-label={`View photo ${index + 1} of ${photos.length} of ${subject}`}
+            aria-label={workoutPhotoLabel(index, photos.length, subject)}
             aria-haspopup="dialog"
             onClick={() => {
               setFailed(null);
@@ -97,7 +103,7 @@ export function WorkoutPhotos({
       {viewing && (
         <PopupDialog
           variant="screen"
-          title={photos.length > 1 ? `Photo ${position + 1} of ${photos.length}` : 'Workout photo'}
+          title={workoutPhotoTitle(position, photos.length)}
           className="profile-photo-viewer workout-photo-viewer"
           headerActions={
             onRemove && (
@@ -122,7 +128,7 @@ export function WorkoutPhotos({
         >
           <div className="profile-photo-viewer-content">
             {failed === viewing.id ? (
-              <p role="alert">This photo could not be loaded. Close and try again.</p>
+              <p role="alert">{PHOTO_UNAVAILABLE}</p>
             ) : (
               <img
                 src={viewing.full_url}
@@ -203,7 +209,7 @@ export function WorkoutPhotoEditor({
     }
   }
 
-  const full = !canAdd || photos.length >= MAX_WORKOUT_PHOTOS;
+  const full = !canAdd || !canAddWorkoutPhoto(photos);
   if (!canAdd && !photos.length) return null;
   return (
     <div className={`workout-photo-editor workout-photo-editor-${layout}`}>

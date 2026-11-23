@@ -2,6 +2,7 @@ import { useRouter } from 'expo-router';
 import { useMemo, type ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { cardioGoalStatus, trackedCardioGoals } from '../../../../frontend/src/cardioZones';
+import type { CardioGoalCardSettings } from '../../../../frontend/src/homeLayout';
 import {
   bodyweightTrendCaption,
   homeBodyweightStats,
@@ -13,21 +14,10 @@ import { useDashboard, useWeightUnit } from '../../data/queries';
 import { useTheme } from '../../ui/theme';
 import { trainingRoute } from '../training/routes';
 import { useBodyMeasurements } from '../body/bodyQueries';
-import { Meter, Sparkline } from './Sparks';
+import { Meter, Ring, Sparkline } from './Sparks';
 import { useWeekStartDay } from './StatCards';
 
-/**
- * The web's two half-width Home cards side by side: cardio zone goals (its default progress
- * style, tracking every goal) and the bodyweight trend.
- */
-export function HalfCards() {
-  return (
-    <View style={styles.row}>
-      <CardioGoalCard />
-      <BodyweightTrendCard />
-    </View>
-  );
-}
+// The web's two half-width Home cards: cardio zone goals and the bodyweight trend.
 
 function HalfCard({
   label,
@@ -55,17 +45,25 @@ function HalfCard({
   );
 }
 
-export function CardioGoalCard() {
+/** This week's cardio zone goals in the card's saved design, tracking one zone or all of them. */
+export function CardioGoalCard({ settings }: { settings: CardioGoalCardSettings }) {
   const { colors, type } = useTheme();
   const router = useRouter();
   const today = localDate();
   const dashboard = useDashboard();
   const { goals, daysLeft } = homeCardioGoals(dashboard.data, today);
-  // Home's default setting tracks every goal.
-  const tracked = trackedCardioGoals(goals, { zone: null });
+  const tracked = trackedCardioGoals(goals, settings);
   const single = tracked.length === 1 ? tracked[0] : null;
   const title = single ? `Zone ${single.zone} cardio` : 'Cardio zone goals';
   const status = dashboard.data ? cardioGoalStatus(tracked, daysLeft) : ' ';
+  const goalLine = (goal: (typeof tracked)[number]) => (
+    <Text style={[type.caption, type.number, { color: colors.secondary }]}>
+      <Text style={{ color: goal.complete ? colors.good : colors.text, fontWeight: '700' }}>
+        Zone {goal.zone}
+      </Text>{' '}
+      {goal.completed_minutes} / {goal.goal_minutes} min
+    </Text>
+  );
   return (
     <HalfCard
       label={`${title}. ${status}`}
@@ -74,7 +72,47 @@ export function CardioGoalCard() {
       <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
         {title}
       </Text>
-      {single ? (
+      {settings.style === 'list' ? (
+        tracked.map((goal) => <View key={goal.zone}>{goalLine(goal)}</View>)
+      ) : settings.style === 'ring' ? (
+        single ? (
+          <View style={styles.ringSingle}>
+            <Ring
+              value={single.completed_minutes}
+              max={single.goal_minutes}
+              size={64}
+              label={`Zone ${single.zone} minutes this week`}
+            >
+              <Text style={[type.headline, type.number, { color: colors.text }]}>
+                {single.completed_minutes}
+              </Text>
+            </Ring>
+            <Text style={[type.caption, { color: colors.muted }]}>
+              of {single.goal_minutes} min
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.rings}>
+            {tracked.map((goal) => (
+              <View key={goal.zone} style={styles.ringItem}>
+                <Ring
+                  value={goal.completed_minutes}
+                  max={goal.goal_minutes}
+                  size={44}
+                  label={`Zone ${goal.zone} minutes this week`}
+                >
+                  <Text style={[type.caption, { color: colors.text, fontWeight: '700' }]}>
+                    Z{goal.zone}
+                  </Text>
+                </Ring>
+                <Text style={[type.caption, type.number, { color: colors.muted }]}>
+                  {goal.completed_minutes}/{goal.goal_minutes}
+                </Text>
+              </View>
+            ))}
+          </View>
+        )
+      ) : single ? (
         <>
           <Text style={[styles.value, type.number, { color: colors.text }]}>
             {single.completed_minutes}
@@ -92,10 +130,7 @@ export function CardioGoalCard() {
       ) : (
         tracked.map((goal) => (
           <View key={goal.zone} style={{ gap: 4 }}>
-            <Text style={[type.caption, type.number, { color: colors.secondary }]}>
-              <Text style={{ color: colors.text, fontWeight: '700' }}>Zone {goal.zone}</Text>{' '}
-              {goal.completed_minutes} / {goal.goal_minutes} min
-            </Text>
+            {goalLine(goal)}
             <Meter
               value={goal.completed_minutes}
               max={goal.goal_minutes}
@@ -157,9 +192,11 @@ export function BodyweightTrendCard() {
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', gap: 12, alignItems: 'stretch' },
   card: { flex: 1, minWidth: 0, padding: 14, gap: 6, borderWidth: StyleSheet.hairlineWidth },
   value: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
+  ringSingle: { alignItems: 'center', gap: 4, paddingVertical: 4 },
+  rings: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center' },
+  ringItem: { alignItems: 'center', gap: 2 },
   // The status sits at the foot of the card when the trend beside it is taller.
   foot: { marginTop: 'auto' },
 });
