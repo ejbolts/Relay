@@ -2,7 +2,14 @@ import { useContext, useEffect, useState } from 'react';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
 import { PopupDialog } from './PopupDialog';
 import { Icon } from './Icon';
-import { partialSetsEnabledForWeek } from './exercisePartialSets';
+import {
+  exerciseMuscleCredits,
+  formatMuscleCreditSets,
+  isCardioExercise,
+  partialSetsEnabledForWeek,
+  selectPartialSetWeek,
+  weekStartDayFromPreference,
+} from './exercisePartialSets';
 import { addDays, weekStartFor } from './trainingSummary';
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import { localDate } from './utils';
@@ -28,8 +35,7 @@ export function ExerciseMuscleHelp({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { preferences } = useTrainingPreferences();
-  const weekStartDay =
-    preferences?.week_start === 'sunday' ? 0 : preferences?.week_start === 'saturday' ? 6 : 1;
+  const weekStartDay = weekStartDayFromPreference(preferences?.week_start);
   const today = localDate();
   const currentWeek = weekStartFor(today, weekStartDay);
   const [selectedWeek, setSelectedWeek] = useState(currentWeek);
@@ -38,10 +44,8 @@ export function ExerciseMuscleHelp({
     setSelectedWeek(weekStartFor(localDate(), weekStartDay));
     setError(null);
   }, [controlled, openedElsewhere, weekStartDay]);
-  const cardio = exercise.kind === 'cardio' || exercise.category === 'cardio';
-  const credits = exercise.default_muscle_set_credits ?? exercise.muscle_set_credits ?? [];
-  const direct = credits.filter((credit) => credit.sets >= 1);
-  const partial = credits.filter((credit) => credit.sets > 0 && credit.sets < 1);
+  const cardio = isCardioExercise(exercise);
+  const { credits, direct, partial } = exerciseMuscleCredits(exercise);
   const partialEnabled = partialSetsEnabledForWeek(exercise, selectedWeek);
 
   async function togglePartialSets() {
@@ -124,8 +128,12 @@ export function ExerciseMuscleHelp({
                         max={today}
                         disabled={saving}
                         onChange={(event) => {
-                          if (event.target.value && event.target.value <= today)
-                            setSelectedWeek(weekStartFor(event.target.value, weekStartDay));
+                          const next = selectPartialSetWeek(
+                            event.target.value,
+                            today,
+                            weekStartDay,
+                          );
+                          if (next) setSelectedWeek(next);
                           setError(null);
                         }}
                       />
@@ -178,9 +186,7 @@ export function ExerciseMuscleHelp({
                                   credit.sets < 1 && !partialEnabled ? 'credit-disabled' : undefined
                                 }
                               >
-                                {credit.sets < 1 && !partialEnabled
-                                  ? 'Off'
-                                  : `${credit.sets} ${credit.sets === 1 ? 'set' : 'sets'}`}
+                                {formatMuscleCreditSets(credit.sets, partialEnabled)}
                               </strong>
                             </li>
                           ))}
