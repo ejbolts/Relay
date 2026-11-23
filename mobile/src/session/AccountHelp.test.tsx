@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, renderHook, screen } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError, currentUser, request } from '../data/api';
+import { startAppTour, useAppTour } from '../features/guides/tourProgress';
 import { SessionProvider } from './SessionProvider';
 import { SignInScreen } from './SignInScreen';
 
@@ -99,4 +100,11 @@ test('is only offered on the sign-in form', async () => {
   await fireEvent.press(await screen.findByRole('button', { name: 'Create account' }));
   expect(screen.queryByRole('button', { name: 'Forgot password?' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Forgot username?' })).toBeNull();
+});
+
+test('closes a tour left open when the session ended', async () => {
+  startAppTour('u1');
+  await open();
+  await screen.findByLabelText('Username');
+  expect((await renderHook(() => useAppTour('u1'))).result.current).toBeNull();
 });

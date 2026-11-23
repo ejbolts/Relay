@@ -14,7 +14,6 @@ import { useReduceMotion } from '../settings/devicePreferences';
 import { useTheme } from '../../ui/theme';
 import { GuideCard, GuideText } from './GuideCard';
 import { guideIcons } from './icons';
-import { showAppTourStep } from './tourProgress';
 
 /** Where each of the web's tour stops is in the app. Progress is an exercise in Training. */
 const TAB_ROUTES: Partial<Record<AppTab, '/' | '/training' | '/social' | '/body' | '/settings'>> = {
@@ -34,12 +33,19 @@ const STEPS = appGuideSteps(false, { app: true });
  * it, then thanks the person, with a way to send feedback. The web's Add to Home Screen step is
  * left out: the app is already on the phone's home screen.
  */
-export function AppTour({ index, onClose }: { index: number; onClose: () => void }) {
+export function AppTour({
+  index,
+  onStep,
+  onClose,
+}: {
+  index: number;
+  onStep: (index: number) => void;
+  onClose: () => void;
+}) {
   const router = useRouter();
   const { colors, type } = useTheme();
   const insets = useSafeAreaInsets();
   const reduced = useReduceMotion();
-  const setIndex = showAppTourStep;
   const step = STEPS[index];
   const route = step && TAB_ROUTES[step.tab];
 
@@ -49,7 +55,7 @@ export function AppTour({ index, onClose }: { index: number; onClose: () => void
     else router.navigate(route);
   }, [route, router]);
 
-  const back = index > 0 ? () => setIndex(index - 1) : undefined;
+  const back = index > 0 ? () => onStep(index - 1) : undefined;
   return (
     <Modal
       visible
@@ -80,7 +86,7 @@ export function AppTour({ index, onClose }: { index: number; onClose: () => void
               onBack={back}
               next={{
                 label: index === STEPS.length - 1 ? 'Finish' : 'Next',
-                onPress: () => setIndex(index + 1),
+                onPress: () => onStep(index + 1),
               }}
               onLeave={onClose}
             >

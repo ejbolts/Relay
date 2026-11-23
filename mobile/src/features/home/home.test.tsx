@@ -36,8 +36,7 @@ jest.mock('../../data/api', () => ({
   apiGet: jest.fn(),
   apiSend: jest.fn(),
 }));
-// B4 (guides): Home's guides read the logger for the "Still working out?" alert.
-jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: jest.fn(), useLogger: () => null }));
+jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: jest.fn() }));
 const mockRouter = { navigate: jest.fn(), push: jest.fn() };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useIsFocused: () => true }));
 const mockUser = {

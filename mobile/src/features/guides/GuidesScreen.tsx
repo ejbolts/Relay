@@ -8,6 +8,7 @@ import {
   SETUP_GUIDE_TITLES,
   type SetupGuideId,
 } from '../../../../frontend/src/setupGuideSteps';
+import { useUser } from '../../session/SessionProvider';
 import { useTrainingBlocks } from '../blocks';
 import { Row, Section, SettingsPage } from '../settings/SettingsList';
 import { replayAppTour } from './tourProgress';
@@ -24,6 +25,7 @@ const GUIDE_ICONS = {
 /** Settings › Guides: the web's App guide and Setup guides panels. */
 export function GuidesScreen() {
   const router = useRouter();
+  const user = useUser();
   const tips = useTips();
   const hasBlocks = (useTrainingBlocks().data?.blocks.length ?? 0) > 0;
   const [guide, setGuide] = useState<SetupGuideId | null>(null);
@@ -35,7 +37,7 @@ export function GuidesScreen() {
           icon={guideIcons.tour}
           iconTint="#8057ba"
           onPress={() => {
-            replayAppTour();
+            replayAppTour(user.id);
             router.navigate('/');
           }}
         />

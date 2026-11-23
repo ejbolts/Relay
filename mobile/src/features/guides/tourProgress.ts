@@ -11,9 +11,11 @@ export const queueAppTour = progress.queueAppGuide;
 export const appTourWaiting = progress.appGuideWaiting;
 export const finishAppTour = progress.finishAppGuide;
 
-// The open tour and its step, outside React: Home's header can remount while the tour moves
-// between tabs, and the tour carries on from the same step.
-let tour: { index: number } | null = null;
+// The open tour, whose account it is and its step, outside React: Home's header can remount while
+// the tour moves between tabs, and the tour carries on from the same step. Only its own account
+// sees it, and the sign-in screen closes it when a session ends.
+type OpenTour = { userId: string; index: number };
+let tour: OpenTour | null = null;
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -21,15 +23,23 @@ const subscribe = (listener: () => void) => {
     listeners.delete(listener);
   };
 };
-function setTour(next: { index: number } | null) {
+function setTour(next: OpenTour | null) {
   tour = next;
   listeners.forEach((listener) => listener());
 }
 
 /** Opens the tour from its start: for a new account, or Replay guide in Settings. */
-export const startAppTour = () => setTour({ index: 0 });
+export const startAppTour = (userId: string) => setTour({ userId, index: 0 });
 export const replayAppTour = startAppTour;
-export const showAppTourStep = (index: number) => setTour({ index });
-export const closeAppTour = () => setTour(null);
-/** The open tour's step, or null while it is closed. */
-export const useAppTour = () => useSyncExternalStore(subscribe, () => tour);
+export function showAppTourStep(userId: string, index: number) {
+  if (tour?.userId === userId) setTour({ userId, index });
+}
+/** Closes the account's tour, or any open tour without one (a session ending). */
+export function closeAppTour(userId?: string) {
+  if (tour && (!userId || tour.userId === userId)) setTour(null);
+}
+/** The account's open tour, or null while it has none. */
+export function useAppTour(userId: string): OpenTour | null {
+  const current = useSyncExternalStore(subscribe, () => tour);
+  return current?.userId === userId ? current : null;
+}
