@@ -170,6 +170,10 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const prBadges = useLivePrBadges(logger, state);
   const measurements = useBodyMeasurements().data;
   const bodyweight = bodyweightOn(measurements ?? [], state.workoutDate);
+  const bodyweightRef = useRef(bodyweight);
+  useLayoutEffect(() => {
+    bodyweightRef.current = bodyweight;
+  }, [bodyweight]);
   const lastDone = useMemo(
     () =>
       exerciseLastDoneDates(
@@ -206,6 +210,8 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     weekRef.current = week;
   }, [week]);
   const [shelf, setShelf] = useState<WeeklySetsUpdate | null>(null);
+  // The shelf joins the rest pill into one card while both show in full.
+  const shelfJoined = !!shelf && restShown && !restHidden;
   const shelfId = useRef(0);
   const closeShelf = useCallback(() => setShelf(null), []);
 
@@ -337,7 +343,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
               localDate(),
             )
           : null;
-        applySetUpdate(movementKey, setKey, update);
+        applySetUpdate(movementKey, setKey, update, bodyweightRef.current);
         if (next === 'hide') setShelf(null);
         else if (next) setShelf({ id: ++shelfId.current, gains: next });
       },
@@ -656,13 +662,18 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         />
       </ScrollView>
       {(restShown || shelf) && (
-        <View pointerEvents="box-none" style={[styles.dock, { bottom: insets.bottom + 12 }]}>
-          {shelf && !restHidden && (
+        <View
+          pointerEvents="box-none"
+          style={[styles.dock, { bottom: insets.bottom + 12, gap: shelfJoined ? 0 : 8 }]}
+        >
+          {/* The shelf stays mounted while the rest is hidden, above the notch as on the web, so
+              hiding or showing the rest never restarts its countdown or drops a hold. */}
+          {shelf && (
             <WeeklySetsShelf
               update={shelf}
               goal={preferences?.weekly_muscle_set_goal ?? 10}
               goals={preferences?.weekly_muscle_set_goals}
-              joined={restShown}
+              joined={shelfJoined}
               onDismiss={closeShelf}
             />
           )}
@@ -671,7 +682,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
             state={state}
             weightUnit={logger.weightUnit}
             hidden={restHidden}
-            joined={!!shelf && !restHidden}
+            joined={shelfJoined}
             onTogglePause={logger.togglePause}
             onAdjust={logger.adjustRest}
             onSkip={logger.skipRest}

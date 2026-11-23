@@ -20,7 +20,7 @@ export const NumberField = forwardRef<
     /** Shown muted: a value copied from last time, used if the set is logged as it is. */
     suggested?: boolean;
     done?: boolean;
-    /** Shown faintly while empty, such as last time's value. */
+    /** Shown faintly while empty, such as last time's value, until the field is edited. */
     placeholder?: string;
     onSubmitEditing?: () => void;
   }
@@ -41,6 +41,9 @@ export const NumberField = forwardRef<
 ) {
   const { colors, type, radius, scheme } = useTheme();
   const [focused, setFocused] = useState(false);
+  // Once someone types in or clears the field, last time's value no longer stands in for it,
+  // so an emptied field can't be read as still holding the old number.
+  const [edited, setEdited] = useState(false);
   const [text, setText] = useState(() => format(value));
   const latest = useRef(value);
   useEffect(() => {
@@ -53,6 +56,7 @@ export const NumberField = forwardRef<
       ref={ref}
       value={text}
       onChangeText={(next) => {
+        setEdited(true);
         setText(next);
         const parsed = parse(next);
         latest.current = parsed;
@@ -62,8 +66,9 @@ export const NumberField = forwardRef<
       keyboardType={keyboardType}
       returnKeyType="done"
       selectTextOnFocus
-      placeholder={placeholder || '–'}
-      placeholderTextColor={colors.muted}
+      placeholder={(!edited && placeholder) || '–'}
+      // Fainter than a suggested value, which is logged as it is: a hint is only a hint.
+      placeholderTextColor={`${colors.muted}8C`}
       selectionColor={colors.accent}
       cursorColor={colors.accent}
       keyboardAppearance={scheme}

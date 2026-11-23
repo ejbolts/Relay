@@ -245,7 +245,13 @@ export interface LoggerApi {
   createExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   /** Changes the live workout; it is stored before the next frame. */
   change: (update: (state: LoggerState) => LoggerState) => void;
-  updateSet: (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => void;
+  /** `workoutBodyweight` (the workout day's weigh-in) stamps a newly logged strength set. */
+  updateSet: (
+    movementKey: string,
+    setKey: string,
+    update: Partial<WorkoutDraftSet>,
+    workoutBodyweight?: number | null,
+  ) => void;
   /** Adds a set at the end, or at `position` (the "+" between sets). */
   addSet: (movementKey: string, position?: number) => void;
   chooseType: (type: WorkoutType) => void;
@@ -733,12 +739,19 @@ const WorkoutEngine = memo(function WorkoutEngine({
   );
 
   const updateSet = useCallback(
-    (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => {
+    (
+      movementKey: string,
+      setKey: string,
+      update: Partial<WorkoutDraftSet>,
+      workoutBodyweight: number | null = null,
+    ) => {
       const current = loggerRef.current;
       if (!current) return;
+      // A logged set keeps the day's bodyweight, as on the web, so its ratio doesn't move when
+      // a weigh-in is later edited; a set that already has one keeps its own.
       const result = updateSetRule(current, movementKey, setKey, update, {
         addedByHand: addedSetKeys.current.has(setKey),
-        workoutBodyweight: null,
+        workoutBodyweight,
       });
       const wasPaused = current.pause.pausedAt !== null;
       commit(withActivity(result.state, Date.now()));
