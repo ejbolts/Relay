@@ -7,6 +7,9 @@ import { SessionProvider } from './SessionProvider';
 import { SignInScreen } from './SignInScreen';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../testing/memoryKvStore'));
+jest.mock('@react-native-segmented-control/segmented-control', () =>
+  jest.requireActual('../testing/segmentedControlMock'),
+);
 jest.mock('../data/api', () => ({
   ...jest.requireActual<typeof import('../data/api')>('../data/api'),
   apiOrigin: 'https://relay.test',
@@ -97,7 +100,7 @@ test('keeps the form open with the reason when the request fails', async () => {
 
 test('is only offered on the sign-in form', async () => {
   await open();
-  await fireEvent.press(await screen.findByRole('button', { name: 'Create account' }));
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Create account' }));
   expect(screen.queryByRole('button', { name: 'Forgot password?' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Forgot username?' })).toBeNull();
 });

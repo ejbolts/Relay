@@ -1,8 +1,8 @@
-import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
 import { Button } from '../../ui/components';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
@@ -79,7 +79,7 @@ function Swatches({
               accessibilityLabel={`Colour ${swatch}`}
               accessibilityState={{ checked: chosen }}
               onPress={() => {
-                void Haptics.selectionAsync();
+                haptics.selection();
                 setSelected(swatch);
               }}
               style={[

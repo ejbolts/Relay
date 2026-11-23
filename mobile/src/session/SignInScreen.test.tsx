@@ -7,6 +7,10 @@ import { friendInviteFromUrl } from './friendInvite';
 import { SessionProvider, useSession } from './SessionProvider';
 import { SignInScreen } from './SignInScreen';
 
+jest.mock('@react-native-segmented-control/segmented-control', () =>
+  jest.requireActual('../testing/segmentedControlMock'),
+);
+
 jest.mock('../data/api', () => ({
   ...jest.requireActual<typeof import('../data/api')>('../data/api'),
   apiOrigin: 'https://relay.test',
@@ -87,6 +91,17 @@ test('keeps the form and shows why a sign-in was refused', async () => {
   expect(screen.getByLabelText('Username')).toHaveProp('value', 'preview');
 });
 
+test('toggles password visibility on the sign-in form', async () => {
+  jest.mocked(currentUser).mockRejectedValue(signedOut());
+  await open();
+  const field = await screen.findByLabelText('Password');
+  expect(field).toHaveProp('secureTextEntry', true);
+  await fireEvent.press(screen.getByRole('button', { name: 'Show password' }));
+  expect(screen.getByLabelText('Password')).toHaveProp('secureTextEntry', false);
+  await fireEvent.press(screen.getByRole('button', { name: 'Hide password' }));
+  expect(screen.getByLabelText('Password')).toHaveProp('secureTextEntry', true);
+});
+
 test('registers with a required code, then signs in through the native session', async () => {
   jest.mocked(currentUser).mockRejectedValue(signedOut());
   jest
@@ -96,7 +111,10 @@ test('registers with a required code, then signs in through the native session',
   jest.mocked(signIn).mockResolvedValue(user);
   await open();
   const create = () => screen.getByRole('button', { name: 'Create account' });
-  await fireEvent.press(await screen.findByRole('button', { name: 'Create account' }));
+  expect(await screen.findByRole('tab', { name: 'Sign in' })).toBeSelected();
+  await fireEvent.press(screen.getByRole('tab', { name: 'Create account' }));
+  expect(screen.getByRole('tab', { name: 'Create account' })).toBeSelected();
+  expect(screen.getByRole('tab', { name: 'Sign in' })).not.toBeSelected();
   await fireEvent.changeText(screen.getByLabelText('Display name'), 'Sample Lifter');
   await fireEvent.changeText(screen.getByLabelText('Username'), 'Sample');
   await fireEvent.changeText(screen.getByLabelText('Password'), 'sample-password');
@@ -131,7 +149,7 @@ test('goes back to sign-in if the account was created and token sign-in failed',
     .mockResolvedValueOnce(user);
   jest.mocked(signIn).mockRejectedValue(new Error('Connection lost'));
   await open();
-  await fireEvent.press(await screen.findByRole('button', { name: 'Create account' }));
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Create account' }));
   await fireEvent.changeText(screen.getByLabelText('Display name'), 'Sample Lifter');
   await fireEvent.changeText(screen.getByLabelText('Username'), 'Sample');
   await fireEvent.changeText(screen.getByLabelText('Password'), 'sample-password');
@@ -143,6 +161,25 @@ test('goes back to sign-in if the account was created and token sign-in failed',
   ).toBeTruthy();
   expect(screen.getByLabelText('Username')).toHaveProp('value', 'sample');
   expect(screen.getByLabelText('Password')).toHaveProp('value', '');
+  expect(screen.getByRole('tab', { name: 'Sign in' })).toBeSelected();
+});
+
+test('holds the Sign in | Create account control while an account is being created', async () => {
+  jest.mocked(currentUser).mockRejectedValue(signedOut());
+  jest
+    .mocked(request)
+    .mockResolvedValueOnce({ registration_open: true, invite_code_required: false })
+    .mockReturnValueOnce(new Promise(() => undefined));
+  await open();
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Create account' }));
+  await fireEvent.changeText(screen.getByLabelText('Display name'), 'Sample Lifter');
+  await fireEvent.changeText(screen.getByLabelText('Username'), 'Sample');
+  await fireEvent.changeText(screen.getByLabelText('Password'), 'sample-password');
+  expect(screen.getByRole('tab', { name: 'Sign in' })).toBeEnabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Create account' }));
+  expect(screen.getByRole('tab', { name: 'Sign in' })).toBeDisabled();
+  expect(screen.getByRole('tab', { name: 'Create account' })).toBeDisabled();
+  expect(screen.getByRole('tab', { name: 'Create account' })).toBeSelected();
 });
 
 test.each([

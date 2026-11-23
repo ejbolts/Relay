@@ -1,16 +1,17 @@
 import { useRef, useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { authErrorText } from '../../../../frontend/src/authRules';
 import { ApiError, apiSend } from '../../data/api';
 import { newId } from '../../data/deviceStorage';
 import { useSession } from '../../session/SessionProvider';
-import { Button, Card, errorMessage } from '../../ui/components';
+import { Button, buttonColors, Card, errorMessage } from '../../ui/components';
+import { TextField } from '../../ui/controls';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { SectionError, SettingsPage, SwitchRow } from './SettingsList';
 
 export function FeedbackScreen() {
-  const { colors, radius, type } = useTheme();
+  const { colors, type } = useTheme();
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -40,8 +41,8 @@ export function FeedbackScreen() {
   return (
     <SettingsPage>
       <Card>
-        <Text style={[type.callout, { color: colors.text }]}>Your feedback or feature request</Text>
-        <TextInput
+        <TextField
+          label="Your feedback or feature request"
           accessibilityLabel="Your feedback or feature request"
           value={message}
           onChangeText={(next) => {
@@ -52,17 +53,7 @@ export function FeedbackScreen() {
           editable={!sending}
           maxLength={2000}
           multiline
-          textAlignVertical="top"
-          style={[
-            type.body,
-            {
-              minHeight: 112,
-              padding: 12,
-              color: colors.text,
-              backgroundColor: colors.surface2,
-              borderRadius: radius.md,
-            },
-          ]}
+          inputStyle={{ minHeight: 112 }}
         />
         <Text style={[type.footnote, { color: colors.secondary }]}>
           Please leave out passwords and sensitive information.
@@ -70,6 +61,9 @@ export function FeedbackScreen() {
         <SectionError message={error} />
         <Button
           label={sending ? 'Sending…' : 'Send feedback'}
+          size="large"
+          block
+          loading={sending}
           disabled={sending || !message.trim()}
           onPress={() => void send()}
         />
@@ -79,7 +73,7 @@ export function FeedbackScreen() {
 }
 
 export function DeleteAccountScreen() {
-  const { colors, radius, type } = useTheme();
+  const { colors, type } = useTheme();
   const { accountDeleted } = useSession();
   const [password, setPassword] = useState('');
   const [confirmed, setConfirmed] = useState(false);
@@ -100,14 +94,15 @@ export function DeleteAccountScreen() {
     await accountDeleted();
   }
 
+  const danger = buttonColors(colors, 'danger-soft');
   return (
     <SettingsPage>
-      <Card>
+      <Card style={{ borderColor: danger.border }}>
         <Text style={[type.body, { color: colors.text }]}>
           Permanently deletes your account and all of its workouts, measurements, photos and videos.
         </Text>
-        <Text style={[type.callout, { color: colors.secondary }]}>Confirm with your password</Text>
-        <TextInput
+        <TextField
+          label="Confirm with your password"
           accessibilityLabel="Confirm with your password"
           autoComplete="current-password"
           textContentType="password"
@@ -115,18 +110,8 @@ export function DeleteAccountScreen() {
           value={password}
           onChangeText={setPassword}
           editable={!deleting}
-          style={[
-            type.body,
-            {
-              minHeight: 48,
-              paddingHorizontal: 12,
-              color: colors.text,
-              backgroundColor: colors.surface2,
-              borderRadius: radius.md,
-            },
-          ]}
         />
-        <View style={{ marginHorizontal: -12 }}>
+        <View style={{ marginHorizontal: -16 }}>
           <SwitchRow
             label="I understand this is permanent"
             value={confirmed}
@@ -138,6 +123,9 @@ export function DeleteAccountScreen() {
         <Button
           label={deleting ? 'Deleting…' : 'Permanently delete account'}
           variant="danger"
+          size="large"
+          block
+          loading={deleting}
           disabled={deleting || !password || !confirmed}
           onPress={() => void remove()}
         />

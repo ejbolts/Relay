@@ -8,11 +8,11 @@ import {
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   canAddSplitDay,
   canAddSplitDayType,
@@ -59,7 +59,15 @@ import {
   useWorkoutHistory,
   useWorkoutTypes,
 } from '../../../data/queries';
-import { Button, Card, errorMessage, ErrorState, Loading } from '../../../ui/components';
+import {
+  Button,
+  Card,
+  cardSurface,
+  errorMessage,
+  ErrorState,
+  Loading,
+} from '../../../ui/components';
+import { Switch } from '../../../ui/controls';
 import { Icon, type IconPair } from '../../../ui/Icon';
 import { promptText, showMenu } from '../../../ui/prompts';
 import { showToast } from '../../../ui/Toast';
@@ -143,7 +151,9 @@ function Editor({
 }) {
   const router = useRouter();
   const client = useQueryClient();
-  const { colors, type, radius } = useTheme();
+  const { colors, type, radius, space } = useTheme();
+  const insets = useSafeAreaInsets();
+  const [nameFocused, setNameFocused] = useState(false);
   const exercises = useExercises();
   const history = useWorkoutHistory();
   const preferences = useTrainingPreferences().data;
@@ -323,12 +333,17 @@ function Editor({
         style={{ flex: 1, backgroundColor: colors.page }}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.page}
+        contentContainerStyle={[
+          styles.page,
+          { padding: space.gutter, paddingBottom: Math.max(56, insets.bottom + 36) },
+        ]}
       >
         <TextInput
           accessibilityLabel="Split name"
           value={value.name}
           onChangeText={(name) => setValue((current) => ({ ...current, name }))}
+          onFocus={() => setNameFocused(true)}
+          onBlur={() => setNameFocused(false)}
           maxLength={40}
           editable={!saving}
           placeholder="Split name"
@@ -337,35 +352,30 @@ function Editor({
           style={[
             type.title,
             styles.name,
-            { color: colors.text, backgroundColor: colors.surface, borderRadius: radius.lg },
+            {
+              color: colors.text,
+              backgroundColor: colors.surface,
+              borderColor: nameFocused ? colors.accent : colors.lineStrong,
+              borderRadius: radius.lg,
+            },
           ]}
         />
         {schedule && (
-          <View
-            style={{
-              backgroundColor: colors.surface,
-              borderRadius: radius.lg,
-              borderColor: colors.line,
-              borderWidth: StyleSheet.hairlineWidth,
-            }}
-          >
+          <View style={[cardSurface(colors), { overflow: 'hidden' }]}>
             <DateStepper
               label="Starts"
               date={startDate}
               onChange={setStartDate}
               disabled={saving}
             />
-            <View style={[styles.separator, { backgroundColor: colors.lineStrong }]} />
+            <View style={[styles.separator, { backgroundColor: colors.line }]} />
             <View style={styles.switchRow}>
               <Text style={[type.body, { color: colors.text, flex: 1 }]}>Active</Text>
               <Switch
                 accessibilityLabel="Active"
                 value={enabled}
                 disabled={saving}
-                onValueChange={setEnabled}
-                trackColor={{ true: colors.good, false: colors.surface3 }}
-                thumbColor={Platform.OS === 'android' ? '#ffffff' : undefined}
-                ios_backgroundColor={colors.surface3}
+                onChange={setEnabled}
               />
             </View>
           </View>
@@ -436,6 +446,7 @@ function Editor({
           label={typeActions.create.isPending ? 'Adding…' : 'New workout type'}
           icon={settingsIcons.types}
           variant="link"
+          align="center"
           disabled={saving || typeActions.create.isPending}
           onPress={newType}
         />
@@ -631,15 +642,7 @@ function DayCard({
     });
   return (
     <View
-      style={[
-        styles.day,
-        {
-          backgroundColor: colors.surface,
-          borderRadius: radius.lg,
-          borderColor: colors.line,
-          opacity: selected && !contribution ? 0.5 : 1,
-        },
-      ]}
+      style={[cardSurface(colors), styles.day, { opacity: selected && !contribution ? 0.5 : 1 }]}
     >
       <Pressable
         accessibilityRole="button"
@@ -806,9 +809,9 @@ function MoveButton({
 }
 
 const styles = StyleSheet.create({
-  page: { padding: 16, gap: 16, paddingBottom: 56 },
-  name: { paddingHorizontal: 16, paddingVertical: 12 },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: 16 },
+  page: { gap: 16 },
+  name: { paddingHorizontal: 16, paddingVertical: 12, borderWidth: 1 },
+  separator: { height: 1, marginLeft: 16 },
   switchRow: { flexDirection: 'row', alignItems: 'center', minHeight: 50, paddingHorizontal: 16 },
   volumeHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   volumeRow: {
@@ -824,7 +827,7 @@ const styles = StyleSheet.create({
   fill: { height: '100%', borderRadius: 4 },
   goal: { position: 'absolute', top: 0, bottom: 0, width: 2, marginLeft: -1 },
   volumeValue: { minWidth: 48, textAlign: 'right' },
-  day: { borderWidth: StyleSheet.hairlineWidth, overflow: 'hidden' },
+  day: { overflow: 'hidden' },
   dayHeader: { flexDirection: 'row', alignItems: 'center', gap: 12, padding: 14 },
   dayBar: { width: 5, alignSelf: 'stretch', borderRadius: 3, overflow: 'hidden' },
   dayBody: { paddingHorizontal: 14, paddingBottom: 14, gap: 10 },

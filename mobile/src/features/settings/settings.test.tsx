@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, Platform, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { TrainingPreferences, User, WorkoutType } from '../../../../frontend/src/types';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
@@ -15,6 +15,7 @@ import { FreshStartsScreen } from './FreshStartsScreen';
 import { EditProfileScreen } from './EditProfileScreen';
 import { PasswordRequiredScreen } from './PasswordRequiredScreen';
 import { SettingsScreen } from './SettingsScreen';
+import { sectionScrollOffset } from './SettingsSearch';
 import { WorkoutTypesScreen } from './WorkoutTypesScreen';
 
 const mockRouter = { push: jest.fn(), back: jest.fn(), canGoBack: () => true };
@@ -159,14 +160,71 @@ async function pickMenu(label: string) {
 }
 
 describe('Settings', () => {
-  it('applies the saved accent and lets the user restore Automatic', async () => {
+  it('applies the saved accent, mode and style through the visual selectors', async () => {
     await show(<AppearanceScreen />);
-    await fireEvent.press(screen.getByRole('button', { name: 'Accent colour, Blue' }));
-    await pickMenu('Emerald');
-    expect(screen.getByRole('button', { name: 'Accent colour, Emerald' })).toBeVisible();
-    await fireEvent.press(screen.getByRole('button', { name: 'Accent colour, Emerald' }));
-    await pickMenu('Blue');
-    expect(screen.getByRole('button', { name: 'Appearance, Automatic' })).toBeVisible();
+    const emerald = screen.getByRole('radio', { name: 'Emerald, Forest green' });
+    await fireEvent.press(emerald);
+    expect(emerald).toBeChecked();
+    const dark = screen.getByRole('radio', { name: 'Dark' });
+    await fireEvent.press(dark);
+    expect(dark).toBeChecked();
+    const oled = screen.getByRole('radio', { name: 'OLED' });
+    await fireEvent.press(oled);
+    expect(oled).toBeChecked();
+    await fireEvent.press(screen.getByRole('radio', { name: 'Blue, Original' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Automatic' }));
+    expect(screen.getByRole('radio', { name: 'Automatic' })).toBeChecked();
+  });
+
+  it('finds settings with the web search and opens their screen or section', async () => {
+    await show(<SettingsScreen />);
+    const search = await screen.findByLabelText('Search settings and profile');
+    await fireEvent.changeText(search, 'theme');
+    await fireEvent.press(screen.getByRole('button', { name: 'App theme, Appearance' }));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/settings/appearance');
+    expect(search).toHaveDisplayValue('');
+
+    await fireEvent.changeText(search, 'pasword');
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Change password, Account & privacy' }),
+    );
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/settings/password');
+
+    // Settings on this page clear the search and show the page again.
+    await fireEvent.changeText(search, 'timer');
+    expect(screen.getByText('1 section found')).toBeVisible();
+    const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo');
+    await fireEvent.press(screen.getByRole('button', { name: 'Rest timer, Training' }));
+    expect(screen.getByLabelText('Rest timer')).toBeVisible();
+    expect(screen.queryByText('1 section found')).toBeNull();
+    // Once the page is laid out again, it scrolls to that section, and only once.
+    await fireEvent(screen.getByTestId('settings-section-training'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 180, width: 360, height: 500 } },
+    });
+    expect(scrollTo).not.toHaveBeenCalled();
+    const section = screen.getByTestId('settings-section-between-sets');
+    await fireEvent(section, 'layout', {
+      nativeEvent: { layout: { x: 0, y: 720, width: 360, height: 200 } },
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    expect(scrollTo).toHaveBeenCalledWith({ y: sectionScrollOffset(720, 8, 0), animated: true });
+    await fireEvent(section, 'layout', {
+      nativeEvent: { layout: { x: 0, y: 760, width: 360, height: 200 } },
+    });
+    expect(scrollTo).toHaveBeenCalledTimes(1);
+    scrollTo.mockRestore();
+
+    // Places the app doesn't have stay out of its results.
+    await fireEvent.changeText(search, 'youtube');
+    expect(screen.getByText('No sections found. Try “timer” or “username”.')).toBeVisible();
+  });
+
+  it('scrolls a found section clear of the header, which iOS draws the page under', () => {
+    expect(sectionScrollOffset(720, 8, 96, 'ios')).toBe(616);
+    expect(sectionScrollOffset(720, 8, 96, 'android')).toBe(712);
+    // Near the top it stops at the page's resting position.
+    expect(sectionScrollOffset(20, 8, 96, 'ios')).toBe(-84);
+    expect(sectionScrollOffset(4, 8, 96, 'android')).toBe(0);
   });
 
   it('saves each bodyweight default independently', async () => {
@@ -391,7 +449,7 @@ describe('Edit profile', () => {
     jest.mocked(apiSend).mockResolvedValue({ ...mockUser, display_name: 'Sam', sex: 'female' });
     await show(<EditProfileScreen />);
     await fireEvent.changeText(screen.getByLabelText('Name'), 'Sam');
-    await fireEvent.press(screen.getByRole('tab', { name: 'Female' }));
+    await fireEvent.press(screen.getByRole('radio', { name: 'Female' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
     expect(alert.mock.calls[0][0]).toBe('Save your sex as Female?');
     expect(apiSend).not.toHaveBeenCalled();

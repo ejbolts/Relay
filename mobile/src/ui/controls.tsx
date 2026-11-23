@@ -4,7 +4,7 @@ import { tint } from '@expo/ui/swift-ui/modifiers';
 import SegmentedControl, {
   type SegmentedControlProps,
 } from '@react-native-segmented-control/segmented-control';
-import { useState, type ComponentType } from 'react';
+import { useState, type ComponentType, type Ref } from 'react';
 import {
   Platform,
   Pressable,
@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
   type StyleProp,
+  type TextInputInstance,
   type TextInputProps,
   type ViewStyle,
 } from 'react-native';
@@ -255,6 +256,8 @@ export function TextField({
   multiline,
   ...input
 }: TextInputProps & {
+  /** Reaches the input itself (React 19 passes it with the props), e.g. to focus the next field. */
+  ref?: Ref<TextInputInstance>;
   label?: string;
   /** Shown under the field in red; also read out with the field. */
   error?: string | null;
