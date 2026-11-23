@@ -343,6 +343,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         else if (next) setShelf({ id: ++shelfId.current, gains: next });
       },
       addSet: logger.addSet,
+      insertSet: logger.addSet,
       deleteSet: (movementKey, setKey) => {
         const movement = getState()?.movements.find((item) => item.key === movementKey);
         const index = movement?.sets.findIndex((item) => item.key === setKey) ?? -1;
@@ -710,12 +711,16 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         recentIds={recentIds}
         addedIds={addedIds}
         category={identity.category}
-        onAdd={(selected) => {
+        chooseMachines
+        onAdd={(selected, machineChoices) => {
           const target = picker?.swapping;
           if (target) {
             if (selected[0]) swap(target, selected[0]);
-          } else change((latest) => addExercises(latest, selected, context));
+          } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}
+        onCreateSuperset={(selected, machineChoices) =>
+          change((latest) => addExercises(latest, selected, context, machineChoices, newId()))
+        }
         onCreate={logger.createExercise}
         onClose={() => setPicker(null)}
       />

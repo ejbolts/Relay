@@ -26,6 +26,8 @@ export const loggerKeys = {
   trainingBlocks: ['training-blocks'] as const,
   autoSave: ['workout-auto-save'] as const,
   machines: (exerciseId: string) => ['machine-photos', exerciseId] as const,
+  /** Every saved machine, for the exercise picker; a prefix of each exercise's own list. */
+  allMachines: ['machine-photos'] as const,
 };
 
 /**
@@ -89,6 +91,16 @@ export function useMachinePhotos(exerciseId: string, enabled = true) {
         `/api/exercises/${encodeURIComponent(exerciseId)}/machine-photos`,
         signal,
       ),
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Every saved machine on the account, most recently used first, for the exercise picker. */
+export function useAllMachinePhotos(enabled = true) {
+  return useQuery({
+    queryKey: loggerKeys.allMachines,
+    enabled,
+    queryFn: ({ signal }) => apiGet<MachinePhotoUsage[]>('/api/machine-photos', signal),
     staleTime: 5 * 60_000,
   });
 }

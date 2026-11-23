@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, type ComponentProps, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import type { Exercise, ExerciseCreateInput } from '../../../../frontend/src/types';
 import { readActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
@@ -11,7 +11,9 @@ import { SessionProvider } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { showMenu, type MenuOption } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
-import { chooseMachines, startLogger, swapExercise } from './loggerState';
+import { restTimesPreference } from '../settings/devicePreferences';
+import { ExercisePicker } from './ExercisePicker';
+import { addExercises, chooseMachines, startLogger, swapExercise } from './loggerState';
 import {
   bench,
   context,
@@ -340,5 +342,151 @@ describe('machines', () => {
     await openLogger();
     expect(await screen.findByRole('button', { name: 'Machine: Cybex' })).toBeVisible();
     expect(readActiveWorkoutDraft(deviceStorage)?.movements[0].machinePhotoIds).toEqual(['cybex']);
+  });
+});
+
+describe('rest times between sets', () => {
+  it('adds a rest between two sets, changes it, removes it, and slots a set in', async () => {
+    await openLogger();
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Add rest after set 1' })),
+    );
+    const [, adding] = jest.mocked(showMenu).mock.calls.at(-1)!;
+    await act(async () => option(adding, '1:30').onPress());
+    expect(await screen.findByRole('button', { name: 'Rest after set 1: 1:30' })).toBeVisible();
+
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Rest after set 1: 1:30' })),
+    );
+    const [, changing] = jest.mocked(showMenu).mock.calls.at(-1)!;
+    await act(async () => option(changing, '2:00').onPress());
+    expect(await screen.findByRole('button', { name: 'Rest after set 1: 2:00' })).toBeVisible();
+
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Rest after set 1: 2:00' })),
+    );
+    const [, removing] = jest.mocked(showMenu).mock.calls.at(-1)!;
+    await act(async () => option(removing, 'No rest').onPress());
+    expect(showToast).toHaveBeenCalledWith(
+      'Rest removed',
+      expect.objectContaining({ label: 'Undo' }),
+    );
+    expect(await screen.findByRole('button', { name: 'Add rest after set 1' })).toBeVisible();
+
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Add set before set 2' })),
+    );
+    expect(await screen.findByRole('button', { name: 'Complete set 3' })).toBeVisible();
+  });
+
+  it('hides the rest rows when Show rest times is off', async () => {
+    restTimesPreference.set(false);
+    await openLogger();
+    expect(screen.queryByRole('button', { name: 'Add rest after set 1' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add set before set 2' })).toBeVisible();
+    restTimesPreference.set(true);
+  });
+});
+
+describe('picking exercises', () => {
+  const cybex = {
+    id: 'cybex',
+    exercise_id: 'bench',
+    exercise_name: 'Bench Press',
+    caption: 'Cybex',
+    thumbnail_url: '',
+    full_url: '',
+    width: 1,
+    height: 1,
+    created_at: '',
+    workout_count: 2,
+    last_used_date: '2026-11-18',
+  };
+
+  async function openPicker(props: Partial<ComponentProps<typeof ExercisePicker>> = {}) {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const onAdd = jest.fn();
+    const onCreateSuperset = jest.fn();
+    await render(
+      <QueryClientProvider client={client}>
+        <ExercisePicker
+          visible
+          exercises={[bench, press]}
+          recentIds={[]}
+          addedIds={new Set()}
+          chooseMachines
+          onAdd={onAdd}
+          onCreateSuperset={onCreateSuperset}
+          onClose={jest.fn()}
+          {...props}
+        />
+      </QueryClientProvider>,
+    );
+    return { onAdd, onCreateSuperset };
+  }
+
+  it('starts a picked exercise on its last-used machine, and tapping it again uses none', async () => {
+    jest
+      .mocked(apiGet)
+      .mockImplementation(async (path: string) => (path === '/api/machine-photos' ? [cybex] : []));
+    const { onAdd } = await openPicker();
+    expect(
+      await screen.findByRole('button', { name: 'Show machines for Bench Press' }),
+    ).toBeVisible();
+    await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Bench Press' })));
+    expect(screen.getByRole('checkbox', { name: 'Cybex' })).toBeChecked();
+    await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Cybex' })));
+    expect(screen.getByText('Baseline exercise')).toBeVisible();
+    await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Cybex' })));
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Add 1' })));
+    expect(onAdd).toHaveBeenCalledWith([bench], { bench: 'cybex' });
+  });
+
+  it('adds two or more picks as a superset', async () => {
+    jest.mocked(apiGet).mockImplementation(async () => []);
+    const { onCreateSuperset } = await openPicker();
+    const add = screen.getByRole('button', { name: 'Add superset' });
+    expect(add).toBeDisabled();
+    await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })));
+    await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Bench Press' })));
+    await act(async () => fireEvent.press(add));
+    expect(onCreateSuperset).toHaveBeenCalledWith([press, bench], {});
+  });
+
+  it('adds the picks to the workout on their machines, grouped as a superset', () => {
+    const state = startLogger(
+      {
+        template: null,
+        startCategory: null,
+        startType: null,
+        recommendationCategory: 'push',
+        types,
+        date: '2026-11-22',
+        now: startedAt,
+        clientSessionId: sessionId,
+      },
+      context(),
+    );
+    const onMachine = {
+      ...lastPush,
+      id: 'on-machine',
+      movements: [
+        {
+          ...lastPush.movements[0],
+          machine_photos: [cybex],
+          sets: lastPush.movements[0].sets.map((item) => ({ ...item, weight_kg: 60 })),
+        },
+      ],
+    };
+    const next = addExercises(
+      state,
+      [bench, press],
+      context({ workouts: [lastPush, onMachine] }),
+      { bench: 'cybex' },
+      'group',
+    );
+    expect(next.movements.map((item) => item.machinePhotoIds)).toEqual([['cybex'], []]);
+    expect(next.movements[0].sets.map((item) => item.weight_kg)).toEqual([60, 60]);
+    expect(next.movements.map((item) => item.supersetKey)).toEqual(['group', 'group']);
   });
 });

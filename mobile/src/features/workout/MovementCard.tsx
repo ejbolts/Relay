@@ -1,8 +1,9 @@
 import * as Haptics from 'expo-haptics';
-import { memo, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { Fragment, memo, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import {
+  historyOnMachine,
   lastWorkingSessionSets,
   machineAliases,
   movementHistory,
@@ -35,19 +36,27 @@ import type {
   WorkoutDraftMovement,
   WorkoutDraftSet,
 } from '../../../../frontend/src/workoutMovements';
+import { previousSetRests, restToAdd } from '../../../../frontend/src/workoutRestHistory';
 import { hasRecordedPerformance } from '../../../../frontend/src/workoutSets';
 import { supersetGroupName } from '../../../../frontend/src/workoutSupersets';
+import { useTrainingPreferences } from '../../data/queries';
 import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { promptText } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
+import { showToast } from '../../ui/Toast';
+import { restTimesPreference } from '../settings/devicePreferences';
+import { CardioSetImport } from './CardioSetImport';
 import { lastUsedMachines, useMachinePhotos } from './loggerQueries';
 import { formatPlain, NumberField, parseDecimal, parseWhole } from './NumberField';
 import { restMenuItems } from './restChoices';
+import { SetInsertRow, SetRestRow } from './SetRestRow';
 
 export interface MovementActions {
   updateSet: (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => void;
   addSet: (movementKey: string) => void;
+  /** Adds a set at `position`, the "+" between sets. Without it the card offers no "+". */
+  insertSet?: (movementKey: string, position: number) => void;
   deleteSet: (movementKey: string, setKey: string) => void;
   moveSet: (movementKey: string, from: number, to: number) => void;
   setKind: (movementKey: string, setKey: string, kind: SetKind) => void;
@@ -126,32 +135,27 @@ export const MovementCard = memo(function MovementCard({
   }, [cardio, exerciseId, movement.key, movement.machinePhotosInitialized, restoreMachines]);
   // Hints come from the last session with working sets, as on the web, reaching back into
   // older history when the loaded workouts don't include the exercise. With a machine pinned,
-  // its own sessions supply them.
-  const lastSession = useMemo(
+  // its own sessions supply them, and the rests too.
+  const exerciseHistory = useMemo(
     () =>
-      lastWorkingSessionSets(
-        movementHistory(
-          recentExerciseHistory(
-            history.filter((workout) => workout.workout_date <= workoutDate),
-            movement.exercise.id,
-            excludedWorkoutId,
-            Number.POSITIVE_INFINITY,
-            olderLatest,
-          ),
-          pinnedMachine,
-          aliases,
-        ),
+      recentExerciseHistory(
+        history.filter((workout) => workout.workout_date <= workoutDate),
+        movement.exercise.id,
+        excludedWorkoutId,
+        Number.POSITIVE_INFINITY,
+        olderLatest,
       ),
-    [
-      history,
-      movement.exercise.id,
-      workoutDate,
-      excludedWorkoutId,
-      olderLatest,
-      pinnedMachine,
-      aliases,
-    ],
+    [history, movement.exercise.id, workoutDate, excludedWorkoutId, olderLatest],
   );
+  const pinnedHistory = useMemo(
+    () => movementHistory(exerciseHistory, pinnedMachine, aliases),
+    [exerciseHistory, pinnedMachine, aliases],
+  );
+  const lastSession = useMemo(() => lastWorkingSessionSets(pinnedHistory), [pinnedHistory]);
+  // Settings > Show rest times draws each set's rest between the sets, as on the web.
+  const showRestTimes = restTimesPreference.use();
+  const defaultRest = useTrainingPreferences().data?.default_rest_seconds ?? null;
+  const { insertSet } = actions;
   const target =
     movement.repRange && !cardio
       ? progressionHint(
@@ -286,22 +290,82 @@ export const MovementCard = memo(function MovementCard({
         <View style={styles.checkColumn} />
       </View>
 
-      {movement.sets.map((item, index) => (
-        <SetRow
-          key={item.key}
-          movement={movement}
-          item={item}
-          index={index}
-          label={labels[index]}
-          previous={matchingLastSessionSet(movement.sets, index, lastSession)}
-          records={prBadges.get(item.key) ?? null}
-          machines={movement.machinePhotoIds.length > 1 ? movement.machinePhotoIds : null}
-          machineNames={machineNames}
-          weightUnit={weightUnit}
-          skipHighRepWarning={skipHighRepWarning}
-          actions={actions}
-        />
-      ))}
+      {insertSet && movement.sets.length > 0 && (
+        <SetInsertRow beforeSet={1} onInsert={() => insertSet(movement.key, 0)} />
+      )}
+      {movement.sets.map((item, index) => {
+        const number = index + 1;
+        // The web's rest rule: a rest shows once its set is logged, or straight away on a set
+        // that isn't a suggestion from last time, unless "+" slotted the set in.
+        const restShown =
+          !cardio &&
+          showRestTimes &&
+          (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
+          (item.rest_seconds ?? 0) > 0;
+        // Between two sets; after the last set, Add set does the same job.
+        const onInsert =
+          insertSet && index < movement.sets.length - 1
+            ? () => insertSet(movement.key, index + 1)
+            : undefined;
+        const restHistory = item.machine_photo_id
+          ? historyOnMachine(exerciseHistory, item.machine_photo_id, aliases)
+          : pinnedHistory;
+        const update = (values: Partial<WorkoutDraftSet>) =>
+          actions.updateSet(movement.key, item.key, values);
+        const removeRest = () => {
+          const before = item.rest_seconds;
+          update({ rest_seconds: null });
+          showToast('Rest removed', {
+            label: 'Undo',
+            run: () => update({ rest_seconds: before }),
+          });
+        };
+        return (
+          <Fragment key={item.key}>
+            <SetRow
+              movement={movement}
+              item={item}
+              index={index}
+              label={labels[index]}
+              previous={matchingLastSessionSet(movement.sets, index, lastSession)}
+              records={prBadges.get(item.key) ?? null}
+              machines={movement.machinePhotoIds.length > 1 ? movement.machinePhotoIds : null}
+              machineNames={machineNames}
+              weightUnit={weightUnit}
+              skipHighRepWarning={skipHighRepWarning}
+              actions={actions}
+            />
+            {restShown ? (
+              <SetRestRow
+                setNumber={number}
+                seconds={item.rest_seconds!}
+                ghost={
+                  !item.completed &&
+                  !item.restConfirmed &&
+                  previousSetRests(movement.sets, index, restHistory)[0]?.seconds ===
+                    item.rest_seconds
+                }
+                onChange={(seconds) => update({ rest_seconds: seconds })}
+                onRemove={removeRest}
+                onInsert={onInsert}
+              />
+            ) : (
+              index < movement.sets.length - 1 && (
+                <SetInsertRow
+                  beforeSet={number + 1}
+                  onInsert={onInsert}
+                  onAddRest={
+                    !cardio && showRestTimes
+                      ? (seconds) => update({ rest_seconds: seconds, restRevealed: true })
+                      : undefined
+                  }
+                  suggestedRest={restToAdd(movement.sets, index, restHistory, defaultRest)}
+                />
+              )
+            )}
+          </Fragment>
+        );
+      })}
 
       <Pressable
         accessibilityRole="button"
@@ -678,6 +742,16 @@ function SetRow({
             onToggle={() => setExtrasOpen((value) => !value)}
             update={update}
           />
+        )}
+        {cardio && (
+          <View style={{ paddingLeft: 40 }}>
+            <CardioSetImport
+              number={number}
+              done={item.completed}
+              // A scanned screenshot is the finished set, so it is logged, as on the web.
+              onScanned={(values) => update({ ...values, completed: true })}
+            />
+          </View>
         )}
       </View>
     </ReanimatedSwipeable>

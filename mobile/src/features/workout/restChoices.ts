@@ -28,10 +28,13 @@ export function restMenuItems({
   current,
   onPick,
   onNone,
+  customStart = 90,
 }: {
   current: number | null;
   onPick: (seconds: number) => void;
   onNone?: () => void;
+  /** Where Custom… starts when no rest is set, as the web's rest select does. */
+  customStart?: number;
 }): MenuItem[] {
   const custom = current !== null && !REST_CHOICES.includes(current);
   return [
@@ -47,7 +50,7 @@ export function restMenuItems({
       onPress: () =>
         promptText({
           title: 'Custom rest time',
-          value: formatSeconds(current ?? 90),
+          value: formatSeconds(current ?? customStart),
           placeholder: 'm:ss',
           submitLabel: 'Set rest time',
           onSubmit: (text) => {

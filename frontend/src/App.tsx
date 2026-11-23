@@ -95,7 +95,6 @@ import type {
   WorkoutInput,
   WorkoutReactions,
   WorkoutRecommendation,
-  WorkoutSetInput,
   WorkoutType,
   WorkoutTypeColors,
 } from './types';
@@ -416,6 +415,8 @@ import {
   isCompletedWorkingSet,
 } from './workoutSets';
 import { restToAdd } from './workoutRestHistory';
+import { movementWithAddedSet } from './workoutSetInsert';
+import { pinnedAfterMerge } from './machinePhotoMerge';
 import { completionRecordDetail, recordTypeLabel } from './recordLabels';
 import {
   checkWorkoutFinish,
@@ -425,11 +426,7 @@ import {
   type WorkoutFinishState,
 } from './workoutFinish';
 import { movementAfterSetUpdate, setUpdateEffects } from './workoutSetUpdate';
-import {
-  emptyDraftSet,
-  suggestedSetsFromHistory as suggestedSetsFromHistoryRule,
-  templateDraftMovements,
-} from './workoutStartMovements';
+import { suggestedSetsForPickedExercise, templateDraftMovements } from './workoutStartMovements';
 import { workoutNameForCategory } from './workoutCategory';
 import {
   machineSelection,
@@ -519,38 +516,11 @@ type HistoryBaselines = {
   byExercise: Map<string, ExerciseHistoryBaseline>;
 };
 
-function emptySet(
-  kind: Exercise['kind'],
-  previous: WorkoutSetInput | undefined,
-  defaultRest: number | null,
-): DraftSet {
-  return emptyDraftSet(kind, previous, defaultRest, crypto.randomUUID());
-}
-
 function setTypeTitle(item: Pick<DraftSet, 'set_type' | 'warmup' | 'failed'>): string {
   return SET_KINDS.find((option) => option.kind === setKindOf(item))?.label ?? 'Working set';
 }
 
 /** Sets pre-filled from the exercise's most recent session, marked as suggestions. */
-function suggestedSetsFromHistory(
-  workouts: TrackedWorkout[],
-  exercise: Exercise,
-  onOrBeforeDate: string,
-  excludedWorkoutId: string | undefined,
-  olderHistory: Map<string, ExerciseHistoryBaseline> | null | undefined,
-  defaultRest: number | null,
-): DraftSet[] {
-  return suggestedSetsFromHistoryRule(
-    workouts,
-    exercise,
-    onOrBeforeDate,
-    excludedWorkoutId,
-    olderHistory,
-    defaultRest,
-    () => crypto.randomUUID(),
-  );
-}
-
 function completedSetPerformance(
   item: DraftSet,
   cardio: boolean,
@@ -4131,26 +4101,15 @@ function WorkoutLogger({
 
   /** Suggestions from the chosen machine's last session, else the exercise's last session. */
   function suggestedSetsForExercise(exercise: Exercise, machineId?: string): DraftSet[] {
-    const onMachine =
-      machineId &&
-      historyOnMachine(
-        recentExerciseHistory(
-          historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
-          exercise.id,
-          initialWorkout?.id,
-          Number.POSITIVE_INFINITY,
-        ),
-        machineId,
-        new Map(),
-      ).find((entry) => entry.sets.length)?.sets;
-    if (onMachine) return withSuggestedSets([], onMachine, exercise.kind);
-    return suggestedSetsFromHistory(
+    return suggestedSetsForPickedExercise(
       historicalWorkouts,
       exercise,
       workoutDate,
       initialWorkout?.id,
       olderHistory,
       defaultRest,
+      machineId,
+      () => crypto.randomUUID(),
     );
   }
 
@@ -4616,18 +4575,10 @@ function WorkoutLogger({
     setMovements((current) =>
       current.map((item) => {
         if (item.key !== movement.key) return item;
-        const at = Math.min(Math.max(position ?? item.sets.length, 0), item.sets.length);
-        const added = emptySet(item.exercise.kind, item.sets[at === 0 ? 0 : at - 1], defaultRest);
-        // A set slotted in with "+" keeps its neighbour's rest hidden, like a suggested set,
-        // until it is ticked; only Add set at the end shows its rest straight away.
-        if (position !== undefined) added.restRevealed = false;
-        markSetAdded(added.key);
-        addedSetKeys.current.add(added.key);
-        return {
-          ...item,
-          isComplete: false,
-          sets: [...item.sets.slice(0, at), added, ...item.sets.slice(at)],
-        };
+        const key = crypto.randomUUID();
+        markSetAdded(key);
+        addedSetKeys.current.add(key);
+        return movementWithAddedSet(item, defaultRest, key, position);
       }),
     );
   }
@@ -7317,11 +7268,7 @@ function MachinePhotoChooser({
             onMerged={(merged, sourceIds) => {
               tips.learn('mergeMachines');
               const sourceSet = new Set(sourceIds);
-              const nextIds = [
-                ...new Set(
-                  selectedIdsRef.current.map((id) => (sourceSet.has(id) ? merged.id : id)),
-                ),
-              ];
+              const nextIds = pinnedAfterMerge(selectedIdsRef.current, merged.id, sourceIds);
               setPhotos((current) => [
                 merged,
                 ...current.filter((photo) => !sourceSet.has(photo.id)),

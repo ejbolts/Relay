@@ -8,6 +8,7 @@ import {
   recentExerciseHistory,
   withSuggestedSets,
 } from '../../../../frontend/src/exerciseHistory';
+import type { ExerciseMachineChoices } from '../../../../frontend/src/exerciseMachineChoices';
 import { swapMovementExercise } from '../../../../frontend/src/exerciseSwap';
 import { movementWithMachines } from '../../../../frontend/src/setMachines';
 import { setKindUpdate, type SetKind } from '../../../../frontend/src/setFieldValues';
@@ -50,12 +51,13 @@ import {
   movementAfterSetUpdate,
   setUpdateEffects,
 } from '../../../../frontend/src/workoutSetUpdate';
+import { movementWithAddedSet } from '../../../../frontend/src/workoutSetInsert';
 import {
   completeRemainingSets,
   hasRecordedPerformance,
 } from '../../../../frontend/src/workoutSets';
 import {
-  emptyDraftSet,
+  suggestedSetsForPickedExercise,
   suggestedSetsFromHistory,
   templateDraftMovements,
 } from '../../../../frontend/src/workoutStartMovements';
@@ -460,36 +462,56 @@ export function olderHistoryFor(
   return baselines && date >= baselines.before ? baselines.byExercise : null;
 }
 
-/** Adds exercises from the picker, each with sets suggested from its last session. */
+/**
+ * Adds exercises from the picker, as the web's picker does: each on the machine chosen there (its
+ * sets suggested from that machine's last session) or else its own last session. With
+ * `supersetKey`, two or more added exercises form a superset.
+ */
 export function addExercises(
   state: LoggerState,
   selected: Exercise[],
   context: LoggerContext,
+  machineChoices: ExerciseMachineChoices = {},
+  supersetKey: string | null = null,
 ): LoggerState {
   const merged = mergeUniqueById(
     state.movements.map((item) => item.exercise),
     selected,
   );
-  const additions: WorkoutDraftMovement[] = merged
-    .slice(state.movements.length)
-    .map((exercise) => ({
+  const additions: WorkoutDraftMovement[] = merged.slice(state.movements.length).map((exercise) => {
+    const machine = machineSelection(exercise.id, machineChoices);
+    return {
       key: context.newKey(),
       exercise,
       notes: '',
-      ...machineSelection(exercise.id, {}),
+      ...machine,
       supersetKey: null,
       isComplete: false,
-      sets: suggestedSetsFromHistory(
+      sets: suggestedSetsForPickedExercise(
         context.workouts,
         exercise,
         state.workoutDate,
         state.resumingWorkoutId ?? undefined,
         olderHistoryFor(context, state.workoutDate),
         context.defaultRest,
+        machine.machinePhotoIds[0],
         context.newKey,
       ),
-    }));
-  return { ...state, movements: [...state.movements, ...additions] };
+    };
+  });
+  const movements = [...state.movements, ...additions];
+  return {
+    ...state,
+    movements:
+      supersetKey && additions.length >= 2
+        ? applySupersetSelection(
+            movements,
+            additions[0].key,
+            additions.slice(1).map((item) => item.key),
+            supersetKey,
+          )
+        : movements,
+  };
 }
 
 /**
@@ -644,22 +666,21 @@ export function setSetKind(
   }).state;
 }
 
-/** Adds a set at the end, copying the one before it. Returns the new set's key too. */
+/**
+ * Adds a set at the end, copying the one before it, or at `position` (the web's "+" between
+ * sets), where its rest stays hidden until it is ticked. Returns the new set's key too.
+ */
 export function addSet(
   state: LoggerState,
   movementKey: string,
   context: Pick<LoggerContext, 'defaultRest' | 'newKey'>,
+  position?: number,
 ): { state: LoggerState; setKey: string | null } {
   let setKey: string | null = null;
   const next = mapMovement(state, movementKey, (movement) => {
-    const added = emptyDraftSet(
-      movement.exercise.kind,
-      movement.sets.at(-1),
-      context.defaultRest,
-      context.newKey(),
-    );
-    setKey = added.key;
-    return { ...movement, isComplete: false, sets: [...movement.sets, added] };
+    const key = context.newKey();
+    setKey = key;
+    return movementWithAddedSet(movement, context.defaultRest, key, position);
   });
   return { state: next, setKey };
 }

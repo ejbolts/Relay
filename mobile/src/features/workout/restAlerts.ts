@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { readJson, writeJson } from '../../data/deviceStorage';
 import type { RestState } from './restTimer';
+import { REST_ALERTS_ASKED_KEY } from './workoutReminders';
 
 // "Rest complete" when a rest ends while Relay is in the background, as a local notification the
 // phone delivers by itself, so it arrives even after the app is suspended. In the app the rest
@@ -9,7 +10,7 @@ import type { RestState } from './restTimer';
 
 const ID = 'relay-rest-timer';
 const CHANNEL = 'rest-timer';
-const ASKED_KEY = 'relay.mobile.rest-alert-asked.v1';
+const ASKED_KEY = REST_ALERTS_ASKED_KEY;
 
 let allowed: boolean | null = null;
 let channelReady: boolean | null = null;
