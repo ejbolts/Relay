@@ -14,6 +14,7 @@ import { Card } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { Avatar } from './Avatar';
+import { ExerciseIcon } from './ExerciseIcon';
 import { socialIcons } from './icons';
 import { useSocialNavigation } from './navigation';
 import { ReactionBar } from './ReactionBar';
@@ -29,7 +30,6 @@ export function FeedCard({ item, today }: { item: TimelineItem; today: string })
   const { colors, radius, space, type } = useTheme();
   const nav = useSocialNavigation();
   const unit = useWeightUnit();
-  const [showAll, setShowAll] = useState(false);
   const { member, workout } = item;
   const session = friendSession(workout);
   const owner = member.is_you ? 'Your' : `${member.display_name}’s`;
@@ -37,7 +37,8 @@ export function FeedCard({ item, today }: { item: TimelineItem; today: string })
   const stats = feedStats(workout, unit);
   const movements = feedExercises(workout);
   const hidden = movements.length - FEED_SHOWN_EXERCISES;
-  const listed = showAll ? movements : movements.slice(0, FEED_SHOWN_EXERCISES);
+  // The rest are counted, and open the whole workout, as on the web.
+  const listed = movements.slice(0, FEED_SHOWN_EXERCISES);
   const openMember = () => nav.openProfile(member);
   const openWorkout = (comments = false) =>
     nav.openWorkout({ id: workout.id, memberId: member.id, date: workout.workout_date, comments });
@@ -132,23 +133,29 @@ export function FeedCard({ item, today }: { item: TimelineItem; today: string })
         </View>
       )}
       {movements.length > 0 && (
-        <Text style={[type.footnote, { color: colors.secondary }]} accessibilityLabel="Exercises">
-          {listed.map((movement) => movement.exercise.name).join(', ')}
+        <View accessibilityLabel="Exercises" style={styles.exercises}>
+          {listed.map((movement) => (
+            <View key={movement.id} style={styles.exercise}>
+              <ExerciseIcon exercise={movement.exercise} size={24} />
+              <Text style={[type.footnote, { color: colors.text, flex: 1 }]} numberOfLines={1}>
+                {movement.exercise.name}
+              </Text>
+            </View>
+          ))}
           {hidden > 0 && (
-            <Text
+            <Pressable
               accessibilityRole="button"
-              accessibilityLabel={
-                showAll
-                  ? 'Show less'
-                  : `Show ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`
-              }
-              onPress={() => setShowAll((current) => !current)}
-              style={{ color: colors.accentText, fontWeight: '600' }}
+              accessibilityLabel={`Open ${subject} workout, with ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`}
+              hitSlop={4}
+              onPress={() => openWorkout()}
+              style={({ pressed }) => pressed && { opacity: 0.6 }}
             >
-              {showAll ? '  Show less' : `  +${hidden} more`}
-            </Text>
+              <Text style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}>
+                +{hidden} {hidden === 1 ? 'exercise' : 'exercises'}
+              </Text>
+            </Pressable>
           )}
-        </Text>
+        </View>
       )}
       <ReactionBar
         workoutId={workout.id}
@@ -195,6 +202,8 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   stats: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   records: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  exercises: { gap: 6 },
+  exercise: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   outline: { ...StyleSheet.absoluteFill, borderWidth: 2 },
   pill: {
     minHeight: 34,

@@ -21,6 +21,7 @@ import type {
   CardioDistanceSettings,
   ExerciseSpotlightSettings,
 } from '../../../../frontend/src/homeLayout';
+import { presenceStatus, presenceText } from '../../../../frontend/src/presenceStatus';
 import { shortDate } from '../../../../frontend/src/trainingSummary';
 import { localDate } from '../../../../frontend/src/utils';
 import {
@@ -35,6 +36,7 @@ import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { useTheme } from '../../ui/theme';
 import { useBodyGoals, useBodyMeasurements } from '../body/bodyQueries';
 import { socialRoutes } from '../social';
+import { Avatar } from '../social/Avatar';
 import { sharingRequired } from '../social/socialApi';
 import { useFriendConnections } from '../social/socialQueries';
 import { trainingRoute } from '../training/routes';
@@ -434,23 +436,19 @@ export function FriendsWeekCard({ compact }: { compact: boolean }) {
         <View>
           {rows.map((row) => {
             const days = `${row.days} ${row.days === 1 ? 'day' : 'days'}`;
+            // B3: a friend's photo shows a dot while they're online or working out, as on the web.
+            const status = row.friend ? presenceStatus(row.friend.presence) : null;
+            const live = status && status.kind !== 'away' ? presenceText(status) : null;
             const content = (
               <>
                 <Text style={[type.footnote, type.number, styles.rank, { color: colors.muted }]}>
                   {rank(row.days)}
                 </Text>
-                <ProfilePhoto
-                  user={
-                    row.is_you
-                      ? user
-                      : {
-                          display_name: row.display_name,
-                          username: row.display_name,
-                          profile_photo_url: row.profile_photo_url,
-                        }
-                  }
-                  size={28}
-                />
+                {row.is_you ? (
+                  <ProfilePhoto user={user} size={28} />
+                ) : (
+                  <Avatar person={row} size={28} status={status} />
+                )}
                 <Text
                   style={[
                     type.footnote,
@@ -467,7 +465,9 @@ export function FriendsWeekCard({ compact }: { compact: boolean }) {
               <Pressable
                 key={row.id}
                 accessibilityRole="button"
-                accessibilityLabel={`${rank(row.days)}. ${row.display_name}, ${days}`}
+                accessibilityLabel={[`${rank(row.days)}. ${row.display_name}`, live, days]
+                  .filter(Boolean)
+                  .join(', ')}
                 onPress={() => router.push(socialRoutes.profile(row.id))}
                 style={({ pressed }) => [styles.boardRow, pressed && { opacity: 0.6 }]}
               >

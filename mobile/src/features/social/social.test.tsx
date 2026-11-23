@@ -44,7 +44,10 @@ const mockUser = {
   created_at: '2026-11-01T00:00:00Z',
 } as unknown as User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
-jest.mock('../../data/queries', () => ({ useWeightUnit: () => 'kg' }));
+jest.mock('../../data/queries', () => ({
+  ...jest.requireActual('../../data/queries'),
+  useWeightUnit: () => 'kg',
+}));
 // The native control has no test renderer; this stand-in has a tab per segment.
 jest.mock('@react-native-segmented-control/segmented-control', () => {
   const { createElement } = jest.requireActual<typeof import('react')>('react');
@@ -246,10 +249,21 @@ test("the feed shows friends' workouts, and a reaction is sent and shown", async
   expect(screen.getByText(feedStats(upper, 'kg').join(' · '))).toBeVisible();
   expect(feedStats(upper, 'kg')[0]).toBe('1h 2min');
   expect(screen.getByText('1 PR')).toBeVisible();
-  // Three exercises, then the rest counted.
-  expect(screen.getByText(/Bench Press, Barbell Row, Overhead Press/)).toBeVisible();
-  await fireEvent.press(screen.getByRole('button', { name: 'Show 1 more exercise' }));
-  expect(screen.getByText(/Overhead Press, Bicep Curl/)).toBeVisible();
+  // Three exercises with their pictures, then the rest counted, which opens the workout.
+  for (const name of ['Bench Press', 'Barbell Row', 'Overhead Press'])
+    expect(screen.getByText(name)).toBeVisible();
+  expect(screen.queryByText('Bicep Curl')).toBeNull();
+  await fireEvent.press(
+    screen.getByRole('button', {
+      name: 'Open Alex Morgan’s Upper body workout, with 1 more exercise',
+    }),
+  );
+  expect(mockRouter.push).toHaveBeenCalledWith(
+    expect.objectContaining({
+      pathname: '/social/workout/[id]',
+      params: expect.objectContaining({ id: 'w1' }),
+    }),
+  );
 
   await fireEvent.press(screen.getByRole('button', { name: 'React to Alex Morgan’s Upper body' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Strong' }));

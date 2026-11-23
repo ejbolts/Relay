@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { ADMIN_ACCOUNT_PARAM } from './notificationInbox';
 
 /** An account to reveal in the admin console, such as one opened from a notification. */
 export interface AdminAccountFocus {
@@ -12,8 +13,8 @@ export function adminUserRowId(userId: string): string {
   return `admin-user-${userId}`;
 }
 
-/** Set by a password reset phone alert's link, such as /?admin-account=<id>#admin. */
-export const ADMIN_ACCOUNT_PARAM = 'admin-account';
+// Set by a password reset phone alert's link, such as /?admin-account=<id>#admin.
+export { ADMIN_ACCOUNT_PARAM };
 
 /** The account a tapped phone alert asked to open, removed from the address once read. */
 export function takeAdminAccountFromUrl(): string | null {

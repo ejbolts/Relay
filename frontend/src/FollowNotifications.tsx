@@ -7,20 +7,20 @@ import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { reactionEmoji } from './friendFeedData';
 import {
+  ADMIN_REQUEST_TEXT,
   commentNoticeText,
-  newestFirst,
-  noticeTime,
+  notificationCount,
   notificationDate,
   notificationKey,
   notificationPageCount,
   notificationPageRows,
   notificationReference,
+  notificationRows,
   notificationsInRows,
   notificationsLabel,
   NOTIFICATIONS_EMPTY,
-  socialNotificationCount,
-  socialNotificationRows,
-  type SocialNotificationRow,
+  type AppNoticeRows,
+  type NotificationRow,
 } from './notificationInbox';
 import {
   markNotificationSnapshotRead,
@@ -31,16 +31,12 @@ import { onNotificationsChanged } from './notificationEvents';
 import { ReleaseAnnouncementContext } from './releaseAnnouncementContext';
 import { ReleaseAnnouncement } from './ReleaseAnnouncement';
 import { requestSharedProfile } from './sharedProfileRequest';
-import { formatReleaseDate, type Release } from './releaseMetadata';
+import { formatReleaseDate } from './releaseMetadata';
 import { dayMonth } from './trainingSummary';
 import { useUserSession } from './userContext';
 import { requestWorkoutFocus } from './workoutFocus';
 import { notificationWorkoutFocus } from './workoutFocusRequest';
-import {
-  requestWeeklyReview,
-  useWeeklyReviewNotice,
-  type WeeklyReviewNotice,
-} from './weeklyReviewNotice';
+import { requestWeeklyReview, useWeeklyReviewNotice } from './weeklyReviewNotice';
 import type {
   NotificationReadReference,
   SharingConnection,
@@ -53,63 +49,7 @@ import './FollowNotifications.css';
 
 export { NOTIFICATIONS_PER_PAGE } from './notificationInbox';
 
-type NotificationRow =
-  | { kind: 'release'; item: Release }
-  | { kind: 'weekly-review'; item: WeeklyReviewNotice }
-  | { kind: 'password-reset'; item: PasswordResetRequest }
-  | { kind: 'username-reminder'; item: UsernameReminderRequest }
-  | SocialNotificationRow;
-
-interface LocalNotices {
-  release?: Release;
-  /** The release notice has not been opened yet. */
-  releaseUnread?: boolean;
-  weeklyReview?: WeeklyReviewNotice | null;
-  /** Only loaded for administrators. */
-  resetRequests?: PasswordResetRequest[];
-  /** Only loaded for administrators. */
-  usernameRequests?: UsernameReminderRequest[];
-}
-
-/** The start of the day after the reviewed week, when its review became available. */
-function weeklyReviewTime(notice: WeeklyReviewNotice): number {
-  const date = new Date(`${notice.weekEnd}T00:00:00`);
-  date.setDate(date.getDate() + 1);
-  return date.getTime();
-}
-
-function notificationRows(
-  items: SharingNotifications,
-  {
-    release,
-    releaseUnread = false,
-    weeklyReview,
-    resetRequests = [],
-    usernameRequests = [],
-  }: LocalNotices = {},
-): NotificationRow[] {
-  const rows: NotificationRow[] = [
-    ...(release ? [{ kind: 'release' as const, item: release }] : []),
-    ...(weeklyReview ? [{ kind: 'weekly-review' as const, item: weeklyReview }] : []),
-    ...resetRequests.map((item) => ({ kind: 'password-reset' as const, item })),
-    ...usernameRequests.map((item) => ({ kind: 'username-reminder' as const, item })),
-    ...socialNotificationRows(items),
-  ];
-  const timestamp = (row: NotificationRow) => {
-    if (row.kind === 'weekly-review') return weeklyReviewTime(row.item);
-    return noticeTime(
-      row.kind === 'release'
-        ? row.item.date
-        : row.kind === 'password-reset' || row.kind === 'username-reminder'
-          ? row.item.requested_at
-          : row.item.since,
-    );
-  };
-  // The app's own unread notices stay at the top of the first page, above newer social rows.
-  const pinned = (row: NotificationRow) =>
-    (row.kind === 'release' && releaseUnread) || (row.kind === 'weekly-review' && row.item.unread);
-  return newestFirst(rows, timestamp, pinned);
-}
+type LocalNotices = AppNoticeRows;
 
 interface PersonProps {
   person: SharingConnection;
@@ -357,13 +297,6 @@ export function FollowNotifications({ active }: { active: boolean }) {
   }
 
   // Waiting friend requests always count; everything else counts until it has been read.
-  const count =
-    socialNotificationCount(items) +
-    Number(announcement?.noticeUnread ?? false) +
-    Number(weeklyReview?.unread ?? false) +
-    // Like friend requests, these count until they have been dealt with.
-    waitingResets.length +
-    waitingUsernames.length;
   const currentItems = items ?? { requests: [], accepted: [] };
   const notices = {
     release,
@@ -372,6 +305,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
     resetRequests: waitingResets,
     usernameRequests: waitingUsernames,
   };
+  const count = notificationCount(items, notices);
   const rows = notificationRows(currentItems, notices);
   const total = rows.length;
   const pageCount = notificationPageCount(total);
@@ -495,7 +429,8 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   </span>
                   <div className="follow-notification-copy">
                     <p>
-                      <strong>{row.item.display_name}</strong> asked for a password reset
+                      <strong>{row.item.display_name}</strong>
+                      {ADMIN_REQUEST_TEXT['password-reset']}
                       <NotificationDate since={row.item.requested_at} />
                     </p>
                   </div>
@@ -521,7 +456,8 @@ export function FollowNotifications({ active }: { active: boolean }) {
                   </span>
                   <div className="follow-notification-copy">
                     <p>
-                      <strong>{row.item.display_name}</strong> asked for their username
+                      <strong>{row.item.display_name}</strong>
+                      {ADMIN_REQUEST_TEXT['username-reminder']}
                       <NotificationDate since={row.item.requested_at} />
                     </p>
                   </div>

@@ -10,6 +10,8 @@ import { createQueryClient } from '../data/queryClient';
 import { BodyCheckInSync } from '../features/body/BodyCheckInSync';
 // W3 (Home): header options for Home's pushed screens.
 import { homeScreenOptions } from '../features/home/routes';
+// B3 (weekly review and notices): header options for the review and What's new.
+import { reviewScreenOptions } from '../features/review/routes';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { useDeferredFriendInvite } from '../session/friendInvite';
@@ -109,6 +111,16 @@ function Navigation() {
             <Stack.Screen name="cardio/zones" />
             {/* Mobile batch 4, records stream (B2): editing a standalone cardio session. */}
             <Stack.Screen name="cardio/edit/[id]" />
+            {/* B3 (weekly review and notices): last week's review and What's new, opened by
+                themselves from Home or from the bell. */}
+            <Stack.Screen
+              name="weekly-review"
+              options={reviewScreenOptions(colors, 'Weekly review')}
+            />
+            <Stack.Screen
+              name="release-notes"
+              options={reviewScreenOptions(colors, "What's new")}
+            />
           </Stack.Protected>
           <Stack.Protected guard={mustChangePassword}>
             <Stack.Screen name="password-required" />

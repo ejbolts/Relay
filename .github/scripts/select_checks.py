@@ -87,7 +87,9 @@ def mobile_shared_files(root: Path = ROOT) -> frozenset[str]:
             if target is None or not target.is_relative_to(root):
                 raise ValueError(f"Cannot resolve {specifier} imported by {source}")
             shared.add(target.relative_to(root).as_posix())
-            pending.append(target)
+            # Images and JSON a shared module imports are shared too, but import nothing.
+            if target.suffix in MOBILE_SOURCES:
+                pending.append(target)
     return frozenset(shared)
 
 

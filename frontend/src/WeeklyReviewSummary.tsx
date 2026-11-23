@@ -1,18 +1,16 @@
-import { cardioRecordLabel } from './cardioRecords';
 import { Icon } from './Icon';
-import type { PersonalRecord } from './types';
-import { dayMonth, formatVolume, shortDate } from './trainingSummary';
-import { formatWeight, recordDisplayValue, weightFromKg, type WeightUnit } from './weightUnits';
+import { dayMonth, formatVolume } from './trainingSummary';
+import { recordDisplayValue, weightFromKg, type WeightUnit } from './weightUnits';
 import { reviewHasActivity, type WeeklyReview } from './weeklyReview';
+import {
+  cardioReviewEmptyText,
+  reviewDelta,
+  reviewEmptyText,
+  reviewNumber as trim,
+  reviewRecordDetail,
+  reviewZoneShare,
+} from './weeklyReviewDisplay';
 import './weeklyReview.css';
-
-const RECORD_LABELS: Partial<Record<PersonalRecord['record_type'], string>> = {
-  weight: 'Heaviest weight',
-  relative_strength: 'Relative strength PR',
-  reps_at_weight: 'Reps at weight',
-};
-
-const trim = (value: number) => Number(value.toFixed(1)).toLocaleString('en-GB');
 
 /** A change against the week before. `better` marks which direction is good, if either is. */
 function Delta({
@@ -26,21 +24,11 @@ function Delta({
   unit?: string;
   better?: 'up' | 'down' | null;
 }) {
-  if (change === null) return null;
-  const size = Math.abs(change) < 0.05 ? 0 : change;
-  const direction = size > 0 ? 'up' : size < 0 ? 'down' : 'same';
-  const tone = direction === 'same' || !better ? 'neutral' : direction === better ? 'good' : 'bad';
+  const delta = reviewDelta(change, { format, unit, better });
+  if (!delta) return null;
   return (
-    <small
-      className={`weekly-delta is-${tone}`}
-      aria-label={
-        direction === 'same'
-          ? 'same as the week before'
-          : `${direction} ${format(Math.abs(size))}${unit} on the week before`
-      }
-    >
-      {direction === 'same' ? '±0' : `${direction === 'up' ? '+' : '−'}${format(Math.abs(size))}`}
-      {direction !== 'same' && unit}
+    <small className={`weekly-delta is-${delta.tone}`} aria-label={delta.label}>
+      {delta.text}
     </small>
   );
 }
@@ -102,9 +90,7 @@ export function WeeklyReviewSummary({
       </dl>
 
       {!reviewHasActivity(review) && (
-        <p className="pulse-empty-line">
-          {isCurrentWeek ? 'Nothing logged yet this week.' : 'Nothing was logged that week.'}
-        </p>
+        <p className="pulse-empty-line">{reviewEmptyText(isCurrentWeek)}</p>
       )}
 
       <div className="weekly-review-block">
@@ -117,29 +103,26 @@ export function WeeklyReviewSummary({
         </h3>
         {review.records.length > 0 ? (
           <ul className="weekly-review-records">
-            {review.records.slice(0, 3).map((record) => (
-              <li key={record.id}>
-                <button type="button" onClick={() => onOpenProgress(record.exercise_id)}>
-                  <Icon name="trophy" />
-                  <span>
-                    <b>{record.exercise_name ?? 'Exercise'}</b>
-                    <small>
-                      {cardioRecordLabel(record) ?? RECORD_LABELS[record.record_type] ?? 'PR'}
-                      {record.record_type === 'reps_at_weight' && record.weight_kg != null
-                        ? ` @ ${formatWeight(record.weight_kg, weightUnit)}`
-                        : ''}{' '}
-                      · {shortDate(record.achieved_date)}
-                      {record.bodyweight_kg != null && (
-                        <span className="record-bodyweight">
-                          at {formatWeight(record.bodyweight_kg, weightUnit)} BW
-                        </span>
-                      )}
-                    </small>
-                  </span>
-                  <strong className="num">{recordDisplayValue(record, weightUnit)}</strong>
-                </button>
-              </li>
-            ))}
+            {review.records.slice(0, 3).map((record) => {
+              const detail = reviewRecordDetail(record, weightUnit);
+              return (
+                <li key={record.id}>
+                  <button type="button" onClick={() => onOpenProgress(record.exercise_id)}>
+                    <Icon name="trophy" />
+                    <span>
+                      <b>{record.exercise_name ?? 'Exercise'}</b>
+                      <small>
+                        {detail.kind} · {detail.date}
+                        {detail.bodyweight && (
+                          <span className="record-bodyweight">{detail.bodyweight}</span>
+                        )}
+                      </small>
+                    </span>
+                    <strong className="num">{recordDisplayValue(record, weightUnit)}</strong>
+                  </button>
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <p className="pulse-empty-line">No new strength records.</p>
@@ -210,9 +193,7 @@ export function WeeklyReviewSummary({
               <li key={zone.zone}>
                 <span>Zone {zone.zone}</span>
                 <span className="weekly-review-zone-bar" aria-hidden="true">
-                  <i
-                    style={{ width: `${Math.min(100, (zone.minutes / zone.goalMinutes) * 100)}%` }}
-                  />
+                  <i style={{ width: `${reviewZoneShare(zone)}%` }} />
                 </span>
                 <b className="num">
                   {trim(zone.minutes)} / {trim(zone.goalMinutes)} min
@@ -225,12 +206,8 @@ export function WeeklyReviewSummary({
               </li>
             ))}
           </ul>
-        ) : cardio ? (
-          <p className="pulse-empty-line">
-            {cardio.totalMinutes ? 'No zone goals set.' : 'No cardio logged.'}
-          </p>
         ) : (
-          <p className="pulse-empty-line">No cardio data.</p>
+          <p className="pulse-empty-line">{cardioReviewEmptyText(cardio)}</p>
         )}
         <button type="button" className="pulse-button link small" onClick={onOpenCardio}>
           Cardio

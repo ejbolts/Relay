@@ -50,7 +50,10 @@ const mockUser = {
   profile_photo_url: null,
 } as unknown as User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
-jest.mock('../../data/queries', () => ({ useWeightUnit: () => 'kg' }));
+jest.mock('../../data/queries', () => ({
+  ...jest.requireActual('../../data/queries'),
+  useWeightUnit: () => 'kg',
+}));
 jest.mock('expo-camera', () => ({
   useCameraPermissions: () => [{ granted: true, canAskAgain: true }, jest.fn()],
   CameraView: () => null,

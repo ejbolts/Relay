@@ -11,6 +11,7 @@ import { queryKeys, useDashboard } from '../../data/queries';
 import { Button, Screen } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { LaunchNotices } from '../review';
 import { bodyKeys } from '../body/bodyQueries';
 import { trainingKeys } from '../training/trainingQueries';
 import { useWorkout } from '../workout/WorkoutProvider';
@@ -140,6 +141,8 @@ export function HomeScreen() {
       </Screen>
       <DaySheet day={day} onClose={() => setDay(null)} onAdd={createOn} />
       <PlannedDaySheet date={plannedDate} onClose={() => setPlannedDate(null)} />
+      {/* B3: What's new once per release, or last week's review at the start of a week. */}
+      <LaunchNotices />
     </>
   );
 }
