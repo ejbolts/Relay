@@ -40,11 +40,11 @@ jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   Stack: { Screen: () => null },
 }));
-// Home's header buttons have their own tests; Training only has to show them.
-jest.mock('../home/HomeHeaderActions', () => {
+// The account buttons have their own tests; Training only has to show them.
+jest.mock('./TrainingHeaderActions', () => {
   const { createElement } = jest.requireActual<typeof import('react')>('react');
   const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
-  return { HomeHeaderActions: () => createElement(Text, null, 'Header actions') };
+  return { TrainingHeaderActions: () => createElement(Text, null, 'Header actions') };
 });
 jest.mock('../../ui/prompts', () => ({
   ...jest.requireActual<typeof import('../../ui/prompts')>('../../ui/prompts'),
