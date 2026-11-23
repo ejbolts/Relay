@@ -36,6 +36,7 @@ import { typeSessionTemplate } from '../../../../frontend/src/routines';
 import { sessionTemplateFor, type SessionTemplate } from '../../../../frontend/src/trainingSummary';
 import type {
   Exercise,
+  ExerciseCreateInput,
   PersonalRecord,
   TrackedWorkout,
   User,
@@ -43,7 +44,7 @@ import type {
   WorkoutInput,
   WorkoutType,
 } from '../../../../frontend/src/types';
-import { localDate } from '../../../../frontend/src/utils';
+import { localDate, mergeUniqueById } from '../../../../frontend/src/utils';
 import type { WeightUnit } from '../../../../frontend/src/weightUnits';
 import { loggedSetCount } from '../../../../frontend/src/workoutAutoSave';
 import {
@@ -190,6 +191,8 @@ export interface LoggerApi {
   context: LoggerContext;
   /** The live workout now, for event handlers. */
   getState: () => LoggerState | null;
+  /** Adds a custom exercise to the account, as the web's exercise picker does. */
+  createExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   /** Changes the live workout; it is stored before the next frame. */
   change: (update: (state: LoggerState) => LoggerState) => void;
   updateSet: (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => void;
@@ -784,6 +787,17 @@ const WorkoutEngine = memo(function WorkoutEngine({
     [types, typesLoading, user.id, allExercises, history, commitRest],
   );
 
+  const createExercise = useCallback(
+    async (input: ExerciseCreateInput) => {
+      const exercise = await apiSend<Exercise>('/api/exercises', 'POST', input);
+      client.setQueryData<Exercise[]>(queryKeys.exercises, (current) =>
+        mergeUniqueById(current ?? [], [exercise]),
+      );
+      return exercise;
+    },
+    [client],
+  );
+
   const closeFinished = useCallback(() => {
     finishedSessionRef.current = null;
     setFinished(null);
@@ -1004,6 +1018,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
       history,
       weightUnit,
       context,
+      createExercise,
       change,
       updateSet,
       addSet,
@@ -1027,6 +1042,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
       history,
       weightUnit,
       context,
+      createExercise,
       change,
       updateSet,
       addSet,

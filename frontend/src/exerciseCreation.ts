@@ -58,3 +58,41 @@ export function prepareExerciseInput(
     ...(strength ? { muscle_set_credits: credits } : {}),
   };
 }
+
+/** A new exercise's form, named after the search it was created from, in the workout's type. */
+export function newExerciseDraft(
+  name: string,
+  category: WorkoutCategory | '',
+): ExerciseCreationDraft {
+  return {
+    name: name.slice(0, 160),
+    category,
+    kind: category === 'cardio' ? 'cardio' : 'strength',
+    muscle_group: '',
+    equipment: '',
+    muscle_set_credits: [{ muscle_name: '', sets: 1 }],
+  };
+}
+
+/** The muscles a strength exercise can target: every muscle the library already credits. */
+export function exerciseMuscleChoices(exercises: Exercise[]): string[] {
+  return [
+    ...new Set(
+      exercises
+        .filter((exercise) => exercise.kind !== 'cardio' && exercise.category !== 'cardio')
+        .flatMap((exercise) =>
+          exercise.muscle_set_credits?.length
+            ? exercise.muscle_set_credits.map((credit) => credit.muscle_name)
+            : [exercise.muscle_group],
+        ),
+    ),
+  ].sort();
+}
+
+/** A search turned into an exercise name: each word capitalised. */
+export function exerciseNameFromSearch(text: string): string {
+  return text.replace(
+    /(^|\s)(\p{L})/gu,
+    (_, space: string, letter: string) => `${space}${letter.toUpperCase()}`,
+  );
+}

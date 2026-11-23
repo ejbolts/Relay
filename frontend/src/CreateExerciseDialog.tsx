@@ -1,7 +1,12 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { CSSProperties, FormEvent } from 'react';
 import { PopupDialog } from './PopupDialog';
-import { prepareExerciseInput, type ExerciseCreationDraft } from './exerciseCreation';
+import {
+  exerciseMuscleChoices,
+  newExerciseDraft,
+  prepareExerciseInput,
+  type ExerciseCreationDraft,
+} from './exerciseCreation';
 import { similarExercises } from './exerciseSearch';
 import type { Exercise, ExerciseCreateInput, ExerciseKind, WorkoutCategory } from './types';
 import './createExercise.css';
@@ -41,14 +46,9 @@ export function CreateExerciseDialog({
     height: viewportHeight ?? window.visualViewport?.height ?? window.innerHeight,
     top: viewportTop ?? window.visualViewport?.offsetTop ?? 0,
   }));
-  const [draft, setDraft] = useState<ExerciseCreationDraft>(() => ({
-    name: initialName.slice(0, 160),
-    category: initialCategory,
-    kind: initialCategory === 'cardio' ? 'cardio' : 'strength',
-    muscle_group: '',
-    equipment: '',
-    muscle_set_credits: [{ muscle_name: '', sets: 1 }],
-  }));
+  const [draft, setDraft] = useState<ExerciseCreationDraft>(() =>
+    newExerciseDraft(initialName, initialCategory),
+  );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Existing exercises that look like the name being typed, checked as it changes.
@@ -58,17 +58,7 @@ export function CreateExerciseDialog({
       exercise.name.trim().toLocaleLowerCase() === draft.name.trim().toLocaleLowerCase(),
   );
   const strength = draft.kind !== 'cardio' && draft.category !== 'cardio';
-  const muscleGroups = [
-    ...new Set(
-      exercises
-        .filter((exercise) => exercise.kind !== 'cardio' && exercise.category !== 'cardio')
-        .flatMap((exercise) =>
-          exercise.muscle_set_credits?.length
-            ? exercise.muscle_set_credits.map((credit) => credit.muscle_name)
-            : [exercise.muscle_group],
-        ),
-    ),
-  ].sort();
+  const muscleGroups = exerciseMuscleChoices(exercises);
 
   useEffect(() => {
     if (viewportHeight !== undefined) return;

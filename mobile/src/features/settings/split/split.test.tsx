@@ -241,6 +241,15 @@ describe('the split editor', () => {
     expect(saved.schedule).toEqual({ start_date: today, enabled: false, progression: 'workouts' });
   });
 
+  it('picks existing exercises only, as the web routine editor does', async () => {
+    mockParams = { id: 'ppl' };
+    await show(<SplitEditorScreen />);
+    await fireEvent.press((await screen.findAllByRole('button', { name: 'Add exercise' }))[0]);
+    await fireEvent.changeText(await screen.findByLabelText('Search exercises'), 'Zercher');
+    expect(screen.queryByRole('button', { name: 'Create new exercise' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^Create / })).toBeNull();
+  });
+
   it('explains what to fix instead of saving', async () => {
     mockParams = { id: 'ul' };
     await show(<SplitEditorScreen />);

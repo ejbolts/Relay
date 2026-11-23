@@ -146,6 +146,7 @@ export function withSuggestedSets(
   current: WorkoutDraftSet[],
   previous: TrackedSet[],
   kind: ExerciseKind,
+  newKey: () => string = () => crypto.randomUUID(),
 ): WorkoutDraftSet[] {
   if (!previous.length) return current;
   const length = Math.max(current.length, previous.length);
@@ -156,7 +157,7 @@ export function withSuggestedSets(
       sets.push(item);
     } else if (previous[index]) {
       sets.push({
-        key: item?.key ?? crypto.randomUUID(),
+        key: item?.key ?? newKey(),
         ...createSuggestedWorkoutSet(kind, previous[index]),
         fromPrevious: true,
         restRevealed: false,

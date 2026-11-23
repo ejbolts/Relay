@@ -3,11 +3,19 @@ import {
   inactiveWorkoutEndAt,
   inactiveWorkoutFinishAt,
 } from '../../../../frontend/src/activeWorkoutTimeout';
+import {
+  machineSuggestionSource,
+  recentExerciseHistory,
+  withSuggestedSets,
+} from '../../../../frontend/src/exerciseHistory';
+import { swapMovementExercise } from '../../../../frontend/src/exerciseSwap';
+import { movementWithMachines } from '../../../../frontend/src/setMachines';
 import { setKindUpdate, type SetKind } from '../../../../frontend/src/setFieldValues';
 import type { SessionTemplate } from '../../../../frontend/src/trainingSummary';
 import type {
   Exercise,
   ExerciseHistoryBaseline,
+  MachineSetting,
   TrackedWorkout,
   WorkoutCategory,
   WorkoutType,
@@ -388,6 +396,85 @@ export function addExercises(
       ),
     }));
   return { ...state, movements: [...state.movements, ...additions] };
+}
+
+/**
+ * Swaps an exercise for another, as the web does: logged sets stay with the original, planned
+ * sets move to the replacement with loads from its own last session.
+ */
+export function swapExercise(
+  state: LoggerState,
+  movementKey: string,
+  replacement: Exercise,
+  context: LoggerContext,
+): LoggerState {
+  const suggested = suggestedSetsFromHistory(
+    context.workouts,
+    replacement,
+    state.workoutDate,
+    undefined,
+    olderHistoryFor(context, state.workoutDate),
+    context.defaultRest,
+    context.newKey,
+  );
+  const movements = swapMovementExercise(
+    state.movements,
+    movementKey,
+    replacement,
+    suggested,
+    machineSelection(replacement.id, {}),
+    context.newKey,
+  );
+  return movements === state.movements ? state : { ...state, movements };
+}
+
+/**
+ * Pins machines to an exercise, as the web's machine chooser does. Picking a different machine
+ * (`chosen`) clears sets assigned to machines no longer pinned, and replaces untouched
+ * suggestions with that machine's last session. `aliases` maps merged-away photos to their
+ * machine.
+ */
+export function chooseMachines(
+  state: LoggerState,
+  movementKey: string,
+  machinePhotoIds: string[],
+  {
+    settings,
+    chosen,
+    aliases,
+  }: { settings?: MachineSetting[]; chosen: boolean; aliases: ReadonlyMap<string, string> },
+  context: LoggerContext,
+): LoggerState {
+  return mapMovement(state, movementKey, (movement) => {
+    const next = movementWithMachines(movement, machinePhotoIds, settings, chosen);
+    const canonical = (id: string | undefined) => (id && aliases.get(id)) ?? id;
+    const pinned = machinePhotoIds.at(-1);
+    if (!chosen || canonical(pinned) === canonical(movement.machinePhotoIds.at(-1))) return next;
+    const history = recentExerciseHistory(
+      context.workouts.filter((workout) => workout.workout_date <= state.workoutDate),
+      movement.exercise.id,
+      undefined,
+      Number.POSITIVE_INFINITY,
+      olderHistoryFor(context, state.workoutDate)?.get(movement.exercise.id)?.latest ?? null,
+    );
+    return {
+      ...next,
+      sets: withSuggestedSets(
+        next.sets,
+        machineSuggestionSource(history, pinned, aliases),
+        movement.exercise.kind,
+        context.newKey,
+      ),
+    };
+  });
+}
+
+export function setMachineSettings(
+  state: LoggerState,
+  movementKey: string,
+  machineSettings: MachineSetting[],
+): LoggerState {
+  return mapMovement(state, movementKey, (movement) => ({ ...movement, machineSettings }));
 }
 
 export interface SetUpdateResult {

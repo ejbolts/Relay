@@ -38,7 +38,7 @@ import type { ContextType, PointerEvent as ReactPointerEvent, ReactNode, RefObje
 import { flushSync } from 'react-dom';
 import { api, revisionAfterSave, revisionAtSignIn, type SavedStartupData } from './api';
 import { SetDragHandle } from './SetDragHandle';
-import { hasUnassignedMachineSets, withMachinePins } from './setMachines';
+import { hasUnassignedMachineSets, movementWithMachines } from './setMachines';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
 import { MachineSettingsEditor, MachineSettingsSummary } from './MachineSettingsEditor';
 import { MachineWeightsDialog } from './MachineWeightsDialog';
@@ -402,7 +402,7 @@ import { useDiscardChangesGuard, type LeaveGuard } from './WorkoutEditGuard';
 import { useUnsavedWorkoutChanges } from './workoutEditChanges';
 
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
-import { exerciseSetGains, weeklySetGains } from './weeklySetsUpdate';
+import { shelfAfterExerciseComplete, shelfAfterSetUpdate } from './weeklySetsUpdate';
 import {
   activeElapsedSeconds,
   draftPause,
@@ -480,7 +480,7 @@ import { recordsForBlock } from './trainingBlocks';
 import { recordBadgeLabel, recordScopeLabel } from './recordScope';
 import { setResult } from './historySetFormat';
 import { canResumeWorkout } from './workoutResume';
-import { loggedSetCount as loggedSetCountRule, workoutSetAfterEdit } from './workoutAutoSave';
+import { loggedSetCount as loggedSetCountRule } from './workoutAutoSave';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
 import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
@@ -4511,20 +4511,10 @@ function WorkoutLogger({
       setMachineAssignmentError(movement.exercise.name);
       return;
     }
-    const newlyCompletedWorkingSets = sets.filter(
-      (set, index) => !movement.sets[index].completed && isCompletedWorkingSet(set),
-    ).length;
-    if (newlyCompletedWorkingSets && !initialWorkout) {
-      const gains = exerciseSetGains(
-        movement.exercise,
-        weeklySets,
-        workoutDate,
-        localDate(),
-        movement.sets.filter(isCompletedWorkingSet).length,
-        newlyCompletedWorkingSets,
-      );
-      if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
-    }
+    const gains = initialWorkout
+      ? null
+      : shelfAfterExerciseComplete(movement, sets, weeklySets, workoutDate, localDate());
+    if (gains) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
     setMovements((current) =>
       current.map((item) =>
         item.key === movement.key
@@ -4588,25 +4578,17 @@ function WorkoutLogger({
     if (loggingSet && workoutPaused) resumeWorkoutTimers();
     // Ticking the last open set finishes the exercise: a planned exercise folds away and its
     // weekly totals show for all of its sets. A set added by hand keeps the card open.
-    const logsWorkingSet =
-      !!currentSet && isCompletedWorkingSet(workoutSetAfterEdit(currentSet, update));
-    if (finishesExercise && movement && currentSet) {
-      const gains = exerciseSetGains(
-        movement.exercise,
-        weeklySets,
-        workoutDate,
-        localDate(),
-        movement.sets.filter(isCompletedWorkingSet).length,
-        logsWorkingSet ? 1 : 0,
-      );
-      if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
-    } else if (loggingSet && logsWorkingSet && movement && !initialWorkout) {
-      // Each working set before then moves its muscles' weekly totals as it is logged.
-      const gains = weeklySetGains(movement.exercise, weeklySets, workoutDate, localDate());
-      if (gains.length) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains });
-    } else if (update.completed === false && currentSet?.completed) {
-      setWeeklySetsUpdate(null);
-    }
+    const shelf = shelfAfterSetUpdate(
+      movement,
+      setKey,
+      update,
+      { loggingSet: loggingSet && !initialWorkout, finishesExercise },
+      weeklySets,
+      workoutDate,
+      localDate(),
+    );
+    if (shelf === 'hide') setWeeklySetsUpdate(null);
+    else if (shelf) setWeeklySetsUpdate({ id: ++weeklySetsUpdateId.current, gains: shelf });
     // Correcting the weight or reps of a logged set also moves the untouched suggestion after it.
     setMovements((current) =>
       current.map((movement) =>
@@ -5406,23 +5388,12 @@ function WorkoutLogger({
                 setMovements((current) =>
                   current.map((item) =>
                     item.key === movement.key
-                      ? {
-                          ...item,
+                      ? movementWithMachines(
+                          item,
                           machinePhotoIds,
-                          machinePhotosInitialized: true,
-                          isComplete:
-                            item.isComplete &&
-                            !hasUnassignedMachineSets(
-                              machinePhotoIds,
-                              withMachinePins(item.sets, machinePhotoIds),
-                            ),
-                          sets: chosen ? withMachinePins(item.sets, machinePhotoIds) : item.sets,
-                          machineSettings:
-                            machineSettings ??
-                            (item.machinePhotoIds.join(',') === machinePhotoIds.join(',')
-                              ? item.machineSettings
-                              : undefined),
-                        }
+                          machineSettings,
+                          Boolean(chosen),
+                        )
                       : item,
                   ),
                 )

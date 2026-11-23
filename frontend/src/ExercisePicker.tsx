@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { api } from './api';
 import { CreateExerciseDialog } from './CreateExerciseDialog';
+import { exerciseNameFromSearch } from './exerciseCreation';
 import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
 import { exerciseEquipment } from './exerciseEquipment';
 import { ExerciseIcon } from './ExerciseIcon';
@@ -26,12 +27,7 @@ import { itemsInSelectionOrder, localDate } from './utils';
 import { supersetGroupName } from './workoutSupersets';
 import './exercisePicker.css';
 
-function titleCase(text: string): string {
-  return text.replace(
-    /(^|\s)(\p{L})/gu,
-    (_, space: string, letter: string) => `${space}${letter.toUpperCase()}`,
-  );
-}
+const titleCase = exerciseNameFromSearch;
 
 export function ExercisePicker({
   exercises,

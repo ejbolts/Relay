@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { prepareExerciseInput, type ExerciseCreationDraft } from './exerciseCreation';
+import {
+  exerciseMuscleChoices,
+  exerciseNameFromSearch,
+  newExerciseDraft,
+  prepareExerciseInput,
+  type ExerciseCreationDraft,
+} from './exerciseCreation';
+import type { Exercise } from './types';
 
 const draft: ExerciseCreationDraft = {
   name: '  Cable Lat Pullover  ',
@@ -97,5 +104,42 @@ describe('new exercise validation', () => {
         [],
       ),
     ).toThrow('only once');
+  });
+});
+
+describe('starting a new exercise', () => {
+  it('starts named after the search, in the given category, as strength unless cardio', () => {
+    expect(newExerciseDraft('Sissy Squat', 'lower')).toMatchObject({
+      name: 'Sissy Squat',
+      category: 'lower',
+      kind: 'strength',
+      muscle_set_credits: [{ muscle_name: '', sets: 1 }],
+    });
+    expect(newExerciseDraft('x'.repeat(200), 'cardio')).toMatchObject({ kind: 'cardio' });
+    expect(newExerciseDraft('x'.repeat(200), 'cardio').name).toHaveLength(160);
+  });
+
+  it('capitalises a search into a name', () => {
+    expect(exerciseNameFromSearch('sissy squat')).toBe('Sissy Squat');
+    expect(exerciseNameFromSearch('élan row')).toBe('Élan Row');
+  });
+
+  it('offers every muscle strength exercises credit, never cardio ones', () => {
+    const exercise = (values: Partial<Exercise>) => values as Exercise;
+    expect(
+      exerciseMuscleChoices([
+        exercise({ kind: 'strength', category: 'lower', muscle_group: 'Quadriceps' }),
+        exercise({
+          kind: 'strength',
+          category: 'push',
+          muscle_group: 'Chest',
+          muscle_set_credits: [
+            { muscle_name: 'Chest', sets: 1 },
+            { muscle_name: 'Triceps', sets: 0.5 },
+          ],
+        }),
+        exercise({ kind: 'cardio', category: 'cardio', muscle_group: 'Cardio' }),
+      ]),
+    ).toEqual(['Chest', 'Quadriceps', 'Triceps']);
   });
 });

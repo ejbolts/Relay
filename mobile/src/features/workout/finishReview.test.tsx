@@ -111,7 +111,11 @@ const lastAlert = (title: string) => {
   return found;
 };
 const press = async (title: string, button: string) =>
-  act(async () => lastAlert(title).buttons.find((item) => item.text === button)!.onPress?.());
+  act(async () =>
+    lastAlert(title)
+      .buttons.find((item) => item.text === button)!
+      .onPress?.(),
+  );
 
 async function openLogger(extra?: ReactNode) {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
