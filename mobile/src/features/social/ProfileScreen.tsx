@@ -75,9 +75,6 @@ import {
 } from './socialQueries';
 import { socialHeader } from './screenOptions';
 
-/** How long a removed friend can be restored before the removal is sent, as the toast's Undo. */
-const REMOVE_UNDO_MS = 5000;
-
 /**
  * A member's profile, or your own: who they are and how you're connected, then what they share
  * (their numbers, body weight, goals and workouts). Opened from an invite, it sends the friend
@@ -363,7 +360,6 @@ function StatRow({
 function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlocked: () => void }) {
   const { colors, radius, type } = useTheme();
   const client = useQueryClient();
-  const removal = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [removing, setRemoving] = useState(false);
   const change = useMutation({
     mutationFn: async (action: 'add' | 'accept' | 'remove'): Promise<FriendStatus> => {
@@ -382,37 +378,22 @@ function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlock
     },
   });
 
-  // Leaving the profile sends a removal that is still waiting for its Undo.
-  useEffect(() => {
-    const id = profile.id;
-    return () => {
-      if (!removal.current) return;
-      clearTimeout(removal.current);
-      removal.current = null;
-      void socialApi.removeFriend(id).finally(() => void refreshSocial(client));
-    };
-  }, [client, profile.id]);
-
   function remove() {
     setRemoving(true);
-    const send = () => {
-      removal.current = null;
-      socialApi
-        .removeFriend(profile.id)
-        .then(() => refreshSocial(client))
-        .catch(() => {
-          setRemoving(false);
-          showToast('Could not remove this friend. You are still friends.');
-        });
-    };
-    removal.current = setTimeout(send, REMOVE_UNDO_MS);
+    const id = profile.id;
     showToast(`Removed ${profile.display_name}`, {
       label: 'Undo',
-      run: () => {
-        if (removal.current) clearTimeout(removal.current);
-        removal.current = null;
-        setRemoving(false);
-      },
+      run: () => setRemoving(false),
+      // Sent once the Undo is gone (timed out, dismissed or replaced), as on the web, so the
+      // friend is never removed while Undo is still on screen.
+      onDismiss: () =>
+        void socialApi
+          .removeFriend(id)
+          .then(() => refreshSocial(client))
+          .catch(() => {
+            setRemoving(false);
+            showToast('Could not remove this friend. You are still friends.');
+          }),
     });
   }
 

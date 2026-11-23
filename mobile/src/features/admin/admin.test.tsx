@@ -3,6 +3,7 @@ import { act, configure, fireEvent, render, screen, waitFor } from '@testing-lib
 import * as Clipboard from 'expo-clipboard';
 import type { ReactElement } from 'react';
 import { Alert, Platform, type AlertButton } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type {
   AccountLimitsSettings,
   AdminUser,
@@ -13,11 +14,12 @@ import type {
 } from '../../../../frontend/src/types';
 import { ApiError, apiGet, apiSend } from '../../data/api';
 import { onAdminActivity, type AdminActivity } from '../../data/livePresence';
-import { promptText, showMenu } from '../../ui/prompts';
+import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { AdminAccountScreen } from './AdminAccountScreen';
 import { AdminScreen } from './AdminScreen';
 import { AdminServerScreen } from './AdminServerScreen';
+import AdminLayout from '../../app/admin/_layout';
 import { AdminSettingsSection } from './AdminSettingsSection';
 
 // A full parallel run is slow to render the first screen.
@@ -25,11 +27,28 @@ configure({ asyncUtilTimeout: 8000 });
 
 const mockRouter = { push: jest.fn(), back: jest.fn() };
 let mockParams: { id?: string } = {};
-jest.mock('expo-router', () => ({
-  useRouter: () => mockRouter,
-  useLocalSearchParams: () => mockParams,
-  Stack: { Screen: () => null },
-}));
+// The last leave guard the screen set: whether it blocks, and what it does when leaving is tried.
+let mockPrevent: { blocking: boolean; onLeave?: (event: { repeat: () => void }) => void } = {
+  blocking: false,
+};
+jest.mock('expo-router', () => {
+  const { createElement } = jest.requireActual<typeof import('react')>('react');
+  const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
+  const Stack = ({ children }: { children?: unknown }) =>
+    createElement(Text, null, 'Admin stack', children as never);
+  Stack.Screen = function Screen() {
+    return null;
+  };
+  return {
+    useRouter: () => mockRouter,
+    useLocalSearchParams: () => mockParams,
+    usePreventRemove: (blocking: boolean, onLeave?: (event: { repeat: () => void }) => void) => {
+      mockPrevent = { blocking, onLeave };
+    },
+    Redirect: ({ href }: { href: string }) => createElement(Text, null, `Redirect to ${href}`),
+    Stack,
+  };
+});
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
   apiGet: jest.fn(),
@@ -168,8 +187,21 @@ beforeEach(() => {
 });
 afterEach(() => client.clear());
 
+const metrics = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 0, left: 0, right: 0, bottom: 0 },
+};
+
+function wrapped(component: ReactElement) {
+  return (
+    <SafeAreaProvider initialMetrics={metrics}>
+      <QueryClientProvider client={client}>{component}</QueryClientProvider>
+    </SafeAreaProvider>
+  );
+}
+
 async function open(component: ReactElement) {
-  await render(<QueryClientProvider client={client}>{component}</QueryClientProvider>);
+  await render(wrapped(component));
 }
 
 /** Presses the named button of the last Alert. */
@@ -277,13 +309,21 @@ it('disables an account, changes its username and dismisses its request', async 
   await waitFor(() => expect(showToast).toHaveBeenCalledWith('Riley is disabled and signed out.'));
   expect(await screen.findByRole('button', { name: 'Enable account' })).toBeTruthy();
 
+  // The editor stays open with what was typed and shows why beside the field.
   await fireEvent.press(screen.getByRole('button', { name: 'Change username' }));
-  await act(async () => jest.mocked(promptText).mock.lastCall![0].onSubmit('x'));
+  const field = await screen.findByLabelText('Username');
+  await fireEvent.changeText(field, 'x');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByRole('alert')).toBeTruthy();
-  await act(async () => jest.mocked(promptText).mock.lastCall![0].onSubmit('casey'));
+  expect(screen.getByLabelText('Username').props.value).toBe('x');
+  await fireEvent.changeText(screen.getByLabelText('Username'), 'casey');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
   expect(await screen.findByText('This username is already registered.')).toBeTruthy();
-  await act(async () => jest.mocked(promptText).mock.lastCall![0].onSubmit('Riley.R '));
+  expect(screen.getByLabelText('Username').props.value).toBe('casey');
+  await fireEvent.changeText(screen.getByLabelText('Username'), 'Riley.R ');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
   await waitFor(() => expect(showToast).toHaveBeenCalledWith('Riley’s username is now @riley.r.'));
+  await waitFor(() => expect(screen.queryByLabelText('Username')).toBeNull());
 
   await fireEvent.press(screen.getByRole('button', { name: 'Dismiss request' }));
   await waitFor(() =>
@@ -330,4 +370,129 @@ it('shows the Admin row in Settings only to administrators', async () => {
   });
   expect(screen.queryByText('Admin console')).toBeNull();
   mockUser.is_admin = true;
+});
+
+// Review fixes (Sol review of #469).
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((done) => (resolve = done));
+  return { promise, resolve };
+}
+
+it('drops a settings save and its profile refresh that answer after signing out', async () => {
+  const saved = deferred<ServerSettings>();
+  jest.mocked(apiSend).mockImplementation(() => saved.promise as never);
+  await open(<AdminScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: /^Video uploads/ }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Everyone')!.onPress());
+  // Signing out unmounts every signed-in screen and clears the account's cached data.
+  await act(async () => screen.unmount());
+  client.clear();
+  await act(async () => saved.resolve({ ...settings, video_uploads: 'everyone' }));
+  expect(client.getQueryData(['admin', 'settings'])).toBeUndefined();
+  expect(apiGet).not.toHaveBeenCalledWith('/api/auth/me');
+  expect(mockSession.updateUser).not.toHaveBeenCalled();
+  expect(showToast).not.toHaveBeenCalled();
+});
+
+it('keeps the profile when the refresh answers for another account', async () => {
+  jest.mocked(apiSend).mockImplementation(async (_path, _method, body) => ({
+    ...settings,
+    ...(body as object),
+  }));
+  const fetched = jest.mocked(apiGet).getMockImplementation()!;
+  jest
+    .mocked(apiGet)
+    .mockImplementation(async (path: string) =>
+      path === '/api/auth/me' ? { ...mockUser, id: 'someone-else' } : fetched(path),
+    );
+  await open(<AdminScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: /^Video uploads/ }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Everyone')!.onPress());
+  await waitFor(() => expect(showToast).toHaveBeenCalledWith('Video uploads: Everyone.'));
+  expect(mockSession.updateUser).not.toHaveBeenCalled();
+});
+
+it('keeps the screen and Reset locked until a reset answers, then asks before leaving', async () => {
+  jest.spyOn(Alert, 'alert');
+  mockParams = { id: 'riley' };
+  const reset = deferred<{ temporary_password: string }>();
+  jest.mocked(apiSend).mockImplementation(() => reset.promise as never);
+  await open(<AdminAccountScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Reset password' }));
+  await answerAlert('Reset and sign out');
+  // A second confirmed reset while the first is on its way never reaches the server.
+  await fireEvent.press(screen.getByRole('button', { name: 'Reset password' }));
+  await answerAlert('Reset and sign out');
+  expect(apiSend).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: 'Reset password' })).toBeDisabled();
+  expect(mockPrevent.blocking).toBe(true);
+  const repeat = jest.fn();
+  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  expect(repeat).not.toHaveBeenCalled();
+  expect(showToast).toHaveBeenCalledWith('Wait for the password reset to finish.');
+
+  await act(async () => reset.resolve({ temporary_password: 'brisk-otter-42' }));
+  expect(await screen.findByText('brisk-otter-42')).toBeTruthy();
+  expect(mockPrevent.blocking).toBe(true);
+  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  await answerAlert('Stay');
+  expect(repeat).not.toHaveBeenCalled();
+  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  await answerAlert('Leave');
+  expect(repeat).toHaveBeenCalledTimes(1);
+});
+
+it('lets leaving go once the temporary password is dismissed', async () => {
+  jest.spyOn(Alert, 'alert');
+  mockParams = { id: 'riley' };
+  jest.mocked(apiSend).mockResolvedValue({ temporary_password: 'brisk-otter-42' });
+  await open(<AdminAccountScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Reset password' }));
+  await answerAlert('Reset and sign out');
+  await fireEvent.press(await screen.findByRole('button', { name: 'Done' }));
+  expect(mockPrevent.blocking).toBe(false);
+});
+
+it('sends anyone but an administrator away from the admin stack', async () => {
+  mockUser.is_admin = false;
+  try {
+    await open(<AdminLayout />);
+    expect(screen.getByText('Redirect to /settings')).toBeTruthy();
+    expect(screen.queryByText('Admin stack')).toBeNull();
+    expect(apiGet).not.toHaveBeenCalled();
+    expect(onAdminActivity).not.toHaveBeenCalled();
+  } finally {
+    mockUser.is_admin = true;
+  }
+  await screen.rerender(wrapped(<AdminLayout />));
+  expect(screen.getByText('Admin stack')).toBeTruthy();
+});
+
+it('keeps live activity that arrived while an older account list was loading', async () => {
+  // The console mounts and subscribes; its first list is still on its way.
+  const list = deferred<AdminUser[]>();
+  const fetched = jest.mocked(apiGet).getMockImplementation()!;
+  jest
+    .mocked(apiGet)
+    .mockImplementation(async (path: string) =>
+      path === '/api/admin/users' ? list.promise : fetched(path),
+    );
+  await open(<AdminScreen />);
+  await act(async () =>
+    mockActivity?.({
+      userId: 'casey',
+      presence: {
+        online: true,
+        last_active_at: new Date().toISOString(),
+        workout: { name: 'Leg day', started_at: new Date().toISOString() },
+      } as AdminActivity['presence'],
+    }),
+  );
+  // The list was read before the workout started, so it still shows Casey idle.
+  await act(async () => list.resolve([owner, casey, riley]));
+  expect(await screen.findByText('Live · Leg day')).toBeTruthy();
 });

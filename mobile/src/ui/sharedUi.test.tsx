@@ -3,8 +3,9 @@ import { AccessibilityInfo, Platform, StyleSheet, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { COLOUR_THEMES } from '../../../frontend/src/appearanceChoices';
 import { AccountHeaderActions } from './AccountHeaderActions';
-import { Button, IconButton } from './components';
-import { Segmented, Slider, snapToStep } from './controls';
+import { Button, IconButton, splitStyle } from './components';
+import { Segmented, Slider, sliderValues, snapToStep, stepSlider } from './controls';
+import { DateField } from './DateField';
 import { SheetFrame } from './navigation';
 import { palettes, themedPalette } from './theme';
 import { ToastHost, showToast, toastAnnouncement } from './Toast';
@@ -18,6 +19,17 @@ jest.mock('expo-haptics', () => ({
   NotificationFeedbackType: { Success: 'success', Warning: 'warning', Error: 'error' },
 }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), back: jest.fn() } }));
+// Material's dialogs need the native module; here they only need to be found in the tree.
+jest.mock('@expo/ui/jetpack-compose', () => {
+  const { createElement } = jest.requireActual<typeof import('react')>('react');
+  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    Host: ({ children }: { children: React.ReactNode }) => children,
+    DatePickerDialog: () => createElement(View, { testID: 'date-dialog' }),
+    TimePickerDialog: () => createElement(View, { testID: 'time-dialog' }),
+    Slider: () => null,
+  };
+});
 
 const wrap = async (ui: React.ReactElement) =>
   await render(
@@ -183,6 +195,8 @@ it('shows the account buttons with the profile badge and opens Settings', async 
       }}
     />,
   );
+  // The web's badge counts what's waiting.
+  expect(screen.getByText('2')).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'Profile: Sam, 2 friend requests' }));
   expect(onProfile).toHaveBeenCalled();
   await fireEvent.press(screen.getByRole('button', { name: 'Settings' }));
@@ -230,4 +244,93 @@ describe('Toast', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Goal removed. Dismiss' }));
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
   });
+});
+
+describe('Slider grid', () => {
+  it('reaches the exact bounds when the last step is shorter', async () => {
+    expect(sliderValues(5, 27, 10)).toEqual([5, 15, 25, 27]);
+    expect(snapToStep(26.4, 5, 27, 10)).toBe(27);
+    expect(stepSlider(27, 5, 27, 10, -1)).toBe(25);
+    expect(stepSlider(25, 5, 27, 10, 1)).toBe(27);
+    expect(stepSlider(27, 5, 27, 10, 1)).toBe(27);
+    const onChange = jest.fn();
+    await wrap(
+      <Slider
+        accessibilityLabel="Factor"
+        value={27}
+        min={5}
+        max={27}
+        step={10}
+        onChange={onChange}
+      />,
+    );
+    await fireEvent(screen.getByLabelText('Factor'), 'accessibilityAction', {
+      nativeEvent: { actionName: 'decrement' },
+    });
+    expect(onChange).toHaveBeenLastCalledWith(25);
+  });
+});
+
+it('gives each Android segment a full-height pressable at least 44 pt wide', async () => {
+  Platform.OS = 'android';
+  await wrap(
+    <Segmented
+      accessibilityLabel="Range"
+      values={['1M', '3M']}
+      selectedIndex={0}
+      onChange={jest.fn()}
+    />,
+  );
+  const group = StyleSheet.flatten(screen.getByLabelText('Range').props.style);
+  expect(group.height).toBe(44);
+  const choice = StyleSheet.flatten(screen.getByRole('radio', { name: '3M' }).props.style);
+  // The 44 pt group's outline is inside it: -1 pt margins give each choice the full 44 pt.
+  expect(choice).toMatchObject({ flex: 1, minWidth: 44, marginVertical: -1 });
+});
+
+it('keeps visual style overrides on the visible face and layout on the touch area', async () => {
+  await wrap(
+    <IconButton
+      icon="bell"
+      accessibilityLabel="Bell"
+      onPress={jest.fn()}
+      style={{ backgroundColor: 'red', borderRadius: 0, marginTop: 4 }}
+    />,
+  );
+  const box = StyleSheet.flatten(screen.getByRole('button', { name: 'Bell' }).props.style);
+  expect(box).toMatchObject({ marginTop: 4, width: 44, height: 44 });
+  expect(box.backgroundColor).toBeUndefined();
+  expect(splitStyle([{ flex: 1, padding: 2 }, { backgroundColor: 'red' }])).toEqual({
+    box: { flex: 1 },
+    face: { padding: 2, backgroundColor: 'red' },
+  });
+});
+
+it('draws badge numerals on the darker danger fill', async () => {
+  await wrap(<IconButton icon="bell" badge="4" accessibilityLabel="Bell" onPress={jest.fn()} />);
+  const pill = screen.getByText('4').parent;
+  expect(StyleSheet.flatten(pill?.props.style).backgroundColor).toBe(palettes.dark.dangerFill);
+  for (const scheme of ['light', 'dark'] as const)
+    for (const style of ['default', 'oled', 'stained'] as const)
+      expect(
+        contrast('#ffffff', themedPalette(scheme, 'blue', style, 'default').dangerFill),
+      ).toBeGreaterThanOrEqual(4.5);
+});
+
+it('closes the Android date dialog and ignores it once the field is disabled', async () => {
+  Platform.OS = 'android';
+  const onChange = jest.fn();
+  const field = (disabled: boolean) => (
+    <SafeAreaProvider>
+      <DateField label="Date" value="2026-11-20" onChange={onChange} disabled={disabled} />
+    </SafeAreaProvider>
+  );
+  const { rerender } = await wrap(field(false));
+  await fireEvent.press(screen.getByRole('button', { name: /^Date,/ }));
+  expect(screen.queryByTestId('date-dialog')).toBeOnTheScreen();
+  await rerender(field(true));
+  expect(screen.queryByTestId('date-dialog')).toBeNull();
+  await rerender(field(false));
+  expect(screen.queryByTestId('date-dialog')).toBeNull();
+  expect(onChange).not.toHaveBeenCalled();
 });
