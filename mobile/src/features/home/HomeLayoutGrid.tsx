@@ -280,8 +280,12 @@ export function HomeLayoutGrid({
         const isThirdRow =
           row.items.every((item) => item.span === 2) && (!row.gap || row.gap.span === 2);
         return (
+          // Rows and slots are never flattened: the drag adds zIndex/elevation to them, and on
+          // Android a view that stops being flattened re-parents its children, which cancels the
+          // active drag gesture the moment it starts.
           <View
             key={rowKey}
+            collapsable={false}
             onLayout={(event: LayoutChangeEvent) => {
               rowLayoutsRef.current[rowKey] = event.nativeEvent.layout;
             }}
@@ -316,6 +320,7 @@ export function HomeLayoutGrid({
               return (
                 <View
                   key={item.id}
+                  collapsable={false}
                   onLayout={(event: LayoutChangeEvent) => {
                     slotLayoutsRef.current[`card:${item.id}`] = {
                       rowKey,
@@ -442,7 +447,7 @@ function DraggableSectionCard({
   const panConfig = useMemo(
     () => ({
       enabled: !disabled,
-      activateAfterLongPress: 250,
+      activateAfterLongPress: 300,
       shouldCancelWhenOutside: false,
       runOnJS: true,
       onActivate: (event: { x: number; y: number; absoluteY: number }) =>
@@ -643,7 +648,7 @@ function DraggableSectionCard({
   // touch coordinate frame while dragging.
   return (
     <GestureDetector gesture={pan}>
-      <View style={{ flex: 1 }} testID={`home-layout-card-${id}`}>
+      <View collapsable={false} style={{ flex: 1 }} testID={`home-layout-card-${id}`}>
         <Animated.View
           accessibilityHint="Hold and drag to reorder or move into an empty space"
           style={[surface, styles.cardFrame, highlightStyle, isDragged && dragAnimatedStyle]}
