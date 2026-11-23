@@ -66,6 +66,7 @@ export function Segmented({
       >
         {values.map((label, index) => {
           const selected = index === selectedIndex;
+          // Each choice is a full-height 44 pt pressable; the pill inside it is the web's 36 pt.
           return (
             <Pressable
               key={`${index}-${label}`}
@@ -74,18 +75,24 @@ export function Segmented({
               accessibilityState={{ selected, checked: selected, disabled: !enabled }}
               disabled={!enabled}
               onPress={() => choose(index)}
-              style={({ pressed }) => [
-                styles.segment,
-                selected && { backgroundColor: colors.surface3 },
-                pressed && !selected && { opacity: 0.7 },
-              ]}
+              style={styles.segment}
             >
-              <Text
-                numberOfLines={1}
-                style={[styles.segmentText, { color: selected ? colors.text : colors.muted }]}
-              >
-                {label}
-              </Text>
+              {({ pressed }) => (
+                <View
+                  style={[
+                    styles.segmentPill,
+                    selected && { backgroundColor: colors.surface3 },
+                    pressed && !selected && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.segmentText, { color: selected ? colors.text : colors.muted }]}
+                  >
+                    {label}
+                  </Text>
+                </View>
+              )}
             </Pressable>
           );
         })}
@@ -159,14 +166,18 @@ export function Slider({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors, scheme } = useTheme();
-  const clamp = (next: number) => snapToStep(next, min, max, step);
   const [last, setLast] = useState(value);
-  const change = (next: number) => {
-    const snapped = clamp(next);
+  const change = (snapped: number) => {
     if (snapped !== last) haptics.selection();
     setLast(snapped);
     onChange(snapped);
   };
+  // One grid of reachable values (from `min` in steps, then `max` itself) for the native track
+  // and for screen readers. When the steps divide the range evenly the native controls show
+  // them as stops; otherwise they move freely and land on the grid here, so `max` stays
+  // reachable even after a shorter last step.
+  const even = sliderValues(min, max, step).length - 1 === (max - min) / step;
+  const nativeChange = (next: number) => change(snapToStep(next, min, max, step));
   return (
     <View
       accessible
@@ -175,7 +186,9 @@ export function Slider({
       accessibilityValue={valueText ? { text: valueText } : { min, max, now: value }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={(event) =>
-        change(value + (event.nativeEvent.actionName === 'increment' ? step : -step))
+        change(
+          stepSlider(value, min, max, step, event.nativeEvent.actionName === 'increment' ? 1 : -1),
+        )
       }
       style={[styles.slider, style]}
     >
@@ -185,8 +198,8 @@ export function Slider({
             value={value}
             min={min}
             max={max}
-            step={step}
-            onValueChange={change}
+            step={even ? step : undefined}
+            onValueChange={nativeChange}
             modifiers={[tint(colors.accent)]}
           />
         </Host>
@@ -196,8 +209,8 @@ export function Slider({
             value={value}
             min={min}
             max={max}
-            steps={Math.max(0, Math.round((max - min) / step) - 1)}
-            onValueChange={change}
+            steps={even ? Math.max(0, Math.round((max - min) / step) - 1) : 0}
+            onValueChange={nativeChange}
             colors={{
               thumbColor: colors.accent,
               activeTrackColor: colors.accent,
@@ -278,19 +291,64 @@ export function TextField({
   );
 }
 
-/** The nearest value on the slider's grid, which starts at `min`, kept within the range. */
-export function snapToStep(value: number, min: number, max: number, step: number) {
-  const snapped = min + Math.round((value - min) / step) * step;
+/**
+ * Every value a slider can take: `min`, then each `step` above it, then `max` itself when the
+ * steps don't land on it exactly.
+ */
+export function sliderValues(min: number, max: number, step: number): number[] {
+  const values: number[] = [];
   // Drop float noise such as 0.30000000000000004 from decimal steps.
-  return Math.min(max, Math.max(min, Number(snapped.toFixed(10))));
+  for (let i = 0; ; i += 1) {
+    const value = Number((min + i * step).toFixed(10));
+    if (value >= max - step * 1e-9) break;
+    values.push(value);
+  }
+  values.push(max);
+  return values;
+}
+
+/** The nearest value on the slider's grid (`sliderValues`). */
+export function snapToStep(value: number, min: number, max: number, step: number) {
+  return nearest(sliderValues(min, max, step), value).value;
+}
+
+/** The next value up (`1`) or down (`-1`) the grid from `value`, as a screen reader's swipe. */
+export function stepSlider(
+  value: number,
+  min: number,
+  max: number,
+  step: number,
+  direction: 1 | -1,
+) {
+  const values = sliderValues(min, max, step);
+  const { index } = nearest(values, value);
+  return values[Math.min(values.length - 1, Math.max(0, index + direction))];
+}
+
+function nearest(values: number[], value: number) {
+  let index = 0;
+  values.forEach((candidate, i) => {
+    if (Math.abs(candidate - value) < Math.abs(values[index] - value)) index = i;
+  });
+  return { index, value: values[index] };
 }
 
 const styles = StyleSheet.create({
   slider: { flex: 1, height: 44, justifyContent: 'center' },
-  segments: { flexDirection: 'row', gap: 4, borderWidth: 1, borderRadius: 13, padding: 3 },
-  segment: {
-    flex: 1,
-    minHeight: 36,
+  // The web's control: a 1 pt outline round 36 pt pills, 4 pt apart, 44 pt in all. The outline
+  // sits inside the 44 pt so each choice's pressable can fill the full height.
+  segments: {
+    flexDirection: 'row',
+    height: 44,
+    borderWidth: 1,
+    borderRadius: 13,
+    paddingHorizontal: 2,
+    overflow: 'hidden',
+  },
+  segment: { flex: 1, minWidth: 44, marginVertical: -1, justifyContent: 'center' },
+  segmentPill: {
+    height: 36,
+    marginHorizontal: 2,
     borderRadius: 10,
     paddingHorizontal: 8,
     alignItems: 'center',

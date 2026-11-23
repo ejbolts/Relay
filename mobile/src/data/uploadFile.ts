@@ -4,6 +4,14 @@ import { sessionToken } from './session';
 const TIMEOUT_MS = 60_000;
 const UNREACHABLE = 'Could not reach Relay. Check your connection, then try again.';
 
+/** An upload stopped on purpose, through its `signal`, rather than one that failed. */
+export class UploadStopped extends Error {
+  constructor() {
+    super('Upload stopped.');
+    this.name = 'UploadStopped';
+  }
+}
+
 /**
  * Sends a file on the phone (a picked photo's `file://` URI) as a multipart form, signed in like
  * every other request. Expo replaces the global `fetch` with `expo/fetch`, which can't send React
@@ -21,6 +29,7 @@ export async function uploadFile<T>(
     failure = 'Relay could not complete this request.',
     timeoutMs = TIMEOUT_MS,
     onProgress,
+    signal,
   }: {
     field?: string;
     fields?: Record<string, string>;
@@ -29,6 +38,8 @@ export async function uploadFile<T>(
     timeoutMs?: number;
     /** The share sent so far, from 0 to 100. */
     onProgress?: (percent: number) => void;
+    /** Aborting stops the upload and rejects with `UploadStopped`. */
+    signal?: AbortSignal;
   } = {},
 ): Promise<T> {
   const origin = new URL(apiOrigin!).origin;
@@ -49,6 +60,14 @@ export async function uploadFile<T>(
     for (const [name, value] of Object.entries(clientVersionHeaders()))
       xhr.setRequestHeader(name, value);
     xhr.withCredentials = false;
+    if (signal) {
+      if (signal.aborted) {
+        reject(new UploadStopped());
+        return;
+      }
+      signal.addEventListener('abort', () => xhr.abort(), { once: true });
+      xhr.onabort = () => reject(new UploadStopped());
+    }
     xhr.onerror = () => reject(new Error(UNREACHABLE));
     xhr.ontimeout = () => reject(new Error(UNREACHABLE));
     xhr.onload = () => {

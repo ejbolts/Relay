@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { useReduceMotion } from '../../features/settings/devicePreferences';
 import { HeaderBack } from '../../features/settings/HeaderBack';
+import { headerOptions } from '../../ui/navigation';
 import { useTheme } from '../../ui/theme';
 
 /**
@@ -13,14 +14,8 @@ export default function DataLayout() {
   return (
     <Stack
       screenOptions={({ navigation, route }) => ({
-        headerTintColor: colors.accentText,
-        headerTitleStyle: { color: colors.text },
-        headerStyle: { backgroundColor: colors.page },
-        headerShadowVisible: false,
-        headerBackButtonDisplayMode: 'minimal',
-        contentStyle: { backgroundColor: colors.page },
+        ...headerOptions(colors, reduced),
         headerLeft: navigation.getState().routes[0]?.key === route.key ? HeaderBack : undefined,
-        ...(reduced && { animation: 'none' }),
       })}
     >
       <Stack.Screen name="import" options={{ title: 'Import workouts' }} />

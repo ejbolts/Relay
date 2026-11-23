@@ -14,6 +14,7 @@ import { Icon } from '../../ui/Icon';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { videoApi, videoKeys, useYouTubeConnection } from './videoData';
+import { useAccountGuard } from '../admin/accountGuard';
 import { videoIcons } from './icons';
 
 /**
@@ -25,6 +26,7 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
   const client = useQueryClient();
   const connection = useYouTubeConnection();
   const { colors, type, radius } = useTheme();
+  const guard = useAccountGuard();
   const [working, setWorking] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const data = connection.data ?? null;
@@ -36,12 +38,13 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
     return () => app.remove();
   }, [client]);
 
-  function connectOnWeb() {
+  async function connectOnWeb() {
     setError(null);
     try {
-      void Linking.openURL(`${serverOrigin()}/#videos`);
-    } catch (reason) {
-      setError(errorMessage(reason));
+      // Opening the browser can fail after the call returns, so wait for it.
+      await Linking.openURL(`${serverOrigin()}/#videos`);
+    } catch {
+      setError('Could not open the browser. Open Relay on the web and connect YouTube there.');
     }
   }
 
@@ -59,12 +62,16 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
   async function disconnect() {
     setWorking(true);
     setError(null);
+    // A reply that arrives after this account signed out mustn't recreate its connection for
+    // the next account.
+    const current = guard();
     try {
       const next = await videoApi.disconnect();
+      if (!current()) return;
       client.setQueryData<YouTubeConnection>(videoKeys.youtube, next);
       showToast(next.message);
     } catch (reason) {
-      setError(errorMessage(reason));
+      if (current()) setError(errorMessage(reason));
     } finally {
       setWorking(false);
     }
@@ -121,7 +128,7 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
             icon={videoIcons.web}
             variant={connected ? 'secondary' : 'primary'}
             disabled={disabled || working}
-            onPress={connectOnWeb}
+            onPress={() => void connectOnWeb()}
           />
         )}
         {data?.channel_id && (
