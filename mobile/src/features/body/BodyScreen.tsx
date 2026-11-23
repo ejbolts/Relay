@@ -1,4 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
@@ -10,12 +11,14 @@ import { dayMonth } from '../../../../frontend/src/trainingSummary';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
 import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
+import { useUser } from '../../session/SessionProvider';
+import { AccountHeaderActions } from '../../ui/AccountHeaderActions';
 import { Button, Card, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
-import { HomeHeaderActions } from '../home/HomeHeaderActions';
+import { NotificationsBell, socialRoutes } from '../social';
 import { BodyHistory } from './BodyHistory';
 import { syncBodyCheckIns } from './bodyCheckInQueue';
 import { CheckInSyncCard, MaintenanceTip } from './BodyNotices';
@@ -89,6 +92,8 @@ function useGoalRemoval() {
  */
 export function BodyScreen() {
   const { colors, type } = useTheme();
+  const router = useRouter();
+  const user = useUser();
   const client = useQueryClient();
   const unit = useWeightUnit();
   const measurementsQuery = useBodyMeasurements();
@@ -151,7 +156,15 @@ export function BodyScreen() {
             ? `${count} ${count === 1 ? 'check-in' : 'check-ins'}${latest ? ` · latest ${dayMonth(latest.measurement_date)}` : ''}`
             : undefined
         }
-        actions={<HomeHeaderActions />}
+        actions={
+          <AccountHeaderActions
+            notifications={<NotificationsBell />}
+            profile={{
+              user,
+              onPress: () => router.push(socialRoutes.profile(user.id)),
+            }}
+          />
+        }
         refreshing={refreshing}
         onRefresh={() => void refresh()}
       >

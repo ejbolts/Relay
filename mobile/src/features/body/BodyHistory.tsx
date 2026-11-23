@@ -203,6 +203,7 @@ export function BodyHistory({
           <Button
             label="Show more"
             variant="link"
+            align="center"
             onPress={() => setRows((shown) => shown + HISTORY_PAGE_SIZE)}
           />
         )}

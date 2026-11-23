@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import { bodyGoalPayload, bodyGoalProgressPercent } from '../../../../frontend/src/bodyGoalForm';
 import {
@@ -203,11 +203,6 @@ function GoalForm({
             setKind(KINDS[index].kind);
             setError(null);
           }}
-          style={
-            Platform.OS === 'android'
-              ? { borderWidth: 1, borderColor: colors.line, borderRadius: 10 }
-              : undefined
-          }
         />
       )}
       {kind === 'maintain' ? (

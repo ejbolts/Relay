@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector, usePinchGesture } from 'react-native-gesture-handler';
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
 import { RANGE_LABELS } from '../../../../frontend/src/appShared';
@@ -206,14 +206,7 @@ export function BodyTrendChart({
                 setSeries(index === 1 ? 'fat' : 'weight');
                 setSelected(null);
               }}
-              style={[
-                styles.seriesSegmented,
-                Platform.OS === 'android' && {
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                  borderRadius: 10,
-                },
-              ]}
+              style={styles.seriesSegmented}
             />
             <LandscapeButton title={title} onPress={() => setLandscape(true)} />
           </View>

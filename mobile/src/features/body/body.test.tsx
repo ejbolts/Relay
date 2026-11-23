@@ -47,7 +47,11 @@ jest.mock('../../data/api', () => ({
   apiSend: jest.fn(),
 }));
 const mockRouter = { navigate: jest.fn(), push: jest.fn() };
-jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useIsFocused: () => true }));
+jest.mock('expo-router', () => ({
+  router: mockRouter,
+  useRouter: () => mockRouter,
+  useIsFocused: () => true,
+}));
 const mockUser = {
   id: 'u1',
   username: 'preview',
@@ -255,7 +259,7 @@ test('with the median chosen in Settings, the history offers median weeks and mo
     expect(screen.getByRole('tab', { name: 'Median Monthly' })).toBeVisible();
     expect(screen.queryByRole('tab', { name: 'Avg Week' })).toBeNull();
   } finally {
-    bodyTrendPreference.set({ duration: '30d', statistic: 'average' });
+    await act(async () => bodyTrendPreference.set({ duration: '30d', statistic: 'average' }));
   }
 });
 
@@ -377,7 +381,7 @@ test('a part typed on the figure is saved into today’s measurements', async ()
 
 test('choosing an outline offers to save it as the account’s sex', async () => {
   await renderBody();
-  await fireEvent.press(screen.getByRole('tab', { name: 'Female' }));
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Female' }));
   const [title, , buttons] = jest.mocked(Alert.alert).mock.calls.at(-1)!;
   expect(title).toBe('Save your sex as Female?');
   await act(async () => (buttons as AlertButton[]).find((b) => b.text === 'Save')!.onPress!());
