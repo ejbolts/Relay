@@ -1,4 +1,5 @@
 import * as ImagePicker from 'expo-image-picker';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { usePreventRemove } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -33,6 +34,7 @@ import { useTheme } from '../../ui/theme';
 import { useAccountGuard } from '../admin/accountGuard';
 import { DateField } from '../body/DateField';
 import { SettingsPage } from '../settings/SettingsList';
+import { ClipPreview } from './ClipPreview';
 import type { ClipTransfer } from './clipUpload';
 import { videoIcons } from './icons';
 import {
@@ -58,9 +60,29 @@ const HOLD_REASONS: Partial<Record<Phase, string>> = {
   stopping: 'Wait while the upload stops.',
 };
 const STILL_UPLOADABLE: WorkoutSession['status'][] = ['draft', 'uploading', 'upload_failed'];
+const UPLOAD_WAKE_LOCK_TAG = 'relay-video-upload';
 /** The server has started work on the batch (or finished it), so it can't be cancelled. */
 const processingBegan = (status: WorkoutSession['status']) =>
   PROCESSING_SESSION_STATUSES.includes(status) || status === 'complete' || status === 'failed';
+
+/** Keeps the phone awake while clips upload, releasing when the upload ends, stops or unmounts. */
+function useUploadWakeLock(active: boolean) {
+  useEffect(() => {
+    if (!active) return;
+    let released = false;
+    void activateKeepAwakeAsync(UPLOAD_WAKE_LOCK_TAG)
+      .then(() => {
+        if (released) return deactivateKeepAwake(UPLOAD_WAKE_LOCK_TAG);
+      })
+      .catch(() => {
+        // Upload still works; wake locks are a best-effort guard only.
+      });
+    return () => {
+      released = true;
+      void deactivateKeepAwake(UPLOAD_WAKE_LOCK_TAG).catch(() => undefined);
+    };
+  }, [active]);
+}
 
 /**
  * The web's videos tab: record or pick each set's video, upload the batch, then follow it while
@@ -103,6 +125,7 @@ function VideoUploader() {
   }
   // A function, so a check after an await reads the phase as it is then.
   const currentPhase = () => phaseRef.current;
+  useUploadWakeLock(phase === 'creating' || phase === 'uploading' || phase === 'starting');
   const ready = youtubeReady(youtube.data ?? null);
   const guard = useAccountGuard();
   // The batch's uploads: `stopped` keeps workers from starting another clip, and each transfer
@@ -789,6 +812,7 @@ function ClipCard({
       <Text numberOfLines={1} style={[type.callout, { color: colors.text, fontWeight: '600' }]}>
         {clip.name}
       </Text>
+      <ClipPreview uri={clip.uri} name={clip.name} />
       <TextInput
         accessibilityLabel={`Set ${set} exercise`}
         value={clip.exerciseLabel}
