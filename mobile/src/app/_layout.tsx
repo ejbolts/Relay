@@ -12,6 +12,8 @@ import { BodyCheckInSync } from '../features/body/BodyCheckInSync';
 import { homeScreenOptions } from '../features/home/routes';
 // B3 (weekly review and notices): header options for the review and What's new.
 import { reviewScreenOptions } from '../features/review/routes';
+// B5 (data): asks a new account whether to import its history.
+import { useImportPrompt } from '../features/data';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { useDeferredFriendInvite } from '../session/friendInvite';
@@ -44,6 +46,7 @@ function Navigation() {
   // After an admin reset nothing else works until a new password is chosen, as on the web.
   const mustChangePassword = signedIn && !!status.user.must_change_password;
   useDeferredFriendInvite(signedIn && !mustChangePassword);
+  useImportPrompt();
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
   const theme = {
     ...base,
@@ -121,6 +124,8 @@ function Navigation() {
               name="release-notes"
               options={reviewScreenOptions(colors, "What's new")}
             />
+            {/* Mobile batch 4, data stream: CSV import with review and undo, and data export. */}
+            <Stack.Screen name="data" />
           </Stack.Protected>
           <Stack.Protected guard={mustChangePassword}>
             <Stack.Screen name="password-required" />

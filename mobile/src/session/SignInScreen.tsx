@@ -35,6 +35,7 @@ import { Sheet } from '../ui/Sheet';
 import { showToast, ToastHost } from '../ui/Toast';
 import { useTheme } from '../ui/theme';
 import { AccountHelpSheet } from './AccountHelpSheet';
+import { queueImportPrompt } from '../features/data/importPrompt';
 import { registerAccount, useRegistrationConfig } from './registration';
 import { useSession } from './SessionProvider';
 
@@ -85,8 +86,12 @@ export function SignInScreen() {
       if (creating) {
         const fields = registrationFields(values);
         const created = await registerAccount(fields);
-        // A new account takes the quick tour on its first Home, as on the web.
-        if (created?.id) queueAppTour(created.id);
+        // A new account takes the quick tour on its first Home, then is asked whether to import
+        // its history, as on the web.
+        if (created?.id) {
+          queueAppTour(created.id);
+          queueImportPrompt(created.id);
+        }
         try {
           await signIn(fields.username, password);
         } catch {

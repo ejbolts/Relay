@@ -36,6 +36,8 @@ import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { HelpSettings } from '../guides/HelpSettings';
+// B5 (data): imports, exports and backups.
+import { DataSection } from '../data';
 import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { restTimerPreference, restTimesPreference } from './devicePreferences';
@@ -209,6 +211,7 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
       <HelpSettings />
       <AutoSaveSection />
       <NotificationsSection />
+      <DataSection />
       <AccountSection />
       <AboutSection />
     </SettingsPage>

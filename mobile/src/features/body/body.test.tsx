@@ -19,7 +19,6 @@ import { memoryKv } from '../../testing/memoryKvStore';
 import { ToastHost } from '../../ui/Toast';
 import { resetTipsForTests } from '../guides/tips';
 import { bodyTrendPreference } from '../settings/devicePreferences';
-import { memoryKv } from '../../testing/memoryKvStore';
 import { bodyCheckInStatus, setBodyCheckInOwner, syncBodyCheckIns } from './bodyCheckInQueue';
 import { BodyScreen } from './BodyScreen';
 import { clearMaintainGoalRequest, requestMaintainGoal } from './maintainGoalRequest';
