@@ -1,39 +1,19 @@
 import { useId, type CSSProperties } from 'react';
-import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
+import type { MuscleSetGoals } from './muscleSetGoals';
 import { HelpPopup } from './HelpPopup';
-import { formatVolume, plannedWeeklyVolume, targetStatus, type TargetStatus } from './splitTargets';
+import {
+  CARDIO_ROW,
+  describeVolumeRow as describe,
+  splitVolumeRows,
+  TARGET_MARKS as MARK,
+  volumeRowValue as shown,
+  type TargetStatus,
+  type VolumeRow as Row,
+} from './splitTargets';
 import type { RoutineDay } from './types';
 import './splitVolume.css';
 
-/** The selection key for the cardio row. */
-export const CARDIO_ROW = '__cardio';
-
-const MARK: Record<TargetStatus, string> = { met: '✓', close: '~', under: '!' };
-const LABEL: Record<TargetStatus, string> = {
-  met: 'on target',
-  close: 'nearly there',
-  under: 'under target',
-};
-
-interface Row {
-  key: string;
-  name: string;
-  value: number;
-  goal: number | null;
-  unit: 'sets' | 'min';
-  status: TargetStatus | null;
-}
-
-/** Sets keep one decimal place for part credits; cardio shows whole minutes. */
-const shown = (row: Row) =>
-  row.unit === 'min' ? Math.round(row.value).toLocaleString() : formatVolume(row.value);
-
-function describe(row: Row) {
-  const unit = row.unit === 'min' ? 'minutes' : 'sets';
-  return row.goal == null
-    ? `${row.name}: ${shown(row)} ${unit} a week`
-    : `${row.name}: ${shown(row)} of ${row.goal} ${unit} a week, ${LABEL[row.status!]}`;
-}
+export { CARDIO_ROW };
 
 function Mark({ status }: { status: TargetStatus | null }) {
   return (
@@ -109,36 +89,16 @@ export function SplitVolumeChart({
   onSelect: (key: string | null) => void;
 }) {
   const headingId = useId();
-  const volume = plannedWeeklyVolume(days);
-  const rows: Row[] = volume.muscles.map(({ muscle, sets }) => ({
-    key: muscle,
-    name: muscle,
-    value: sets,
-    goal: muscleSetGoal(muscle, muscleGoal, muscleGoals),
-    unit: 'sets',
-    status: targetStatus(sets, muscleSetGoal(muscle, muscleGoal, muscleGoals)),
-  }));
-  const cardio: Row | null =
-    cardioGoal || volume.cardioMinutes > 0
-      ? {
-          key: CARDIO_ROW,
-          name: 'Cardio',
-          value: volume.cardioMinutes,
-          goal: cardioGoal || null,
-          unit: 'min',
-          status: cardioGoal ? targetStatus(volume.cardioMinutes, cardioGoal) : null,
-        }
-      : null;
-  const goals = [...rows, ...(cardio ? [cardio] : [])].filter((row) => row.status);
-  const met = goals.filter((row) => row.status === 'met').length;
+  const volume = splitVolumeRows(days, muscleGoal, muscleGoals, cardioGoal);
+  const { rows, cardio, met, goals } = volume;
   return (
     <section className="split-volume" aria-labelledby={headingId}>
       <header>
         <h3 id={headingId}>Weekly volume</h3>
-        {goals.length > 0 && (
+        {goals > 0 && (
           <span className="split-volume-count">
-            {met === goals.length && <Mark status="met" />}
-            {met} of {goals.length} on target
+            {met === goals && <Mark status="met" />}
+            {met} of {goals} on target
           </span>
         )}
         <HelpPopup title="Weekly volume">

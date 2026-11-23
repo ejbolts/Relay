@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
+import { pendingFriendRequests } from './profileButton';
 
 /**
  * A count from the server, refreshed whenever `active` turns on or the app regains focus.
@@ -34,25 +35,7 @@ export function useRefreshedCount(
   return enabled ? count : 0;
 }
 
-const loadFriendRequestCount = () =>
-  api.sharing
-    .choices()
-    .then((settings) => (settings.visibility === 'private' ? 0 : settings.pending_requests));
-
-/** The profile button's label, including friend requests and feedback waiting for review. */
-export function profileButtonLabel(
-  name: string | undefined,
-  friendRequests: number,
-  openFeedback: number,
-): string {
-  const waiting = [
-    friendRequests > 0 &&
-      `${friendRequests} friend ${friendRequests === 1 ? 'request' : 'requests'}`,
-    openFeedback > 0 &&
-      `${openFeedback} feedback ${openFeedback === 1 ? 'message' : 'messages'} to review`,
-  ].filter(Boolean);
-  return [name ? `Profile: ${name}` : 'Profile', ...waiting].join(', ');
-}
+const loadFriendRequestCount = () => api.sharing.choices().then(pendingFriendRequests);
 
 /** Friend requests waiting for an answer, refreshed whenever `active` turns on. */
 export function useFriendRequestCount(active: boolean, enabled: boolean): number {

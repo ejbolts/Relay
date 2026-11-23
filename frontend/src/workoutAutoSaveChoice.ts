@@ -2,16 +2,12 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { api } from './api';
 import { setInactiveWorkoutLimitMinutes } from './activeWorkoutTimeout';
 
-/** Choices offered in Settings; the server accepts any 15-minute step from 30 to 720. */
-export const WORKOUT_AUTO_SAVE_CHOICES = [60, 90, 120, 150, 180, 240, 300, 360] as const;
-export const DEFAULT_WORKOUT_AUTO_SAVE_MINUTES = 180;
-
-export function autoSaveChoiceLabel(minutes: number): string {
-  const hours = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (!rest) return hours === 1 ? '1 hour' : `${hours} hours`;
-  return hours ? `${hours} h ${rest} min` : `${rest} min`;
-}
+export {
+  autoSaveChoiceLabel,
+  autoSaveChoices,
+  DEFAULT_WORKOUT_AUTO_SAVE_MINUTES,
+  WORKOUT_AUTO_SAVE_CHOICES,
+} from './trainingSettings';
 
 const EVENT = 'relay-workout-auto-save';
 const keyFor = (userId: string) => `relay-workout-auto-save:${userId}`;

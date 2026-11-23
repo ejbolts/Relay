@@ -1,4 +1,4 @@
-import type { PresenceStatus } from './presence';
+import { presenceDot, type PresenceStatus } from './presenceStatus';
 import { ProfileAvatar } from './ProfileAvatar';
 import type { User } from './types';
 
@@ -10,7 +10,7 @@ export function PresenceAvatar({
   user: Pick<User, 'display_name' | 'username' | 'profile_photo_url'>;
   status: PresenceStatus;
 }) {
-  const dot = status?.kind === 'workout' || status?.kind === 'online' ? status.kind : null;
+  const dot = presenceDot(status);
   return (
     <span className="presence-avatar">
       <ProfileAvatar className="shared-profile-avatar small" user={user} />

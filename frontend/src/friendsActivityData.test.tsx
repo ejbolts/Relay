@@ -3,11 +3,7 @@ import { act } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
-import {
-  useFriendRequestCount,
-  profileButtonLabel,
-  useOpenFeedbackCount,
-} from './friendsActivityData';
+import { useFriendRequestCount, useOpenFeedbackCount } from './friendsActivityData';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -79,14 +75,5 @@ describe('Home friend and feedback counts', () => {
       container.remove();
       summary.mockRestore();
     }
-  });
-
-  it('describes waiting requests and feedback on the profile button', () => {
-    expect(profileButtonLabel('Ethan', 0, 0)).toBe('Profile: Ethan');
-    expect(profileButtonLabel('Ethan', 1, 0)).toBe('Profile: Ethan, 1 friend request');
-    expect(profileButtonLabel(undefined, 2, 1)).toBe(
-      'Profile, 2 friend requests, 1 feedback message to review',
-    );
-    expect(profileButtonLabel('Ethan', 0, 3)).toBe('Profile: Ethan, 3 feedback messages to review');
   });
 });

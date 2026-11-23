@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createQueryClient } from '../data/queryClient';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { SessionProvider, useSession } from '../session/SessionProvider';
+import { PromptHost } from '../ui/prompts';
 import { useTheme } from '../ui/theme';
 
 export default function RootLayout() {
@@ -29,6 +30,8 @@ function Navigation() {
   const { status } = useSession();
   const { scheme, colors } = useTheme();
   const signedIn = status.kind === 'signed-in';
+  // After an admin reset nothing else works until a new password is chosen, as on the web.
+  const mustChangePassword = signedIn && !!status.user.must_change_password;
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
   const theme = {
     ...base,
@@ -48,7 +51,7 @@ function Navigation() {
         <Stack
           screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.page } }}
         >
-          <Stack.Protected guard={signedIn}>
+          <Stack.Protected guard={signedIn && !mustChangePassword}>
             <Stack.Screen name="(tabs)" />
             {/* The logger: a page sheet that drags down to minimise the workout, not end it. */}
             <Stack.Screen name="workout" options={{ presentation: 'modal' }} />
@@ -68,11 +71,24 @@ function Navigation() {
                 }),
               }}
             />
+            {/* Settings and the split editor: pushed screens with their own stacks and headers. */}
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="split" />
+            {/* Social's profiles, shared workouts and sharing choices, over the tabs. */}
+            <Stack.Screen name="social/profile/[id]" />
+            <Stack.Screen name="social/workout/[id]" />
+            <Stack.Screen name="social/sharing" />
+          </Stack.Protected>
+          <Stack.Protected guard={mustChangePassword}>
+            <Stack.Screen name="password-required" />
           </Stack.Protected>
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="sign-in" />
           </Stack.Protected>
         </Stack>
+        {/* Android's menu sheets and text dialogs for every screen. The logger, a separate native
+            sheet, mounts its own. */}
+        <PromptHost />
       </WorkoutProvider>
     </ThemeProvider>
   );
