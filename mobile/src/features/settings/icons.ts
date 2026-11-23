@@ -1,0 +1,30 @@
+import type { IconPair } from '../../ui/Icon';
+
+/** Settings' own icons: an SF Symbol on iOS and a Material icon elsewhere. */
+export const settingsIcons = {
+  split: { sf: 'arrow.triangle.2.circlepath', md: 'autorenew' },
+  unit: { sf: 'scalemass', md: 'scale' },
+  week: { sf: 'calendar', md: 'calendar-today' },
+  goal: { sf: 'target', md: 'track-changes' },
+  rest: { sf: 'timer', md: 'timer' },
+  types: { sf: 'paintpalette', md: 'palette' },
+  autoSave: { sf: 'tray.and.arrow.down', md: 'save' },
+  bell: { sf: 'bell', md: 'notifications-none' },
+  password: { sf: 'key', md: 'vpn-key' },
+  signOut: { sf: 'rectangle.portrait.and.arrow.right', md: 'logout' },
+  everywhere: { sf: 'iphone.slash', md: 'devices' },
+  whatsNew: { sf: 'sparkles', md: 'auto-awesome' },
+  version: { sf: 'info.circle', md: 'info-outline' },
+  web: { sf: 'safari', md: 'public' },
+  copy: { sf: 'doc.on.doc', md: 'content-copy' },
+  camera: { sf: 'camera', md: 'photo-camera' },
+  lock: { sf: 'lock.fill', md: 'lock' },
+  show: { sf: 'eye', md: 'visibility' },
+  hide: { sf: 'eye.slash', md: 'visibility-off' },
+  up: { sf: 'arrow.up', md: 'arrow-upward' },
+  down: { sf: 'arrow.down', md: 'arrow-downward' },
+  calendar: { sf: 'calendar', md: 'calendar-month' },
+  list: { sf: 'list.bullet', md: 'view-list' },
+  people: { sf: 'person.2', md: 'group' },
+  restore: { sf: 'arrow.uturn.backward', md: 'restore' },
+} satisfies Record<string, IconPair>;

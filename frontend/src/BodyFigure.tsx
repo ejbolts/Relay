@@ -1,47 +1,21 @@
 import { useId, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent } from 'react';
+import { BODY_FIGURES, bodyFigurePath, type BodyFigureKind } from './bodyFigureShapes';
 import {
-  BODY_FIGURES,
-  bodyFigurePath,
-  type BodyFigureBand,
-  type BodyFigureKind,
-} from './bodyFigureShapes';
-import { LABEL_GAP, spreadLabels } from './bodyFigureLayout';
+  EDITOR_WIDTH,
+  FIGURE_HALF_WIDTH,
+  FIGURE_HEIGHT,
+  FIGURE_TOP,
+  LABEL_GAP,
+  LABEL_WIDTH,
+  LEADER_START,
+  bodyFigureCallouts,
+  bodyFigureLabelName,
+} from './bodyFigureLayout';
 import type { BodySizeField } from './bodySizes';
 
-/**
- * Where each measurement is labelled. The figure faces the viewer, so its right side is on the
- * left of the picture (`column: -1`); `mirror` flips a limb band onto that side.
- */
-const CALLOUTS: readonly {
-  field: BodySizeField;
-  name: string;
-  band: BodyFigureBand;
-  column: -1 | 1;
-  mirror?: boolean;
-}[] = [
-  { field: 'neck_cm', name: 'Neck', band: 'neck', column: -1 },
-  { field: 'right_arm_cm', name: 'Right arm', band: 'arm', column: -1, mirror: true },
-  { field: 'waist_cm', name: 'Waist', band: 'waist', column: -1 },
-  { field: 'hips_cm', name: 'Hips', band: 'hips', column: -1 },
-  { field: 'right_thigh_cm', name: 'Right thigh', band: 'thigh', column: -1, mirror: true },
-  { field: 'right_calf_cm', name: 'Right calf', band: 'calf', column: -1, mirror: true },
-  { field: 'shoulders_cm', name: 'Shoulders', band: 'shoulders', column: 1 },
-  { field: 'chest_cm', name: 'Chest', band: 'chest', column: 1 },
-  { field: 'left_arm_cm', name: 'Left arm', band: 'arm', column: 1 },
-  { field: 'wrist_cm', name: 'Wrist', band: 'wrist', column: 1 },
-  { field: 'left_thigh_cm', name: 'Left thigh', band: 'thigh', column: 1 },
-  { field: 'left_calf_cm', name: 'Left calf', band: 'calf', column: 1 },
-];
-
-const HALF_WIDTH = 350;
-// Room above the head for the bun.
-const TOP = -26;
-const HEIGHT = 852;
-const LEADER_START = 214;
-/** A label's tap area: from the edge of the picture to where its leader starts. */
-const LABEL_WIDTH = HALF_WIDTH - LEADER_START + 4;
-/** The number box typed into in place of a value; it may cover the start of the leader. */
-const EDITOR_WIDTH = 180;
+const HALF_WIDTH = FIGURE_HALF_WIDTH;
+const TOP = FIGURE_TOP;
+const HEIGHT = FIGURE_HEIGHT;
 
 /** Places an HTML element over the drawing, given in the figure's own units. */
 const overlay = (x: number, y: number, width: number): CSSProperties => ({
@@ -91,19 +65,7 @@ export function BodyFigure({
   const maskId = `body-figure-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
   const frame = { x: -HALF_WIDTH, y: TOP, width: HALF_WIDTH * 2, height: HEIGHT };
   const labels = useRef(new Map<BodySizeField, SVGGElement>());
-  const callouts = ([-1, 1] as const).flatMap((column) => {
-    const shown = CALLOUTS.filter(
-      (item) => item.column === column && (onPick || values[item.field]),
-    )
-      .map((item) => {
-        const [x1, x2, y] = shape.bands[item.band];
-        const [from, to] = item.mirror ? [-x2, -x1] : [x1, x2];
-        return { ...item, from, to, y };
-      })
-      .sort((a, b) => a.y - b.y);
-    const labelY = spreadLabels(shown.map((item) => item.y));
-    return shown.map((item, index) => ({ ...item, labelY: labelY[index] }));
-  });
+  const callouts = bodyFigureCallouts(kind, (field) => Boolean(onPick || values[field]));
   const active = callouts.find((item) => item.field === editing);
   return (
     <div className="body-figure-frame">
@@ -169,9 +131,7 @@ export function BodyFigure({
               {...(onPick && {
                 role: 'button',
                 tabIndex: 0,
-                'aria-label': value
-                  ? `${earlier ? 'Add' : 'Update'} ${item.name.toLowerCase()}, ${earlier ? 'last ' : ''}${value} ${unit}`
-                  : `Add ${item.name.toLowerCase()}`,
+                'aria-label': bodyFigureLabelName(item.name, value, earlier, unit),
                 onClick: () => onPick(item.field),
                 onKeyDown: (event: KeyboardEvent) => {
                   if (event.key !== 'Enter' && event.key !== ' ') return;

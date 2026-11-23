@@ -5,6 +5,23 @@ import { BodyFigure } from './BodyFigure';
 import { loadBodyFigure, saveBodyFigure } from './bodyFigurePreference';
 import type { BodyFigureKind } from './bodyFigureShapes';
 import { BODY_SIZE_FIELDS, type BodySizeField, type BodySizeLog } from './bodySizes';
+import {
+  bodyFigureValues,
+  bodySizeChangeText,
+  bodySizeChanges,
+  bodySizeDraft,
+  bodySizeEditText,
+  bodySizeHistory,
+  bodySizeLastValue,
+  bodySizeShown,
+  bodySizeSummary,
+  bodySizeUnit,
+  bodySizesPayload,
+  figureEntry,
+  formatBodySize,
+  withBodySizeLog,
+  type BodySizeDraft,
+} from './bodySizeEntries';
 import { Icon } from './Icon';
 import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
@@ -16,16 +33,6 @@ import { useWeightUnit } from './trainingPreferencesContext';
 import { useUserSession } from './userContext';
 import { localDate } from './utils';
 import './bodySizes.css';
-
-type Draft = Record<BodySizeField, string>;
-
-const emptyLog = (date: string) =>
-  ({
-    ...Object.fromEntries(BODY_SIZE_FIELDS.map(([key]) => [key, null])),
-    measurement_date: date,
-  }) as BodySizeLog;
-const newestFirst = (a: BodySizeLog, b: BodySizeLog) =>
-  b.measurement_date.localeCompare(a.measurement_date);
 
 const shortDate = (date: string) =>
   new Intl.DateTimeFormat(undefined, {
@@ -40,13 +47,13 @@ const dayAndMonth = (date: string) =>
 
 export function BodySizesCard({ dataRevision = null }: { dataRevision?: string | null }) {
   const weightUnit = useWeightUnit();
-  const unit = weightUnit === 'lb' ? 'in' : 'cm';
-  const factor = unit === 'in' ? 2.54 : 1;
-  const editText = (cm: number) => String(Number((cm / factor).toFixed(2)));
+  const size = bodySizeUnit(weightUnit);
+  const unit = size.unit;
+  const editText = (cm: number) => bodySizeEditText(cm, size);
   const [logs, setLogs] = useState<BodySizeLog[] | null>(null);
   const [editing, setEditing] = useState(false);
   const [date, setDate] = useState(localDate());
-  const [draft, setDraft] = useState<Draft>({} as Draft);
+  const [draft, setDraft] = useState<BodySizeDraft>({} as BodySizeDraft);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -107,12 +114,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
 
   function chooseDate(nextDate: string) {
     setDate(nextDate);
-    const row = logs?.find((item) => item.measurement_date === nextDate);
-    setDraft(
-      Object.fromEntries(
-        BODY_SIZE_FIELDS.map(([key]) => [key, row?.[key] == null ? '' : editText(row[key])]),
-      ) as Draft,
-    );
+    setDraft(bodySizeDraft(logs, nextDate, size));
     setError(null);
   }
 
@@ -128,27 +130,25 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
    */
   function saveOnFigure(field: BodySizeField, typed: string): boolean {
     const day = localDate();
-    const entry = logs?.find((row) => row.measurement_date === day) ?? emptyLog(day);
-    const text = typed.trim().replace(',', '.');
-    // What the box started with, so confirming it unchanged saves nothing.
-    const original = figureValues[field];
-    if (!text || (original != null && text === editText(original))) {
+    const result = figureEntry({
+      logs,
+      day,
+      field,
+      typed,
+      shownCm: figureValues[field],
+      size,
+    });
+    if (result.kind === 'unchanged') {
       setInlineField(null);
       setInlineError(null);
       return true;
     }
-    const value = Number(text) * factor;
-    if (!Number.isFinite(value) || value <= 0 || value > 300) {
-      const label = BODY_SIZE_FIELDS.find(([key]) => key === field)![1];
-      setInlineError(
-        `${label} must be above 0 and up to ${Number((300 / factor).toFixed(2))} ${unit}.`,
-      );
+    if (result.kind === 'invalid') {
+      setInlineError(result.error);
       return false;
     }
-    const next = { ...entry, [field]: value };
-    setLogs((items) =>
-      [next, ...(items ?? []).filter((row) => row.measurement_date !== day)].sort(newestFirst),
-    );
+    const next = result.entry;
+    setLogs((items) => withBodySizeLog(items, next));
     setShownDate(day);
     setInlineField(null);
     setInlineError(null);
@@ -163,34 +163,16 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   async function save() {
     // Starts from the stored entry, so a part no longer offered here (ankle) is kept.
     const stored = logs?.find((row) => row.measurement_date === date);
-    const payload = { ...stored, measurement_date: date } as BodySizeLog;
-    for (const [key, label] of BODY_SIZE_FIELDS) {
-      const text = draft[key]?.trim();
-      // Keep untouched measurements exact when displaying rounded inches.
-      const original = stored?.[key];
-      const unchanged = original != null && text === editText(original);
-      payload[key] = unchanged ? original : text ? Number(text) * factor : null;
-      if (
-        payload[key] !== null &&
-        (!Number.isFinite(payload[key]) || payload[key]! <= 0 || payload[key]! > 300)
-      ) {
-        setError(
-          `${label} must be above 0 and up to ${Number((300 / factor).toFixed(2))} ${unit}.`,
-        );
-        return;
-      }
-    }
-    if (!BODY_SIZE_FIELDS.some(([key]) => payload[key] !== null)) {
-      setError('Enter at least one body measurement.');
+    const checked = bodySizesPayload(stored, date, draft, size);
+    if (checked.error !== null) {
+      setError(checked.error);
       return;
     }
     setSaving(true);
     setError(null);
     try {
-      const saved = await queueSave(payload);
-      setLogs((items) =>
-        [saved, ...(items ?? []).filter((row) => row.measurement_date !== date)].sort(newestFirst),
-      );
+      const saved = await queueSave(checked.payload);
+      setLogs((items) => withBodySizeLog(items, saved));
       setShownDate(saved.measurement_date);
       setEditing(false);
     } catch (reason) {
@@ -234,43 +216,20 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
   const previous = logs?.[shownIndex + 1];
   // The figure shows the shown entry's values, and for parts it lacks, the latest earlier value,
   // muted, so it stays complete without copying old values into the entry.
-  const figureValues: Partial<Record<BodySizeField, number>> = {};
-  const carried = new Set<BodySizeField>();
-  for (const [key] of BODY_SIZE_FIELDS) {
-    if (shown?.[key] != null) figureValues[key] = shown[key]!;
-    else {
-      const earlier = logs?.slice(shownIndex + 1).find((row) => row[key] != null)?.[key];
-      if (earlier != null) {
-        figureValues[key] = earlier;
-        carried.add(key);
-      }
-    }
-  }
-  const history = (logs ?? []).filter((row) => historyPart === 'all' || row[historyPart] !== null);
+  const { values: figureValues, carried } = bodyFigureValues(logs, shownIndex);
+  const history = bodySizeHistory(logs, historyPart);
   const historyPages = Math.max(1, Math.ceil(history.length / HISTORY_PAGE_SIZE));
   const currentHistoryPage = Math.min(historyPage, historyPages);
   const firstRow = (currentHistoryPage - 1) * HISTORY_PAGE_SIZE;
   const partLabel = BODY_SIZE_FIELDS.find(([key]) => key === historyPart)?.[1];
-  const format = (cm: number) => `${Number((cm / factor).toFixed(1))} ${unit}`;
-  function changeFromPrevious(index: number): string {
-    if (historyPart === 'all' || !history[index + 1]) return 'First measurement';
-    const current = Number((history[index][historyPart]! / factor).toFixed(1));
-    const previous = Number((history[index + 1][historyPart]! / factor).toFixed(1));
-    const change = Number((current - previous).toFixed(1));
-    return change === 0 ? 'No change' : `${change > 0 ? '+' : '−'}${Math.abs(change)} ${unit}`;
-  }
-  const display = (cm: number) => Number((cm / factor).toFixed(1));
+  const format = (cm: number) => formatBodySize(cm, size);
+  const changeFromPrevious = (index: number) =>
+    bodySizeChangeText(history, index, historyPart, size);
+  const display = (cm: number) => bodySizeShown(cm, size);
   const shownDay = shown?.measurement_date ?? localDate();
-  const changes = BODY_SIZE_FIELDS.flatMap(([key, label]) => {
-    if (shown?.[key] == null || previous?.[key] == null) return [];
-    const change = Number((display(shown[key]) - display(previous[key])).toFixed(1));
-    return change === 0 ? [] : [{ key, label, change }];
-  });
+  const changes = bodySizeChanges(shown, previous, size);
   /** The most recent measurement of a part before the dialog's date, as a hint to type over. */
-  const lastValue = (key: BodySizeField) => {
-    const cm = logs?.find((row) => row.measurement_date < date && row[key] != null)?.[key];
-    return cm == null ? undefined : String(display(cm));
-  };
+  const lastValue = (key: BodySizeField) => bodySizeLastValue(logs, date, key, size);
   const open = (day: string, field: BodySizeField | null = null) => {
     chooseDate(day);
     setFocusField(field);
@@ -506,11 +465,7 @@ export function BodySizesCard({ dataRevision = null }: { dataRevision?: string |
                         </span>
                       </div>
                     ) : (
-                      <p>
-                        {BODY_SIZE_FIELDS.filter(([key]) => row[key] !== null)
-                          .map(([key, label]) => `${label} ${format(row[key]!)}`)
-                          .join(' · ')}
-                      </p>
+                      <p>{bodySizeSummary(row, size)}</p>
                     )}
                   </article>
                 ))}

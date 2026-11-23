@@ -45,9 +45,11 @@ export function ExercisePicker({
   /** Exercises already in the workout. */
   addedIds: Set<string>;
   /** The workout's type, which a new exercise created from a search starts in. */
-  category: WorkoutCategory;
+  category?: WorkoutCategory;
   onAdd: (selected: Exercise[]) => void;
-  onCreate: (input: ExerciseCreateInput) => Promise<Exercise>;
+  /** Creates an exercise that isn't in the list. Without it (as in the split editor, like the
+   * web's routine editor) the picker only chooses existing exercises. */
+  onCreate?: (input: ExerciseCreateInput) => Promise<Exercise>;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
@@ -159,14 +161,16 @@ export function ExercisePicker({
             returnKeyType="search"
             style={[type.body, { flex: 1, color: colors.text, paddingVertical: 10 }]}
           />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Create new exercise"
-            hitSlop={8}
-            onPress={() => setCreating({ name: query.trim(), category: '' })}
-          >
-            <Icon name="plus" size={18} color={colors.accentText} />
-          </Pressable>
+          {onCreate && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Create new exercise"
+              hitSlop={8}
+              onPress={() => setCreating({ name: query.trim(), category: '' })}
+            >
+              <Icon name="plus" size={18} color={colors.accentText} />
+            </Pressable>
+          )}
         </View>
         <FlatList
           data={shown}
@@ -181,6 +185,7 @@ export function ExercisePicker({
             </Text>
           }
           ListFooterComponent={
+            onCreate &&
             query.trim() &&
             !available.some(
               (exercise) =>
@@ -190,7 +195,10 @@ export function ExercisePicker({
                 accessibilityRole="button"
                 accessibilityLabel={`Create ${exerciseNameFromSearch(query.trim())}`}
                 onPress={() =>
-                  setCreating({ name: exerciseNameFromSearch(query.trim()), category })
+                  setCreating({
+                    name: exerciseNameFromSearch(query.trim()),
+                    category: category ?? '',
+                  })
                 }
                 style={({ pressed }) => [styles.create, pressed && { opacity: 0.7 }]}
               >
@@ -251,25 +259,27 @@ export function ExercisePicker({
           }}
         />
       </View>
-      <CreateExerciseSheet
-        visible={!!creating}
-        exercises={exercises}
-        initialName={creating?.name ?? ''}
-        initialCategory={creating?.category ?? ''}
-        onCreate={onCreate}
-        onUseExisting={(exercise) => {
-          setCreating(null);
-          setQuery('');
-          if (swap) {
-            onAdd([exercise]);
-            close();
-          } else if (!addedIds.has(exercise.id))
-            setSelected((current) =>
-              current.some((item) => item.id === exercise.id) ? current : [...current, exercise],
-            );
-        }}
-        onClose={() => setCreating(null)}
-      />
+      {onCreate && (
+        <CreateExerciseSheet
+          visible={!!creating}
+          exercises={exercises}
+          initialName={creating?.name ?? ''}
+          initialCategory={creating?.category ?? ''}
+          onCreate={onCreate}
+          onUseExisting={(exercise) => {
+            setCreating(null);
+            setQuery('');
+            if (swap) {
+              onAdd([exercise]);
+              close();
+            } else if (!addedIds.has(exercise.id))
+              setSelected((current) =>
+                current.some((item) => item.id === exercise.id) ? current : [...current, exercise],
+              );
+          }}
+          onClose={() => setCreating(null)}
+        />
+      )}
     </Modal>
   );
 }

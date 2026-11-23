@@ -190,3 +190,9 @@ export function parseReleaseHistory(value: unknown, currentVersion: string): Rel
   }
   return releases as Release[];
 }
+
+/** A change bullet's leading bold title (`**Title:** text`), the only formatting notes support. */
+export function releaseChangeParts(text: string): { title: string | null; text: string } {
+  const titled = text.match(/^\*\*([^*\n]+)\*\*\s+(.+)$/);
+  return titled ? { title: titled[1], text: titled[2] } : { title: null, text };
+}

@@ -31,6 +31,8 @@ interface Session {
   signIn: (username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   retry: () => void;
+  /** The server's newer copy of the signed-in account, such as after a profile edit. */
+  updateUser: (user: User) => void;
 }
 
 const SessionContext = createContext<Session | null>(null);
@@ -168,10 +170,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setStatus({ kind: 'loading' });
     setAttempt((value) => value + 1);
   }, []);
+  const updateUser = useCallback((user: User) => {
+    if (!signedIn.current) return;
+    rememberUser(user);
+    setStatus({ kind: 'signed-in', user });
+  }, []);
 
   const value = useMemo(
-    () => ({ status, signIn, signOut, retry }),
-    [status, signIn, signOut, retry],
+    () => ({ status, signIn, signOut, retry, updateUser }),
+    [status, signIn, signOut, retry, updateUser],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }
