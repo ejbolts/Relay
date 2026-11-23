@@ -1,7 +1,7 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
-import { Alert, Platform, ScrollView } from 'react-native';
+import { Alert, Keyboard, Platform, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { TrainingPreferences, User, WorkoutType } from '../../../../frontend/src/types';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
@@ -132,13 +132,14 @@ beforeEach(() => {
 let client: QueryClient;
 afterEach(() => client.clear());
 
-async function show(element: ReactElement) {
+async function show(element: ReactElement, prepare?: (client: QueryClient) => void) {
   client = new QueryClient({
     defaultOptions: {
       queries: { retry: false, gcTime: Infinity },
       mutations: { gcTime: Infinity },
     },
   });
+  prepare?.(client);
   await render(
     <SafeAreaProvider
       initialMetrics={{
@@ -180,8 +181,11 @@ describe('Settings', () => {
     await show(<SettingsScreen />);
     const search = await screen.findByLabelText('Search settings and profile');
     await fireEvent.changeText(search, 'theme');
+    const dismiss = jest.spyOn(Keyboard, 'dismiss');
     await fireEvent.press(screen.getByRole('button', { name: 'App theme, Appearance' }));
     expect(mockRouter.push).toHaveBeenLastCalledWith('/settings/appearance');
+    expect(dismiss).toHaveBeenCalledTimes(1);
+    dismiss.mockRestore();
     expect(search).toHaveDisplayValue('');
 
     await fireEvent.changeText(search, 'pasword');
@@ -217,6 +221,21 @@ describe('Settings', () => {
     // Places the app doesn't have stay out of its results.
     await fireEvent.changeText(search, 'youtube');
     expect(screen.getByText('No sections found. Try “timer” or “username”.')).toBeVisible();
+  });
+
+  it('shows the split row as offline, not blank, while the split waits for the network', async () => {
+    onlineManager.setOnline(false);
+    try {
+      // Preferences are cached; the split has never loaded.
+      await show(<SettingsScreen />, (c) =>
+        c.setQueryData(queryKeys.trainingPreferences, preferences),
+      );
+      expect(await screen.findByRole('button', { name: 'Your split, Offline' })).toBeVisible();
+      await act(async () => onlineManager.setOnline(true));
+      expect(await screen.findByRole('button', { name: /^Your split, (?!Offline)/ })).toBeVisible();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it('scrolls a found section clear of the header, which iOS draws the page under', () => {

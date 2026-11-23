@@ -7,6 +7,7 @@ import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } 
 import {
   Alert,
   AppState,
+  Keyboard,
   Linking,
   Pressable,
   StyleSheet,
@@ -30,6 +31,7 @@ import { VISIBILITY_LABELS } from '../../../../frontend/src/sharedProfileDisplay
 import type { TrainingPreferences } from '../../../../frontend/src/types';
 import { formatSeconds } from '../../../../frontend/src/utils';
 import { apiOrigin, ApiError } from '../../data/api';
+import { waitingForNetwork } from '../../data/offline';
 import { useTrainingPreferences, useWorkoutTypes } from '../../data/queries';
 import { useSession, useUser } from '../../session/SessionProvider';
 import { cardSurface, errorMessage, ErrorState, Loading } from '../../ui/components';
@@ -129,6 +131,8 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
   const [jump, setJump] = useState<SettingsAnchor | null>(null);
 
   function choose(target: SearchTarget) {
+    // The keyboard would otherwise cover the section the result scrolls to.
+    Keyboard.dismiss();
     setQuery('');
     if ('route' in target) router.push(target.route);
     else setJump(target.section);
@@ -158,7 +162,7 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
               <Row
                 label="Your split"
                 icon={settingsIcons.split}
-                value={split.isPending ? null : splitName}
+                value={waitingForNetwork(split) ? 'Offline' : split.isPending ? null : splitName}
                 onPress={() => router.push('/split')}
               />
               <ChoiceRow
