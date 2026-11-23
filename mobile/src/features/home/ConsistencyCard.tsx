@@ -288,11 +288,11 @@ const CalendarDay = memo(function CalendarDay({
   types: WorkoutType[];
   categoryColors: WorkoutTypeColors;
   hidden: ReadonlySet<string>;
-  splitDays: ReadonlyMap<string, string>;
+  splitDays: ReadonlyMap<string, readonly string[]>;
   colors: Palette;
   onPress: (date: string) => void;
 }) {
-  const { dayTypes, ring, filteredOut, scheduledColor, scheduledNote } = calendarDayLook({
+  const { dayTypes, ring, filteredOut, scheduledRing, scheduledNote } = calendarDayLook({
     date,
     today,
     entry,
@@ -332,8 +332,8 @@ const CalendarDay = memo(function CalendarDay({
         {!live &&
           (ring.length || filteredOut ? (
             <DayRing colors={filteredOut ? [colors.deemph] : ring} radius={10} />
-          ) : scheduledColor ? (
-            <DayRing colors={[scheduledColor]} radius={10} opacity={future ? 1 : 0.32} />
+          ) : scheduledRing.length ? (
+            <DayRing colors={scheduledRing} radius={10} opacity={future ? 1 : 0.32} />
           ) : null)}
         <Text
           style={[

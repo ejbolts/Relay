@@ -41,8 +41,9 @@ describe('calendar day look', () => {
 
   it("outlines an empty day faintly for the split's planned or missed workout", () => {
     const splitDays = new Map([
-      ['2026-11-21', 'lower'],
-      ['2026-11-24', 'upper'],
+      ['2026-11-21', ['lower']],
+      ['2026-11-24', ['upper']],
+      ['2026-11-25', ['upper', 'cardio']],
     ]);
     const missed = calendarDayLook({
       date: '2026-11-21',
@@ -52,7 +53,10 @@ describe('calendar day look', () => {
       categoryColors: colors,
       splitDays,
     });
-    expect(missed).toMatchObject({ scheduledColor: '#f59e0b', scheduledNote: 'Lower body missed' });
+    expect(missed).toMatchObject({
+      scheduledRing: ['#f59e0b'],
+      scheduledNote: 'Lower body missed',
+    });
     const planned = calendarDayLook({
       date: '2026-11-24',
       today: '2026-11-22',
@@ -62,6 +66,22 @@ describe('calendar day look', () => {
       splitDays,
     });
     expect(planned.scheduledNote).toBe('Upper body planned');
+    // A mixed day plans each of its types, split around the outline; hidden types drop out.
+    const mixed = (hiddenCategories?: Set<string>) =>
+      calendarDayLook({
+        date: '2026-11-25',
+        today: '2026-11-22',
+        entry: undefined,
+        types,
+        categoryColors: colors,
+        hiddenCategories,
+        splitDays,
+      });
+    expect(mixed()).toMatchObject({
+      scheduledRing: ['#8b5cf6', colors.cardio],
+      scheduledNote: 'Upper body + Cardio planned',
+    });
+    expect(mixed(new Set(['cardio'])).scheduledRing).toEqual(['#8b5cf6']);
     // A logged day or the live workout's day shows no plan.
     expect(
       calendarDayLook({
@@ -72,7 +92,7 @@ describe('calendar day look', () => {
         types,
         splitDays,
       }).scheduled,
-    ).toBeUndefined();
+    ).toEqual([]);
   });
 
   it('names at most two types on a week strip tile, counting the rest', () => {

@@ -8,6 +8,7 @@ import type {
   User,
   WorkoutType,
 } from '../../../../frontend/src/types';
+import { withExplicitDayTypes } from '../../../../frontend/src/trainingSplit';
 import { localDate } from '../../../../frontend/src/utils';
 import { apiGet, apiSend } from '../../data/api';
 import { queryKeys } from '../../data/queries';
@@ -185,11 +186,12 @@ export function saveRoutine(routine: Routine, schedule?: Schedule) {
     return apiSend<Routine>('/api/routines', 'POST', {
       name: routine.name,
       shared: routine.shared,
-      days: routine.days,
+      days: withExplicitDayTypes(routine.days),
       ...scheduled,
     });
   return apiSend<Routine>(`/api/routines/${encodeURIComponent(routine.id)}`, 'PUT', {
     ...routine,
+    days: withExplicitDayTypes(routine.days),
     ...scheduled,
   });
 }
@@ -209,4 +211,7 @@ export const startRoutine = (id: string, startDate: string) =>
   );
 
 export const saveTrainingSplit = (split: TrainingSplit) =>
-  apiSend<TrainingSplit>(`/api/training-split?on_date=${localDate()}`, 'PUT', split);
+  apiSend<TrainingSplit>(`/api/training-split?on_date=${localDate()}`, 'PUT', {
+    ...split,
+    steps: withExplicitDayTypes(split.steps),
+  });

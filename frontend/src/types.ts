@@ -374,9 +374,20 @@ export interface WorkoutRecommendation {
   routine_day?: RoutineDay | null;
   /** On a split's rest day: the next training day, which starting a workout then trains. */
   next_training_day?: WorkoutRecommendation | null;
+  /** A mixed split day's other workout types; the workout starts as `workout_type`. */
+  extra_workout_types?: WorkoutType[];
 }
 
 export type SplitProgression = 'calendar' | 'workouts';
+
+/**
+ * A day of a split: its workout type, or null for rest. A mixed day plans more types, such as
+ * Upper body + Cardio; servers before mixed days omit `extra_workout_type_ids`.
+ */
+export interface SplitStep {
+  workout_type_id: string | null;
+  extra_workout_type_ids?: string[];
+}
 
 export interface TrainingSplit {
   name: string;
@@ -384,14 +395,14 @@ export interface TrainingSplit {
   start_date: string;
   /** Splits follow logged workouts unless set to calendar, which pins each day to a date. */
   progression?: SplitProgression;
-  steps: { workout_type_id: string | null }[];
+  steps: SplitStep[];
   routine_id?: string | null;
   /** Where a workout-following split stands, from the server's replay of logged workouts. */
   next_step?: number | null;
   rest_saved?: boolean;
   next_date?: string | null;
   /** Past days whose planned workout was not done, from the server's replay (last year only). */
-  missed_days?: { workout_date: string; workout_type_id: string }[];
+  missed_days?: { workout_date: string; workout_type_id: string; workout_type_ids?: string[] }[];
   /** The latest skip: from this date the split stands at this step. */
   shift?: SplitShift | null;
 }
@@ -420,6 +431,10 @@ export interface RepRange {
 export interface RoutineDay {
   workout_type_id: string | null;
   workout_type: WorkoutType | null;
+  /** A mixed day's other workout types, in order; absent from servers before mixed days. */
+  extra_workout_type_ids?: string[];
+  /** Those types resolved by the server, for a friend's split whose types you don't have. */
+  extra_workout_types?: WorkoutType[];
   movements: {
     exercise_id: string;
     exercise: Exercise;

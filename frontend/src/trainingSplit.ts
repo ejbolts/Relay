@@ -1,11 +1,31 @@
-import type { TrainingSplit } from './types';
+import type { SplitStep, TrainingSplit } from './types';
 import { addDays, parseLocalDate } from './trainingSummary';
 
 export const MAX_SPLIT_DAYS = 28;
+/** Workout types a mixed day can add to its main one, as the server allows. */
+export const MAX_EXTRA_DAY_TYPES = 3;
+
+/** Every workout type a split day plans, its main type first; empty on a rest day. */
+export function splitDayTypeIds(step: SplitStep | undefined): string[] {
+  return step?.workout_type_id
+    ? [step.workout_type_id, ...(step.extra_workout_type_ids ?? [])]
+    : [];
+}
+
+/**
+ * Days with `extra_workout_type_ids` always set, for saving: the server keeps a day's stored extra
+ * types when the field is missing (an app from before mixed days), so a plain day must say so.
+ */
+export function withExplicitDayTypes<T extends SplitStep>(days: T[]): T[] {
+  return days.map((day) => ({
+    ...day,
+    extra_workout_type_ids: day.workout_type_id ? (day.extra_workout_type_ids ?? []) : [],
+  }));
+}
 
 /** Preserve A/B suffixes in narrow cells while the full name stays accessible. */
 export function splitPreviewLabel(name: string): string {
-  return name.replace(/^(upper|lower|full) body\b/i, '$1');
+  return name.replace(/\b(upper|lower|full) body\b/gi, '$1');
 }
 export const SPLIT_TEMPLATES = [
   { id: 'upper-lower', name: 'Upper / Lower', types: ['upper', 'lower', null] },
@@ -62,11 +82,20 @@ export function followsWorkouts(split: TrainingSplit): boolean {
   return split.progression !== 'calendar';
 }
 
-/** A day of the split ahead: its step (the routine day it follows) and workout type, if any. */
+/**
+ * A day of the split ahead: its step (the routine day it follows) and main workout type: null
+ * on a rest day, undefined before the split starts. `typeIds` lists every type a mixed day plans.
+ */
 export interface SplitPreviewDay {
   date: string;
   step?: number;
   typeId: string | null | undefined;
+  typeIds: string[];
+}
+
+function previewDay(split: TrainingSplit, date: string, step: number): SplitPreviewDay {
+  const item = split.steps[step];
+  return { date, step, typeId: item.workout_type_id, typeIds: splitDayTypeIds(item) };
 }
 
 export function splitPreview(split: TrainingSplit, from: string, count = 7): SplitPreviewDay[] {
@@ -75,8 +104,8 @@ export function splitPreview(split: TrainingSplit, from: string, count = 7): Spl
     const date = addDays(from, offset);
     const index = splitStepOnDate(split, date);
     return index === null
-      ? { date, typeId: undefined }
-      : { date, step: index, typeId: split.steps[index].workout_type_id };
+      ? { date, typeId: undefined, typeIds: [] }
+      : previewDay(split, date, index);
   });
 }
 
@@ -96,33 +125,38 @@ function followedSplitPreview(
   let started = false;
   return Array.from({ length: count }, (_, offset) => {
     const date = addDays(from, offset);
-    if (!size || date < first) return { date, typeId: undefined };
+    if (!size || date < first) return { date, typeId: undefined, typeIds: [] };
     if (started) index = (index + 1) % size;
     started = true;
     if (saved && split.steps[index].workout_type_id === null) {
       saved = false;
       index = (index + 1) % size;
     }
-    return { date, step: index, typeId: split.steps[index].workout_type_id };
+    return previewDay(split, date, index);
   });
 }
 
 /**
- * The workout type a split puts on calendar days: the past days it marks missed, then today and
- * the `daysAhead` after it as if each is done as planned. Rest days are left out.
+ * The workout types a split puts on calendar days, several on a mixed day: the past days it marks
+ * missed, then today and the `daysAhead` after it as if each is done as planned. Rest days are
+ * left out.
  */
 export function splitCalendarDays(
   split: TrainingSplit | null | undefined,
   today: string,
   daysAhead: number,
-): Map<string, string> {
-  const days = new Map<string, string>();
+): Map<string, string[]> {
+  const days = new Map<string, string[]>();
   if (!split?.enabled) return days;
   for (const day of split.missed_days ?? []) {
-    if (day.workout_date < today) days.set(day.workout_date, day.workout_type_id);
+    if (day.workout_date < today)
+      days.set(
+        day.workout_date,
+        day.workout_type_ids?.length ? day.workout_type_ids : [day.workout_type_id],
+      );
   }
-  for (const { date, typeId } of splitPreview(split, today, daysAhead + 1)) {
-    if (typeId) days.set(date, typeId);
+  for (const { date, typeIds } of splitPreview(split, today, daysAhead + 1)) {
+    if (typeIds.length) days.set(date, typeIds);
   }
   return days;
 }

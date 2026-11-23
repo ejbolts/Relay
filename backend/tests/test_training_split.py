@@ -431,8 +431,8 @@ def test_a_followed_split_misses_only_the_days_off_beyond_its_saved_rest(client)
     assert client.get("/api/training-split", params={"on_date": "2026-10-31"}).json()[
         "missed_days"
     ] == [
-        {"workout_date": "2026-10-28", "workout_type_id": "lower"},
-        {"workout_date": "2026-10-29", "workout_type_id": "lower"},
+        {"workout_date": "2026-10-28", "workout_type_id": "lower", "workout_type_ids": ["lower"]},
+        {"workout_date": "2026-10-29", "workout_type_id": "lower", "workout_type_ids": ["lower"]},
     ]
 
 

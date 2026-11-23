@@ -1,4 +1,4 @@
-import { currentSplitStep, nextTrainingStep } from './trainingSplit';
+import { currentSplitStep, nextTrainingStep, splitDayTypeIds } from './trainingSplit';
 import type { TrainingSplit, WorkoutRecommendation, WorkoutType } from './types';
 
 // Plain functions with no React or browser APIs: Home's Skip on the web and in the native app
@@ -32,11 +32,11 @@ export function splitSkipMove(
   return to === from ? null : { split, from, to };
 }
 
-/** A split step's workout type name, or "rest day". */
+/** A split step's workout type names ("Upper body + Cardio" on a mixed day), or "rest day". */
 export function splitDayName(split: TrainingSplit, step: number, types: WorkoutType[]) {
-  const typeId = split.steps[step]?.workout_type_id;
-  if (!typeId) return 'rest day';
-  return types.find((type) => type.id === typeId)?.name ?? 'workout';
+  const typeIds = splitDayTypeIds(split.steps[step]);
+  if (!typeIds.length) return 'rest day';
+  return typeIds.map((id) => types.find((type) => type.id === id)?.name ?? 'workout').join(' + ');
 }
 
 /** The confirmation after a skip, such as "Skipped Upper body · Lower body is up next". */

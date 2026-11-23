@@ -21,3 +21,14 @@ export function dayRing(colors: string[]): string {
   );
   return `conic-gradient(from -45deg, ${arcs.join(', ')})`;
 }
+
+/**
+ * A mixed day's colours as equal hard-edged stripes along `direction`, for bars and swatches; a
+ * single colour stays flat.
+ */
+export function dayStripes(colors: string[], direction = 'to bottom'): string {
+  if (colors.length <= 1) return colors[0] ?? '';
+  const step = 100 / colors.length;
+  const stops = colors.map((color, index) => `${color} ${index * step}% ${(index + 1) * step}%`);
+  return `linear-gradient(${direction}, ${stops.join(', ')})`;
+}

@@ -1,23 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import {
   atPlannedMinimum,
+  canAddSplitDayType,
   canPlanMore,
   hasSplitTemplate,
   legacySplitRoutine,
   moveSplitDay,
   newRoutineMovement,
+  nextSplitDayType,
   planFewer,
   planMore,
   routineFromTemplate,
   routineSaveError,
+  scheduledSplit,
   shareSplitError,
   splitDayContribution,
+  splitDayExtraChoices,
+  splitDayName,
   splitDaySummary,
   splitDayTotal,
+  splitDayTypes,
   splitPreviewDayLabel,
   splitsActiveFirst,
   splitTypeNameError,
   swapPlannedExercise,
+  withSplitDayExtraType,
   withSplitDayType,
   withSplitProgress,
 } from './splitEditing';
@@ -204,5 +211,74 @@ describe('weekly volume rows', () => {
     expect(volume.cardio).toMatchObject({ key: CARDIO_ROW, value: 105, goal: 60, status: 'met' });
     expect(volume).toMatchObject({ cycleDays: 2, goals: 2, met: 2 });
     expect(splitVolumeRows([day(null)], 10, undefined, null).cardio).toBeNull();
+  });
+});
+
+describe('mixed split days', () => {
+  const types = DEFAULT_WORKOUT_TYPES;
+  const mixed = (...extras: string[]): RoutineDay => ({
+    ...day('upper'),
+    extra_workout_type_ids: extras,
+  });
+
+  it('names and colours every type of a mixed day', () => {
+    expect(splitDayName(mixed('cardio'), types)).toBe('Upper body + Cardio');
+    expect(splitDayName(mixed('gone'), types)).toBe('Upper body + Removed type');
+    expect(splitDayName(day(null), types)).toBe('Rest');
+    expect(splitDayTypes(mixed('cardio', 'gone'), types).map((item) => item.id)).toEqual([
+      'upper',
+      'cardio',
+    ]);
+    // A friend's type you don't have comes resolved from the server.
+    const friend = { ...type('cardio'), id: 'friend-mobility', name: 'Mobility', is_custom: true };
+    expect(
+      splitDayName({ ...mixed('friend-mobility'), extra_workout_types: [friend] }, types),
+    ).toBe('Upper body + Mobility');
+    expect(splitPreviewDayLabel(types, 'upper', ['upper', 'cardio'])).toBe('Upper body + Cardio');
+  });
+
+  it('adds, changes and removes extra types without repeating one', () => {
+    const start = day('upper');
+    expect(canAddSplitDayType(start, types)).toBe(true);
+    expect(canAddSplitDayType(day(null), types)).toBe(false);
+    const added = withSplitDayExtraType(start, 0, nextSplitDayType(start, types));
+    expect(added.extra_workout_type_ids).toEqual(['lower']);
+    const changed = withSplitDayExtraType(added, 0, type('cardio'));
+    expect(changed.extra_workout_type_ids).toEqual(['cardio']);
+    expect(splitDayExtraChoices(changed, 0, types).map((item) => item.id)).not.toContain('upper');
+    expect(splitDayExtraChoices(changed, 0, types).map((item) => item.id)).toContain('cardio');
+    expect(withSplitDayExtraType(changed, 0, null).extra_workout_type_ids).toEqual([]);
+    const full = mixed('lower', 'push', 'cardio');
+    expect(canAddSplitDayType(full, types)).toBe(false);
+    // A main type the day already has as an extra moves up; Rest clears the extras.
+    expect(withSplitDayType(mixed('cardio'), type('cardio')).extra_workout_type_ids).toEqual([]);
+    expect(withSplitDayType(mixed('cardio'), null).extra_workout_type_ids).toEqual([]);
+  });
+
+  it('keeps extras in saved and legacy splits, and refuses removed ones', () => {
+    const saved = routine({ days: [mixed('cardio'), day(null)] });
+    expect(
+      scheduledSplit(saved, { start_date: '2026-11-01', enabled: true, progression: 'workouts' })
+        .steps[0],
+    ).toEqual({ workout_type_id: 'upper', extra_workout_type_ids: ['cardio'] });
+    const legacy = legacySplitRoutine(
+      {
+        name: 'Old',
+        enabled: true,
+        start_date: '2026-11-01',
+        steps: [{ workout_type_id: 'upper', extra_workout_type_ids: ['cardio'] }],
+      },
+      types,
+    );
+    expect(legacy?.days[0].extra_workout_type_ids).toEqual(['cardio']);
+    expect(routineSaveError(routine({ days: [mixed('gone')] }), types)).toBe(
+      'Choose an active workout type for every workout day.',
+    );
+    expect(
+      hasSplitTemplate(
+        [routine({ days: [mixed('cardio'), day('lower'), day(null)] })],
+        SPLIT_TEMPLATES[0],
+      ),
+    ).toBe(false);
   });
 });

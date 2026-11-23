@@ -41,7 +41,8 @@ const CALENDAR_LOAD_OLDER_SCREENS = 1.5;
 
 type CalendarPreview = {
   from: string;
-  days: Array<{ date: string; label: string; color?: string }>;
+  /** Each planned day's label and the colours of its workout types, several on a mixed day. */
+  days: Array<{ date: string; label: string; colors?: string[] }>;
 };
 const EMPTY_ENTRIES: DashboardData['heatmap'] = [];
 
@@ -59,7 +60,7 @@ type WorkoutCalendarProps = {
   /** Called with the `YYYY-MM` months on screen whenever they change, for the legend. */
   onVisibleMonthsChange?: (months: string[]) => void;
   /** The workout type a split plans on a date: days ahead, and past days it was missed. */
-  splitDays?: ReadonlyMap<string, string>;
+  splitDays?: ReadonlyMap<string, readonly string[]>;
 } & (
   | {
       preview: CalendarPreview;
@@ -276,7 +277,7 @@ export function WorkoutCalendar({
                       const inProgress = key === activeWorkoutDate;
                       // The border takes the colours of the types still switched on in the
                       // legend; a day with nothing logged keeps a faint outline for the split's.
-                      const { dayTypes, ring, filteredOut, scheduledColor, scheduledNote } =
+                      const { dayTypes, ring, filteredOut, scheduledRing, scheduledNote } =
                         calendarDayLook({
                           date: key,
                           today: todayKey,
@@ -288,14 +289,14 @@ export function WorkoutCalendar({
                           splitDays: previewMode ? undefined : splitDays,
                         });
                       const dayRingStyle =
-                        ring.length && !inProgress ? dayRing(ring) : scheduledColor;
+                        ring.length && !inProgress ? dayRing(ring) : dayRing(scheduledRing);
                       // Today's outer ring and ripple repeat the day's workout colours, split into
                       // the same arcs as its outline on a mixed day.
                       const todayRing = key === todayKey && ring.length > 0 && !inProgress;
                       return (
                         <button
                           type="button"
-                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${scheduledColor ? 'scheduled' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${!previewMode && key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
+                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${scheduledRing.length ? 'scheduled' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${!previewMode && key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
                           key={key}
                           data-date={key}
                           style={
@@ -338,7 +339,9 @@ export function WorkoutCalendar({
                           <span className="calendar-day-number">{day.getDate()}</span>
                           <span className="calendar-day-dots" aria-hidden="true">
                             {planned ? (
-                              planned.color && <i style={{ backgroundColor: planned.color }} />
+                              planned.colors?.map((color, dotIndex) => (
+                                <i key={dotIndex} style={{ backgroundColor: color }} />
+                              ))
                             ) : inProgress ? (
                               <i className="calendar-live-dot" />
                             ) : (
