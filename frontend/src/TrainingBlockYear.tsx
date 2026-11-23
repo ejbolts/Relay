@@ -9,13 +9,7 @@ import {
 } from './blockColors';
 import { Icon } from './Icon';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
-import {
-  blockDay,
-  blockOn,
-  blockProgress,
-  blockRange,
-  daysLeftLabel,
-} from './trainingBlocks';
+import { blockDay, blockOn, blockProgress, blockRange, daysLeftLabel } from './trainingBlocks';
 import {
   blockYearSegments,
   blocksInYear,
@@ -63,7 +57,6 @@ function useScrollerWidth(ref: React.RefObject<HTMLDivElement | null>) {
   // jsdom and the first frame have no layout; a phone-sized width keeps the maths usable.
   return width || 320;
 }
-
 
 /**
  * Every block on one continuous timeline. Swipe to scroll through the years, and pinch (or
