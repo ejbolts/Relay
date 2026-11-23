@@ -1,5 +1,4 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState, type ComponentRef, type Ref } from 'react';
 import {
   ActivityIndicator,
@@ -25,8 +24,11 @@ import type {
   WorkoutReactionKind,
   WorkoutReactions,
 } from '../../../../frontend/src/types';
-import { errorMessage } from '../../ui/components';
+import { Button, errorMessage } from '../../ui/components';
+import { ContextMenu } from '../../ui/ContextMenu';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
+import type { MenuItem } from '../../ui/MenuButton';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 import { Avatar } from './Avatar';
@@ -68,7 +70,7 @@ export function useCommentThread(workoutId: string, reactions: WorkoutReactions 
         ? socialApi.editComment(editing.id, body)
         : socialApi.addComment(workoutId, body, reply?.id ?? null),
     onSuccess: async () => {
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       setBody('');
       setReply(null);
       setEditing(null);
@@ -154,7 +156,7 @@ export function CommentList({
       onTogglePicker={() => setPicker(picker === item.id ? null : item.id)}
       onOpenPerson={onOpenPerson}
       onReact={(kind) => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        haptics.tap();
         setPicker(null);
         thread.reactTo.mutate({ comment: item, kind });
       }}
@@ -183,15 +185,13 @@ export function CommentList({
         </View>
       ))}
       {query.hasNextPage && (
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          label={query.isFetchingNextPage ? 'Loading…' : 'Show more comments'}
+          variant="secondary"
+          size="small"
+          loading={query.isFetchingNextPage}
           onPress={() => void query.fetchNextPage()}
-          style={styles.more}
-        >
-          <Text style={[type.callout, { color: colors.accentText, fontWeight: '600' }]}>
-            {query.isFetchingNextPage ? 'Loading…' : 'Show more comments'}
-          </Text>
-        </Pressable>
+        />
       )}
     </View>
   );
@@ -223,8 +223,23 @@ function CommentRow({
   onDelete: () => void;
 }) {
   const { colors, type, radius } = useTheme();
+  const menuItems: MenuItem[] = [
+    { label: 'React', onPress: onTogglePicker },
+    { label: 'Reply', onPress: onReply },
+    ...(item.can_edit ? [{ label: 'Edit', onPress: onEdit }] : []),
+    ...(item.can_delete ? [{ label: 'Delete', destructive: true, onPress: onDelete }] : []),
+  ];
   const link = (label: string, onPress: () => void, danger = false) => (
-    <Pressable accessibilityRole="button" hitSlop={6} disabled={busy} onPress={onPress}>
+    <Pressable
+      accessibilityRole="button"
+      hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
+      disabled={busy}
+      onPress={() => {
+        haptics.tap();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.actionLink, pressed && { opacity: 0.6 }]}
+    >
       <Text
         style={[
           type.footnote,
@@ -240,40 +255,47 @@ function CommentRow({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open ${item.author.display_name}'s profile`}
+        hitSlop={6}
         onPress={() => onOpenPerson(item.author)}
       >
         <Avatar person={item.author} size={32} />
       </Pressable>
-      <View style={{ flex: 1, gap: 6 }}>
-        <View
-          style={[
-            styles.bubble,
-            { backgroundColor: colors.surface2, borderRadius: radius.lg },
-            highlighted && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-          ]}
+      <View style={{ flex: 1, gap: 4 }}>
+        <ContextMenu
+          items={menuItems}
+          title={item.author.display_name}
+          accessibilityLabel={`Comment by ${item.author.display_name}`}
         >
-          <Text style={[type.footnote, { color: colors.text }]}>
-            <Text style={{ fontWeight: '700' }} onPress={() => onOpenPerson(item.author)}>
-              {item.author.display_name}
+          <View
+            style={[
+              styles.bubble,
+              { backgroundColor: colors.surface2, borderRadius: radius.lg },
+              highlighted && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+            ]}
+          >
+            <Text style={[type.footnote, { color: colors.text }]}>
+              <Text style={{ fontWeight: '700' }} onPress={() => onOpenPerson(item.author)}>
+                {item.author.display_name}
+              </Text>
+              {item.reaction ? (
+                <Text style={{ color: colors.secondary }}>
+                  {` reacted ${reactionEmoji(item.reaction)}`}
+                </Text>
+              ) : null}
             </Text>
-            {item.reaction ? (
-              <Text style={{ color: colors.secondary }}>
-                {` reacted ${reactionEmoji(item.reaction)}`}
-              </Text>
-            ) : null}
-          </Text>
-          <Text style={[type.callout, { color: colors.text }]}>
-            {item.reply_to && (
-              <Text
-                style={{ color: colors.accentText, fontWeight: '600' }}
-                onPress={() => onOpenPerson(item.reply_to!)}
-              >
-                {`@${item.reply_to.display_name} `}
-              </Text>
-            )}
-            {item.body}
-          </Text>
-        </View>
+            <Text style={[type.callout, { color: colors.text }]}>
+              {item.reply_to && (
+                <Text
+                  style={{ color: colors.accentText, fontWeight: '600' }}
+                  onPress={() => onOpenPerson(item.reply_to!)}
+                >
+                  {`@${item.reply_to.display_name} `}
+                </Text>
+              )}
+              {item.body}
+            </Text>
+          </View>
+        </ContextMenu>
         <View style={styles.actions}>
           <Text style={[type.caption, { color: colors.muted }]}>
             {commentTime(item.created_at)}
@@ -283,47 +305,69 @@ function CommentRow({
           {link('Reply', onReply)}
           {item.can_edit && link('Edit', onEdit)}
           {item.can_delete && link('Delete', onDelete, true)}
-          {item.reactions.counts.map((count) => (
-            <Pressable
-              key={count.reaction}
-              accessibilityRole="button"
-              accessibilityLabel={`${count.reaction}, ${count.count}`}
-              accessibilityState={{ selected: item.reactions.yours === count.reaction }}
-              disabled={busy}
-              onPress={() => onReact(count.reaction)}
-              style={[
-                styles.chip,
-                {
-                  borderRadius: radius.pill,
-                  backgroundColor:
-                    item.reactions.yours === count.reaction ? colors.accentSoft : colors.surface2,
-                },
-              ]}
-            >
-              <Text style={[type.caption, { color: colors.text }]}>
-                {reactionEmoji(count.reaction)} {count.count}
-              </Text>
-            </Pressable>
-          ))}
+          {item.reactions.counts.map((count) => {
+            const mine = item.reactions.yours === count.reaction;
+            return (
+              <Pressable
+                key={count.reaction}
+                accessibilityRole="button"
+                accessibilityLabel={`${count.reaction}, ${count.count}`}
+                accessibilityState={{ selected: mine }}
+                hitSlop={8}
+                disabled={busy}
+                onPress={() => onReact(count.reaction)}
+                style={[
+                  styles.chip,
+                  {
+                    borderRadius: radius.pill,
+                    borderColor: mine ? colors.accent : colors.lineStrong,
+                    backgroundColor: mine ? colors.accentSoft : colors.surface2,
+                  },
+                ]}
+              >
+                <Text style={[type.caption, { color: colors.text, fontWeight: '600' }]}>
+                  {reactionEmoji(count.reaction)} {count.count}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
         {picking && (
           <View
             accessibilityLabel={`React to ${item.author.display_name}'s comment`}
-            style={[styles.picker, { backgroundColor: colors.surface2, borderRadius: radius.pill }]}
+            style={[
+              styles.picker,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.lineStrong,
+                borderRadius: radius.pill,
+              },
+            ]}
           >
-            {REACTIONS.map((choice) => (
-              <Pressable
-                key={choice.kind}
-                accessibilityRole="button"
-                accessibilityLabel={choice.label}
-                accessibilityState={{ selected: item.reactions.yours === choice.kind }}
-                disabled={busy}
-                onPress={() => onReact(choice.kind)}
-                style={styles.choice}
-              >
-                <Text style={{ fontSize: 22 }}>{choice.emoji}</Text>
-              </Pressable>
-            ))}
+            {REACTIONS.map((choice) => {
+              const mine = item.reactions.yours === choice.kind;
+              return (
+                <Pressable
+                  key={choice.kind}
+                  accessibilityRole="button"
+                  accessibilityLabel={choice.label}
+                  accessibilityState={{ selected: mine }}
+                  disabled={busy}
+                  onPress={() => onReact(choice.kind)}
+                  style={({ pressed }) => [
+                    styles.choice,
+                    mine && {
+                      backgroundColor: colors.accentSoft,
+                      borderColor: colors.accent,
+                      borderWidth: 1,
+                    },
+                    pressed && { transform: [{ scale: 1.15 }] },
+                  ]}
+                >
+                  <Text style={{ fontSize: 22 }}>{choice.emoji}</Text>
+                </Pressable>
+              );
+            })}
           </View>
         )}
       </View>
@@ -371,7 +415,8 @@ export function CommentComposer({
   thread: CommentThread;
   ref?: Ref<ComponentRef<typeof TextInput>>;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, scheme, type, radius } = useTheme();
+  const [focused, setFocused] = useState(false);
   const { body, reply, editing, send } = thread;
   const loading = thread.query.isPending;
   return (
@@ -384,7 +429,7 @@ export function CommentComposer({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Cancel comment reply or edit"
-            hitSlop={8}
+            hitSlop={12}
             onPress={thread.cancel}
           >
             <Icon name="close" size={14} color={colors.secondary} />
@@ -397,14 +442,24 @@ export function CommentComposer({
           accessibilityLabel="Comment"
           placeholder={reply ? 'Write a reply…' : 'Write a comment…'}
           placeholderTextColor={colors.muted}
+          selectionColor={colors.accent}
+          cursorColor={colors.accent}
+          keyboardAppearance={scheme}
           value={body}
           onChangeText={thread.setBody}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           editable={!loading && !thread.busy}
           multiline
           style={[
             type.body,
             styles.input,
-            { color: colors.text, backgroundColor: colors.surface2, borderRadius: radius.lg },
+            {
+              color: colors.text,
+              backgroundColor: colors.surface2,
+              borderColor: focused ? colors.accent : colors.lineStrong,
+              borderRadius: radius.md,
+            },
           ]}
         />
         <Pressable
@@ -412,7 +467,10 @@ export function CommentComposer({
           accessibilityLabel={editing ? 'Save comment' : 'Send comment'}
           accessibilityState={{ disabled: !canSendComment(body) || thread.busy }}
           disabled={!canSendComment(body) || thread.busy || loading}
-          onPress={() => send.mutate()}
+          onPress={() => {
+            haptics.tap();
+            send.mutate();
+          }}
           style={({ pressed }) => [
             styles.send,
             (!canSendComment(body) || thread.busy) && { opacity: 0.4 },
@@ -457,19 +515,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'transparent',
   },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
-  chip: { paddingHorizontal: 8, paddingVertical: 3 },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  actionLink: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 4 },
+  chip: { paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1 },
   picker: {
     flexDirection: 'row',
     alignSelf: 'flex-start',
+    borderWidth: 1,
     paddingHorizontal: 4,
-    paddingVertical: 2,
+    paddingVertical: 3,
+    gap: 2,
   },
-  choice: { width: 38, height: 38, alignItems: 'center', justifyContent: 'center' },
-  more: { alignItems: 'center', paddingVertical: 10 },
+  choice: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   replying: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
-  input: { flex: 1, maxHeight: 120, minHeight: 42, paddingHorizontal: 14, paddingVertical: 10 },
-  send: { width: 42, height: 42, alignItems: 'center', justifyContent: 'center' },
+  input: {
+    flex: 1,
+    maxHeight: 120,
+    minHeight: 44,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  send: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   footer: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 16 },
 });

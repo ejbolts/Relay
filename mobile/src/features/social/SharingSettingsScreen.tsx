@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Stack } from 'expo-router';
-import * as Haptics from 'expo-haptics';
 import { useState, type ReactNode } from 'react';
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { VISIBILITY_LABELS } from '../../../../frontend/src/sharedProfileDisplay';
 import {
   ALWAYS_SHARED,
@@ -23,7 +23,8 @@ import {
 import type { SharingChoices } from '../../../../frontend/src/types';
 import { useUser } from '../../session/SessionProvider';
 import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
-import { Icon } from '../../ui/Icon';
+import { Switch } from '../../ui/controls';
+import { haptics } from '../../ui/haptics';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { Avatar } from './Avatar';
@@ -36,7 +37,8 @@ import { refreshSocial, socialKeys, useSharingChoices } from './socialQueries';
  * waits for its confirm button; share switches save at once while the profile is shared.
  */
 export function SharingSettingsScreen() {
-  const { colors, space, type } = useTheme();
+  const { colors, radius, space, type } = useTheme();
+  const insets = useSafeAreaInsets();
   const client = useQueryClient();
   const user = useUser();
   const query = useSharingChoices();
@@ -50,7 +52,7 @@ export function SharingSettingsScreen() {
     onSuccess: (stored, { message }) => {
       client.setQueryData(socialKeys.choices, stored);
       setDraft(null);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       showToast(message);
       // Sharing opens or closes Social, the feed and every profile.
       void refreshSocial(client);
@@ -78,31 +80,44 @@ export function SharingSettingsScreen() {
     else setDraft(next);
   };
   const preview = livePreview(current, null);
+  const shared = saved.visibility !== 'private';
 
   return (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.page }}
-      contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: space.xxl * 2 }}
+      contentContainerStyle={{
+        padding: space.gutter,
+        gap: space.stack,
+        paddingBottom: insets.bottom + 32,
+      }}
     >
       {header}
       <Card>
         <CardHeader
           title="Who can see your profile"
           action={
-            <Text
+            <View
               style={[
-                type.footnote,
+                styles.statusPill,
                 {
-                  color: saved.visibility === 'private' ? colors.muted : colors.good,
-                  fontWeight: '700',
+                  borderRadius: radius.pill,
+                  backgroundColor: shared ? colors.accentSoft : colors.surface2,
+                  borderColor: shared ? colors.accent : colors.lineStrong,
                 },
               ]}
             >
-              {VISIBILITY_LABELS[saved.visibility]}
-            </Text>
+              <Text
+                style={[
+                  styles.statusPillText,
+                  { color: shared ? colors.accentText : colors.muted },
+                ]}
+              >
+                {VISIBILITY_LABELS[saved.visibility].toUpperCase()}
+              </Text>
+            </View>
           }
         />
-        <View accessibilityRole="radiogroup">
+        <View accessibilityRole="radiogroup" style={styles.radioGroup}>
           {VISIBILITY_OPTIONS.map((option) => {
             const selected = current.visibility === option.value;
             return (
@@ -112,27 +127,36 @@ export function SharingSettingsScreen() {
                 accessibilityState={{ checked: selected, disabled: save.isPending }}
                 disabled={save.isPending}
                 onPress={() => {
-                  void Haptics.selectionAsync();
+                  haptics.selection();
                   setDraft(withVisibility(saved, current, option.value));
                 }}
-                style={({ pressed }) => [styles.option, pressed && { opacity: 0.6 }]}
+                style={({ pressed }) => [
+                  styles.optionCard,
+                  {
+                    borderRadius: radius.lg,
+                    backgroundColor: selected ? colors.accentSoft : colors.surface2,
+                    borderColor: selected ? colors.accent : colors.lineStrong,
+                  },
+                  pressed && { opacity: 0.75 },
+                ]}
               >
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={[type.body, { color: colors.text, fontWeight: '600' }]}>
-                    {VISIBILITY_LABELS[option.value]}
-                  </Text>
-                  <Text style={[type.footnote, { color: colors.secondary }]}>
-                    {option.description}
-                  </Text>
-                </View>
                 <View
                   style={[
                     styles.radio,
                     { borderColor: selected ? colors.accent : colors.lineStrong },
-                    selected && { backgroundColor: colors.accent },
                   ]}
                 >
-                  {selected && <Icon name="check" size={12} color={colors.onAccent} />}
+                  {selected && (
+                    <View style={[styles.radioDot, { backgroundColor: colors.accent }]} />
+                  )}
+                </View>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]}>
+                    {VISIBILITY_LABELS[option.value]}
+                  </Text>
+                  <Text style={[type.footnote, { color: colors.secondary, lineHeight: 18 }]}>
+                    {option.description}
+                  </Text>
                 </View>
               </Pressable>
             );
@@ -141,7 +165,7 @@ export function SharingSettingsScreen() {
         {(pending || (save.isPending && save.variables?.message !== SHARING_CHOICES_SAVED)) && (
           <Button
             label={VISIBILITY_CONFIRM[current.visibility]}
-            disabled={save.isPending}
+            loading={save.isPending}
             onPress={() =>
               save.mutate({ next: current, message: VISIBILITY_SAVED[current.visibility] })
             }
@@ -150,36 +174,50 @@ export function SharingSettingsScreen() {
       </Card>
       <Card>
         <CardHeader title="What you share" />
-        {ALWAYS_SHARED.map((item) => (
-          <SettingRow key={item.label} label={item.label} description={item.description}>
-            <Text style={[type.footnote, { color: colors.muted, fontWeight: '600' }]}>Always</Text>
-          </SettingRow>
-        ))}
-        {SHARING_OPTIONS.map((option) => (
-          <SettingRow key={option.key} label={option.label} description={option.description}>
-            <Switch
-              accessibilityLabel={option.label}
-              value={current[option.key]}
-              disabled={save.isPending}
-              trackColor={{ true: colors.accent }}
-              onValueChange={(value) => toggle({ ...current, [option.key]: value })}
-            />
-          </SettingRow>
-        ))}
+        <View>
+          {ALWAYS_SHARED.map((item, index) => (
+            <SettingRow
+              key={item.label}
+              label={item.label}
+              description={item.description}
+              divider={index > 0}
+            >
+              <Text style={[type.footnote, { color: colors.muted, fontWeight: '600' }]}>
+                Always
+              </Text>
+            </SettingRow>
+          ))}
+          {SHARING_OPTIONS.map((option) => (
+            <SettingRow
+              key={option.key}
+              label={option.label}
+              description={option.description}
+              divider
+            >
+              <Switch
+                accessibilityLabel={option.label}
+                value={current[option.key]}
+                disabled={save.isPending}
+                onChange={(value) => toggle({ ...current, [option.key]: value })}
+              />
+            </SettingRow>
+          ))}
+        </View>
       </Card>
       <Card>
         <CardHeader title="Live activity" />
-        {LIVE_OPTIONS.map((option) => (
-          <SettingRow key={option.key} label={option.label}>
-            <Switch
-              accessibilityLabel={option.label}
-              value={current[option.key]}
-              disabled={save.isPending}
-              trackColor={{ true: colors.accent }}
-              onValueChange={(value) => toggle({ ...current, [option.key]: value })}
-            />
-          </SettingRow>
-        ))}
+        <View>
+          {LIVE_OPTIONS.map((option, index) => (
+            <SettingRow key={option.key} label={option.label} divider={index > 0}>
+              <Switch
+                accessibilityLabel={option.label}
+                value={current[option.key]}
+                disabled={save.isPending}
+                onChange={(value) => toggle({ ...current, [option.key]: value })}
+              />
+            </SettingRow>
+          ))}
+        </View>
         <View style={[styles.preview, { borderTopColor: colors.line }]}>
           <Text style={[type.caption, { color: colors.muted }]}>Friends see you as</Text>
           <View style={styles.previewPerson}>
@@ -198,7 +236,9 @@ export function SharingSettingsScreen() {
           {errorMessage(save.error)}
         </Text>
       )}
-      <Text style={[type.footnote, { color: colors.muted }]}>{SHARING_NEVER}</Text>
+      <Text style={[type.footnote, { color: colors.muted, paddingHorizontal: 4 }]}>
+        {SHARING_NEVER}
+      </Text>
     </ScrollView>
   );
 }
@@ -206,17 +246,24 @@ export function SharingSettingsScreen() {
 function SettingRow({
   label,
   description,
+  divider = false,
   children,
 }: {
   label: string;
   description?: string;
+  divider?: boolean;
   children: ReactNode;
 }) {
   const { colors, type } = useTheme();
   return (
-    <View style={styles.row}>
+    <View
+      style={[
+        styles.row,
+        divider && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line },
+      ]}
+    >
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[type.body, { color: colors.text }]}>{label}</Text>
+        <Text style={[type.callout, { color: colors.text, fontWeight: '500' }]}>{label}</Text>
         {!!description && (
           <Text style={[type.footnote, { color: colors.secondary }]}>{description}</Text>
         )}
@@ -227,16 +274,32 @@ function SettingRow({
 }
 
 const styles = StyleSheet.create({
-  option: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10 },
+  statusPill: {
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+  },
+  statusPillText: { fontSize: 11, fontWeight: '700', letterSpacing: 0.5 },
+  radioGroup: { gap: 8 },
+  optionCard: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 12,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
   radio: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     borderWidth: 2,
+    marginTop: 2,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
+  radioDot: { width: 10, height: 10, borderRadius: 5 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 50, paddingVertical: 8 },
   preview: { gap: 8, paddingTop: 12, borderTopWidth: StyleSheet.hairlineWidth },
   previewPerson: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 });

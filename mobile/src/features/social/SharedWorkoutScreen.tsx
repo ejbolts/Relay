@@ -20,7 +20,7 @@ import {
 import { recordCountsByWorkout } from '../../../../frontend/src/trainingSummary';
 import { localDate } from '../../../../frontend/src/utils';
 import { useWeightUnit } from '../../data/queries';
-import { Card, ErrorState, errorMessage, Loading } from '../../ui/components';
+import { Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { WorkoutDetails } from '../training/WorkoutCard';
@@ -85,10 +85,7 @@ export function SharedWorkoutScreen({
   const records = data.records.length
     ? (recordCountsByWorkout(data.records).get(workout.id) ?? 0)
     : (data.recordCount ?? 0);
-  const stats = [
-    ...feedStats(workout, unit),
-    ...(records ? [`${records} ${records === 1 ? 'PR' : 'PRs'}`] : []),
-  ];
+  const stats = feedStats(workout, unit);
   const when = [relativeDay(workout.workout_date, localDate()), loggedTime(workout.created_at)]
     .filter(Boolean)
     .join(' · ');
@@ -96,60 +93,81 @@ export function SharedWorkoutScreen({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.page }}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}
     >
       {header}
       <ScrollView
         ref={scroll}
-        contentContainerStyle={{ padding: space.lg, gap: space.lg }}
+        contentContainerStyle={{
+          padding: space.gutter,
+          gap: space.stack,
+          paddingBottom: space.xl,
+        }}
         keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={own ? 'Open your profile' : `Open ${name}’s profile`}
-          onPress={() => nav.openProfile({ id: memberId })}
-          style={({ pressed }) => [styles.person, pressed && { opacity: 0.6 }]}
-        >
-          {member && <Avatar person={member} size={44} />}
-          <View style={{ flex: 1 }}>
-            <Text style={[type.body, { color: colors.text, fontWeight: '600' }]}>{name}</Text>
-            <Text style={[type.footnote, { color: colors.secondary }]}>{when}</Text>
-          </View>
-          <Icon name="chevronRight" size={14} color={colors.muted} />
-        </Pressable>
-        <View style={{ gap: 4 }}>
-          <Text accessibilityRole="header" style={[type.title, { color: colors.text }]}>
-            {session.name}
-          </Text>
-          {stats.length > 0 && (
-            <Text style={[type.callout, type.number, { color: colors.secondary }]}>
-              {stats.join(' · ')}
+        <Card>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={own ? 'Open your profile' : `Open ${name}’s profile`}
+            onPress={() => nav.openProfile({ id: memberId })}
+            style={({ pressed }) => [styles.person, pressed && { opacity: 0.6 }]}
+          >
+            {member && <Avatar person={member} size={42} />}
+            <View style={{ flex: 1, gap: 1 }}>
+              <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]}>{name}</Text>
+              <Text style={[type.footnote, { color: colors.muted }]}>{when}</Text>
+            </View>
+            <Icon name="chevronRight" size={14} color={colors.muted} />
+          </Pressable>
+          <View style={{ gap: 4 }}>
+            <Text accessibilityRole="header" style={[type.title, { color: colors.text }]}>
+              {session.name}
             </Text>
+            {(stats.length > 0 || records > 0) && (
+              <View style={styles.statsRow}>
+                {stats.length > 0 && (
+                  <Text style={[type.callout, type.number, { color: colors.secondary }]}>
+                    {stats.join(' · ')}
+                  </Text>
+                )}
+                {stats.length > 0 && records > 0 && (
+                  <Text style={[type.callout, { color: colors.muted }]}>·</Text>
+                )}
+                {records > 0 && (
+                  <View style={styles.records}>
+                    <Icon name="trophy" size={14} color={colors.gold} />
+                    <Text style={[type.callout, { color: colors.gold, fontWeight: '700' }]}>
+                      {records} {records === 1 ? 'PR' : 'PRs'}
+                    </Text>
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+          {own ? (
+            <WorkoutPhotoActions
+              workoutId={workout.id}
+              photos={workout.photos ?? []}
+              subject={subject}
+              inset={(space.gutter + space.lg) * 2}
+            />
+          ) : (
+            <WorkoutPhotos
+              photos={workout.photos ?? []}
+              subject={subject}
+              inset={(space.gutter + space.lg) * 2}
+              full
+            />
           )}
-        </View>
-        {own ? (
-          <WorkoutPhotoActions
+          <ReactionBar
             workoutId={workout.id}
-            photos={workout.photos ?? []}
             subject={subject}
-            inset={space.lg * 2}
+            reactions={reactions}
+            ownWorkout={own}
+            onOpenPerson={nav.openProfile}
           />
-        ) : (
-          <WorkoutPhotos
-            photos={workout.photos ?? []}
-            subject={subject}
-            inset={space.lg * 2}
-            full
-          />
-        )}
-        <ReactionBar
-          workoutId={workout.id}
-          subject={subject}
-          reactions={reactions}
-          ownWorkout={own}
-          onOpenPerson={nav.openProfile}
-        />
+        </Card>
         {workout.movements.length > 0 && (
           <Card>
             <WorkoutDetails
@@ -160,25 +178,32 @@ export function SharedWorkoutScreen({
             />
           </Card>
         )}
-        <View
-          style={{ gap: space.md }}
-          onLayout={(event) => {
-            if (!showComments || scrolled.current) return;
-            scrolled.current = true;
-            const y = event.nativeEvent.layout.y;
-            requestAnimationFrame(() => scroll.current?.scrollTo({ y, animated: true }));
-          }}
-        >
-          <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
-            Comments
-          </Text>
-          <CommentList
-            thread={thread}
-            highlightId={highlightCommentId}
-            onOpenPerson={nav.openProfile}
-            onCompose={() => composer.current?.focus()}
-          />
-        </View>
+        <Card style={{ gap: space.md }}>
+          <View
+            style={{ gap: space.md }}
+            onLayout={(event) => {
+              if (!showComments || scrolled.current) return;
+              scrolled.current = true;
+              const y = event.nativeEvent.layout.y;
+              requestAnimationFrame(() => scroll.current?.scrollTo({ y, animated: true }));
+            }}
+          >
+            <CardHeader
+              title="Comments"
+              detail={
+                thread.items.length > 0
+                  ? `${thread.items.length} ${thread.items.length === 1 ? 'comment' : 'comments'}`
+                  : undefined
+              }
+            />
+            <CommentList
+              thread={thread}
+              highlightId={highlightCommentId}
+              onOpenPerson={nav.openProfile}
+              onCompose={() => composer.current?.focus()}
+            />
+          </View>
+        </Card>
       </ScrollView>
       <View
         style={[
@@ -198,8 +223,10 @@ export function SharedWorkoutScreen({
 
 const styles = StyleSheet.create({
   person: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  statsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  records: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   composer: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },

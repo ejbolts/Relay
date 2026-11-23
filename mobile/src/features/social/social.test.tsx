@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { commentTime } from '../../../../frontend/src/commentDisplay';
 import { feedStats } from '../../../../frontend/src/friendFeedData';
 import { connectionDate } from '../../../../frontend/src/sharedProfileDisplay';
+import { VISIBILITY_CONFIRM } from '../../../../frontend/src/sharingChoices';
 import type {
   FriendConnections,
   FriendFeed,
@@ -21,6 +22,7 @@ import { FriendQrSheet } from './FriendQrSheet';
 import { FriendsActivityCard } from './FriendsActivityCard';
 import { ProfileScreen } from './ProfileScreen';
 import { SharedWorkoutScreen } from './SharedWorkoutScreen';
+import { SharingSettingsScreen } from './SharingSettingsScreen';
 import { SocialScreen } from './SocialScreen';
 
 const mockRouter = { push: jest.fn(), navigate: jest.fn(), setParams: jest.fn(), back: jest.fn() };
@@ -79,10 +81,12 @@ jest.mock('@react-native-segmented-control/segmented-control', () => {
 });
 // The native menu draws its items as buttons here.
 jest.mock('../../ui/MenuButton', () => {
+  const actual = jest.requireActual<typeof import('../../ui/MenuButton')>('../../ui/MenuButton');
   const { createElement } = jest.requireActual<typeof import('react')>('react');
   const { Pressable, Text, View } =
     jest.requireActual<typeof import('react-native')>('react-native');
   return {
+    ...actual,
     MenuButton: (props: {
       accessibilityLabel: string;
       items: { label: string; onPress: () => void }[];
@@ -294,7 +298,8 @@ test("the feed shows friends' workouts, and a reaction is sent and shown", async
 test('Friends lists requests and friends, and accepting a request asks the server', async () => {
   jest.mocked(apiSend).mockResolvedValue({ status: 'friends' });
   await show(<SocialScreen />);
-  await fireEvent.press(await screen.findByRole('tab', { name: 'Friends (1)' }));
+  expect(await screen.findByText('1')).toBeVisible();
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Friends' }));
   expect(screen.getByText('Friend requests')).toBeVisible();
   expect(screen.getByText(connectionDate('request', '2026-11-20T10:00:00Z'))).toBeVisible();
   expect(screen.getByText('Active now')).toBeVisible();
@@ -303,6 +308,11 @@ test('Friends lists requests and friends, and accepting a request asks the serve
   await waitFor(() =>
     expect(apiSend).toHaveBeenCalledWith('/api/sharing/friends/jordan/accept', 'POST'),
   );
+  // The Search people header opens the QR code sheet, and the Social header reaches Settings.
+  await fireEvent.press(screen.getByRole('button', { name: 'Settings' }));
+  expect(mockRouter.push).toHaveBeenCalledWith('/settings');
+  await fireEvent.press(screen.getByRole('button', { name: 'QR code' }));
+  expect(await screen.findByLabelText('QR code to add Preview as a friend')).toBeVisible();
 });
 
 test('a private profile is asked to share before it sees Social', async () => {
@@ -430,4 +440,29 @@ test('a shared workout shows its comments and sends a reply', async () => {
       reaction: null,
     }),
   );
+});
+
+test('profile sharing shows the visibility status badge and selectable visibility cards', async () => {
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing')
+      return {
+        visibility: 'public',
+        share_notes: true,
+        share_body_weight: true,
+        share_body_sizes: false,
+        share_goals: true,
+        share_machine_photos: false,
+        share_online_status: true,
+        share_live_workouts: true,
+      };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  await show(<SharingSettingsScreen />);
+  expect(await screen.findByText('PUBLIC')).toBeVisible();
+  expect(screen.getByRole('radio', { name: /Public/ })).toHaveProp(
+    'accessibilityState',
+    expect.objectContaining({ checked: true }),
+  );
+  await fireEvent.press(screen.getByRole('radio', { name: /Friends only/ }));
+  expect(await screen.findByRole('button', { name: VISIBILITY_CONFIRM.followers })).toBeVisible();
 });
