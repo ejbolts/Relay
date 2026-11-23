@@ -554,3 +554,28 @@ it('keeps live activity that arrived while an older account list was loading', a
   await act(async () => list.resolve([owner, casey, riley]));
   expect(await screen.findByText('Live · Leg day')).toBeTruthy();
 });
+
+it('holds leaving while the reset confirmation is open, so a late answer is never lost', async () => {
+  jest.spyOn(Alert, 'alert');
+  mockParams = { id: 'riley' };
+  jest.mocked(apiSend).mockResolvedValue({ temporary_password: 'brisk-otter-42' });
+  await open(<AdminAccountScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Reset password' }));
+  // Back reaches the screen before the confirmation's answer does.
+  expect(mockPrevent.blocking).toBe(true);
+  const repeat = jest.fn();
+  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  expect(repeat).not.toHaveBeenCalled();
+  await answerAlert('Reset and sign out');
+  expect(await screen.findByText('brisk-otter-42')).toBeTruthy();
+});
+
+it('lets leaving go again when the reset confirmation is cancelled', async () => {
+  jest.spyOn(Alert, 'alert');
+  mockParams = { id: 'riley' };
+  await open(<AdminAccountScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Reset password' }));
+  await answerAlert('Cancel');
+  expect(mockPrevent.blocking).toBe(false);
+  expect(apiSend).not.toHaveBeenCalled();
+});

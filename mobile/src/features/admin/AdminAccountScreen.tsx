@@ -70,6 +70,8 @@ function AccountDetails({ account }: { account: AdminUser }) {
   // Set synchronously, so a second tap in the same frame can't start a second request.
   const working = useRef(false);
   const [resetting, setResetting] = useState(false);
+  // The reset confirmation is open: its answer may still be on its way to the screen.
+  const [confirmingReset, setConfirmingReset] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Shown once while this screen is open, then discarded.
@@ -77,7 +79,10 @@ function AccountDetails({ account }: { account: AdminUser }) {
 
   // The temporary password exists only here: leaving while the reset is on its way, or before
   // it has been dismissed, would lose its only copy. Leaving waits for the reset, then asks.
-  usePreventRemove(resetting || temporaryPassword !== null, ({ repeat }) => {
+  usePreventRemove(confirmingReset || resetting || temporaryPassword !== null, ({ repeat }) => {
+    // Back can reach the screen before the confirmation's answer does (Android delivers them
+    // separately), so leaving waits from the moment the confirmation opens.
+    if (confirmingReset) return;
     if (resetting) {
       showToast('Wait for the password reset to finish.');
       return;
@@ -132,24 +137,30 @@ function AccountDetails({ account }: { account: AdminUser }) {
     );
 
   function confirmReset() {
+    setConfirmingReset(true);
     Alert.alert(
       `Reset ${account.display_name}’s password?`,
       'Signs them out everywhere. They choose a new password at next sign-in.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => setConfirmingReset(false) },
         {
           text: 'Reset and sign out',
           style: 'destructive',
           onPress: () => void reset(),
         },
       ],
+      { cancelable: true, onDismiss: () => setConfirmingReset(false) },
     );
   }
 
   async function reset() {
-    if (resetsInFlight.has(account.id)) return;
+    if (resetsInFlight.has(account.id)) {
+      setConfirmingReset(false);
+      return;
+    }
     resetsInFlight.add(account.id);
     setResetting(true);
+    setConfirmingReset(false);
     try {
       await run(async (check) => {
         setTemporaryPassword(null);
