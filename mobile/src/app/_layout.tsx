@@ -80,6 +80,10 @@ function Navigation() {
             <Stack.Screen name="social/sharing" />
             {/* Editing a saved workout from Training's session screen. */}
             <Stack.Screen name="edit-workout/[id]" />
+            {/* Training Cardio: standalone logging, metrics and zone preferences. */}
+            <Stack.Screen name="cardio/log" />
+            <Stack.Screen name="cardio/metrics/[id]" />
+            <Stack.Screen name="cardio/zones" />
           </Stack.Protected>
           <Stack.Protected guard={mustChangePassword}>
             <Stack.Screen name="password-required" />
