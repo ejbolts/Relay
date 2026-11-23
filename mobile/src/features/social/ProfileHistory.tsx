@@ -24,6 +24,7 @@ import type {
   SharedWorkoutFilters,
   WorkoutReactions,
 } from '../../../../frontend/src/types';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { useWeightUnit } from '../../data/queries';
 import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Segmented } from '../../ui/controls';
@@ -79,7 +80,6 @@ export function ProfileHistory({
     filters,
     enabled: profile.can_view && !invalidDates,
   });
-  const options = useSharedWorkoutFilters(profile.id, profile.can_view);
   const { workouts, records, reactions } = sharedWorkoutList(query.data);
   const total = query.data?.pages.at(-1)?.total ?? 0;
   const recordCounts = recordCountsByWorkout(records);
@@ -90,9 +90,17 @@ export function ProfileHistory({
   // A link can refer to an older workout, beyond the first page that day: read on until it loads.
   const needsMore = linkedWorkoutNeedsMore(workouts, linkedId, total) && query.hasNextPage;
   const { fetchNextPage, isFetching } = query;
+  const pageError = query.isFetchNextPageError;
+  // Driven by the pages committed, not only by the fetching flags: a fast page can start and finish
+  // inside one render, leaving every flag as it was, and the next page must still be asked for.
+  const pagesLoaded = query.data?.pages.length ?? 0;
   useEffect(() => {
-    if (needsMore && !isFetching && !query.isFetchNextPageError) void fetchNextPage();
-  }, [needsMore, isFetching, fetchNextPage, query.isFetchNextPageError]);
+    if (pagesLoaded > 0 && needsMore && !isFetching && !pageError) void fetchNextPage();
+  }, [pagesLoaded, needsMore, isFetching, pageError, fetchNextPage]);
+  // Offline, a request waits for the network instead of failing: say so rather than spin.
+  const paused = query.fetchStatus === 'paused';
+  const offline = paused && (query.isPending || needsMore);
+  const options = useSharedWorkoutFilters(profile.id, profile.can_view);
   const missing =
     !!linkedId &&
     !!query.data &&
@@ -130,7 +138,12 @@ export function ProfileHistory({
         <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
           {SHARED_FILTER_DATES_ERROR}
         </Text>
-      ) : query.isPending || (needsMore && !query.isFetchNextPageError) ? (
+      ) : offline ? (
+        <ErrorState
+          message={OFFLINE_MESSAGE}
+          onRetry={() => void (query.isPending ? query.refetch() : fetchNextPage())}
+        />
+      ) : query.isPending || (needsMore && !pageError) ? (
         <Loading label="Loading workouts" />
       ) : query.error && !workouts.length ? (
         <ErrorState message={errorMessage(query.error)} onRetry={() => void query.refetch()} />
@@ -188,6 +201,11 @@ export function ProfileHistory({
           ))}
         </View>
       )}
+      {paused && query.isFetchingNextPage && !needsMore && (
+        <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
+          {OFFLINE_MESSAGE}
+        </Text>
+      )}
       {query.error && workouts.length > 0 && (
         <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
           {errorMessage(query.error)}
@@ -211,6 +229,19 @@ export function ProfileHistory({
         visible={filtersOpen}
         filters={filters}
         options={options.data ?? NO_OPTIONS}
+        optionsState={{
+          status: options.data
+            ? 'ready'
+            : options.error || waitingForNetwork(options)
+              ? 'error'
+              : 'loading',
+          message: waitingForNetwork(options)
+            ? OFFLINE_MESSAGE
+            : options.error
+              ? `Exercises and machines could not load. ${errorMessage(options.error)}`
+              : undefined,
+          onRetry: () => void options.refetch(),
+        }}
         onChange={changeFilters}
         onClose={() => setFiltersOpen(false)}
       />

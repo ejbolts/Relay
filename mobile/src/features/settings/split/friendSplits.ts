@@ -1,6 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { Routine } from '../../../../../frontend/src/types';
-import { apiSend } from '../../../data/api';
+import { request, serverOrigin } from '../../../data/api';
+import { sessionToken } from '../../../data/session';
 import { queryKeys } from '../../../data/queries';
 import { isToastAccountCurrent, toastAccount } from '../../../ui/Toast';
 import { refreshSplits, settingsKeys } from '../settingsData';
@@ -17,12 +18,13 @@ export type FriendSplitCopy = { kind: 'saved'; routine: Routine } | { kind: 'sta
 
 /**
  * Saves a private copy of a friend's shared split into your own library, as the web's
- * `api.routines.copy`. The server maps its workout types onto yours, adding any you lack, so the
- * split library and the workout types are both read again.
+ * `api.routines.copy`. The server maps its workout types and exercises onto yours, adding any you
+ * lack, so the split library, the workout types and the exercise catalogue are all read again.
  *
- * The account is captured when the save starts: a copy that answers after a switch to another
- * account writes nothing into that account's cache and reports `stale`. (The request itself was
- * sent with the starting account's session, so it can only land in that account's library.)
+ * The save is bound to the session that starts it: the account is captured at once and the request
+ * carries that session's own token, read before anything else can change. If the session changed
+ * while the token was read (or there is none), nothing is sent. A copy that answers after a switch
+ * writes nothing into the new account's cache and reports `stale`.
  */
 export async function copyFriendSplit(
   client: QueryClient,
@@ -30,9 +32,13 @@ export async function copyFriendSplit(
   routineId: string,
 ): Promise<FriendSplitCopy> {
   const account = toastAccount();
-  const routine = await apiSend<Routine>(
+  const token = await sessionToken(serverOrigin());
+  // A switch (or sign-out) while the token was read: never send with another session's token.
+  if (!token || !isToastAccountCurrent(account)) return { kind: 'stale' };
+  const routine = await request<Routine>(
     `/api/routines/profile/${encodeURIComponent(ownerId)}/${encodeURIComponent(routineId)}/copy`,
-    'POST',
+    { method: 'POST' },
+    token,
   );
   if (!isToastAccountCurrent(account)) return { kind: 'stale' };
   // The library shows the copy at once, and its editor can open on it before the refresh lands.
@@ -42,6 +48,8 @@ export async function copyFriendSplit(
   await Promise.all([
     refreshSplits(client),
     client.invalidateQueries({ queryKey: queryKeys.workoutTypes }),
+    // A friend's custom exercise is added to your catalogue, so the pickers must offer it.
+    client.invalidateQueries({ queryKey: queryKeys.exercises }),
   ]);
   return isToastAccountCurrent(account) ? { kind: 'saved', routine } : { kind: 'stale' };
 }

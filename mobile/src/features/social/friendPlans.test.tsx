@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { Platform } from 'react-native';
@@ -15,7 +15,9 @@ import type {
 } from '../../../../frontend/src/types';
 import { addDays } from '../../../../frontend/src/trainingSummary';
 import { localDate } from '../../../../frontend/src/utils';
-import { apiGet, apiSend } from '../../data/api';
+import { apiGet } from '../../data/api';
+import { OFFLINE_MESSAGE } from '../../data/offline';
+import { sessionToken } from '../../data/session';
 import { showMenu } from '../../ui/prompts';
 import { ToastHost } from '../../ui/Toast';
 import { ProfileScreen } from './ProfileScreen';
@@ -30,13 +32,19 @@ jest.mock('expo-router', () => ({
   useIsFocused: () => true,
   Stack: { Screen: () => null },
 }));
-jest.mock('../../data/api', () => ({
-  ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
-  apiOrigin: 'https://relay.test',
-  apiGet: jest.fn(),
-  apiSend: jest.fn(),
+// Save split goes through the real request layer, so its fetch and bearer can be checked.
+jest.mock('../../data/api', () => {
+  process.env.EXPO_PUBLIC_RELAY_API_ORIGIN = 'https://relay.test';
+  return {
+    ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
+    apiGet: jest.fn(),
+    apiSend: jest.fn(),
+  };
+});
+jest.mock('../../data/session', () => ({
+  sessionToken: jest.fn(async () => 'token-me'),
+  forgetSessionTokenIf: jest.fn(),
 }));
-jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../ui/prompts', () => ({ showMenu: jest.fn(), promptText: jest.fn() }));
 // The native date pickers have no test renderer: each field offers one date to pick.
 jest.mock('../../ui/DateField', () => {
@@ -55,7 +63,27 @@ jest.mock('../../ui/DateField', () => {
       ),
   };
 });
+// Nor does the iOS calendar: it offers one date to pick.
+jest.mock('@expo/ui/swift-ui', () => {
+  const { createElement, Fragment } = jest.requireActual<typeof import('react')>('react');
+  const { Pressable, Text } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    ...jest.requireActual<object>('@expo/ui/swift-ui'),
+    Host: ({ children }: { children: ReactNode }) => createElement(Fragment, null, children),
+    DatePicker: (props: { title: string; onDateChange: (date: Date) => void }) =>
+      createElement(
+        Pressable,
+        {
+          accessibilityRole: 'button',
+          accessibilityLabel: `${props.title} calendar`,
+          onPress: () => props.onDateChange(mockCalendarDate.value),
+        },
+        createElement(Text, null, 'calendar'),
+      ),
+  };
+});
 const mockPickedDate = { value: '' };
+const mockCalendarDate = { value: new Date() };
 const mockUser = { id: 'me', username: 'preview', display_name: 'Preview' };
 const mockSession = {
   status: { kind: 'signed-in', user: { id: 'me' } } as { kind: string; user?: { id: string } },
@@ -160,11 +188,21 @@ const workoutReads = () =>
     .filter((path) => path.startsWith('/api/sharing/profiles/alex/workouts?'))
     .map((path) => Object.fromEntries(new URLSearchParams(path.split('?')[1])));
 
-let workouts: (params: Record<string, string>) => SharedWorkoutPage;
+/** A server answer, as the fetch adapter sees it. */
+const answer = (body: unknown, status = 201) =>
+  ({ ok: status < 400, status, json: async () => body }) as Response;
+const fetchMock = jest.fn<Promise<Response>, [string, RequestInit]>();
+const copyCalls = () => fetchMock.mock.calls.filter(([url]) => url.endsWith('/copy'));
+const bearer = (call: [string, RequestInit]) =>
+  (call[1].headers as Record<string, string>).Authorization;
+
+let workouts: (params: Record<string, string>) => SharedWorkoutPage | Promise<SharedWorkoutPage>;
 let splits: Routine[];
 let client: QueryClient;
 beforeEach(() => {
   jest.clearAllMocks();
+  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  fetchMock.mockResolvedValue(answer(copy));
   splits = [upperLower];
   workouts = () => page([workout('w1', today)]);
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
@@ -183,6 +221,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   jest.restoreAllMocks();
+  onlineManager.setOnline(true);
   client.clear();
   if (mockSession.status.user?.id !== 'me') switchAccount('me');
 });
@@ -213,6 +252,14 @@ async function openSplit(name = 'Upper Lower') {
   await fireEvent.press(await screen.findByRole('button', { name: `${name}, 2 days` }));
 }
 
+/** The last menu's choice with this label. */
+function menuChoice(label: string) {
+  return jest
+    .mocked(showMenu)
+    .mock.calls.at(-1)![1]
+    .find((item) => item.label === label)!;
+}
+
 describe("a friend's splits", () => {
   test('lists their shared splits, each opening to its cycle with set blocks and muscles', async () => {
     await show(<ProfileScreen profileId="alex" />);
@@ -223,6 +270,25 @@ describe("a friend's splits", () => {
     expect(screen.getByText('Rest day')).toBeVisible();
     await fireEvent.press(screen.getByRole('switch', { name: 'Muscles' }));
     expect(screen.getByRole('switch', { name: 'Muscles' })).toBeChecked();
+  });
+
+  test('each split opens and keeps its Muscles choice on its own, as the web’s cards', async () => {
+    splits = [upperLower, { ...upperLower, id: 'ppl', name: 'Push Pull' }];
+    await show(<ProfileScreen profileId="alex" />);
+    await openSplit('Upper Lower');
+    await fireEvent.press(screen.getByRole('switch', { name: 'Muscles' }));
+    await openSplit('Push Pull');
+    // Both are open at once, and only the first shows its muscles.
+    const checked = () =>
+      screen
+        .getAllByRole('switch', { name: 'Muscles' })
+        .map((item) => Boolean(item.props.accessibilityState?.checked));
+    expect(checked()).toEqual([true, false]);
+    // Closing and reopening the first keeps its choice.
+    await openSplit('Upper Lower');
+    expect(checked()).toEqual([false]);
+    await openSplit('Upper Lower');
+    expect(checked()).toEqual([true, false]);
   });
 
   test('says when a friend shares no splits', async () => {
@@ -245,23 +311,30 @@ describe("a friend's splits", () => {
   });
 
   test('Save split keeps a private copy in your library, says so, and can open it', async () => {
-    jest.mocked(apiSend).mockResolvedValue(copy);
     await show(<ProfileScreen profileId="alex" />);
     await openSplit();
-    // Your library, as a split screen opened earlier left it.
+    // Your library and catalogues, as screens opened earlier left them.
     client.setQueryData(['routines'], [{ ...upperLower, id: 'mine', name: 'Push Pull' }]);
+    client.setQueryData(['workout-types'], []);
+    client.setQueryData(['exercises'], []);
     await fireEvent.press(screen.getByRole('button', { name: 'Save Upper Lower' }));
-    expect(apiSend).toHaveBeenCalledWith('/api/routines/profile/alex/source/copy', 'POST');
     expect(await screen.findByText('Split saved')).toBeOnTheScreen();
+    expect(copyCalls()).toHaveLength(1);
+    const [url, init] = copyCalls()[0];
+    expect(url).toBe('https://relay.test/api/routines/profile/alex/source/copy');
+    expect(init.method).toBe('POST');
+    expect(bearer(copyCalls()[0])).toBe('Bearer token-me');
     // Saved once on this visit, as the web's button.
     expect(screen.getByRole('button', { name: 'Upper Lower saved' })).toBeDisabled();
-    // The copy is in your library at once, and the library and workout types are read again
-    // (the copy can add workout types).
+    // The copy is in your library at once; the library, workout types and exercises are read
+    // again, since the copy can add types and exercises to your account.
     expect(client.getQueryData<Routine[]>(['routines'])?.map((item) => item.id)).toEqual([
       'copy',
       'mine',
     ]);
     expect(client.getQueryState(['routines'])?.isInvalidated).toBe(true);
+    expect(client.getQueryState(['workout-types'])?.isInvalidated).toBe(true);
+    expect(client.getQueryState(['exercises'])?.isInvalidated).toBe(true);
 
     await fireEvent.press(screen.getByRole('button', { name: 'Edit' }));
     expect(mockRouter.push).toHaveBeenLastCalledWith({
@@ -276,7 +349,9 @@ describe("a friend's splits", () => {
   });
 
   test('a failed save says why, keeps Save split and shows no toast', async () => {
-    jest.mocked(apiSend).mockRejectedValueOnce(new Error('You can save up to 20 splits.'));
+    fetchMock.mockResolvedValueOnce(
+      answer({ error: { message: 'You can save up to 20 splits.' } }, 422),
+    );
     await show(<ProfileScreen profileId="alex" />);
     await openSplit();
     await fireEvent.press(screen.getByRole('button', { name: 'Save Upper Lower' }));
@@ -286,18 +361,50 @@ describe("a friend's splits", () => {
     expect(screen.queryByRole('button', { name: 'View my splits' })).toBeNull();
   });
 
-  test('a save that answers after an account switch writes and says nothing there', async () => {
-    let answer!: (routine: Routine) => void;
-    jest.mocked(apiSend).mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+  test("a switch while the token is read sends nothing with the new session's token", async () => {
+    let token!: (value: string) => void;
+    jest
+      .mocked(sessionToken)
+      .mockImplementationOnce(() => new Promise<string | null>((resolve) => (token = resolve)));
     await show(<ProfileScreen profileId="alex" />);
     await openSplit();
     client.setQueryData(['routines'], []);
     await fireEvent.press(screen.getByRole('button', { name: 'Save Upper Lower' }));
     await act(async () => switchAccount('sam'));
-    await act(async () => answer(copy));
+    // The token store now answers with the account that signed in since.
+    await act(async () => token('token-sam'));
+    expect(copyCalls()).toHaveLength(0);
+    expect(screen.queryByText('Split saved')).toBeNull();
+    expect(client.getQueryData(['routines'])).toEqual([]);
+  });
+
+  test('a save that answers after an account switch writes and says nothing there', async () => {
+    let respond!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise((resolve) => (respond = resolve)));
+    await show(<ProfileScreen profileId="alex" />);
+    await openSplit();
+    client.setQueryData(['routines'], []);
+    await fireEvent.press(screen.getByRole('button', { name: 'Save Upper Lower' }));
+    await waitFor(() => expect(copyCalls()).toHaveLength(1));
+    // Sent with the starting session's own token.
+    expect(bearer(copyCalls()[0])).toBe('Bearer token-me');
+    await act(async () => switchAccount('sam'));
+    await act(async () => respond(answer(copy)));
     expect(screen.queryByText('Split saved')).toBeNull();
     expect(client.getQueryData(['routines'])).toEqual([]);
     expect(screen.queryByRole('button', { name: 'View my splits' })).toBeNull();
+  });
+
+  test('a failure that answers after an account switch says nothing there', async () => {
+    let respond!: (response: Response) => void;
+    fetchMock.mockImplementationOnce(() => new Promise((resolve) => (respond = resolve)));
+    await show(<ProfileScreen profileId="alex" />);
+    await openSplit();
+    await fireEvent.press(screen.getByRole('button', { name: 'Save Upper Lower' }));
+    await waitFor(() => expect(copyCalls()).toHaveLength(1));
+    await act(async () => switchAccount('sam'));
+    await act(async () => respond(answer({ error: { message: 'Split not found.' } }, 404)));
+    expect(screen.queryByText('Split not found.')).toBeNull();
   });
 });
 
@@ -323,7 +430,7 @@ describe('history filters', () => {
     expect(workoutReads().at(-1)).not.toHaveProperty('exercise_id');
   });
 
-  test('a custom workout type replaces the category, as on the web', async () => {
+  test('a custom workout type replaces a chosen category, as on the web', async () => {
     jest.mocked(apiGet).mockImplementation(async (path: string) => {
       if (path === '/api/sharing/profiles/alex') return alex;
       if (path.endsWith('/workout-filters'))
@@ -336,12 +443,16 @@ describe('history filters', () => {
     });
     await show(<ProfileScreen profileId="alex" />);
     await fireEvent.press(await screen.findByRole('button', { name: 'Filter workouts' }));
+    // A built-in category first, then the custom type in its place.
     await fireEvent.press(await screen.findByRole('button', { name: 'Workout type, All types' }));
-    const choices = jest.mocked(showMenu).mock.calls.at(-1)![1];
-    expect(choices.at(-1)!.label).toBe('Arms');
-    await act(async () => choices.at(-1)!.onPress());
+    await act(async () => menuChoice('Push').onPress());
+    await waitFor(() => expect(workoutReads().at(-1)).toMatchObject({ category: 'push' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Workout type, Push' }));
+    expect(jest.mocked(showMenu).mock.calls.at(-1)![1].at(-1)!.label).toBe('Arms');
+    await act(async () => menuChoice('Arms').onPress());
     await waitFor(() => expect(workoutReads().at(-1)).toMatchObject({ workout_type_id: 't1' }));
     expect(workoutReads().at(-1)).not.toHaveProperty('category');
+    expect(screen.getByRole('button', { name: 'Workout type, Arms' })).toBeVisible();
     expect(await screen.findByText('No workouts match these filters.')).toBeVisible();
   });
 
@@ -351,9 +462,13 @@ describe('history filters', () => {
     await fireEvent.press(await screen.findByRole('button', { name: 'Filter workouts' }));
     mockPickedDate.value = today;
     await fireEvent.press(screen.getByRole('button', { name: 'From, not set' }));
+    await waitFor(() => expect(workoutReads().at(-1)).toMatchObject({ start_date: today }));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    // The reads made before the range turns invalid.
+    const reads = workoutReads().length;
     mockPickedDate.value = addDays(today, -3);
     await fireEvent.press(screen.getByRole('button', { name: 'To, not set' }));
-    const reads = workoutReads().length;
+    await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(screen.getAllByText(SHARED_FILTER_DATES_ERROR).length).toBeGreaterThan(0);
     expect(workoutReads()).toHaveLength(reads);
     await fireEvent.press(screen.getByRole('button', { name: 'Clear To date' }));
@@ -363,37 +478,121 @@ describe('history filters', () => {
 });
 
 describe('history dates on iOS', () => {
-  test('an unset date says Any date, since the native picker always shows one', async () => {
+  test('an unset date opens a calendar at today and applies only what is set', async () => {
     jest.replaceProperty(Platform, 'OS', 'ios');
     await show(<ProfileScreen profileId="alex" />);
     await fireEvent.press(await screen.findByRole('button', { name: 'Filter workouts' }));
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    const reads = workoutReads().length;
+    // Opening the calendar applies nothing, and Cancel leaves the date unset.
     await fireEvent.press(await screen.findByRole('button', { name: 'From, Any date' }));
-    // Choosing one starts the picker at today, with Clear beside it.
-    await waitFor(() => expect(workoutReads().at(-1)).toMatchObject({ start_date: today }));
+    expect(screen.getByRole('button', { name: 'From calendar' })).toBeVisible();
+    await fireEvent.press(screen.getByRole('button', { name: 'Cancel From date' }));
+    expect(screen.getByRole('button', { name: 'From, Any date' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Filter workouts' })).toBeVisible();
+    expect(workoutReads()).toHaveLength(reads);
+    // A chosen day applies only once it is set.
+    const earlier = addDays(today, -10);
+    mockCalendarDate.value = new Date(`${earlier}T12:00:00`);
+    await fireEvent.press(screen.getByRole('button', { name: 'From, Any date' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'From calendar' }));
+    expect(workoutReads()).toHaveLength(reads);
+    await fireEvent.press(screen.getByRole('button', { name: 'Set From date' }));
+    await waitFor(() => expect(workoutReads().at(-1)).toMatchObject({ start_date: earlier }));
     await fireEvent.press(screen.getByRole('button', { name: 'Clear From date' }));
     expect(await screen.findByRole('button', { name: 'From, Any date' })).toBeVisible();
   });
 });
 
+describe('history offline and unavailable choices', () => {
+  test('a paused history read says it is offline instead of spinning', async () => {
+    await show(<ProfileScreen profileId="alex" />);
+    await screen.findByRole('button', { name: /^Upper body,/ });
+    await act(async () => onlineManager.setOnline(false));
+    await fireEvent.press(screen.getByRole('button', { name: 'Filter workouts' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Exercise, All exercises' }));
+    await act(async () => menuChoice('Cable row').onPress());
+    expect(await screen.findByText(OFFLINE_MESSAGE)).toBeOnTheScreen();
+    expect(screen.queryByLabelText('Loading workouts')).toBeNull();
+  });
+
+  test('when the choices fail to load, types and dates still work and Try again reloads them', async () => {
+    let fail = true;
+    const base = jest.mocked(apiGet).getMockImplementation()!;
+    jest.mocked(apiGet).mockImplementation(async (path: string, signal?: AbortSignal) => {
+      if (path.endsWith('/workout-filters') && fail) throw new Error('Relay is busy.');
+      return base(path, signal);
+    });
+    await show(<ProfileScreen profileId="alex" />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Filter workouts' }));
+    expect(await screen.findByText(/Exercises and machines could not load/)).toBeVisible();
+    expect(screen.queryByRole('button', { name: /^Exercise,/ })).toBeNull();
+    // The built-in types still filter.
+    await fireEvent.press(screen.getByRole('button', { name: 'Workout type, All types' }));
+    await act(async () => menuChoice('Pull').onPress());
+    await waitFor(() => expect(workoutReads().at(-1)).toMatchObject({ category: 'pull' }));
+    fail = false;
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Try loading exercises and machines again' }),
+    );
+    expect(await screen.findByRole('button', { name: 'Exercise, All exercises' })).toBeVisible();
+  });
+});
+
 describe('opening a profile at a linked workout', () => {
   const older = addDays(today, -40);
+  const day = (from: number, count: number) =>
+    Array.from({ length: count }, (_, index) => workout(`d${from + index}`, older, 'Pull'));
 
   test('reads older pages of its day until the workout loads, and opens it', async () => {
-    const first = Array.from({ length: 20 }, (_, index) => workout(`d${index}`, older, 'Pull'));
+    // The linked workout is on the third page, with a fourth beyond it; answers are immediate.
     workouts = ({ offset }) =>
-      offset === '0' ? page(first, 21) : page([workout('linked', older, 'Legs')], 21);
+      offset === '20'
+        ? page([...day(20, 5), workout('linked', older, 'Legs'), ...day(26, 4)], 40)
+        : page(day(Number(offset), 10), 40);
     await show(
       <ProfileScreen profileId="alex" targetWorkout={{ id: 'linked', workout_date: older }} />,
     );
     const linked = await screen.findByRole('button', { name: /^Legs,/ });
     expect(linked).toHaveProp('accessibilityState', expect.objectContaining({ expanded: true }));
-    expect(workoutReads()).toEqual([
-      expect.objectContaining({ offset: '0', start_date: older, end_date: older }),
-      expect.objectContaining({ offset: '20', start_date: older, end_date: older }),
-    ]);
+    // Each page in turn, stopping once it has loaded: the fourth is never read.
+    expect(workoutReads()).toEqual(
+      ['0', '10', '20'].map((offset) =>
+        expect.objectContaining({ offset, start_date: older, end_date: older }),
+      ),
+    );
     // Its day is set as two filters.
     expect(screen.getByRole('button', { name: 'Filter workouts, 2 set' })).toBeVisible();
     expect(screen.queryByText(LINKED_WORKOUT_MISSING)).toBeNull();
+    // The fourth page waits for Show older workouts.
+    expect(screen.getByRole('button', { name: 'Show older workouts' })).toBeVisible();
+  });
+
+  test('keeps loading while an intermediate page is on its way', async () => {
+    let second!: (value: SharedWorkoutPage) => void;
+    workouts = ({ offset }) =>
+      offset === '0'
+        ? page(day(0, 10), 15)
+        : new Promise<SharedWorkoutPage>((resolve) => (second = resolve));
+    await show(
+      <ProfileScreen profileId="alex" targetWorkout={{ id: 'linked', workout_date: older }} />,
+    );
+    await waitFor(() => expect(workoutReads()).toHaveLength(2));
+    // The first page holds other workouts: the list waits for the link instead of showing them.
+    expect(screen.getByLabelText('Loading workouts')).toBeOnTheScreen();
+    expect(screen.queryByRole('button', { name: /^Pull,/ })).toBeNull();
+    await act(async () => second(page([...day(10, 4), workout('linked', older, 'Legs')], 15)));
+    expect(await screen.findByRole('button', { name: /^Legs,/ })).toBeVisible();
+  });
+
+  test('stops at the last page when the workout is not there, and says so', async () => {
+    workouts = ({ offset }) => page(day(Number(offset), offset === '20' ? 5 : 10), 25);
+    await show(
+      <ProfileScreen profileId="alex" targetWorkout={{ id: 'gone', workout_date: older }} />,
+    );
+    expect(await screen.findByText(LINKED_WORKOUT_MISSING)).toBeVisible();
+    expect(workoutReads().map((read) => read.offset)).toEqual(['0', '10', '20']);
+    expect(screen.queryByRole('button', { name: 'Show older workouts' })).toBeNull();
   });
 
   test('says when the linked workout is gone, until another filter is chosen', async () => {

@@ -221,7 +221,7 @@ export function SharedWorkoutScreen({
 }
 
 const styles = StyleSheet.create({
-  person: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  person: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
   statsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   records: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   composer: {

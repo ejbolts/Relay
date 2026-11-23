@@ -3,10 +3,13 @@ import { useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
+  cardioBarWidth,
+  plannedMinutes,
   splitDayCount,
   splitDayName,
   splitDayTotal,
   splitFailure,
+  splitSetPips,
 } from '../../../../frontend/src/splitEditing';
 import { exerciseMuscles } from '../../../../frontend/src/splitTargets';
 import type { Routine } from '../../../../frontend/src/types';
@@ -14,26 +17,30 @@ import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { Button, Card, CardHeader } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
-import { showToast, toastAccount } from '../../ui/Toast';
+import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { copyFriendSplit, splitRoutes } from '../settings/split/friendSplits';
 import { SplitPattern } from '../settings/split/SplitParts';
 import { useProfileSplits } from './socialQueries';
 
-/** As the web's set blocks: up to ten, then a count of the rest. */
-const MAX_PIPS = 10;
-
 /**
  * A friend's shared splits on their profile, as the web's profile Splits card: each opens to its
  * cycle (a row per exercise with a block per planned set, muscles on request) and Save split,
- * which keeps a private copy in your own library.
+ * which keeps a private copy in your own library. As the web's separate cards, each split opens and
+ * keeps its Muscles choice on its own, so two can be compared side by side.
  */
 export function FriendSplits({ ownerId }: { ownerId: string }) {
   const { colors, type } = useTheme();
   const client = useQueryClient();
   const router = useRouter();
   const query = useProfileSplits(ownerId, true);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
+  const [muscles, setMuscles] = useState<ReadonlySet<string>>(() => new Set());
+  const toggle = (set: ReadonlySet<string>, id: string) => {
+    const next = new Set(set);
+    if (!next.delete(id)) next.add(id);
+    return next;
+  };
   const [busy, setBusy] = useState(false);
   const locked = useRef(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,7 +71,8 @@ export function FriendSplits({ ownerId }: { ownerId: string }) {
         { account },
       );
     } catch (reason) {
-      setError(splitFailure(reason));
+      // A failure that answers after a switch belongs to the session that started it.
+      if (isToastAccountCurrent(account)) setError(splitFailure(reason));
     } finally {
       locked.current = false;
       setBusy(false);
@@ -109,7 +117,7 @@ export function FriendSplits({ ownerId }: { ownerId: string }) {
         <Text style={[type.callout, { color: colors.secondary }]}>No shared splits.</Text>
       )}
       {routines?.map((routine, index) => {
-        const open = openId === routine.id;
+        const expanded = open.has(routine.id);
         const saved = copied.includes(routine.id);
         return (
           <View
@@ -125,11 +133,11 @@ export function FriendSplits({ ownerId }: { ownerId: string }) {
           >
             <Pressable
               accessibilityRole="button"
-              accessibilityState={{ expanded: open }}
+              accessibilityState={{ expanded }}
               accessibilityLabel={`${routine.name}, ${splitDayCount(routine.days)}`}
               onPress={() => {
                 haptics.selection();
-                setOpenId(open ? null : routine.id);
+                setOpen((current) => toggle(current, routine.id));
               }}
               style={({ pressed }) => [{ gap: 8, minHeight: 44 }, pressed && { opacity: 0.7 }]}
             >
@@ -140,13 +148,21 @@ export function FriendSplits({ ownerId }: { ownerId: string }) {
                     {splitDayCount(routine.days)}
                   </Text>
                 </View>
-                <Icon name={open ? 'chevronUp' : 'chevronDown'} size={14} color={colors.muted} />
+                <Icon
+                  name={expanded ? 'chevronUp' : 'chevronDown'}
+                  size={14}
+                  color={colors.muted}
+                />
               </View>
               <SplitPattern days={routine.days} />
             </Pressable>
-            {open && (
+            {expanded && (
               <>
-                <SplitCycle routine={routine} />
+                <SplitCycle
+                  routine={routine}
+                  showMuscles={muscles.has(routine.id)}
+                  onToggleMuscles={() => setMuscles((current) => toggle(current, routine.id))}
+                />
                 <Button
                   label={saved ? 'Saved' : 'Save split'}
                   icon={saved ? 'check' : undefined}
@@ -165,39 +181,49 @@ export function FriendSplits({ ownerId }: { ownerId: string }) {
 }
 
 /** A split's cycle as the web's: a row per exercise, with a block for each planned set. */
-export function SplitCycle({ routine }: { routine: Routine }) {
+export function SplitCycle({
+  routine,
+  showMuscles,
+  onToggleMuscles,
+}: {
+  routine: Routine;
+  showMuscles: boolean;
+  onToggleMuscles: () => void;
+}) {
   const { colors, type, radius } = useTheme();
-  const [showMuscles, setShowMuscles] = useState(false);
   return (
     <View style={{ gap: 10 }}>
       <View style={styles.tools}>
+        {/* A 44 pt touch area round the web's compact 32 pt pill. */}
         <Pressable
           accessibilityRole="switch"
           accessibilityLabel="Muscles"
-          hitSlop={{ top: 6, bottom: 6 }}
           accessibilityState={{ checked: showMuscles }}
           onPress={() => {
             haptics.selection();
-            setShowMuscles((value) => !value);
+            onToggleMuscles();
           }}
-          style={({ pressed }) => [
-            styles.toggle,
-            {
-              borderRadius: radius.pill,
-              borderColor: showMuscles ? colors.accent : colors.lineStrong,
-              backgroundColor: showMuscles ? colors.accentSoft : 'transparent',
-            },
-            pressed && { opacity: 0.7 },
-          ]}
+          style={({ pressed }) => [styles.toggleTouch, pressed && { opacity: 0.7 }]}
         >
-          <Text
+          <View
             style={[
-              type.footnote,
-              { color: showMuscles ? colors.accentText : colors.secondary, fontWeight: '600' },
+              styles.toggle,
+              {
+                borderRadius: radius.pill,
+                borderColor: showMuscles ? colors.accent : colors.lineStrong,
+                backgroundColor: showMuscles ? colors.accentSoft : 'transparent',
+              },
             ]}
           >
-            Muscles
-          </Text>
+            <Text
+              style={[
+                type.footnote,
+                { color: showMuscles ? colors.accentText : colors.secondary, fontWeight: '600' },
+              ]}
+            >
+              Muscles
+            </Text>
+          </View>
         </Pressable>
       </View>
       {routine.days.map((day, index) => {
@@ -223,10 +249,9 @@ export function SplitCycle({ routine }: { routine: Routine }) {
               {day.movements.length ? (
                 day.movements.map((movement, mi) => {
                   const cardio = movement.exercise.kind === 'cardio';
-                  const length = Math.round(
-                    movement.sets.reduce((sum, set) => sum + (set.duration_seconds ?? 0), 0) / 60,
-                  );
+                  const length = plannedMinutes(movement);
                   const count = movement.sets.length;
+                  const pips = splitSetPips(count);
                   return (
                     <View key={mi} style={styles.exercise}>
                       <View style={{ flex: 1 }}>
@@ -243,7 +268,7 @@ export function SplitCycle({ routine }: { routine: Routine }) {
                         <View style={styles.pips}>
                           <View
                             style={{
-                              width: Math.max(6, Math.min(length, 120) * 0.6),
+                              width: cardioBarWidth(length),
                               height: 6,
                               borderRadius: 3,
                               backgroundColor: colour,
@@ -260,12 +285,12 @@ export function SplitCycle({ routine }: { routine: Routine }) {
                           accessibilityLabel={`${count} ${count === 1 ? 'set' : 'sets'}`}
                           style={styles.pips}
                         >
-                          {Array.from({ length: Math.min(count, MAX_PIPS) }, (_, pip) => (
+                          {Array.from({ length: pips.shown }, (_, pip) => (
                             <View key={pip} style={[styles.pip, { backgroundColor: colour }]} />
                           ))}
-                          {count > MAX_PIPS && (
+                          {pips.more > 0 && (
                             <Text style={[type.caption, { color: colors.secondary }]}>
-                              +{count - MAX_PIPS}
+                              +{pips.more}
                             </Text>
                           )}
                         </View>
@@ -289,6 +314,7 @@ export function SplitCycle({ routine }: { routine: Routine }) {
 const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   tools: { flexDirection: 'row', justifyContent: 'flex-end' },
+  toggleTouch: { minHeight: 44, minWidth: 44, justifyContent: 'center' },
   toggle: {
     minHeight: 32,
     paddingHorizontal: 12,
