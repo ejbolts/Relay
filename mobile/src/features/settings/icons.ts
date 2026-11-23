@@ -29,8 +29,13 @@ export const settingsIcons = {
   people: { sf: 'person.2', md: 'group' },
   restore: { sf: 'arrow.uturn.backward', md: 'restore' },
   appearance: { sf: 'circle.lefthalf.filled', md: 'brightness-6' },
+  moon: { sf: 'moon', md: 'dark-mode' },
+  sun: { sf: 'sun.max', md: 'light-mode' },
+  contrast: { sf: 'circle.lefthalf.filled', md: 'contrast' },
   feedback: { sf: 'bubble.left', md: 'chat-bubble-outline' },
   freshStart: { sf: 'flag', md: 'outlined-flag' },
   tips: { sf: 'lightbulb', md: 'lightbulb-outline' },
   guide: { sf: 'questionmark.circle', md: 'help-outline' },
+  guides: { sf: 'book', md: 'menu-book' },
+  data: { sf: 'arrow.up.arrow.down', md: 'import-export' },
 } satisfies Record<string, IconPair>;

@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { useReduceMotion } from '../../features/settings/devicePreferences';
 import { HeaderBack } from '../../features/settings/HeaderBack';
+import { headerOptions } from '../../ui/navigation';
 import { useTheme } from '../../ui/theme';
 
 /** Settings' own stack, pushed over the tabs, with native headers and back buttons. */
@@ -8,18 +9,7 @@ export default function SettingsLayout() {
   const { colors } = useTheme();
   const reduced = useReduceMotion();
   return (
-    <Stack
-      screenOptions={{
-        headerTintColor: colors.accentText,
-        headerTitleStyle: { color: colors.text },
-        headerLargeTitleStyle: { color: colors.text },
-        headerStyle: { backgroundColor: colors.page },
-        headerShadowVisible: false,
-        headerBackButtonDisplayMode: 'minimal',
-        contentStyle: { backgroundColor: colors.page },
-        ...(reduced && { animation: 'none' }),
-      }}
-    >
+    <Stack screenOptions={headerOptions(colors, reduced)}>
       <Stack.Screen
         name="index"
         options={{ title: 'Settings', headerLargeTitle: true, headerLeft: HeaderBack }}

@@ -18,7 +18,12 @@ export function HeaderBack() {
       accessibilityLabel="Back"
       hitSlop={10}
       onPress={() => router.back()}
-      style={{ paddingRight: Platform.OS === 'ios' ? 8 : 24 }}
+      style={{
+        minWidth: 44,
+        minHeight: 44,
+        justifyContent: 'center',
+        paddingRight: Platform.OS === 'ios' ? 8 : 16,
+      }}
     >
       <Icon
         name={Platform.OS === 'ios' ? 'chevronLeft' : { sf: 'chevron.left', md: 'arrow-back' }}
