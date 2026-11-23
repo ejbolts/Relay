@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { HISTORY_PAGE_SIZE } from '../../../../frontend/src/appShared';
 import type { BodyFigureKind } from '../../../../frontend/src/bodyFigureShapes';
 import {
@@ -311,7 +311,14 @@ export function BodySizesCard() {
           values={['Male', 'Female']}
           selectedIndex={figure === 'female' ? 1 : 0}
           onChange={(index) => chooseFigure(index === 1 ? 'female' : 'male')}
-          style={styles.figureSegmented}
+          style={[
+            styles.figureSegmented,
+            Platform.OS === 'android' && {
+              borderWidth: 1,
+              borderColor: colors.line,
+              borderRadius: 10,
+            },
+          ]}
         />
       )}
       {shown && (

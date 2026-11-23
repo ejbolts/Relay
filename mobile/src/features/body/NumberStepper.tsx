@@ -124,6 +124,7 @@ export function NumberStepper({
             text.length > 0 ? type.headline : type.body,
             type.number,
             styles.input,
+            !showUnit && { flex: 1 },
             { color: colors.text },
           ]}
         />
@@ -206,5 +207,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     gap: 4,
   },
-  input: { minWidth: 56, textAlign: 'center', paddingVertical: 0 },
+  input: { minWidth: 72, textAlign: 'center', paddingVertical: 0 },
 });
