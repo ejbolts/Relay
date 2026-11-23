@@ -10,6 +10,7 @@ import { HelpSettings } from './HelpSettings';
 import { HomeGuides } from './HomeGuides';
 import { ShareReminderAction } from './ShareReminderAction';
 import { resetTipsForTests, tipsFor } from './tips';
+import { launchPromptOpened, resetNoticeMemory } from '../review/noticeMemory';
 import { appTourWaiting, closeAppTour, queueAppTour } from './tourProgress';
 import { resetInactiveWorkoutAlertForTests, syncInactiveWorkoutAlert } from './workoutAlerts';
 
@@ -75,6 +76,7 @@ const stored = () => JSON.parse(memoryKv.get(tipStorageKey('u1')) ?? '{}');
 beforeEach(() => {
   memoryKv.clear();
   resetTipsForTests();
+  resetNoticeMemory();
   resetInactiveWorkoutAlertForTests();
   closeAppTour();
   mockWorkouts.current = [];
@@ -143,6 +145,8 @@ test('Settings lists the guides, says why Compare machines must wait, and replay
 test('a new account takes the quick tour, which opens each tab it explains', async () => {
   queueAppTour('u1');
   await show(<HomeGuides />);
+  // The tour is this visit's one launch prompt, so What's new and the weekly review wait.
+  expect(launchPromptOpened('u1')).toBe('onboarding');
   expect(await screen.findByText('Quick tour · 1 of 8')).toBeVisible();
   await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Next' }));

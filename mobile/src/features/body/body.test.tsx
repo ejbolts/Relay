@@ -20,6 +20,7 @@ import { ToastHost } from '../../ui/Toast';
 import { resetTipsForTests } from '../guides/tips';
 import { bodyTrendPreference } from '../settings/devicePreferences';
 import { BodyScreen } from './BodyScreen';
+import { clearMaintainGoalRequest, requestMaintainGoal } from './maintainGoalRequest';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 // Pinches can't be made in a test; the chart's pinch reaches its handlers through this stand-in.
@@ -147,6 +148,7 @@ let responses: Record<string, unknown>;
 beforeEach(() => {
   jest.clearAllMocks();
   memoryKv.delete(tipStorageKey(mockUser.id));
+  clearMaintainGoalRequest();
   resetTipsForTests();
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   responses = {
@@ -371,6 +373,12 @@ test('reaching a loss goal suggests a maintenance range until it is dismissed', 
   // The goal form opens on Maintain, and the tip doesn't come back.
   expect(await screen.findByLabelText('Minimum in kg')).toBeVisible();
   expect(screen.queryByLabelText('Quick tip')).toBeNull();
+});
+
+test('Home’s maintenance tip opens the goal form on Maintain', async () => {
+  requestMaintainGoal();
+  await renderBody();
+  expect(await screen.findByLabelText('Minimum in kg')).toBeVisible();
 });
 
 test('the maintenance tip waits until the goal is reached', async () => {

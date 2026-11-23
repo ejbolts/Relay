@@ -28,10 +28,13 @@ import {
 import { BodySizesCard } from './BodySizesCard';
 import { BodyTrendChart } from './BodyTrendChart';
 import { GoalSheet, type GoalRequest } from './GoalSheet';
+import { clearMaintainGoalRequest, useMaintainGoalRequested } from './maintainGoalRequest';
 import { WeighInSheet } from './WeighInSheet';
 
 /** How long a removed goal can be brought back: the Undo toast's time on screen. */
 const GOAL_UNDO_MS = 5000;
+/** The goal form on Maintain, as Home's maintenance tip asks for. */
+const MAINTAIN_GOAL: GoalRequest = { goal: null, kind: 'maintain' };
 
 /**
  * Removes a goal from view at once and deletes it only when its Undo window closes, as the
@@ -92,6 +95,7 @@ export function BodyScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [entry, setEntry] = useState<{ editing: BodyMeasurement | null } | null>(null);
   const [goalRequest, setGoalRequest] = useState<GoalRequest | null>(null);
+  const maintainRequested = useMaintainGoalRequested();
   const measurements = measurementsQuery.data ?? [];
   const goals = (goalsQuery.data ?? []).filter((goal) => goal.id !== removal.pendingId);
   const latest = measurements[0];
@@ -255,10 +259,13 @@ export function BodyScreen() {
         onClose={() => setEntry(null)}
       />
       <GoalSheet
-        request={goalRequest}
+        request={goalRequest ?? (maintainRequested ? MAINTAIN_GOAL : null)}
         goals={goals}
         latestKg={latest?.weight_kg ?? null}
-        onClose={() => setGoalRequest(null)}
+        onClose={() => {
+          setGoalRequest(null);
+          clearMaintainGoalRequest();
+        }}
         onRemove={removal.start}
       />
     </>

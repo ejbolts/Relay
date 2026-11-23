@@ -16,6 +16,7 @@ import {
 } from '../../../../frontend/src/weeklyReviewFixtures';
 import { apiGet, apiSend } from '../../data/api';
 import { NotificationsBell } from '../social/NotificationsBell';
+import { finishAppTour, queueAppTour } from '../guides/tourProgress';
 import { LaunchNotices } from './LaunchNotices';
 import { resetNoticeMemory } from './noticeMemory';
 import { ReleaseNotesScreen } from './ReleaseNotesScreen';
@@ -144,6 +145,22 @@ it('opens What’s new once per release, then last week’s review on a later vi
     weekly_review_seen: thisWeek,
   });
   expect(memoryKv.get(weeklyReviewShownKey('me'))).toBe(thisWeek);
+});
+
+it('lets a new account’s quick tour come first, and opens What’s new on a later visit', async () => {
+  mockUser = { ...mockUser, id: 'new-account' };
+  queueAppTour('new-account');
+  await show(<LaunchNotices />);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  });
+  expect(mockRouter.push).not.toHaveBeenCalled();
+
+  // The tour is finished; on the next visit What's new opens by itself.
+  finishAppTour('new-account');
+  resetNoticeMemory();
+  await show(<LaunchNotices />);
+  await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/release-notes'));
 });
 
 it('stays quiet when another device has shown this week’s review and seen the release', async () => {
