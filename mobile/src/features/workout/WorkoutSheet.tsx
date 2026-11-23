@@ -343,6 +343,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         else if (next) setShelf({ id: ++shelfId.current, gains: next });
       },
       addSet: logger.addSet,
+      insertSet: logger.addSet,
       deleteSet: (movementKey, setKey) => {
         const movement = getState()?.movements.find((item) => item.key === movementKey);
         const index = movement?.sets.findIndex((item) => item.key === setKey) ?? -1;

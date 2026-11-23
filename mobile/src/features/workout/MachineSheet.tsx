@@ -1,6 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -20,11 +19,10 @@ import { apiSend } from '../../data/api';
 import { useAuthorisedImage } from '../../data/authorisedImage';
 import { Button } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
-import { promptText, showMenu } from '../../ui/prompts';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 import { loggerKeys, machineSettings, useMachinePhotos } from './loggerQueries';
-import { uploadMachinePhoto } from './machineMedia';
+import { askForMachinePhoto, uploadMachinePhoto } from './machineMedia';
 
 export interface MachineTarget {
   movementKey: string;
@@ -93,67 +91,29 @@ function MachineChoices({
         .catch(() => undefined);
   };
 
-  async function addPhoto(source: 'camera' | 'library') {
-    const permission =
-      source === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        source === 'camera' ? 'Camera access is off' : 'Photo access is off',
-        source === 'camera'
-          ? 'Allow camera access in Settings to photograph a machine.'
-          : 'Allow photo access in Settings to choose a machine photo.',
-      );
-      return;
-    }
-    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.6 };
-    const result =
-      source === 'camera'
-        ? await ImagePicker.launchCameraAsync(options)
-        : await ImagePicker.launchImageLibraryAsync(options);
-    const asset = result.canceled ? null : result.assets[0];
-    if (!asset) return;
-    promptText({
-      title: 'Machine name',
-      value: '',
-      placeholder: 'Such as Cybex leg press',
-      submitLabel: 'Save',
-      onSubmit: (caption) => {
-        if (!caption.trim()) {
-          Alert.alert('Name the machine', 'Enter the machine name before saving the photo.');
-          return;
-        }
-        setUploading(true);
-        void uploadMachinePhoto(
-          target.exercise.id,
-          {
-            uri: asset.uri,
-            name: asset.fileName ?? 'machine.jpg',
-            type: asset.mimeType ?? 'image/jpeg',
-          },
-          caption.trim(),
-          target.machineSettings ?? [],
+  function addPhoto() {
+    askForMachinePhoto((file, caption) => {
+      setUploading(true);
+      void uploadMachinePhoto(target.exercise.id, file, caption, target.machineSettings ?? [])
+        .then((photo) => {
+          const added: MachinePhotoUsage = {
+            ...photo,
+            exercise_name: target.exercise.name,
+            workout_count: 0,
+            last_used_date: null,
+          };
+          const list = [added, ...photos];
+          client.setQueryData(loggerKeys.machines(target.exercise.id), list);
+          void client.invalidateQueries({ queryKey: loggerKeys.allMachines, exact: true });
+          choose([...new Set([...pinned, photo.id])], list);
+        })
+        .catch((reason) =>
+          Alert.alert(
+            'Photo not saved',
+            reason instanceof Error ? reason.message : 'Could not save the photo.',
+          ),
         )
-          .then((photo) => {
-            const added: MachinePhotoUsage = {
-              ...photo,
-              exercise_name: target.exercise.name,
-              workout_count: 0,
-              last_used_date: null,
-            };
-            const list = [added, ...photos];
-            client.setQueryData(loggerKeys.machines(target.exercise.id), list);
-            choose([...new Set([...pinned, photo.id])], list);
-          })
-          .catch((reason) =>
-            Alert.alert(
-              'Photo not saved',
-              reason instanceof Error ? reason.message : 'Could not save the photo.',
-            ),
-          )
-          .finally(() => setUploading(false));
-      },
+        .finally(() => setUploading(false));
     });
   }
 
@@ -193,12 +153,7 @@ function MachineChoices({
         icon={{ sf: 'camera', md: 'photo-camera' }}
         variant="secondary"
         disabled={uploading}
-        onPress={() =>
-          showMenu('Add machine photo', [
-            { label: 'Take photo', onPress: () => void addPhoto('camera') },
-            { label: 'Choose photo', onPress: () => void addPhoto('library') },
-          ])
-        }
+        onPress={addPhoto}
       />
       {primary && (
         <SettingsEditor

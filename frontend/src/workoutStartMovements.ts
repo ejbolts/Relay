@@ -1,3 +1,4 @@
+import { historyOnMachine, recentExerciseHistory, withSuggestedSets } from './exerciseHistory';
 import { withLastSessionReps, withLastSessionValues } from './lastSessionSet';
 import { progressionTarget, progressionWeightKg } from './repProgression';
 import type { SessionTemplate } from './trainingSummary';
@@ -60,6 +61,44 @@ export function suggestedSetsFromHistory(
     fromPrevious: true,
     restRevealed: false,
   }));
+}
+
+/**
+ * The sets an exercise added from the picker starts with: with a machine chosen there, that
+ * machine's last session, else the exercise's own last session, as suggestedSetsFromHistory.
+ */
+export function suggestedSetsForPickedExercise(
+  workouts: TrackedWorkout[],
+  exercise: Exercise,
+  onOrBeforeDate: string,
+  excludedWorkoutId: string | undefined,
+  olderHistory: Map<string, ExerciseHistoryBaseline> | null | undefined,
+  defaultRest: number | null,
+  machineId: string | undefined,
+  newKey: () => string,
+): WorkoutDraftSet[] {
+  const onMachine =
+    machineId &&
+    historyOnMachine(
+      recentExerciseHistory(
+        workouts.filter((workout) => workout.workout_date <= onOrBeforeDate),
+        exercise.id,
+        excludedWorkoutId,
+        Number.POSITIVE_INFINITY,
+      ),
+      machineId,
+      new Map(),
+    ).find((entry) => entry.sets.length)?.sets;
+  if (onMachine) return withSuggestedSets([], onMachine, exercise.kind, newKey);
+  return suggestedSetsFromHistory(
+    workouts,
+    exercise,
+    onOrBeforeDate,
+    excludedWorkoutId,
+    olderHistory,
+    defaultRest,
+    newKey,
+  );
 }
 
 export interface TemplateMovementContext {

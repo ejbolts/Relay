@@ -37,7 +37,7 @@ import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
-import { restTimerPreference } from './devicePreferences';
+import { restTimerPreference, restTimesPreference } from './devicePreferences';
 import { settingsIcons } from './icons';
 import {
   useAutoSave,
@@ -82,6 +82,8 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
   // While a change is on its way, show it rather than the saved value.
   const shown = (save.isPending && save.variables) || preferences;
   const restTimer = restTimerPreference.use();
+  // Stream B1 (logger): rest times between sets.
+  const restTimes = restTimesPreference.use();
 
   function change(next: TrainingPreferences, confirmation = 'Training preferences saved.') {
     setTrainingError(null);
@@ -173,7 +175,13 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
           value={restTimer}
           onChange={restTimerPreference.set}
         />
-        {/* Show rest times returns once the logger draws rest times between sets (PARITY.md). */}
+        <SwitchRow
+          label="Show rest times"
+          icon={settingsIcons.show}
+          iconTint="#d97706"
+          value={restTimes}
+          onChange={restTimesPreference.set}
+        />
         <ChoiceRow
           label="Default rest"
           disabled={save.isPending}

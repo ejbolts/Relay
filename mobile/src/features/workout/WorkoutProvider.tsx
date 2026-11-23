@@ -240,7 +240,8 @@ export interface LoggerApi {
   /** Changes the live workout; it is stored before the next frame. */
   change: (update: (state: LoggerState) => LoggerState) => void;
   updateSet: (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => void;
-  addSet: (movementKey: string) => void;
+  /** Adds a set at the end, or at `position` (the "+" between sets). */
+  addSet: (movementKey: string, position?: number) => void;
   chooseType: (type: WorkoutType) => void;
   togglePause: () => void;
   startRest: (seconds: number) => void;
@@ -724,10 +725,10 @@ const WorkoutEngine = memo(function WorkoutEngine({
   );
 
   const addSet = useCallback(
-    (movementKey: string) => {
+    (movementKey: string, position?: number) => {
       const current = loggerRef.current;
       if (!current) return;
-      const { state, setKey } = addSetRule(current, movementKey, context);
+      const { state, setKey } = addSetRule(current, movementKey, context, position);
       if (setKey) addedSetKeys.current.add(setKey);
       commit(withActivity(state, Date.now()));
     },
