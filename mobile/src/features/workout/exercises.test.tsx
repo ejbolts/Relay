@@ -52,6 +52,13 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => children,
 }));
+jest.mock('react-native-gesture-handler', () => ({
+  ...jest.requireActual<typeof import('react-native-gesture-handler')>(
+    'react-native-gesture-handler',
+  ),
+  usePanGesture: (config: unknown) => config,
+  GestureDetector: ({ children }: { children: ReactNode }) => children,
+}));
 jest.mock('./restAlerts', () => ({
   askForRestAlerts: jest.fn(async () => undefined),
   syncRestAlert: jest.fn(async () => undefined),

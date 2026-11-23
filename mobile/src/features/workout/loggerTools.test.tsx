@@ -12,6 +12,7 @@ import { memoryKv } from '../../testing/memoryKvStore';
 import { showMenu, type MenuOption } from '../../ui/prompts';
 import { pushDay, types } from './testFixtures';
 import { useWorkout, WorkoutProvider } from './WorkoutProvider';
+import { setDropIndex } from './SetDrag';
 import { WorkoutSheet } from './WorkoutSheet';
 
 const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
@@ -31,6 +32,21 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => children,
 }));
+// The set drag's pan gesture: each row's config lands on a stand-in view, so a test can run it.
+jest.mock('react-native-gesture-handler', () => {
+  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    ...jest.requireActual<typeof import('react-native-gesture-handler')>(
+      'react-native-gesture-handler',
+    ),
+    usePanGesture: (config: unknown) => config,
+    GestureDetector: ({ gesture, children }: { gesture: unknown; children: ReactNode }) => (
+      <View testID="set-drag" {...{ gesture }}>
+        {children}
+      </View>
+    ),
+  };
+});
 jest.mock('./restAlerts', () => ({
   askForRestAlerts: jest.fn(async () => undefined),
   syncRestAlert: jest.fn(async () => undefined),
@@ -145,6 +161,13 @@ const option = (options: MenuOption[], label: string) => {
 };
 
 const draft = () => readActiveWorkoutDraft(deviceStorage);
+const menuCall = (title: string) => {
+  const call = jest
+    .mocked(showMenu)
+    .mock.calls.findLast(([heading]) => heading === title || heading?.startsWith(`${title} ·`));
+  if (!call) throw new Error(`No menu ${title}`);
+  return call[1] as MenuOption[];
+};
 const MINUTE = 60_000;
 
 describe('correcting the workout time', () => {
@@ -270,5 +293,89 @@ describe('folding an exercise card', () => {
     expect(screen.getByText(/^\d completed sets?$/)).toBeVisible();
     await fireEvent.press(screen.getByRole('button', { name: 'Mark Bench Press as not finished' }));
     expect(screen.getAllByRole('button', { name: 'Collapse Bench Press' })).toHaveLength(2);
+  });
+});
+
+type DragConfig = {
+  enabled: boolean;
+  activateAfterLongPress: number;
+  onActivate: () => void;
+  onUpdate: (event: { translationY: number }) => void;
+  onDeactivate: (event: { canceled: boolean }) => void;
+};
+const dragOf = (row: number) => screen.getAllByTestId('set-drag')[row].props.gesture as DragConfig;
+
+async function layOutSets(height = 60) {
+  const blocks = screen.getAllByTestId(/^set-block-/);
+  for (const [index, block] of blocks.entries())
+    await fireEvent(block, 'layout', {
+      nativeEvent: { layout: { y: 100 + index * height, height } },
+    });
+}
+
+async function dragSet(row: number, dy: number, canceled = false) {
+  const drag = dragOf(row);
+  await act(async () => drag.onActivate());
+  await act(async () => drag.onUpdate({ translationY: dy }));
+  await act(async () => dragOf(row).onDeactivate({ canceled }));
+}
+
+describe('dragging to reorder sets', () => {
+  test('the drop place is the block under the dragged set’s middle', () => {
+    const blocks = [
+      { y: 0, height: 60 },
+      { y: 60, height: 100 },
+      { y: 160, height: 60 },
+    ];
+    expect(setDropIndex(blocks, 0, 20)).toBe(0);
+    expect(setDropIndex(blocks, 0, 40)).toBe(1);
+    expect(setDropIndex(blocks, 0, 200)).toBe(2);
+    expect(setDropIndex(blocks, 2, -150)).toBe(0);
+    expect(setDropIndex(blocks, 2, -400)).toBe(0);
+    expect(setDropIndex([undefined, ...blocks.slice(1)], 0, 100)).toBe(0);
+  });
+
+  test('holding a set and dragging it moves the set, its numbers following', async () => {
+    await openLogger();
+    await fireEvent.changeText(
+      screen.getByLabelText('Weight kilograms for set 1, suggested value'),
+      '100',
+    );
+    expect(dragOf(0)).toMatchObject({ enabled: true, activateAfterLongPress: 500 });
+    await layOutSets();
+    await dragSet(0, 70);
+
+    expect(draft()?.movements[0].sets.map((set) => set.weight_kg)).toEqual([80, 100]);
+    expect(screen.getByLabelText(/^Weight kilograms for set 2/).props.value).toBe('100');
+  });
+
+  test('a short or cancelled drag leaves the sets where they were', async () => {
+    await openLogger();
+    await fireEvent.changeText(
+      screen.getByLabelText('Weight kilograms for set 1, suggested value'),
+      '100',
+    );
+    await layOutSets();
+    await dragSet(0, 20);
+    await dragSet(0, 90, true);
+    expect(draft()?.movements[0].sets.map((set) => set.weight_kg)).toEqual([100, 80]);
+  });
+
+  test('screen readers move a set with Move up and Move down in its menu', async () => {
+    await openLogger();
+    await fireEvent.changeText(
+      screen.getByLabelText('Weight kilograms for set 1, suggested value'),
+      '100',
+    );
+    await fireEvent.press(screen.getAllByLabelText(/^Set 1 type: /)[0]);
+    await act(async () => option(menuCall('Set 1'), 'Move down').onPress());
+    expect(draft()?.movements[0].sets.map((set) => set.weight_kg)).toEqual([80, 100]);
+  });
+
+  test('a single set has nothing to reorder', async () => {
+    await openLogger();
+    await fireEvent.press(screen.getAllByLabelText(/^Set 2 type: /)[0]);
+    await act(async () => option(menuCall('Set 2'), 'Delete set').onPress());
+    expect(dragOf(0).enabled).toBe(false);
   });
 });
