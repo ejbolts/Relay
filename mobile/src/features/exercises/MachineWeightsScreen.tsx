@@ -131,7 +131,7 @@ function MachineWeightsEditor({
         date: point.workout_date,
         value: weightFromKg(point.estimated_1rm, unit),
         id: point.workout_id,
-        detail: '',
+        detail: 'est. 1RM',
       }))
     : [];
 

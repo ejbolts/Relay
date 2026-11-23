@@ -62,6 +62,8 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
   const [range, setRange] = useState<TimeRange>('3m');
   const [machine, setMachine] = useState<MachineView>('all');
   const [shownSessions, setShownSessions] = useState(SESSION_PAGE);
+  // Only a pull shows the spinner; refreshes after a change happen quietly.
+  const [refreshing, setRefreshing] = useState(false);
   const today = localDate();
   const name = exercise?.name ?? progress.data?.exercise.name ?? 'Exercise';
   // The chosen block's records; without a block, the whole history's.
@@ -149,8 +151,11 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
         }}
         refreshControl={
           <RefreshControl
-            refreshing={progress.isRefetching}
-            onRefresh={() => void progress.refetch()}
+            refreshing={refreshing}
+            onRefresh={() => {
+              setRefreshing(true);
+              void progress.refetch().finally(() => setRefreshing(false));
+            }}
           />
         }
       >

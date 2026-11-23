@@ -84,6 +84,8 @@ export function ChoiceTiles<T extends string>({
               style={({ pressed }) => [
                 styles.tile,
                 {
+                  // Three choices sit in a row; two or four make a 2 × 2 grid.
+                  flexBasis: options.length % 3 === 0 ? '30%' : '45%',
                   borderRadius: radius.md,
                   backgroundColor: on ? colors.accentSoft : colors.surface2,
                   borderColor: on ? colors.accent : 'transparent',
@@ -165,7 +167,6 @@ const styles = StyleSheet.create({
   tiles: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   tile: {
     flexGrow: 1,
-    flexBasis: '30%',
     minHeight: 52,
     paddingHorizontal: 12,
     paddingVertical: 8,

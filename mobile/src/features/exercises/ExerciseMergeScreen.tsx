@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useRef, useState, type ComponentRef } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -27,8 +27,10 @@ import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { FieldLabel, RadioRow } from '../blocks/parts';
-import { Divider } from '../training/parts';
+import { Divider, MoreButton } from '../training/parts';
 import { mergeExercise, updateExercise } from './exerciseQueries';
+
+const PAGE = 20;
 
 /**
  * Merges a custom exercise into another, as the web's dialog does: suggested standard
@@ -64,6 +66,8 @@ function MergeForm({
   const [sourceId, setSourceId] = useState(initialSource);
   const [targetId, setTargetId] = useState(initialTarget);
   const [query, setQuery] = useState('');
+  const [shown, setShown] = useState(PAGE);
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const [busy, setBusy] = useState<'change' | 'merge' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const source = all.find((item) => item.id === sourceId);
@@ -113,6 +117,7 @@ function MergeForm({
           setSourceId(item.id);
           setTargetId('');
           setQuery('');
+          setShown(PAGE);
           setError(null);
         },
       })),
@@ -127,6 +132,8 @@ function MergeForm({
       onPress={() => {
         setTargetId(exercise.id);
         setError(null);
+        // What the merge needs, or does, shows at the top.
+        scroll.current?.scrollTo({ y: 0, animated: true });
       }}
     >
       <View style={{ flex: 1, gap: 2 }}>
@@ -156,6 +163,7 @@ function MergeForm({
     >
       <Stack.Screen options={{ title: 'Merge exercises' }} />
       <ScrollView
+        ref={scroll}
         style={{ flex: 1, backgroundColor: colors.page }}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
@@ -179,63 +187,6 @@ function MergeForm({
             <Icon name="chevronDown" size={14} color={colors.muted} />
           </Pressable>
         </View>
-        {source && (
-          <View style={styles.group}>
-            <FieldLabel>Merge into</FieldLabel>
-            <View
-              style={[styles.search, { backgroundColor: colors.surface2, borderRadius: radius.md }]}
-            >
-              <Icon name="search" size={16} color={colors.muted} />
-              <TextInput
-                accessibilityLabel="Search merge destination"
-                placeholder="Search exercises"
-                placeholderTextColor={colors.muted}
-                value={query}
-                onChangeText={setQuery}
-                autoCorrect={false}
-                clearButtonMode="while-editing"
-                style={[type.body, { flex: 1, paddingVertical: 8, color: colors.text }]}
-              />
-            </View>
-            <View
-              accessibilityRole="radiogroup"
-              accessibilityLabel="Merge destination"
-              style={[styles.list, { backgroundColor: colors.surface, borderRadius: radius.lg }]}
-            >
-              {suggested.length > 0 && (
-                <>
-                  <Text style={[type.eyebrow, styles.heading, { color: colors.muted }]}>
-                    SUGGESTED
-                  </Text>
-                  {suggested.map((entry, index) => (
-                    <View key={entry.exercise.id}>
-                      {index > 0 && <Divider inset={16} />}
-                      {targetRow(entry.exercise, entry.ready, entry.matchedWords)}
-                    </View>
-                  ))}
-                  {listed.length > 0 && (
-                    <Text style={[type.eyebrow, styles.heading, { color: colors.muted }]}>
-                      ALL EXERCISES
-                    </Text>
-                  )}
-                </>
-              )}
-              {listed.map((entry, index) => (
-                <View key={entry.item.id}>
-                  {index > 0 && <Divider inset={16} />}
-                  {targetRow(entry.item, entry.ready)}
-                </View>
-              ))}
-              {!candidates.length && (
-                <Text style={[type.callout, styles.empty, { color: colors.secondary }]}>
-                  {query.trim()
-                    ? 'No exercises match your search.'
-                    : 'No other exercises of this kind.'}
-                </Text>
-              )}
-            </View>
-          </View>
-        )}
         {source && chosen && needed && (
           <Card accessibilityLabel="Changes needed to merge">
             <Text style={[type.headline, { color: colors.text }]}>
@@ -288,6 +239,72 @@ function MergeForm({
               onPress={() => void merge()}
             />
           </Card>
+        )}
+        {source && (
+          <View style={styles.group}>
+            <FieldLabel>Merge into</FieldLabel>
+            <View
+              style={[styles.search, { backgroundColor: colors.surface2, borderRadius: radius.md }]}
+            >
+              <Icon name="search" size={16} color={colors.muted} />
+              <TextInput
+                accessibilityLabel="Search merge destination"
+                placeholder="Search exercises"
+                placeholderTextColor={colors.muted}
+                value={query}
+                onChangeText={(text) => {
+                  setQuery(text);
+                  setShown(PAGE);
+                }}
+                autoCorrect={false}
+                clearButtonMode="while-editing"
+                style={[type.body, { flex: 1, paddingVertical: 8, color: colors.text }]}
+              />
+            </View>
+            <View
+              accessibilityRole="radiogroup"
+              accessibilityLabel="Merge destination"
+              style={[styles.list, { backgroundColor: colors.surface, borderRadius: radius.lg }]}
+            >
+              {suggested.length > 0 && (
+                <>
+                  <Text style={[type.eyebrow, styles.heading, { color: colors.muted }]}>
+                    SUGGESTED
+                  </Text>
+                  {suggested.map((entry, index) => (
+                    <View key={entry.exercise.id}>
+                      {index > 0 && <Divider inset={16} />}
+                      {targetRow(entry.exercise, entry.ready, entry.matchedWords)}
+                    </View>
+                  ))}
+                  {listed.length > 0 && (
+                    <Text style={[type.eyebrow, styles.heading, { color: colors.muted }]}>
+                      ALL EXERCISES
+                    </Text>
+                  )}
+                </>
+              )}
+              {listed.slice(0, shown).map((entry, index) => (
+                <View key={entry.item.id}>
+                  {index > 0 && <Divider inset={16} />}
+                  {targetRow(entry.item, entry.ready)}
+                </View>
+              ))}
+              {listed.length > shown && (
+                <MoreButton
+                  label={`Show more (${listed.length - shown})`}
+                  onPress={() => setShown(shown + PAGE)}
+                />
+              )}
+              {!candidates.length && (
+                <Text style={[type.callout, styles.empty, { color: colors.secondary }]}>
+                  {query.trim()
+                    ? 'No exercises match your search.'
+                    : 'No other exercises of this kind.'}
+                </Text>
+              )}
+            </View>
+          </View>
         )}
         {!!error && (
           <Text accessibilityRole="alert" style={[type.callout, { color: colors.danger }]}>
