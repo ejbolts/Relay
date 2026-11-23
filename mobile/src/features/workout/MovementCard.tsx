@@ -46,6 +46,7 @@ import { promptText } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
 import { restTimesPreference } from '../settings/devicePreferences';
+import { CardioSetImport } from './CardioSetImport';
 import { lastUsedMachines, useMachinePhotos } from './loggerQueries';
 import { formatPlain, NumberField, parseDecimal, parseWhole } from './NumberField';
 import { restMenuItems } from './restChoices';
@@ -741,6 +742,16 @@ function SetRow({
             onToggle={() => setExtrasOpen((value) => !value)}
             update={update}
           />
+        )}
+        {cardio && (
+          <View style={{ paddingLeft: 40 }}>
+            <CardioSetImport
+              number={number}
+              done={item.completed}
+              // A scanned screenshot is the finished set, so it is logged, as on the web.
+              onScanned={(values) => update({ ...values, completed: true })}
+            />
+          </View>
         )}
       </View>
     </ReanimatedSwipeable>
