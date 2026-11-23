@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { commentTime } from '../../../../frontend/src/commentDisplay';
@@ -17,6 +17,7 @@ import type {
 } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { ApiError, apiGet, apiSend } from '../../data/api';
+import { pendingActions } from '../../ui/pendingActions';
 import { ToastHost } from '../../ui/Toast';
 import { FriendQrSheet } from './FriendQrSheet';
 import { FriendsActivityCard } from './FriendsActivityCard';
@@ -48,7 +49,30 @@ const mockUser = {
   profile_photo_url: null,
   created_at: '2026-11-01T00:00:00Z',
 } as unknown as User;
-jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
+// The session the toasts see; switchAccount signs another account in.
+const mockSession = {
+  status: { kind: 'signed-in', user: { id: 'me' } } as { kind: string; user?: { id: string } },
+  listeners: new Set<() => void>(),
+};
+function switchAccount(id: string) {
+  mockSession.status = { kind: 'signed-in', user: { id } };
+  mockSession.listeners.forEach((listener) => listener());
+}
+jest.mock('../../session/SessionProvider', () => {
+  const { useSyncExternalStore } = jest.requireActual<typeof import('react')>('react');
+  return {
+    useUser: () => mockUser,
+    useOptionalSession: () => ({
+      status: useSyncExternalStore(
+        (listener) => {
+          mockSession.listeners.add(listener);
+          return () => void mockSession.listeners.delete(listener);
+        },
+        () => mockSession.status,
+      ),
+    }),
+  };
+});
 jest.mock('../../data/queries', () => ({
   ...jest.requireActual('../../data/queries'),
   useWeightUnit: () => 'kg',
@@ -206,7 +230,11 @@ const casey: SharedProfile = {
 };
 
 let client: QueryClient;
-afterEach(() => client.clear());
+afterEach(() => {
+  client.clear();
+  pendingActions.clear();
+  if (mockSession.status.user?.id !== 'me') switchAccount('me');
+});
 beforeEach(() => {
   jest.clearAllMocks();
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
@@ -227,7 +255,7 @@ async function show(children: ReactNode) {
       mutations: { gcTime: Infinity },
     },
   });
-  await render(
+  const tree = (content: ReactNode) => (
     <SafeAreaProvider
       initialMetrics={{
         frame: { x: 0, y: 0, width: 390, height: 844 },
@@ -235,11 +263,14 @@ async function show(children: ReactNode) {
       }}
     >
       <QueryClientProvider client={client}>
-        {children}
+        {content}
         <ToastHost />
       </QueryClientProvider>
-    </SafeAreaProvider>,
+    </SafeAreaProvider>
   );
+  const view = await render(tree(children));
+  /** Shows other screens under the same toast host, as navigating does. */
+  return { rerender: (content: ReactNode) => view.rerender(tree(content)) };
 }
 
 test("the feed shows friends' workouts, and a reaction is sent and shown", async () => {
@@ -354,6 +385,59 @@ test('an invite sends the friend request once, with Undo', async () => {
     expect(apiSend).toHaveBeenLastCalledWith('/api/sharing/friends/casey', 'DELETE'),
   );
   expect(apiSend).toHaveBeenCalledTimes(2);
+});
+
+test('an invite that answers after another account signs in shows nothing there', async () => {
+  let answer: (value: unknown) => void = () => undefined;
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/casey') return casey;
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  jest
+    .mocked(apiSend)
+    .mockImplementation((_path: string, method: string) =>
+      method === 'POST' ? new Promise((resolve) => (answer = resolve)) : Promise.resolve(undefined),
+    );
+  await show(<ProfileScreen profileId="casey" invite />);
+  await waitFor(() => expect(apiSend).toHaveBeenCalledWith('/api/sharing/friends/casey', 'POST'));
+  // Another account signs in while the request is on its way.
+  await act(async () => switchAccount('other'));
+  await act(async () => answer({ status: 'outgoing' }));
+  expect(screen.queryByText('Friend request sent to Casey Kim')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
+  expect(apiSend).toHaveBeenCalledTimes(1);
+});
+
+test('a removed friend stays removed when the profile opens again, and is sent once', async () => {
+  let status: SharedProfile['friend_status'] = 'friends';
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/casey') return { ...casey, friend_status: status };
+    if (path === '/api/sharing/friends') return friends;
+    if (path === '/api/sharing') return { visibility: 'public', pending_requests: 0 };
+    if (path.startsWith('/api/sharing/')) return [];
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  jest.mocked(apiSend).mockImplementation(async (_path: string, method: string) => {
+    if (method === 'DELETE') status = 'none';
+    return undefined;
+  });
+  const view = await show(<ProfileScreen profileId="casey" />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Remove friend' }));
+  expect(screen.getByRole('button', { name: 'Undo' })).toBeOnTheScreen();
+
+  // Leave the profile and open it again while the Undo still shows.
+  await view.rerender(null);
+  await view.rerender(<ProfileScreen profileId="casey" />);
+  expect(await screen.findByRole('button', { name: 'Add friend' })).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: 'Remove friend' })).toBeNull();
+  expect(apiSend).not.toHaveBeenCalledWith('/api/sharing/friends/casey', 'DELETE');
+
+  // The toast ends without Undo: the removal is sent, once.
+  await fireEvent.press(screen.getByRole('button', { name: 'Removed Casey Kim. Dismiss' }));
+  await waitFor(() => expect(apiSend).toHaveBeenCalledWith('/api/sharing/friends/casey', 'DELETE'));
+  expect(jest.mocked(apiSend).mock.calls.filter(([, method]) => method === 'DELETE')).toHaveLength(
+    1,
+  );
 });
 
 test('your own profile opens Edit profile, sharing choices and your QR code', async () => {
