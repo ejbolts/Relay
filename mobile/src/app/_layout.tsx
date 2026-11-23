@@ -18,6 +18,7 @@ import { colourMode, useReduceMotion } from '../features/settings/devicePreferen
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { useDeferredFriendInvite } from '../session/friendInvite';
 import { SessionProvider, useSession } from '../session/SessionProvider';
+import { AppTourHost } from '../features/guides/AppTourHost';
 import { PromptHost } from '../ui/prompts';
 import { useTheme } from '../ui/theme';
 
@@ -137,6 +138,8 @@ function Navigation() {
             <Stack.Screen name="sign-in" />
           </Stack.Protected>
         </Stack>
+        {/* Mobile batch 4, B4: the quick tour, above the tabs so it stays open as it opens each. */}
+        {signedIn && !mustChangePassword && <AppTourHost />}
         {/* Android's menu sheets and text dialogs for every screen. The logger, a separate native
             sheet, mounts its own. */}
         <PromptHost />
