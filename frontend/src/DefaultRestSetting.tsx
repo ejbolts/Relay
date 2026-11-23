@@ -2,10 +2,9 @@ import { useState } from 'react';
 import { api } from './api';
 import { useToast } from './Toast';
 import { useTrainingPreferences } from './trainingPreferencesContext';
+import { defaultRestChoices } from './trainingSettings';
 import { formatSeconds } from './utils';
 import './defaultRestSetting.css';
-
-const CHOICES = [30, 60, 90, 120, 150, 180, 210, 240, 300];
 
 /**
  * The rest a new set gets when last time gives none. Unset by default, so a set has no rest
@@ -17,7 +16,6 @@ export function DefaultRestSetting() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const seconds = shared.preferences?.default_rest_seconds ?? null;
-  const choices = seconds === null || CHOICES.includes(seconds) ? CHOICES : [...CHOICES, seconds];
 
   async function change(value: number | null) {
     if (!shared.preferences) return;
@@ -55,13 +53,11 @@ export function DefaultRestSetting() {
           }
         >
           <option value="">None</option>
-          {[...choices]
-            .sort((left, right) => left - right)
-            .map((choice) => (
-              <option key={choice} value={choice}>
-                {formatSeconds(choice)}
-              </option>
-            ))}
+          {defaultRestChoices(seconds).map((choice) => (
+            <option key={choice} value={choice}>
+              {formatSeconds(choice)}
+            </option>
+          ))}
         </select>
       </label>
       {error && (

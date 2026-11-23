@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { api } from './api';
 import { AuthBrand } from './AuthScreen';
-import { authErrorMessage, MIN_PASSWORD_LENGTH, validateNewPassword } from './authForm';
+import { authErrorMessage } from './authForm';
+import { MIN_PASSWORD_LENGTH, passwordChangeError } from './authRules';
 import { PasswordInput } from './PasswordInput';
 import { useUserSession } from './userContext';
 
@@ -26,17 +27,9 @@ export function PasswordChangeRequired() {
     event.preventDefault();
     if (saving) return;
     setError(null);
-    if (!current) {
-      setError('Enter the temporary password.');
-      return;
-    }
-    const passwordError = validateNewPassword(next);
-    if (passwordError) {
-      setError(`New password: ${passwordError.toLowerCase()}`);
-      return;
-    }
-    if (next !== confirm) {
-      setError('The new passwords do not match.');
+    const invalid = passwordChangeError({ current, next, confirm }, { temporary: true });
+    if (invalid) {
+      setError(invalid);
       return;
     }
     setSaving(true);

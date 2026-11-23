@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { api, ApiError } from './api';
-import { authErrorMessage, MIN_PASSWORD_LENGTH, validateNewPassword } from './authForm';
+import { authErrorMessage, isNetworkFailure } from './authForm';
+import { MIN_PASSWORD_LENGTH, passwordChangeError, passwordChangeFailureText } from './authRules';
 import { CollapsibleSection } from './CollapsibleSection';
 import { PasswordInput } from './PasswordInput';
 import { PopupDialog } from './PopupDialog';
@@ -59,17 +60,9 @@ function PasswordForm() {
     event.preventDefault();
     if (saving) return;
     setError(null);
-    if (!current) {
-      setError('Enter your current password.');
-      return;
-    }
-    const passwordError = validateNewPassword(next);
-    if (passwordError) {
-      setError(`New password: ${passwordError.toLowerCase()}`);
-      return;
-    }
-    if (next !== confirm) {
-      setError('The new passwords do not match.');
+    const invalid = passwordChangeError({ current, next, confirm });
+    if (invalid) {
+      setError(invalid);
       return;
     }
     setSaving(true);
@@ -81,8 +74,8 @@ function PasswordForm() {
       toast.show('Password updated. Other devices were signed out.');
     } catch (reason) {
       setError(
-        reason instanceof ApiError && reason.code === 'invalid_password'
-          ? 'Your current password is not correct.'
+        reason instanceof ApiError && !isNetworkFailure(reason)
+          ? passwordChangeFailureText(reason)
           : authErrorMessage(reason),
       );
     } finally {
