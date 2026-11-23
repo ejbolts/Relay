@@ -268,9 +268,7 @@ export function bodyGoalName(goal: BodyHistoryGoal, unit: WeightUnit): string {
 function goalComparison(change: BodyHistoryWeightChange): string {
   if (!change.goalDirection || change.status === 'neutral') return '';
   if (change.goalDirection === 'maintain') {
-    // A template literal, so the shared-import check doesn't read this text as an import.
-    const distance = change.status === 'favorable' ? 'closer to' : `further from`;
-    return `; ${distance} maintenance weight`;
+    return `; ${change.status === 'favorable' ? 'closer to' : 'further from'} maintenance weight`;
   }
   return `; ${change.status === 'favorable' ? 'in line with' : 'opposite to'} weight-${change.goalDirection} goal`;
 }
