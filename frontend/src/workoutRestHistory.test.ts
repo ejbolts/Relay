@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { previousSetRests, restToAdd } from './workoutRestHistory';
+import { previousSetRests, restRowShown, restToAdd } from './workoutRestHistory';
 import { createWorkoutSet } from './workoutSets';
 import type { ExerciseHistoryEntry } from './exerciseHistory';
 
@@ -70,5 +70,27 @@ describe('rest to add between sets', () => {
     expect(restToAdd(sets, 1, [], 150)).toBe(45);
     expect(restToAdd([noRest, noRest], 0, [], 150)).toBe(150);
     expect(restToAdd([noRest, noRest], 0, [])).toBeUndefined();
+  });
+});
+
+describe('when a rest shows between sets', () => {
+  const set = { completed: false, rest_seconds: 90 };
+
+  it("shows a logged set's rest, and a typed set's straight away", () => {
+    expect(restRowShown({ ...set, completed: true, fromPrevious: true }, false, true)).toBe(true);
+    expect(restRowShown({ ...set, restRevealed: true }, false, true)).toBe(true);
+    expect(restRowShown(set, false, true)).toBe(true);
+  });
+
+  it("hides a suggestion's rest and a set slotted in with + until they are logged", () => {
+    expect(restRowShown({ ...set, fromPrevious: true }, false, true)).toBe(false);
+    expect(restRowShown({ ...set, restRevealed: false }, false, true)).toBe(false);
+  });
+
+  it('never shows for cardio, without a rest, or with Show rest times off', () => {
+    const logged = { ...set, completed: true };
+    expect(restRowShown(logged, true, true)).toBe(false);
+    expect(restRowShown({ ...logged, rest_seconds: null }, false, true)).toBe(false);
+    expect(restRowShown(logged, false, false)).toBe(false);
   });
 });

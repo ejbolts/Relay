@@ -414,7 +414,7 @@ import {
   hasRecordedPerformance,
   isCompletedWorkingSet,
 } from './workoutSets';
-import { restToAdd } from './workoutRestHistory';
+import { restRowShown, restToAdd } from './workoutRestHistory';
 import { movementWithAddedSet } from './workoutSetInsert';
 import { pinnedAfterMerge } from './machinePhotoMerge';
 import { completionRecordDetail, recordTypeLabel } from './recordLabels';
@@ -6858,11 +6858,7 @@ function MovementCard({
         {movement.sets.length > 0 && <SetInsertRow beforeSet={1} onInsert={() => onInsertSet(0)} />}
         {movement.sets.map((item, index) => {
           const open = isSetOpen(item);
-          const restShown =
-            !cardio &&
-            showRestTimes &&
-            (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
-            (item.rest_seconds ?? 0) > 0;
+          const restShown = restRowShown(item, cardio, showRestTimes);
           // Between two sets; after the last set, Add set below does the same job.
           const insertAfter = index < movement.sets.length - 1 && (
             <SetInsertButton beforeSet={index + 2} onInsert={() => onInsertSet(index + 1)} />

@@ -8,7 +8,16 @@ import {
   pinnedAfterMerge,
 } from './machinePhotoMerge';
 
-const image = { id: 'i', thumbnail_url: '', full_url: '', width: 1, height: 1 };
+const image = {
+  id: 'i',
+  exercise_id: 'e',
+  caption: '',
+  created_at: '',
+  thumbnail_url: '',
+  full_url: '',
+  width: 1,
+  height: 1,
+};
 
 describe('merging saved machines', () => {
   it('counts each machine as at least one photo', () => {
