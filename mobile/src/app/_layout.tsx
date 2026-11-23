@@ -68,6 +68,10 @@ function Navigation() {
                 }),
               }}
             />
+            {/* Social's profiles, shared workouts and sharing choices, over the tabs. */}
+            <Stack.Screen name="social/profile/[id]" />
+            <Stack.Screen name="social/workout/[id]" />
+            <Stack.Screen name="social/sharing" />
           </Stack.Protected>
           <Stack.Protected guard={!signedIn}>
             <Stack.Screen name="sign-in" />
