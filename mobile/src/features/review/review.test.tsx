@@ -20,6 +20,7 @@ import { recordAppNotices, resetAppNoticeSending, useAppNotices } from './appNot
 import { NotificationsBell } from '../social/NotificationsBell';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { finishAppTour, queueAppTour } from '../guides/tourProgress';
+import { reduceMotion } from '../settings/devicePreferences';
 import { LaunchNotices } from './LaunchNotices';
 import { launchPromptOpened, openLaunchPrompt, resetNoticeMemory } from './noticeMemory';
 import { ReleaseNotesScreen } from './ReleaseNotesScreen';
@@ -51,6 +52,51 @@ jest.mock('../../data/authorisedImage', () => ({ useAuthorisedImage: () => null 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 let mockUser: User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
+interface MockVideoPlayer {
+  source: unknown;
+  volume: number;
+  muted: boolean;
+  loop: boolean;
+  play: jest.Mock;
+  pause: jest.Mock;
+  emit: (event: string, payload: unknown) => void;
+  addListener: jest.Mock;
+}
+const mockVideoPlayers: MockVideoPlayer[] = [];
+jest.mock('expo-video', () => {
+  const { createElement } = jest.requireActual<typeof import('react')>('react');
+  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    useVideoPlayer: (source: unknown, setup?: (player: MockVideoPlayer) => void) => {
+      const { useRef } = jest.requireActual<typeof import('react')>('react');
+      const ref = useRef(null as MockVideoPlayer | null);
+      if (!ref.current) {
+        const listeners = new Map<string, Set<(payload: unknown) => void>>();
+        const player: MockVideoPlayer = {
+          source,
+          volume: 1,
+          muted: false,
+          loop: false,
+          play: jest.fn(),
+          pause: jest.fn(),
+          emit(event: string, payload: unknown) {
+            listeners.get(event)?.forEach((cb) => cb(payload));
+          },
+          addListener: jest.fn((event: string, cb: (payload: unknown) => void) => {
+            if (!listeners.has(event)) listeners.set(event, new Set());
+            listeners.get(event)!.add(cb);
+            return { remove: () => listeners.get(event)?.delete(cb) };
+          }),
+        };
+        setup?.(player);
+        mockVideoPlayers.push(player);
+        ref.current = player;
+      }
+      return ref.current;
+    },
+    VideoView: (props: Record<string, unknown>) => createElement(View, props),
+  };
+});
 
 const version = announcedRelease(parseRelease(releaseMetadata)!).version;
 const today = localDate();
@@ -107,6 +153,7 @@ async function show(ui: ReactNode) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockVideoPlayers.length = 0;
   memoryKv.clear();
   resetNoticeMemory();
   resetAppNoticeSending();
@@ -349,4 +396,51 @@ it('keeps each account’s launch prompt for the visit when switching accounts',
   openLaunchPrompt('b', 'weekly-review');
   expect(launchPromptOpened('a')).toBe('release');
   expect(launchPromptOpened('b')).toBe('weekly-review');
+});
+
+it('shows the release trailer poster without autoplay, plays at half volume on tap, and falls back to the poster on error', async () => {
+  await show(<ReleaseNotesScreen />);
+  const trailer = parseRelease(releaseMetadata)!.video!;
+  const playButton = await screen.findByRole('button', {
+    name: `Play trailer: ${trailer.alt}`,
+  });
+  expect(playButton).toBeVisible();
+  expect(mockVideoPlayers).toHaveLength(0);
+  expect(screen.queryByTestId('release-trailer-video')).toBeNull();
+
+  await fireEvent.press(playButton);
+  const videoView = await screen.findByTestId('release-trailer-video');
+  expect(videoView.props.nativeControls).toBe(true);
+  expect(videoView.props.allowsPictureInPicture).toBe(false);
+  expect(mockVideoPlayers).toHaveLength(1);
+  expect(mockVideoPlayers[0]).toMatchObject({
+    source: `https://relay.test${trailer.url}`,
+    volume: 0.5,
+    muted: false,
+    loop: true,
+  });
+  expect(mockVideoPlayers[0].play).toHaveBeenCalledTimes(1);
+
+  // If playback fails, the player unmounts and the poster stays with the same description.
+  await act(async () => {
+    mockVideoPlayers[0].emit('statusChange', { status: 'error' });
+  });
+  expect(screen.queryByTestId('release-trailer-video')).toBeNull();
+  expect(screen.queryByRole('button', { name: `Play trailer: ${trailer.alt}` })).toBeNull();
+  expect(screen.getByLabelText(trailer.alt)).toBeVisible();
+});
+
+it('waits for Play with reduced motion enabled too', async () => {
+  reduceMotion.set(true);
+  try {
+    const view = await show(<ReleaseNotesScreen />);
+    const trailer = parseRelease(releaseMetadata)!.video!;
+    expect(
+      await screen.findByRole('button', { name: `Play trailer: ${trailer.alt}` }),
+    ).toBeVisible();
+    expect(mockVideoPlayers).toHaveLength(0);
+    await view.unmount();
+  } finally {
+    reduceMotion.set(false);
+  }
 });
