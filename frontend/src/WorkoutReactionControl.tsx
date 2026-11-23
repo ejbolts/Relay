@@ -4,6 +4,7 @@ import { authErrorMessage } from './authForm';
 import { nextReaction, reactionSummary, REACTIONS } from './friendFeedData';
 import { Icon } from './Icon';
 import { useHeightAnimation } from './motionHooks';
+import { pendingReactionLabel } from './pendingReactionQueue';
 import { queueReaction, usePendingReaction } from './pendingReactions';
 import type { WorkoutReactions, WorkoutComment } from './types';
 import { WorkoutComments } from './WorkoutComments';
@@ -167,7 +168,7 @@ export function WorkoutReactionControl({
       className={`discussion-button friend-react-button${waiting ? ' is-pending' : ''}`}
       aria-label={
         waiting
-          ? `${pendingChoice ? `${pendingChoice.label} reaction` : 'Reaction removal'} to ${subject} sends when you're back online`
+          ? pendingReactionLabel(subject, pending)
           : selected
             ? `Your reaction to ${subject}: ${selected.label}. Change reaction`
             : `React to ${subject}`

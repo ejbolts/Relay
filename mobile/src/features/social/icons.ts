@@ -16,4 +16,6 @@ export const socialIcons = {
   link: { sf: 'link', md: 'link' },
   reply: { sf: 'arrowshape.turn.up.left', md: 'reply' },
   edit: { sf: 'pencil', md: 'edit' },
+  waiting: { sf: 'clock', md: 'schedule' },
+  addPhoto: { sf: 'photo.badge.plus', md: 'add-photo-alternate' },
 } satisfies Record<string, IconPair>;
