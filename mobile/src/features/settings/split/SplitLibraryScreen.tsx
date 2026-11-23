@@ -17,12 +17,22 @@ import { SPLIT_TEMPLATES } from '../../../../../frontend/src/trainingSplit';
 import type { Routine, TrainingSplit, WorkoutType } from '../../../../../frontend/src/types';
 import { localDate } from '../../../../../frontend/src/utils';
 import { useWorkoutTypes } from '../../../data/queries';
-import { Button, Card, errorMessage, ErrorState, Loading } from '../../../ui/components';
+import {
+  Button,
+  buttonColors,
+  Card,
+  EmptyState,
+  errorMessage,
+  ErrorState,
+  Loading,
+} from '../../../ui/components';
+import { haptics } from '../../../ui/haptics';
 import { Icon } from '../../../ui/Icon';
 import { showMenu } from '../../../ui/prompts';
 import { Sheet } from '../../../ui/Sheet';
 import { showToast } from '../../../ui/Toast';
 import { useTheme } from '../../../ui/theme';
+import { settingsIcons } from '../icons';
 import {
   deleteRoutine,
   refreshSplits,
@@ -94,6 +104,9 @@ function Library({
   const legacy = legacySplitRoutine(split, types);
   const displayed = splitsActiveFirst([...(legacy ? [legacy] : []), ...routines], activeId);
   const [expanded, setExpanded] = useState<string | null>(activeId);
+  // Active split's exercise breakdown starts collapsed (matching web) so Templates stay above the fold.
+  const [exercisesOpen, setExercisesOpen] = useState<Record<string, boolean>>({});
+  const secondary = buttonColors(colors, 'secondary');
 
   const edit = (params: { id: string } | { template: string }) =>
     router.push({ pathname: '/split/edit', params });
@@ -159,7 +172,7 @@ function Library({
       <Stack.Screen
         options={{
           headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
               <SplitGuide />
               <Pressable
                 accessibilityRole="button"
@@ -175,70 +188,160 @@ function Library({
         }}
       />
       <SettingsPage refreshing={refreshing} onRefresh={onRefresh}>
-        {displayed.length === 0 && (
-          <Text style={[type.callout, { color: colors.muted }]}>No saved splits.</Text>
-        )}
-        {displayed.map((routine) => {
-          const active = routine.id === activeId;
-          const open = expanded === routine.id;
-          return (
-            <Card key={routine.id} accessibilityLabel={routine.name}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ expanded: open }}
-                accessibilityLabel={`${routine.name}, ${splitDayCount(routine.days)}${active ? ', active' : ''}`}
-                onPress={() => setExpanded(open ? null : routine.id)}
-                style={{ gap: 8 }}
+        <View style={{ gap: 12 }}>
+          <View style={styles.sectionHeader}>
+            <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
+              My splits
+            </Text>
+            <Button
+              label="New split"
+              icon="plus"
+              variant="link"
+              size="small"
+              disabled={!typesReady}
+              onPress={() => edit({ template: 'custom' })}
+            />
+          </View>
+          {displayed.length === 0 && (
+            <EmptyState
+              icon={settingsIcons.split}
+              title="No saved splits"
+              message="Pick a template below or build your own rotation."
+              action={{
+                label: 'New split',
+                icon: 'plus',
+                onPress: () => edit({ template: 'custom' }),
+              }}
+            />
+          )}
+          {displayed.map((routine) => {
+            const active = routine.id === activeId;
+            const open = expanded === routine.id;
+            const showExercises = !!exercisesOpen[routine.id];
+            const hasExercises = routine.days.some((day) => day.movements.length > 0);
+            return (
+              <Card
+                key={routine.id}
+                accessibilityLabel={routine.name}
+                style={active ? { borderColor: colors.accent, borderWidth: 1.5 } : undefined}
               >
-                <View style={styles.cardTitle}>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={[type.headline, { color: colors.text }]}>{routine.name}</Text>
-                    <Text style={[type.footnote, { color: colors.muted }]}>
-                      {splitDayCount(routine.days)} · {routine.shared ? 'On profile' : 'Only you'}
-                    </Text>
-                  </View>
-                  {active && (
-                    <View style={[styles.badge, { backgroundColor: colors.accentSoft }]}>
-                      <Text style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}>
-                        Active
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: open }}
+                  accessibilityLabel={`${routine.name}, ${splitDayCount(routine.days)}${active ? ', active' : ''}`}
+                  onPress={() => setExpanded(open ? null : routine.id)}
+                  style={{ gap: 8 }}
+                >
+                  <View style={styles.cardTitle}>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={[type.headline, { color: colors.text }]}>{routine.name}</Text>
+                      <Text style={[type.footnote, { color: colors.muted }]}>
+                        {splitDayCount(routine.days)} · {routine.shared ? 'On profile' : 'Only you'}
                       </Text>
                     </View>
-                  )}
-                  <Icon name={open ? 'chevronUp' : 'chevronDown'} size={14} color={colors.muted} />
-                </View>
-                <SplitPattern days={routine.days} />
-              </Pressable>
-              {active && split && <SplitPreview split={split} types={types} />}
-              {open && <Cycle routine={routine} />}
-              <Button
-                label={active ? 'Change schedule' : 'Use split'}
-                variant={active ? 'secondary' : 'primary'}
-                disabled={busy}
-                onPress={() => setUsing(routine)}
-              />
-              <View style={styles.actions}>
-                <Button
-                  label="Edit split"
-                  variant="secondary"
-                  disabled={busy || !typesReady}
-                  onPress={() => edit({ id: routine.id })}
-                  style={{ flex: 1 }}
-                />
-                {routine.id !== 'current-split' && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Options for ${routine.name}`}
-                    disabled={busy}
-                    onPress={() => options(routine)}
-                    style={[styles.more, { backgroundColor: colors.surface2 }]}
-                  >
-                    <Icon name="more" size={18} color={colors.text} />
-                  </Pressable>
+                    {active && (
+                      <View style={[styles.badge, { backgroundColor: colors.accentSoft }]}>
+                        <Text
+                          style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}
+                        >
+                          Active
+                        </Text>
+                      </View>
+                    )}
+                    <Icon
+                      name={open ? 'chevronUp' : 'chevronDown'}
+                      size={14}
+                      color={colors.muted}
+                    />
+                  </View>
+                  <SplitPattern days={routine.days} />
+                </Pressable>
+
+                {open && (
+                  <>
+                    {active && split && (
+                      <View style={[styles.dividerBlock, { borderTopColor: colors.line }]}>
+                        <SplitPreview split={split} types={types} />
+                      </View>
+                    )}
+                    {active ? (
+                      hasExercises && (
+                        <View style={{ gap: 8 }}>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Exercises & sets"
+                            accessibilityState={{ expanded: showExercises }}
+                            onPress={() => {
+                              haptics.selection();
+                              setExercisesOpen((current) => ({
+                                ...current,
+                                [routine.id]: !current[routine.id],
+                              }));
+                            }}
+                            style={styles.disclosure}
+                          >
+                            <Icon
+                              name={showExercises ? 'chevronDown' : 'chevronRight'}
+                              size={14}
+                              color={colors.muted}
+                            />
+                            <Text style={[type.callout, { color: colors.secondary }]}>
+                              Exercises &amp; sets
+                            </Text>
+                          </Pressable>
+                          {showExercises && <Cycle routine={routine} />}
+                        </View>
+                      )
+                    ) : (
+                      <View style={[styles.dividerBlock, { borderTopColor: colors.line }]}>
+                        <Cycle routine={routine} />
+                      </View>
+                    )}
+                  </>
                 )}
-              </View>
-            </Card>
-          );
-        })}
+
+                <View style={[styles.actionsRow, { borderTopColor: colors.line }]}>
+                  <Button
+                    label="Edit split"
+                    variant="secondary"
+                    disabled={busy || !typesReady}
+                    onPress={() => edit({ id: routine.id })}
+                  />
+                  <Button
+                    label={active ? 'Change schedule' : 'Use split'}
+                    variant={active ? 'secondary' : 'primary'}
+                    disabled={busy}
+                    onPress={() => setUsing(routine)}
+                    style={{ flex: 1 }}
+                  />
+                  {routine.id !== 'current-split' && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Options for ${routine.name}`}
+                      disabled={busy}
+                      onPress={() => {
+                        haptics.tap();
+                        options(routine);
+                      }}
+                      style={({ pressed }) => [
+                        styles.more,
+                        {
+                          backgroundColor: secondary.fill,
+                          borderColor: secondary.border,
+                        },
+                        pressed && { opacity: 0.7 },
+                        busy && { opacity: 0.45 },
+                      ]}
+                    >
+                      <Icon name="more" size={18} color={secondary.ink} />
+                    </Pressable>
+                  )}
+                </View>
+              </Card>
+            );
+          })}
+        </View>
+
         <View style={{ gap: 10 }}>
           <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
             Templates
@@ -253,12 +356,15 @@ function Library({
                   accessibilityLabel={`${splitTemplateName(preset)} template${saved ? ', already in My splits' : ''}`}
                   accessibilityState={{ disabled: saved || busy || !typesReady }}
                   disabled={saved || busy || !typesReady}
-                  onPress={() => edit({ template: preset.id })}
+                  onPress={() => {
+                    haptics.tap();
+                    edit({ template: preset.id });
+                  }}
                   style={({ pressed }) => [
                     styles.template,
                     {
                       backgroundColor: pressed ? colors.surface2 : colors.surface,
-                      borderColor: colors.line,
+                      borderColor: colors.lineStrong,
                     },
                     saved && { opacity: 0.55 },
                   ]}
@@ -269,9 +375,10 @@ function Library({
                     >
                       {splitTemplateName(preset)}
                     </Text>
-                    <Icon name={saved ? 'check' : 'plus'} size={14} color={colors.accentText} />
+                    <Icon name={saved ? 'check' : 'plus'} size={15} color={colors.accentText} />
                   </View>
                   <SplitPattern
+                    dashWidth={20}
                     days={preset.types.map((id) => ({
                       workout_type: types.find((item) => item.id === id) ?? null,
                     }))}
@@ -405,13 +512,22 @@ function UseSplitForm({
       <View style={{ gap: 6 }}>
         <Text style={[type.headline, { color: colors.text }]}>{routine.name}</Text>
         <Text style={[type.footnote, { color: colors.muted }]}>{splitDayCount(routine.days)}</Text>
-        <SplitPattern days={routine.days} size={12} />
+        <SplitPattern days={routine.days} />
       </View>
-      <View style={{ backgroundColor: colors.surface2, borderRadius: radius.lg }}>
+      <View
+        style={{
+          backgroundColor: colors.surface2,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.lineStrong,
+        }}
+      >
         <DateStepper label="Starts" date={startDate} onChange={setStartDate} disabled={busy} />
       </View>
       <Button
         label={busy ? 'Saving…' : 'Use this split'}
+        block
+        loading={busy}
         disabled={busy}
         onPress={() => onUse(startDate)}
       />
@@ -420,13 +536,34 @@ function UseSplitForm({
 }
 
 const styles = StyleSheet.create({
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+  },
   cardTitle: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  dividerBlock: { borderTopWidth: 1, paddingTop: 12 },
+  disclosure: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 36,
+    alignSelf: 'flex-start',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderTopWidth: 1,
+    paddingTop: 12,
+  },
   more: {
-    width: 46,
-    height: 46,
+    width: 44,
+    height: 44,
     borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -437,7 +574,8 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
     borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
+    borderStyle: 'dashed',
   },
   cycleDay: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 },
   cycleBar: { width: 4, alignSelf: 'stretch', borderRadius: 2 },

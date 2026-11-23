@@ -142,13 +142,19 @@ async function show(element: ReactElement) {
 }
 
 describe('the split library', () => {
-  it('leads with the active split and its week, and marks templates already saved', async () => {
+  it('leads with the active split and its week, collapses exercises by default, and marks saved templates', async () => {
     await show(<SplitLibraryScreen />);
     expect(
       await screen.findByRole('button', { name: 'Push / Pull / Legs, 4 days, active' }),
     ).toBeTruthy();
-    expect(screen.getByText('NEXT 7 DAYS')).toBeTruthy();
+    expect(screen.getByText('Next 7 days')).toBeTruthy();
     expect(screen.getByText('Change schedule')).toBeTruthy();
+    const toggle = screen.getByRole('button', { name: 'Exercises & sets' });
+    expect(toggle).toHaveProp('accessibilityState', { expanded: false });
+    expect(screen.queryByText('Bench press')).toBeNull();
+    await fireEvent.press(toggle);
+    expect(toggle).toHaveProp('accessibilityState', { expanded: true });
+    expect(screen.getAllByText('Bench press').length).toBeGreaterThan(0);
     const pplTemplate = screen.getByRole('button', {
       name: 'Push / Pull / Legs template, already in My splits',
     });
@@ -167,7 +173,7 @@ describe('the split library', () => {
       expect(screen.getByRole('header', { name: month.title })).toBeVisible();
     }
     await fireEvent.press(screen.getByRole('button', { name: 'Show next 7 days' }));
-    expect(screen.getByText('NEXT 7 DAYS')).toBeVisible();
+    expect(screen.getByText('Next 7 days')).toBeVisible();
     await fireEvent.press(screen.getByRole('button', { name: 'Splits guide' }));
     expect(screen.getByRole('header', { name: 'Start from a template' })).toBeVisible();
     await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
