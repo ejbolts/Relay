@@ -15,11 +15,8 @@ import {
   inviteMessage,
   inviteSendsRequest,
   profileStats,
-  SHARED_HISTORY_KIND,
-  SHARED_HISTORY_TABS,
   sharedBodyWeight,
   sharedGoalsSummary,
-  sharedHistoryEmpty,
   SHARING_LOCKED,
   signedWeightChange,
   sinceMonthLabel,
@@ -27,18 +24,12 @@ import {
   VISIBILITY_LABELS,
   BODY_WEIGHT_CHART_DAYS,
   type InviteResult,
-  type SharedHistoryTab,
 } from '../../../../frontend/src/sharedProfileDisplay';
-import {
-  dayMonth,
-  recordCountsByWorkout,
-  workoutDisplayName,
-} from '../../../../frontend/src/trainingSummary';
+import { dayMonth } from '../../../../frontend/src/trainingSummary';
 import type {
   FriendStatus,
   SharedConsistency,
   SharedProfile,
-  WorkoutReactions,
 } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { formatWeight } from '../../../../frontend/src/weightUnits';
@@ -52,44 +43,42 @@ import {
   IconButton,
   Loading,
 } from '../../ui/components';
-import { Segmented } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { pendingActions, usePendingActions } from '../../ui/pendingActions';
 import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { pushedScreenOptions } from '../../ui/navigation';
-import { workoutColor } from '../training/useTrainingContext';
-import { WorkoutCard, WorkoutDetails } from '../training/WorkoutCard';
 import { Avatar } from './Avatar';
 import { PhotoViewer } from './PhotoViewer';
-import { ReactionBar } from './ReactionBar';
 import { FriendQrSheet } from './FriendQrSheet';
+import { FriendSplits } from './FriendSplits';
 import { socialIcons } from './icons';
-import { useSocialNavigation } from './navigation';
+import { useLinkedScroll, type LinkedRow } from './linkedScroll';
+import { useSocialNavigation, type LinkedWorkout } from './navigation';
+import { ProfileHistory } from './ProfileHistory';
 import { SharingLocked, SmallButton } from './parts';
 import { notFound, sharingRequired, socialApi } from './socialApi';
-import {
-  refreshSocial,
-  socialKeys,
-  sharedWorkoutList,
-  useSharedProfile,
-  useSharedWorkouts,
-} from './socialQueries';
+import { refreshSocial, socialKeys, useSharedProfile } from './socialQueries';
 
 /**
  * A member's profile, or your own: who they are and how you're connected, then what they share
  * (their numbers, body weight, goals and workouts). Opened from an invite, it sends the friend
- * request first, with Undo, as the web's invite flow does.
+ * request first, with Undo, as the web's invite flow does. Opened at a linked workout, it shows
+ * that workout in the history, scrolled into view.
  */
 export function ProfileScreen({
   profileId,
   invite = false,
+  targetWorkout,
 }: {
   profileId: string;
   invite?: boolean;
+  targetWorkout?: LinkedWorkout;
 }) {
   const { colors, space } = useTheme();
+  const { scrollRef, targetRef, reveal, onScrollBeginDrag, onContentSizeChange } =
+    useLinkedScroll();
   const client = useQueryClient();
   const query = useSharedProfile(profileId);
   const [blocked, setBlocked] = useState(false);
@@ -118,12 +107,24 @@ export function ProfileScreen({
     ) : (
       <Loading label="Loading profile" />
     );
-  else body = <ProfileBody profile={profile} onBlocked={() => setBlocked(true)} />;
+  else
+    body = (
+      <ProfileBody
+        profile={profile}
+        onBlocked={() => setBlocked(true)}
+        targetWorkout={targetWorkout}
+        linkedRef={targetRef}
+        onLinkedLayout={reveal}
+      />
+    );
 
   return (
     <>
       <Stack.Screen options={pushedScreenOptions(colors, title)} />
       <ScrollView
+        ref={scrollRef}
+        onScrollBeginDrag={onScrollBeginDrag}
+        onContentSizeChange={onContentSizeChange}
         style={{ flex: 1, backgroundColor: colors.page }}
         contentContainerStyle={{
           padding: space.gutter,
@@ -197,7 +198,19 @@ function useInvite(profileId: string, invite: boolean, profile: SharedProfile | 
   }, [client, invite, profile, profileId, router]);
 }
 
-function ProfileBody({ profile, onBlocked }: { profile: SharedProfile; onBlocked: () => void }) {
+function ProfileBody({
+  profile,
+  onBlocked,
+  targetWorkout,
+  linkedRef,
+  onLinkedLayout,
+}: {
+  profile: SharedProfile;
+  onBlocked: () => void;
+  targetWorkout?: LinkedWorkout;
+  linkedRef: LinkedRow['targetRef'];
+  onLinkedLayout: () => void;
+}) {
   return (
     <>
       <ProfileHeader profile={profile} onBlocked={onBlocked} />
@@ -205,10 +218,16 @@ function ProfileBody({ profile, onBlocked }: { profile: SharedProfile; onBlocked
         <FriendsOnly profile={profile} />
       ) : (
         <>
+          {!profile.is_you && <FriendSplits key={profile.id} ownerId={profile.id} />}
           {profile.consistency && <ConsistencySummary consistency={profile.consistency} />}
           {profile.body_weight && <BodyWeightCard profile={profile} />}
           {profile.goals && <GoalsCard profile={profile} />}
-          <ProfileWorkouts profile={profile} />
+          <ProfileHistory
+            profile={profile}
+            targetWorkout={targetWorkout}
+            linkedRef={linkedRef}
+            onLinkedLayout={onLinkedLayout}
+          />
         </>
       )}
     </>
@@ -724,111 +743,6 @@ function GoalsCard({ profile }: { profile: SharedProfile }) {
           </Text>
         ))}
       </View>
-    </Card>
-  );
-}
-
-/** A workout nobody has reacted to or commented on. */
-const NO_REACTIONS: WorkoutReactions = { counts: [], yours: null, comment_count: 0 };
-
-/**
- * The shared history, in the web's tabs when the member logs cardio, opening like Training's.
- * Each workout has its reactions and comments under its summary, as in the feed.
- */
-function ProfileWorkouts({ profile }: { profile: SharedProfile }) {
-  const { colors, type } = useTheme();
-  const nav = useSocialNavigation();
-  const unit = useWeightUnit();
-  const [tab, setTab] = useState<SharedHistoryTab>('all');
-  const [openId, setOpenId] = useState<string | null>(null);
-  const cardioTab = !!profile.cardio_sessions;
-  const kind = cardioTab ? SHARED_HISTORY_KIND[tab] : undefined;
-  const query = useSharedWorkouts(profile.id, { kind, enabled: profile.can_view });
-  const { workouts, records, reactions } = sharedWorkoutList(query.data);
-  const recordCounts = recordCountsByWorkout(records);
-  const types = profile.consistency?.workout_types ?? [];
-  const thisYear = new Date().getFullYear().toString();
-  return (
-    <Card>
-      {cardioTab ? (
-        <Segmented
-          accessibilityLabel="Training history"
-          values={SHARED_HISTORY_TABS.map(([, label]) => label)}
-          selectedIndex={SHARED_HISTORY_TABS.findIndex(([value]) => value === tab)}
-          onChange={(index) => setTab(SHARED_HISTORY_TABS[index][0])}
-        />
-      ) : (
-        <CardHeader title="Workouts" />
-      )}
-      {query.isPending ? (
-        <Loading label="Loading workouts" />
-      ) : query.error && !workouts.length ? (
-        <ErrorState message={errorMessage(query.error)} onRetry={() => void query.refetch()} />
-      ) : workouts.length === 0 ? (
-        <Text style={[type.callout, { color: colors.secondary }]}>
-          {sharedHistoryEmpty(kind, false)}
-        </Text>
-      ) : (
-        <View>
-          {workouts.map((workout, index) => (
-            <View
-              key={workout.id}
-              style={
-                index > 0 && {
-                  borderTopWidth: StyleSheet.hairlineWidth,
-                  borderTopColor: colors.line,
-                }
-              }
-            >
-              <WorkoutCard
-                workout={workout}
-                color={workoutColor(workout, types)}
-                records={recordCounts.get(workout.id) ?? 0}
-                open={openId === workout.id}
-                showYear={workout.workout_date.slice(0, 4) !== thisYear}
-                onToggle={() => setOpenId(openId === workout.id ? null : workout.id)}
-              >
-                <WorkoutDetails
-                  workout={workout}
-                  personalRecords={records}
-                  bodyweight={null}
-                  unit={unit}
-                />
-              </WorkoutCard>
-              <View style={{ paddingBottom: 10 }}>
-                <ReactionBar
-                  workoutId={workout.id}
-                  subject={`${profile.is_you ? 'Your' : `${profile.display_name}’s`} ${workoutDisplayName(workout)}`}
-                  reactions={reactions[workout.id] ?? NO_REACTIONS}
-                  ownWorkout={profile.is_you}
-                  onOpenComments={() =>
-                    nav.openWorkout({
-                      id: workout.id,
-                      memberId: profile.id,
-                      date: workout.workout_date,
-                      comments: true,
-                    })
-                  }
-                  onOpenPerson={nav.openProfile}
-                />
-              </View>
-            </View>
-          ))}
-        </View>
-      )}
-      {query.error && workouts.length > 0 && (
-        <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
-          {errorMessage(query.error)}
-        </Text>
-      )}
-      {query.hasNextPage && (
-        <Button
-          label={query.isFetchingNextPage ? 'Loading…' : 'Show older workouts'}
-          variant="secondary"
-          loading={query.isFetchingNextPage}
-          onPress={() => void query.fetchNextPage()}
-        />
-      )}
     </Card>
   );
 }

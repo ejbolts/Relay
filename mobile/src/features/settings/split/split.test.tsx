@@ -167,6 +167,19 @@ describe('the split library', () => {
     });
   });
 
+  it("opens at a friend's split just saved, as the web's View my splits", async () => {
+    mockParams = { open: upper.id };
+    await show(<SplitLibraryScreen />);
+    const card = await screen.findByRole('button', {
+      name: `${upper.name}, ${upper.days.length} days`,
+    });
+    expect(card).toHaveProp('accessibilityState', { expanded: true });
+    expect(screen.getByRole('button', { name: 'Push / Pull / Legs, 4 days, active' })).toHaveProp(
+      'accessibilityState',
+      { expanded: false },
+    );
+  });
+
   it('says it is offline instead of spinning, then loads once back online', async () => {
     onlineManager.setOnline(false);
     try {
