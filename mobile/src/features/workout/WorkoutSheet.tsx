@@ -1,6 +1,14 @@
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+} from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineAliases } from '../../../../frontend/src/exerciseHistory';
@@ -36,7 +44,7 @@ import { MenuButton } from '../../ui/MenuButton';
 import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
-import { restTimerPreference } from '../settings/devicePreferences';
+import { restTimerPreference, useReduceMotion } from '../settings/devicePreferences';
 import { useBodyMeasurements } from '../training/trainingQueries';
 import { FinishedSummary } from './FinishedSummary';
 import { ExercisePicker } from './ExercisePicker';
@@ -341,8 +349,27 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     [change, getState, removeExercise],
   );
 
+  // Folding a card from its bottom edge brings its header back into view, as on the web.
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const scrollY = useRef(0);
+  const cardTops = useRef(new Map<string, number>());
+  const reducedMotion = useReduceMotion();
+  const revealMovement = useCallback(
+    (movementKey: string) => {
+      requestAnimationFrame(() => {
+        const top = cardTops.current.get(movementKey);
+        if (top === undefined) return;
+        const target = Math.max(0, top - space.gutter);
+        if (target < scrollY.current)
+          scrollRef.current?.scrollTo({ y: target, animated: !reducedMotion });
+      });
+    },
+    [space.gutter, reducedMotion],
+  );
+
   const actions = useMemo<MovementActions>(
     () => ({
+      revealMovement,
       updateSet: (movementKey, setKey, update) => {
         const current = getState();
         const movement = current?.movements.find((item) => item.key === movementKey);
@@ -415,7 +442,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
               ),
         ),
     }),
-    [applySetUpdate, logger.addSet, change, getState, openActions, context],
+    [applySetUpdate, logger.addSet, change, getState, openActions, context, revealMovement],
   );
 
   function rename() {
@@ -645,6 +672,11 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         </View>
       </View>
       <ScrollView
+        ref={scrollRef}
+        onScroll={(event) => {
+          scrollY.current = event.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={64}
         style={{ flex: 1 }}
         contentContainerStyle={{
           padding: space.gutter,
@@ -662,25 +694,29 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           onChangeNotes={(notes) => change((latest) => ({ ...latest, notes }))}
         />
         {state.movements.map((movement, index) => (
-          <MovementCard
+          <View
             key={movement.key}
-            number={index + 1}
-            movement={movement}
-            supersetNames={supersetNames(movement.supersetKey)}
-            history={logger.history}
-            olderLatest={
-              olderHistoryFor(logger.context, state.workoutDate)?.get(movement.exercise.id)
-                ?.latest ?? null
-            }
-            lastDone={lastDone.get(movement.exercise.id) ?? null}
-            bodyweight={bodyweight}
-            prBadges={prBadges.get(movement.key)}
-            excludedWorkoutId={state.resumingWorkoutId ?? undefined}
-            workoutDate={state.workoutDate}
-            weightUnit={logger.weightUnit}
-            skipHighRepWarning={state.skipHighRepWarning}
-            actions={actions}
-          />
+            onLayout={(event) => cardTops.current.set(movement.key, event.nativeEvent.layout.y)}
+          >
+            <MovementCard
+              number={index + 1}
+              movement={movement}
+              supersetNames={supersetNames(movement.supersetKey)}
+              history={logger.history}
+              olderLatest={
+                olderHistoryFor(logger.context, state.workoutDate)?.get(movement.exercise.id)
+                  ?.latest ?? null
+              }
+              lastDone={lastDone.get(movement.exercise.id) ?? null}
+              bodyweight={bodyweight}
+              prBadges={prBadges.get(movement.key)}
+              excludedWorkoutId={state.resumingWorkoutId ?? undefined}
+              workoutDate={state.workoutDate}
+              weightUnit={logger.weightUnit}
+              skipHighRepWarning={state.skipHighRepWarning}
+              actions={actions}
+            />
+          </View>
         ))}
         <Button
           label="Add exercise"

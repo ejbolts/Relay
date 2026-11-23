@@ -9,6 +9,7 @@ import {
   recentExerciseHistory,
 } from '../../../../frontend/src/exerciseHistory';
 import { matchingLastSessionSet } from '../../../../frontend/src/lastSessionSet';
+import { foldedMovementSummary, workingSetsDone } from '../../../../frontend/src/movementFold';
 import { timeSince } from '../../../../frontend/src/machineHistory';
 import { bodyweightContext, heaviestLoggedSetKey } from '../../../../frontend/src/relativeStrength';
 import { progressionHint, progressionTarget } from '../../../../frontend/src/repProgression';
@@ -74,6 +75,8 @@ export interface MovementActions {
   openMachines: (movementKey: string) => void;
   /** Pins the machines the exercise's last session used, for a movement that has none yet. */
   restoreMachines: (movementKey: string, machinePhotoIds: string[]) => void;
+  /** Brings the exercise's header back into view, after folding it from the bottom of its card. */
+  revealMovement?: (movementKey: string) => void;
 }
 
 const NO_BADGES: ReadonlyMap<string, string[]> = new Map();
@@ -187,6 +190,25 @@ export const MovementCard = memo(function MovementCard({
   // The bodyweight ratio is said once per exercise, on its heaviest logged set, as on the web.
   const ratioSetKey = cardio ? null : heaviestLoggedSetKey(movement.sets);
   const pinnedPhoto = machines?.find((photo) => photo.id === pinnedMachine) ?? null;
+  // Finished exercises open folded, as on the web, and reopen when marked as not finished;
+  // ticking sets never folds a card, only the collapse controls do, so the next set stays in reach.
+  const [expanded, setExpanded] = useState(!movement.isComplete);
+  const [wasComplete, setWasComplete] = useState(movement.isComplete);
+  if (wasComplete !== movement.isComplete) {
+    setWasComplete(movement.isComplete);
+    if (!movement.isComplete) setExpanded(true);
+  }
+  const toggle = () => {
+    haptics.selection();
+    setExpanded((current) => !current);
+  };
+  const { revealMovement } = actions;
+  const collapseFromFooter = () => {
+    haptics.selection();
+    setExpanded(false);
+    revealMovement?.(movement.key);
+  };
+  const allWorkingSetsDone = workingSetsDone(movement.sets);
 
   return (
     <View
@@ -217,7 +239,8 @@ export const MovementCard = memo(function MovementCard({
             <Text style={[styles.orderText, { color: colors.onAccent }]}>{order}</Text>
           </View>
         </View>
-        <View style={{ flex: 1, gap: 2 }}>
+        {/* Tapping the header folds or opens the card, as on the web; the chevron says so. */}
+        <Pressable accessible={false} onPress={toggle} style={{ flex: 1, gap: 2 }}>
           <Text accessibilityRole="header" style={[styles.name, { color: colors.accentText }]}>
             {name}
           </Text>
@@ -237,7 +260,22 @@ export const MovementCard = memo(function MovementCard({
               {movement.notes.trim()}
             </Text>
           )}
-        </View>
+          {!expanded && (
+            <Text style={[type.caption, styles.foldSummary, { color: colors.secondary }]}>
+              {foldedMovementSummary(movement.sets, cardio)}
+            </Text>
+          )}
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${expanded ? 'Collapse' : 'Expand'} ${name}`}
+          accessibilityState={{ expanded }}
+          hitSlop={4}
+          onPress={toggle}
+          style={({ pressed }) => [styles.chevronButton, pressed && styles.pressed]}
+        >
+          <Icon name={expanded ? 'chevronUp' : 'chevronDown'} size={18} color={colors.secondary} />
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
@@ -275,7 +313,7 @@ export const MovementCard = memo(function MovementCard({
         </Pressable>
       </View>
 
-      {machineRow && (
+      {expanded && machineRow && (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={
@@ -312,110 +350,140 @@ export const MovementCard = memo(function MovementCard({
         </Pressable>
       )}
 
-      <View style={[styles.columns, { borderColor: colors.line }]}>
-        <Text style={[styles.head, styles.setColumn, { color: colors.muted }]}>Set</Text>
-        <Text style={[styles.head, styles.valueColumn, { color: colors.muted }]}>
-          {cardio ? 'Min' : `Weight (${weightUnit})`}
-        </Text>
-        <Text style={[styles.head, styles.valueColumn, { color: colors.muted }]}>
-          {cardio ? 'Km' : 'Reps'}
-        </Text>
-        <Text style={[styles.head, styles.rpeColumn, { color: colors.muted }]}>RPE</Text>
-        <View style={styles.checkColumn} />
-      </View>
+      {expanded && (
+        <>
+          <View style={[styles.columns, { borderColor: colors.line }]}>
+            <Text style={[styles.head, styles.setColumn, { color: colors.muted }]}>Set</Text>
+            <Text style={[styles.head, styles.valueColumn, { color: colors.muted }]}>
+              {cardio ? 'Min' : `Weight (${weightUnit})`}
+            </Text>
+            <Text style={[styles.head, styles.valueColumn, { color: colors.muted }]}>
+              {cardio ? 'Km' : 'Reps'}
+            </Text>
+            <Text style={[styles.head, styles.rpeColumn, { color: colors.muted }]}>RPE</Text>
+            <View style={styles.checkColumn} />
+          </View>
 
-      {insertSet && movement.sets.length > 0 && (
-        <SetInsertRow beforeSet={1} onInsert={() => insertSet(movement.key, 0)} />
-      )}
-      {movement.sets.map((item, index) => {
-        const number = index + 1;
-        const restShown = restRowShown(item, cardio, showRestTimes);
-        // Between two sets; after the last set, Add set does the same job.
-        const onInsert =
-          insertSet && index < movement.sets.length - 1
-            ? () => insertSet(movement.key, index + 1)
-            : undefined;
-        const restHistory = item.machine_photo_id
-          ? historyOnMachine(exerciseHistory, item.machine_photo_id, aliases)
-          : pinnedHistory;
-        const update = (values: Partial<WorkoutDraftSet>) =>
-          actions.updateSet(movement.key, item.key, values);
-        const removeRest = () => {
-          const before = item.rest_seconds;
-          update({ rest_seconds: null });
-          showToast('Rest removed', {
-            label: 'Undo',
-            run: () => update({ rest_seconds: before }),
-          });
-        };
-        return (
-          <Fragment key={item.key}>
-            <SetRow
-              movement={movement}
-              item={item}
-              index={index}
-              label={labels[index]}
-              previous={matchingLastSessionSet(movement.sets, index, lastSession)}
-              records={prBadges.get(item.key) ?? null}
-              ratio={
-                item.key === ratioSetKey && (item.bodyweight_kg ?? bodyweight) != null
-                  ? bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)
-                  : null
-              }
-              machines={movement.machinePhotoIds.length > 1 ? movement.machinePhotoIds : null}
-              machineNames={machineNames}
-              weightUnit={weightUnit}
-              skipHighRepWarning={skipHighRepWarning}
-              actions={actions}
-            />
-            {restShown ? (
-              <SetRestRow
-                setNumber={number}
-                seconds={item.rest_seconds!}
-                ghost={
-                  !item.completed &&
-                  !item.restConfirmed &&
-                  previousSetRests(movement.sets, index, restHistory)[0]?.seconds ===
-                    item.rest_seconds
-                }
-                onChange={(seconds) => update({ rest_seconds: seconds })}
-                onRemove={removeRest}
-                onInsert={onInsert}
-              />
-            ) : (
-              index < movement.sets.length - 1 && (
-                <SetInsertRow
-                  beforeSet={number + 1}
-                  onInsert={onInsert}
-                  onAddRest={
-                    !cardio && showRestTimes
-                      ? (seconds) => update({ rest_seconds: seconds, restRevealed: true })
-                      : undefined
+          {insertSet && movement.sets.length > 0 && (
+            <SetInsertRow beforeSet={1} onInsert={() => insertSet(movement.key, 0)} />
+          )}
+          {movement.sets.map((item, index) => {
+            const number = index + 1;
+            const restShown = restRowShown(item, cardio, showRestTimes);
+            // Between two sets; after the last set, Add set does the same job.
+            const onInsert =
+              insertSet && index < movement.sets.length - 1
+                ? () => insertSet(movement.key, index + 1)
+                : undefined;
+            const restHistory = item.machine_photo_id
+              ? historyOnMachine(exerciseHistory, item.machine_photo_id, aliases)
+              : pinnedHistory;
+            const update = (values: Partial<WorkoutDraftSet>) =>
+              actions.updateSet(movement.key, item.key, values);
+            const removeRest = () => {
+              const before = item.rest_seconds;
+              update({ rest_seconds: null });
+              showToast('Rest removed', {
+                label: 'Undo',
+                run: () => update({ rest_seconds: before }),
+              });
+            };
+            return (
+              <Fragment key={item.key}>
+                <SetRow
+                  movement={movement}
+                  item={item}
+                  index={index}
+                  label={labels[index]}
+                  previous={matchingLastSessionSet(movement.sets, index, lastSession)}
+                  records={prBadges.get(item.key) ?? null}
+                  ratio={
+                    item.key === ratioSetKey && (item.bodyweight_kg ?? bodyweight) != null
+                      ? bodyweightContext(
+                          item.weight_kg,
+                          item.bodyweight_kg ?? bodyweight,
+                          weightUnit,
+                        )
+                      : null
                   }
-                  suggestedRest={restToAdd(movement.sets, index, restHistory, defaultRest)}
+                  machines={movement.machinePhotoIds.length > 1 ? movement.machinePhotoIds : null}
+                  machineNames={machineNames}
+                  weightUnit={weightUnit}
+                  skipHighRepWarning={skipHighRepWarning}
+                  actions={actions}
                 />
-              )
-            )}
-          </Fragment>
-        );
-      })}
+                {restShown ? (
+                  <SetRestRow
+                    setNumber={number}
+                    seconds={item.rest_seconds!}
+                    ghost={
+                      !item.completed &&
+                      !item.restConfirmed &&
+                      previousSetRests(movement.sets, index, restHistory)[0]?.seconds ===
+                        item.rest_seconds
+                    }
+                    onChange={(seconds) => update({ rest_seconds: seconds })}
+                    onRemove={removeRest}
+                    onInsert={onInsert}
+                  />
+                ) : (
+                  index < movement.sets.length - 1 && (
+                    <SetInsertRow
+                      beforeSet={number + 1}
+                      onInsert={onInsert}
+                      onAddRest={
+                        !cardio && showRestTimes
+                          ? (seconds) => update({ rest_seconds: seconds, restRevealed: true })
+                          : undefined
+                      }
+                      suggestedRest={restToAdd(movement.sets, index, restHistory, defaultRest)}
+                    />
+                  )
+                )}
+              </Fragment>
+            );
+          })}
 
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Add set to ${name}`}
-        onPress={() => {
-          haptics.tap();
-          actions.addSet(movement.key);
-        }}
-        style={({ pressed }) => [
-          styles.addSet,
-          { backgroundColor: colors.accentSoft, borderRadius: radius.md },
-          pressed && styles.pressed,
-        ]}
-      >
-        <Icon name="plus" size={16} color={colors.accentText} />
-        <Text style={[type.button, { color: colors.accentText }]}>Add set</Text>
-      </Pressable>
+          <View style={styles.footer}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Add set to ${name}`}
+              onPress={() => {
+                haptics.tap();
+                actions.addSet(movement.key);
+              }}
+              style={({ pressed }) => [
+                styles.addSet,
+                { backgroundColor: colors.accentSoft, borderRadius: radius.md },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Icon name="plus" size={16} color={colors.accentText} />
+              <Text style={[type.button, { color: colors.accentText }]}>Add set</Text>
+            </Pressable>
+            {/* Folds the card from its bottom edge; green once every working set is ticked. */}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Collapse ${name}`}
+              onPress={collapseFromFooter}
+              style={({ pressed }) => [
+                styles.footerCollapse,
+                { borderRadius: radius.md },
+                allWorkingSetsDone
+                  ? { backgroundColor: colors.goodSoft, borderColor: `${colors.good}73` }
+                  : { backgroundColor: colors.surface2, borderColor: colors.lineStrong },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Icon
+                name="chevronUp"
+                size={18}
+                color={allWorkingSetsDone ? colors.good : colors.secondary}
+              />
+            </Pressable>
+          </View>
+        </>
+      )}
     </View>
   );
 });
@@ -1082,8 +1150,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  footer: { flexDirection: 'row', gap: 8, marginTop: 6 },
+  footerCollapse: {
+    width: 44,
+    minHeight: 44,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chevronButton: {
+    width: 36,
+    height: 44,
+    marginRight: -4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  foldSummary: { fontWeight: '700', marginTop: 2 },
   addSet: {
-    marginTop: 6,
+    flex: 1,
     minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',

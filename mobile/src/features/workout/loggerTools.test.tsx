@@ -226,3 +226,49 @@ describe('correcting the workout time', () => {
     expect(draft()?.pausedAt).not.toBeNull();
   });
 });
+
+describe('folding an exercise card', () => {
+  test('the chevron folds the card to a summary and opens it again', async () => {
+    await openLogger();
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Complete set 1' })[0]);
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Collapse Bench Press' })[0]);
+    expect(screen.queryByRole('button', { name: 'Complete set 2' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Add set to Bench Press' })).toBeNull();
+    expect(screen.getByText('1 completed set')).toBeVisible();
+    const expand = screen.getByRole('button', { name: 'Expand Bench Press' });
+    expect(expand.props.accessibilityState).toMatchObject({ expanded: false });
+
+    await fireEvent.press(expand);
+    expect(screen.getByRole('button', { name: 'Complete set 2' })).toBeVisible();
+    expect(screen.queryByText('1 completed set')).toBeNull();
+    // Folding only changes what shows: the sets are as they were.
+    expect(draft()?.movements[0].sets.map((set) => set.completed)).toEqual([true, false]);
+  });
+
+  test('the collapse button under the sets folds the card and turns green once the sets are done', async () => {
+    await openLogger();
+    const footer = () => screen.getAllByRole('button', { name: 'Collapse Bench Press' }).at(-1)!;
+    expect(screen.getAllByRole('button', { name: 'Collapse Bench Press' })).toHaveLength(2);
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Complete set 1' })[0]);
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Complete set 2' })[0]);
+    // Ticking every set never folds the card by itself.
+    expect(screen.getAllByRole('button', { name: 'Collapse Bench Press' })).toHaveLength(2);
+    await fireEvent.press(footer());
+    expect(screen.getByText('2 completed sets')).toBeVisible();
+  });
+
+  test('a finished exercise opens folded, and marking it not finished opens it', async () => {
+    const view = await openLogger();
+    await fireEvent.press(screen.getByRole('button', { name: 'Finish Bench Press' }));
+    // Finishing it keeps it open while you are looking at it.
+    expect(screen.getAllByRole('button', { name: 'Collapse Bench Press' })).toHaveLength(2);
+    await view.unmount();
+    client.clear();
+
+    await openLogger(false);
+    expect(screen.getByRole('button', { name: 'Expand Bench Press' })).toBeVisible();
+    expect(screen.getByText(/^\d completed sets?$/)).toBeVisible();
+    await fireEvent.press(screen.getByRole('button', { name: 'Mark Bench Press as not finished' }));
+    expect(screen.getAllByRole('button', { name: 'Collapse Bench Press' })).toHaveLength(2);
+  });
+});

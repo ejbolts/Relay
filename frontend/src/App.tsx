@@ -133,6 +133,7 @@ import { ExercisePicker } from './ExercisePicker';
 import { SupersetPicker } from './SupersetPicker';
 import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
 import { loggedOnlyWarmups, warmupOnlyMovements as warmupOnly } from './workingSetCheck';
+import { foldedMovementSummary, workingSetsDone } from './movementFold';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
@@ -411,11 +412,7 @@ import {
   writeActiveWorkoutDraft,
   type ActiveWorkoutDraft,
 } from './workoutDraft';
-import {
-  completeRemainingSets,
-  hasRecordedPerformance,
-  isCompletedWorkingSet,
-} from './workoutSets';
+import { completeRemainingSets, hasRecordedPerformance } from './workoutSets';
 import { restRowShown, restToAdd } from './workoutRestHistory';
 import { movementWithAddedSet } from './workoutSetInsert';
 import { pinnedAfterMerge } from './machinePhotoMerge';
@@ -5773,13 +5770,8 @@ function MovementCard({
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
   const defaultRest = useDefaultRest();
-  const completedWorkingSetCount = movement.sets.filter(isCompletedWorkingSet).length;
   const onlyWarmupsLogged = !cardio && loggedOnlyWarmups(movement.sets);
-  const loggedWarmupCount = onlyWarmupsLogged
-    ? movement.sets.filter((item) => item.completed).length
-    : 0;
-  const workingSets = movement.sets.filter((item) => item.set_type !== 'warmup' && !item.warmup);
-  const workingSetsDone = workingSets.length > 0 && workingSets.every((item) => item.completed);
+  const allWorkingSetsDone = workingSetsDone(movement.sets);
   // Finished exercises open folded, but ticking sets never folds a card: only the collapse
   // controls do, so the next set stays in reach.
   const [expanded, setExpanded] = useState(!movement.isComplete);
@@ -6509,9 +6501,7 @@ function MovementCard({
           )}
           {!expanded && (
             <span className="movement-completed-summary">
-              {onlyWarmupsLogged
-                ? `${loggedWarmupCount} warm-up ${loggedWarmupCount === 1 ? 'set' : 'sets'}`
-                : `${completedWorkingSetCount} completed ${completedWorkingSetCount === 1 ? 'set' : 'sets'}`}
+              {foldedMovementSummary(movement.sets, cardio)}
             </span>
           )}
         </div>
@@ -6950,7 +6940,7 @@ function MovementCard({
         </button>
         <button
           type="button"
-          className={`movement-collapse-button pulse-button${workingSetsDone ? ' is-done' : ''}`}
+          className={`movement-collapse-button pulse-button${allWorkingSetsDone ? ' is-done' : ''}`}
           aria-label={`Collapse ${movement.exercise.name}`}
           onClick={collapseFromFooter}
         >
