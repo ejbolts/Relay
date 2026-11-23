@@ -1,7 +1,13 @@
-import { useState } from 'react';
+import { useEffect } from 'react';
 import { useUser } from '../../session/SessionProvider';
 import { AppTour } from './AppTour';
-import { appTourWaiting, closeAppTour, finishAppTour, useAppTourRequested } from './tourProgress';
+import {
+  appTourWaiting,
+  closeAppTour,
+  finishAppTour,
+  startAppTour,
+  useAppTour,
+} from './tourProgress';
 import { HomeTipsButton } from './HomeTipsButton';
 import { useInactiveWorkoutAlert } from './workoutAlerts';
 
@@ -11,17 +17,20 @@ import { useInactiveWorkoutAlert } from './workoutAlerts';
  */
 export function HomeGuides() {
   const user = useUser();
-  const requested = useAppTourRequested();
-  const [waiting, setWaiting] = useState(() => appTourWaiting(user.id));
+  const tour = useAppTour();
+  useEffect(() => {
+    // Opened once for a new account; finishing or skipping it marks it done.
+    if (appTourWaiting(user.id) && !tour) startAppTour();
+  }, [user.id, tour]);
   useInactiveWorkoutAlert();
   return (
     <>
       <HomeTipsButton />
-      {(waiting || requested) && (
+      {tour && (
         <AppTour
+          index={tour.index}
           onClose={() => {
             finishAppTour(user.id);
-            setWaiting(false);
             closeAppTour();
           }}
         />

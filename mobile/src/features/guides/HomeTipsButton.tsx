@@ -114,11 +114,11 @@ export function HomeTipsButton() {
           pressed && { opacity: 0.7 },
         ]}
       >
-        <Icon name={guideIcons.bulb} size={17} color={amber ? colors.gold : colors.muted} />
+        <Icon name={guideIcons.bulb} size={19} color={amber ? colors.gold : colors.text} />
         {amber && (
-          <Text style={[type.footnote, { color: colors.gold, fontWeight: '700' }]}>
-            {homeTipCount(unread.length)}
-          </Text>
+          <View style={[styles.badge, { backgroundColor: colors.gold, borderColor: colors.page }]}>
+            <Text style={styles.badgeText}>{homeTipCount(unread.length)}</Text>
+          </View>
         )}
       </Pressable>
       <Sheet visible={showing} title={tip.title} kicker="TIP" onClose={() => setOpen(false)}>
@@ -170,16 +170,21 @@ export function HomeTipsButton() {
 }
 
 const styles = StyleSheet.create({
-  bulb: {
-    minWidth: 38,
-    height: 38,
-    borderRadius: 19,
-    paddingHorizontal: 10,
-    flexDirection: 'row',
+  // Like the bell beside it: a round button, with the count of new tips as a badge.
+  bulb: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    paddingHorizontal: 3,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 4,
   },
+  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   dots: { flexDirection: 'row', gap: 5 },
   dot: { width: 7, height: 7, borderRadius: 4 },

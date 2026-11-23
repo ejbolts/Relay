@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { Linking, Modal, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -14,6 +14,7 @@ import { useReduceMotion } from '../settings/devicePreferences';
 import { useTheme } from '../../ui/theme';
 import { GuideCard, GuideText } from './GuideCard';
 import { guideIcons } from './icons';
+import { showAppTourStep } from './tourProgress';
 
 /** Where each of the web's tour stops is in the app. Progress is an exercise in Training. */
 const TAB_ROUTES: Partial<Record<AppTab, '/' | '/training' | '/social' | '/body' | '/settings'>> = {
@@ -33,12 +34,12 @@ const STEPS = appGuideSteps(false, { app: true });
  * it, then thanks the person, with a way to send feedback. The web's Add to Home Screen step is
  * left out: the app is already on the phone's home screen.
  */
-export function AppTour({ onClose }: { onClose: () => void }) {
+export function AppTour({ index, onClose }: { index: number; onClose: () => void }) {
   const router = useRouter();
   const { colors, type } = useTheme();
   const insets = useSafeAreaInsets();
   const reduced = useReduceMotion();
-  const [index, setIndex] = useState(0);
+  const setIndex = showAppTourStep;
   const step = STEPS[index];
   const route = step && TAB_ROUTES[step.tab];
 
@@ -66,7 +67,7 @@ export function AppTour({ onClose }: { onClose: () => void }) {
               backgroundColor: colors.surface,
               borderColor: colors.lineStrong,
               // Above the tab bar, so the tab being explained stays in sight.
-              marginBottom: insets.bottom + 72,
+              marginBottom: insets.bottom + 100,
             },
           ]}
         >

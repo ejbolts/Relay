@@ -11,7 +11,9 @@ export const queueAppTour = progress.queueAppGuide;
 export const appTourWaiting = progress.appGuideWaiting;
 export const finishAppTour = progress.finishAppGuide;
 
-let requested = false;
+// The open tour and its step, outside React: Home's header can remount while the tour moves
+// between tabs, and the tour carries on from the same step.
+let tour: { index: number } | null = null;
 const listeners = new Set<() => void>();
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
@@ -19,12 +21,15 @@ const subscribe = (listener: () => void) => {
     listeners.delete(listener);
   };
 };
-function setRequested(value: boolean) {
-  requested = value;
+function setTour(next: { index: number } | null) {
+  tour = next;
   listeners.forEach((listener) => listener());
 }
 
-/** Replay guide, from Settings: Home shows the tour from its start. */
-export const replayAppTour = () => setRequested(true);
-export const closeAppTour = () => setRequested(false);
-export const useAppTourRequested = () => useSyncExternalStore(subscribe, () => requested);
+/** Opens the tour from its start: for a new account, or Replay guide in Settings. */
+export const startAppTour = () => setTour({ index: 0 });
+export const replayAppTour = startAppTour;
+export const showAppTourStep = (index: number) => setTour({ index });
+export const closeAppTour = () => setTour(null);
+/** The open tour's step, or null while it is closed. */
+export const useAppTour = () => useSyncExternalStore(subscribe, () => tour);

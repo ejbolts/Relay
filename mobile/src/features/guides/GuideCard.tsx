@@ -60,7 +60,8 @@ export function GuideCard({
       {children}
       {(onBack || next) && (
         <View style={styles.actions}>
-          {onBack && (
+          {/* Next stays in one place, so a quick second tap never lands on Back. */}
+          {onBack ? (
             <Button
               label="Back"
               variant="secondary"
@@ -68,6 +69,8 @@ export function GuideCard({
               style={{ flex: 1 }}
               onPress={onBack}
             />
+          ) : (
+            <View style={{ flex: 1 }} />
           )}
           {next && (
             <Button label={next.label ?? 'Next'} style={{ flex: 1 }} onPress={next.onPress} />

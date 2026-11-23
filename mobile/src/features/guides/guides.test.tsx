@@ -10,7 +10,7 @@ import { HelpSettings } from './HelpSettings';
 import { HomeGuides } from './HomeGuides';
 import { ShareReminderAction } from './ShareReminderAction';
 import { resetTipsForTests, tipsFor } from './tips';
-import { appTourWaiting, queueAppTour } from './tourProgress';
+import { appTourWaiting, closeAppTour, queueAppTour } from './tourProgress';
 import { resetInactiveWorkoutAlertForTests, syncInactiveWorkoutAlert } from './workoutAlerts';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
@@ -76,6 +76,7 @@ beforeEach(() => {
   memoryKv.clear();
   resetTipsForTests();
   resetInactiveWorkoutAlertForTests();
+  closeAppTour();
   mockWorkouts.current = [];
   jest.clearAllMocks();
 });
@@ -142,7 +143,7 @@ test('Settings lists the guides, says why Compare machines must wait, and replay
 test('a new account takes the quick tour, which opens each tab it explains', async () => {
   queueAppTour('u1');
   await show(<HomeGuides />);
-  expect(screen.getByText('Quick tour · 1 of 8')).toBeVisible();
+  expect(await screen.findByText('Quick tour · 1 of 8')).toBeVisible();
   await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
   expect(screen.getByText('Your training in one place')).toBeVisible();
