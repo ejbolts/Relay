@@ -73,6 +73,10 @@ function Navigation() {
             {/* Settings and the split editor: pushed screens with their own stacks and headers. */}
             <Stack.Screen name="settings" />
             <Stack.Screen name="split" />
+            {/* Social's profiles, shared workouts and sharing choices, over the tabs. */}
+            <Stack.Screen name="social/profile/[id]" />
+            <Stack.Screen name="social/workout/[id]" />
+            <Stack.Screen name="social/sharing" />
           </Stack.Protected>
           <Stack.Protected guard={mustChangePassword}>
             <Stack.Screen name="password-required" />

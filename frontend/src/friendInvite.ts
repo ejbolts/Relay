@@ -4,7 +4,14 @@
  * through signing in or creating an account, then sends the inviter a friend request.
  */
 
-const INVITE_HASH = /^#friend=([A-Za-z0-9-]{1,64})(?:&invite=([^&]*))?$/;
+import {
+  FRIEND_INVITE_HASH as INVITE_HASH,
+  friendInviteIdFromHash,
+  friendInviteLink,
+} from './friendInviteLink';
+
+export { friendInviteIdFromHash, friendInviteIdFromScan } from './friendInviteLink';
+
 const STORAGE_KEY = 'relay.pendingFriendInvite';
 const REGISTRATION_KEY = 'relay.pendingRegistrationInvite';
 
@@ -29,13 +36,7 @@ export function friendInviteUrl(
   origin = window.location.origin,
   inviteCode?: string | null,
 ): string {
-  // Keep the code in the fragment: browsers do not send it in requests or referrers.
-  const registration = inviteCode ? `&invite=${encodeURIComponent(inviteCode)}` : '';
-  return `${origin}/#friend=${encodeURIComponent(userId)}${registration}`;
-}
-
-export function friendInviteIdFromHash(hash: string): string | null {
-  return INVITE_HASH.exec(hash)?.[1] ?? null;
+  return friendInviteLink(userId, origin, inviteCode);
 }
 
 function registrationInviteFromHash(hash: string): string | null {
@@ -108,21 +109,6 @@ export function clearFriendInvite(storage?: Pick<Storage, 'removeItem'>) {
 
 /** Dispatched on window when a code scanned inside the app has stored a new invitation. */
 export const FRIEND_INVITE_EVENT = 'relay:friend-invite';
-
-/**
- * Reads a scanned QR code as a friend link. Any Relay address is accepted, so a code made on
- * another of this server's addresses still works; an unknown account simply cannot be opened.
- */
-export function friendInviteIdFromScan(text: string): string | null {
-  let url: URL;
-  try {
-    url = new URL(text.trim());
-  } catch {
-    return null;
-  }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
-  return friendInviteIdFromHash(url.hash);
-}
 
 /** Starts the same flow as opening an invite link, for a code scanned inside the app. */
 export function openFriendInvite(id: string, storage?: Pick<Storage, 'setItem'>) {

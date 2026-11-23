@@ -1,6 +1,20 @@
-import { addDays, parseLocalDate, shortDate } from './trainingSummary';
-import type { FriendFeedItem, WorkoutReactionKind, WorkoutReactions } from './types';
+import {
+  addDays,
+  formatVolume,
+  parseLocalDate,
+  shortDate,
+  strengthSets,
+  workoutVolumeKg,
+} from './trainingSummary';
+import type {
+  FriendFeedItem,
+  TrackedMovement,
+  TrackedWorkout,
+  WorkoutReactionKind,
+  WorkoutReactions,
+} from './types';
 import { formatMinutesDuration } from './utils';
+import type { WeightUnit } from './weightUnits';
 
 export const REACTIONS: ReadonlyArray<{ kind: WorkoutReactionKind; emoji: string; label: string }> =
   [
@@ -93,4 +107,46 @@ export function nextReaction(
   chosen: WorkoutReactionKind,
 ): WorkoutReactionKind | null {
   return current === chosen ? null : chosen;
+}
+
+/**
+ * A feed card's summary line: duration, then distance for cardio or sets and volume for
+ * strength. Each value carries its own unit, so none needs a label.
+ */
+export function feedStats(workout: TrackedWorkout, weightUnit: WeightUnit): string[] {
+  const session = friendSession(workout);
+  const sets = strengthSets(workout).length;
+  const volume = workoutVolumeKg(workout);
+  const stats: string[] = [];
+  if (workout.duration_minutes) stats.push(formatMinutesDuration(workout.duration_minutes));
+  if (session.cardio) {
+    if (session.detail) stats.push(session.detail);
+  } else {
+    if (sets) stats.push(`${sets} ${sets === 1 ? 'set' : 'sets'}`);
+    if (volume > 0) stats.push(formatVolume(volume, weightUnit));
+  }
+  return stats;
+}
+
+/** Exercises listed on a feed card before the rest are counted. */
+export const FEED_SHOWN_EXERCISES = 3;
+
+/**
+ * The exercises a feed card lists: those with a completed set. A session of one exercise named
+ * after it (a run called "Running") lists none.
+ */
+export function feedExercises(workout: TrackedWorkout): TrackedMovement[] {
+  const name = friendSession(workout).name.toLocaleLowerCase();
+  const movements = workout.movements.filter((movement) =>
+    movement.sets.some((item) => item.completed),
+  );
+  const listed =
+    movements.length > 1 ||
+    (movements.length === 1 && movements[0].exercise.name.toLocaleLowerCase() !== name);
+  return listed ? movements : [];
+}
+
+/** "Alex" from "Alex Morgan", for the feed's row of friends. */
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
 }
