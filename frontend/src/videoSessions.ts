@@ -153,3 +153,25 @@ export function youtubeCallbackResult(result: string): { message: string; confir
     confirmation: CALLBACK_CONFIRMATIONS.has(result),
   };
 }
+
+/**
+ * The session to show after a status check. A reply for another session, or one that would take
+ * a finished session (complete, failed or cancelled) back to an earlier state, is an older reply
+ * that arrived late, so the current session stays.
+ */
+export function newerSession<T extends { id: string; status: SessionStatus }>(
+  current: T | null,
+  next: T,
+): T {
+  if (!current) return next;
+  if (current.id !== next.id) return current;
+  if (
+    TERMINAL_SESSION_STATUSES.includes(current.status) &&
+    !TERMINAL_SESSION_STATUSES.includes(next.status)
+  )
+    return current;
+  return next;
+}
+
+/** Processing that the server reports as already started counts as started. */
+export const ALREADY_PROCESSING_CODES = ['already_processing', 'already_complete'];
