@@ -462,7 +462,12 @@ import {
   prToastLines,
   type PrToastEntry,
 } from './workoutPr';
-import { bodyweightOn, bodyweightContext, relativeStrength } from './relativeStrength';
+import {
+  bodyweightOn,
+  bodyweightContext,
+  heaviestLoggedSetKey,
+  relativeStrength,
+} from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
@@ -5849,15 +5854,7 @@ function MovementCard({
   const cardRef = useRef<HTMLElement>(null);
   const setNumbers = setNumberLabels(movement.sets);
   // The bodyweight ratio is said once per exercise, on its heaviest logged set.
-  const ratioSetKey = cardio
-    ? null
-    : (movement.sets.reduce<DraftSet | null>(
-        (best, item) =>
-          item.completed && (best === null || (item.weight_kg ?? 0) > (best.weight_kg ?? 0))
-            ? item
-            : best,
-        null,
-      )?.key ?? null);
+  const ratioSetKey = cardio ? null : heaviestLoggedSetKey(movement.sets);
 
   useEffect(() => {
     if (!movement.isComplete) setExpanded(true);

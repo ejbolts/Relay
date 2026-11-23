@@ -10,7 +10,7 @@ import {
 } from '../../../../frontend/src/exerciseHistory';
 import { matchingLastSessionSet } from '../../../../frontend/src/lastSessionSet';
 import { timeSince } from '../../../../frontend/src/machineHistory';
-import { bodyweightContext } from '../../../../frontend/src/relativeStrength';
+import { bodyweightContext, heaviestLoggedSetKey } from '../../../../frontend/src/relativeStrength';
 import { progressionHint, progressionTarget } from '../../../../frontend/src/repProgression';
 import { unusualSetEntryWarning } from '../../../../frontend/src/setEntryConfirmation';
 import {
@@ -185,15 +185,7 @@ export const MovementCard = memo(function MovementCard({
   const labels = setNumberLabels(movement.sets);
   const name = movement.exercise.name;
   // The bodyweight ratio is said once per exercise, on its heaviest logged set, as on the web.
-  const ratioSetKey = cardio
-    ? null
-    : (movement.sets.reduce<WorkoutDraftSet | null>(
-        (best, item) =>
-          item.completed && (best === null || (item.weight_kg ?? 0) > (best.weight_kg ?? 0))
-            ? item
-            : best,
-        null,
-      )?.key ?? null);
+  const ratioSetKey = cardio ? null : heaviestLoggedSetKey(movement.sets);
   const pinnedPhoto = machines?.find((photo) => photo.id === pinnedMachine) ?? null;
 
   return (

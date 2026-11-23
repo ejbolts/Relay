@@ -54,3 +54,17 @@ export function sharedBodyweight(items: { bodyweight_kg: number | null }[]): num
   ];
   return recorded.length === 1 ? recorded[0] : null;
 }
+
+/**
+ * The set an exercise's bodyweight ratio is said on: its heaviest logged set (the first of equal
+ * ones), or null before any is logged. Callers leave cardio out.
+ */
+export function heaviestLoggedSetKey(
+  sets: readonly { key: string; completed: boolean; weight_kg: number | null }[],
+): string | null {
+  let best: (typeof sets)[number] | null = null;
+  for (const item of sets)
+    if (item.completed && (best === null || (item.weight_kg ?? 0) > (best.weight_kg ?? 0)))
+      best = item;
+  return best?.key ?? null;
+}

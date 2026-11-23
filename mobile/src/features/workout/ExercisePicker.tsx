@@ -12,10 +12,11 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { exerciseNameFromSearch } from '../../../../frontend/src/exerciseCreation';
+import { exerciseEquipmentOptions } from '../../../../frontend/src/exerciseEquipment';
 import {
-  exerciseEquipment,
-  exerciseEquipmentOptions,
-} from '../../../../frontend/src/exerciseEquipment';
+  EXERCISE_BODY_PARTS,
+  matchesExerciseFilters,
+} from '../../../../frontend/src/exerciseFilters';
 import { formatLastDone } from '../../../../frontend/src/exerciseLastDone';
 import {
   lastUsedMachineId,
@@ -46,16 +47,6 @@ import { PickerMachineStrip } from './PickerMachineStrip';
 
 const NO_MACHINES: MachinePhotoUsage[] = [];
 const NO_DATES: ReadonlyMap<string, string> = new Map();
-/** The web picker's body parts, in its order. */
-const BODY_PARTS: WorkoutCategory[] = [
-  'push',
-  'pull',
-  'lower',
-  'upper',
-  'full_body',
-  'cardio',
-  'other',
-];
 
 /**
  * Picks exercises to add, in the order tapped, searched with the web's exercise search (names,
@@ -126,16 +117,11 @@ export function ExercisePicker({
     machineChoices,
   );
   const equipmentOptions = useMemo(() => exerciseEquipmentOptions(exercises), [exercises]);
+  const eligible = useMemo(() => exercises.filter((exercise) => !exercise.hidden), [exercises]);
   // The web's Body part and Equipment filters narrow the list before the search ranks it.
   const available = useMemo(
-    () =>
-      exercises.filter(
-        (exercise) =>
-          !exercise.hidden &&
-          (bodyPart === 'all' || exercise.category === bodyPart) &&
-          (!equipment || exerciseEquipment(exercise.equipment) === equipment),
-      ),
-    [exercises, bodyPart, equipment],
+    () => eligible.filter((exercise) => matchesExerciseFilters(exercise, bodyPart, equipment)),
+    [eligible, bodyPart, equipment],
   );
   const today = localDate();
   const shown = useMemo(() => {
@@ -290,7 +276,7 @@ export function ExercisePicker({
                 checked: bodyPart === 'all',
                 onPress: () => setBodyPart('all'),
               },
-              ...BODY_PARTS.map((part) => ({
+              ...EXERCISE_BODY_PARTS.map((part) => ({
                 label: CATEGORY_LABELS[part],
                 checked: bodyPart === part,
                 onPress: () => setBodyPart(part),
@@ -345,7 +331,8 @@ export function ExercisePicker({
           ListFooterComponent={
             onCreate &&
             query.trim() &&
-            !available.some(
+            // An exact name anywhere in the catalogue, filtered out or not, already exists.
+            !eligible.some(
               (exercise) =>
                 exercise.name.trim().toLocaleLowerCase() === query.trim().toLocaleLowerCase(),
             ) ? (
@@ -550,7 +537,8 @@ function FilterMenu({
   const text = value ?? label;
   return (
     <View style={styles.filter} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
-      {width > 0 && (
+      {/* iOS sizes its native menu host from the layout; Android draws a plain button. */}
+      {(Platform.OS !== 'ios' || width > 0) && (
         <MenuButton
           accessibilityLabel={value ? `${label}: ${value}` : label}
           title={label}

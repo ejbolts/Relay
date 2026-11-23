@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -121,7 +122,8 @@ function MenuSheet({ request, onClose }: { request: MenuRequest; onClose: () => 
       <View
         style={[
           styles.sheet,
-          { backgroundColor: colors.surface, paddingBottom: insets.bottom + 8 },
+          // Bounded, so a long data-driven menu scrolls instead of running off the screen.
+          { backgroundColor: colors.surface, paddingBottom: insets.bottom + 8, maxHeight: '85%' },
         ]}
       >
         <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
@@ -130,24 +132,33 @@ function MenuSheet({ request, onClose }: { request: MenuRequest; onClose: () => 
             {request.title}
           </Text>
         )}
-        {request.options.map((option) => (
-          <Pressable
-            key={option.label}
-            accessibilityRole="button"
-            onPress={() => {
-              onClose();
-              option.onPress();
-            }}
-            style={({ pressed }) => [
-              styles.menuRow,
-              pressed && { backgroundColor: colors.surface2 },
-            ]}
-          >
-            <Text style={[type.body, { color: option.destructive ? colors.danger : colors.text }]}>
-              {option.label}
-            </Text>
-          </Pressable>
-        ))}
+        <ScrollView
+          style={styles.menuOptions}
+          accessibilityLabel={request.title}
+          bounces={false}
+          showsVerticalScrollIndicator
+        >
+          {request.options.map((option) => (
+            <Pressable
+              key={option.label}
+              accessibilityRole="button"
+              onPress={() => {
+                onClose();
+                option.onPress();
+              }}
+              style={({ pressed }) => [
+                styles.menuRow,
+                pressed && { backgroundColor: colors.surface2 },
+              ]}
+            >
+              <Text
+                style={[type.body, { color: option.destructive ? colors.danger : colors.text }]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
     </View>
   );
@@ -223,6 +234,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   menuTitle: { paddingHorizontal: 20, paddingVertical: 8 },
+  menuOptions: { flexGrow: 0, flexShrink: 1 },
   menuRow: { paddingHorizontal: 20, paddingVertical: 15 },
   dialog: { padding: 20, gap: 14 },
   input: { paddingHorizontal: 12, paddingVertical: 10 },
