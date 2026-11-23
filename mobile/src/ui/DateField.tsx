@@ -37,6 +37,8 @@ export function DateField({
 }) {
   const { colors, type, radius, scheme } = useTheme();
   const [open, setOpen] = useState(false);
+  // A field that becomes disabled (a save starting) closes its dialog and ignores its answer.
+  if (open && disabled) setOpen(false);
   const caption = <Text style={[type.callout, { color: colors.secondary, flex: 1 }]}>{label}</Text>;
   if (Platform.OS === 'ios') {
     return (
@@ -100,7 +102,7 @@ export function DateField({
         </Text>
         <Icon name="chevronDown" size={16} color={colors.muted} />
       </Pressable>
-      {open && (
+      {open && !disabled && (
         <ComposeHost matchContents>
           <DatePickerDialog
             // Material's picker works in UTC days.
@@ -114,7 +116,7 @@ export function DateField({
             dismissButtonLabel="Cancel"
             onDateSelected={(date) => {
               setOpen(false);
-              onChange(date.toISOString().slice(0, 10));
+              if (!disabled) onChange(date.toISOString().slice(0, 10));
             }}
             onDismissRequest={() => setOpen(false)}
           />
@@ -152,6 +154,8 @@ export function TimeField({
 }) {
   const { colors, type, radius, scheme } = useTheme();
   const [open, setOpen] = useState(false);
+  // A field that becomes disabled (a save starting) closes its dialog and ignores its answer.
+  if (open && disabled) setOpen(false);
   const caption = <Text style={[type.callout, { color: colors.secondary, flex: 1 }]}>{label}</Text>;
   if (Platform.OS === 'ios') {
     return (
@@ -209,7 +213,7 @@ export function TimeField({
         </Text>
         <Icon name="chevronDown" size={16} color={colors.muted} />
       </Pressable>
-      {open && (
+      {open && !disabled && (
         <ComposeHost matchContents>
           <TimePickerDialog
             initialDate={timeOnToday(value).toISOString()}
@@ -218,7 +222,7 @@ export function TimeField({
             dismissButtonLabel="Cancel"
             onDateSelected={(date) => {
               setOpen(false);
-              onChange(hhmm(date));
+              if (!disabled) onChange(hhmm(date));
             }}
             onDismissRequest={() => setOpen(false)}
           />

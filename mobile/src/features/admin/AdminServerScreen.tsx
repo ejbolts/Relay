@@ -22,6 +22,7 @@ import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { useNow } from '../../ui/useNow';
 import { Row, Section, SectionError, SettingsPage } from '../settings/SettingsList';
+import { useAccountGuard } from './accountGuard';
 import { adminApi, adminKeys, useAccountLimits, useServerStatus } from './adminData';
 
 /** The web's folded Server panel: hidden account limits, storage, and app versions in use. */
@@ -131,6 +132,7 @@ function VersionsSection({ status }: { status: ServerStatus }) {
 function LimitsSection({ limits }: { limits: AccountLimitsSettings }) {
   const client = useQueryClient();
   const { colors, type, radius } = useTheme();
+  const guard = useAccountGuard();
   const [draft, setDraft] = useState(() => limitDraft(limits.values));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -144,8 +146,11 @@ function LimitsSection({ limits }: { limits: AccountLimitsSettings }) {
     if (!parsed || !changed || saving) return;
     setSaving(true);
     setError(null);
+    const current = guard();
     try {
-      client.setQueryData(adminKeys.limits, await adminApi.updateLimits(parsed));
+      const saved = await adminApi.updateLimits(parsed);
+      if (!current()) return;
+      client.setQueryData(adminKeys.limits, saved);
       showToast('Limits saved.');
     } catch (reason) {
       setError(errorMessage(reason));

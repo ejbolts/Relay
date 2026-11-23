@@ -10,14 +10,30 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReduceMotion } from '../features/settings/devicePreferences';
+import * as sessionModule from '../session/SessionProvider';
 import { Icon } from './Icon';
 import { useTheme } from './theme';
 
 // Brief, non-blocking confirmations such as "Workout saved". Any screen calls `showToast`; the
 // most recently mounted <ToastHost /> shows it (a sheet mounts its own, since native sheets sit
-// above the app's root view), then it clears by itself or when tapped. A toast with an action
-// (Undo) stays longer, waits while someone is touching or focused on it, and stays until it is
-// dismissed while a screen reader is on, so the action can always be reached.
+// above the app's root view), then it clears by itself or when tapped.
+//
+// A toast with an action (Undo) has one lifecycle, as on the web: it stays longer, waits while it
+// is touched or focused, and stays until dismissed while a screen reader is on. When it ends
+// without the action (it times out, is dismissed or a newer toast replaces it), its `onDismiss`
+// runs once, so a caller that defers its work (deleting a goal) commits then, never while Undo is
+// still on screen. A toast belongs to the account it was shown under: when the session changes it
+// disappears without running either callback, and its action never runs under another account.
+
+export interface ToastAction {
+  label: string;
+  run: () => void;
+  /**
+   * Runs once when the toast ends without its action: timed out, dismissed, or replaced by a
+   * newer toast. Commit deferred work here rather than on a timer of your own.
+   */
+  onDismiss?: () => void;
+}
 
 interface Toast {
   id: number;
@@ -27,12 +43,11 @@ interface Toast {
   ms: number;
 }
 
-export interface ToastAction {
-  label: string;
-  run: () => void;
+interface Host {
+  show: (toast: Toast) => void;
+  /** A longer time for a toast that is still showing (Android's accessibility timeout). */
+  extend: (id: number, ms: number) => void;
 }
-
-type Host = (toast: Toast | null) => void;
 const hosts: Host[] = [];
 let nextId = 0;
 
@@ -53,41 +68,108 @@ export function showToast(message: string, action?: ToastAction) {
     ms: action ? ACTION_VISIBLE_MS : VISIBLE_MS,
   };
   const host = hosts.at(-1);
-  host?.(toast);
+  if (!host) {
+    // Nowhere to show it: settle it at once, so deferred work still happens.
+    action?.onDismiss?.();
+    return;
+  }
+  host.show(toast);
   AccessibilityInfo.announceForAccessibility(toastAnnouncement(message, action));
-  // Android lets people ask for more time in its accessibility settings.
-  if (Platform.OS === 'android' && host) {
+  // Android lets people ask for more time in its accessibility settings. The host applies the
+  // answer only while this toast is still the one showing.
+  if (Platform.OS === 'android') {
+    // Promise.resolve: a test's mock may answer without a promise.
     Promise.resolve(AccessibilityInfo.getRecommendedTimeoutMillis?.(toast.ms))
       .then((ms) => {
-        if (typeof ms === 'number' && ms > toast.ms) host({ ...toast, ms });
+        if (typeof ms === 'number' && ms > toast.ms) host.extend(toast.id, ms);
       })
       .catch(() => undefined);
   }
 }
 
+// Screen tests often mock the session module with only the hooks they need, so the toast reads
+// the session through whatever that module provides.
+type SessionStatus = NonNullable<ReturnType<typeof sessionModule.useOptionalSession>>['status'];
+const useSessionStatus: () => SessionStatus | undefined =
+  typeof sessionModule.useOptionalSession === 'function'
+    ? () => sessionModule.useOptionalSession()?.status
+    : () => undefined;
+
+/** The session a toast belongs to: the signed-in account, or the signed-out state. */
+function useAccountKey() {
+  const status = useSessionStatus();
+  if (!status) return 'none';
+  return status.kind === 'signed-in' ? `user:${status.user.id}` : status.kind;
+}
+
+interface Shown extends Toast {
+  account: string;
+}
+
 export function ToastHost({ bottom = 24 }: { bottom?: number }) {
-  const [toast, setToast] = useState<Toast | null>(null);
+  const [toast, setToast] = useState<Shown | null>(null);
   const insets = useSafeAreaInsets();
   const { colors, type, radius, scheme } = useTheme();
   const reduced = useReduceMotion();
+  const account = useAccountKey();
   const [shown] = useState(() => new Animated.Value(0));
   // The web's timer bar along the bottom edge, shrinking until the toast clears.
   const [left] = useState(() => new Animated.Value(1));
   const [reader, setReader] = useState(false);
-  const [touched, setTouched] = useState(false);
+  // Press and focus hold the countdown separately, for the toast they happened on.
+  const [hold, setHold] = useState({ id: -1, pressed: false, focused: false });
   const clock = useRef({ id: -1, total: 0, remaining: 0 });
+  const current = useRef<Shown | null>(null);
+  const accountRef = useRef(account);
   const id = toast?.id;
-  // The countdown waits while it's being touched or focused, and for a screen reader user an
-  // action toast waits until it is dismissed.
-  const held = touched || (reader && !!toast?.action);
+  const held = (hold.id === id && (hold.pressed || hold.focused)) || (reader && !!toast?.action);
+
+  /** Ends the showing toast. Without its action, `onDismiss` runs (once); `drop` runs neither. */
+  const end = (how: 'dismissed' | 'acted' | 'dropped') => {
+    const ending = current.current;
+    current.current = null;
+    setToast(null);
+    if (!ending) return;
+    if (how === 'dismissed') ending.action?.onDismiss?.();
+    if (how === 'acted' && ending.account === accountRef.current) ending.action?.run();
+  };
+  const endRef = useRef(end);
 
   useEffect(() => {
-    const host: Host = setToast;
+    endRef.current = end;
+  });
+
+  useEffect(() => {
+    const host: Host = {
+      show: (next) => {
+        const replaced = current.current;
+        const stamped = { ...next, account: accountRef.current };
+        current.current = stamped;
+        setToast(stamped);
+        // A newer toast ends the one it replaces, as dismissing it would.
+        replaced?.action?.onDismiss?.();
+      },
+      extend: (toastId, ms) => {
+        const showing = current.current;
+        if (!showing || showing.id !== toastId || ms <= showing.ms) return;
+        const longer = { ...showing, ms };
+        current.current = longer;
+        setToast(longer);
+      },
+    };
     hosts.push(host);
     return () => {
       hosts.splice(hosts.indexOf(host), 1);
+      // A screen's own host going away settles what it was showing.
+      endRef.current('dismissed');
     };
   }, []);
+
+  // A different account (or signing out) drops the toast without running anything.
+  useEffect(() => {
+    accountRef.current = account;
+    if (current.current && current.current.account !== account) endRef.current('dropped');
+  }, [account]);
 
   useEffect(() => {
     let live = true;
@@ -128,7 +210,7 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
     const started = Date.now();
     const bar = Animated.timing(left, { toValue: 0, duration: remaining, useNativeDriver: false });
     if (!reduced) bar.start();
-    const timer = setTimeout(() => setToast(null), remaining);
+    const timer = setTimeout(() => endRef.current('dismissed'), remaining);
     return () => {
       bar.stop();
       clearTimeout(timer);
@@ -136,14 +218,20 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
     };
   }, [toast, held, left, reduced]);
 
-  const hold = {
-    onPressIn: () => setTouched(true),
-    onPressOut: () => setTouched(false),
-    onFocus: () => setTouched(true),
-    onBlur: () => setTouched(false),
-  };
-
   if (!toast) return null;
+  const holding = (key: 'pressed' | 'focused', on: boolean) => () =>
+    setHold((was) => ({
+      id: toast.id,
+      pressed: was.id === toast.id ? was.pressed : false,
+      focused: was.id === toast.id ? was.focused : false,
+      [key]: on,
+    }));
+  const holdHandlers = {
+    onPressIn: holding('pressed', true),
+    onPressOut: holding('pressed', false),
+    onFocus: holding('focused', true),
+    onBlur: holding('focused', false),
+  };
   return (
     <Animated.View
       key={toast.id}
@@ -174,11 +262,8 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${toast.message}. Dismiss`}
-          {...hold}
-          onPress={() => {
-            setTouched(false);
-            setToast(null);
-          }}
+          {...holdHandlers}
+          onPress={() => end('dismissed')}
           style={styles.message}
         >
           <Text
@@ -197,12 +282,8 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
           <Pressable
             accessibilityRole="button"
             hitSlop={8}
-            {...hold}
-            onPress={() => {
-              setTouched(false);
-              setToast(null);
-              toast.action?.run();
-            }}
+            {...holdHandlers}
+            onPress={() => end('acted')}
             style={styles.action}
           >
             <Text style={[type.callout, { color: colors.accentText, fontWeight: '700' }]}>
