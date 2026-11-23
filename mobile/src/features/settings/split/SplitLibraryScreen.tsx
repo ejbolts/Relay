@@ -16,6 +16,7 @@ import {
 import { SPLIT_TEMPLATES } from '../../../../../frontend/src/trainingSplit';
 import type { Routine, TrainingSplit, WorkoutType } from '../../../../../frontend/src/types';
 import { localDate } from '../../../../../frontend/src/utils';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../../data/offline';
 import { useWorkoutTypes } from '../../../data/queries';
 import {
   Button,
@@ -53,6 +54,18 @@ export function SplitLibraryScreen() {
   const types = useWorkoutTypes();
   const client = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  // Offline with nothing cached the queries are paused, not loading: say so instead of spinning.
+  // A paused query resumes by itself once the phone is back online; Retry asks again now.
+  if (waitingForNetwork(routines) || waitingForNetwork(split))
+    return (
+      <ErrorState
+        message={OFFLINE_MESSAGE}
+        onRetry={() => {
+          void routines.refetch();
+          void split.refetch();
+        }}
+      />
+    );
   if (routines.isPending || split.isPending) return <Loading label="Loading splits" />;
   const error = routines.error ?? split.error;
   if (error && (!routines.data || split.data === undefined))

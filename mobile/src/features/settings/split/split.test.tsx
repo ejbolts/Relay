@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 import { Alert, Platform } from 'react-native';
@@ -15,6 +15,7 @@ import type {
 import { localDate } from '../../../../../frontend/src/utils';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../../frontend/src/workoutTypes';
 import { apiGet, apiSend } from '../../../data/api';
+import { OFFLINE_MESSAGE } from '../../../data/offline';
 import { showMenu } from '../../../ui/prompts';
 import { showToast } from '../../../ui/Toast';
 import { SplitEditorScreen } from './SplitEditorScreen';
@@ -164,6 +165,24 @@ describe('the split library', () => {
       pathname: '/split/edit',
       params: { template: 'upper-lower' },
     });
+  });
+
+  it('says it is offline instead of spinning, then loads once back online', async () => {
+    onlineManager.setOnline(false);
+    try {
+      await show(<SplitLibraryScreen />);
+      expect(await screen.findByText(OFFLINE_MESSAGE)).toBeVisible();
+      expect(screen.queryByLabelText('Loading splits')).toBeNull();
+      expect(apiGet).not.toHaveBeenCalled();
+      // Retry while still offline keeps the offline state rather than a spinner.
+      await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+      expect(screen.getByText(OFFLINE_MESSAGE)).toBeVisible();
+      await act(async () => onlineManager.setOnline(true));
+      expect(await screen.findByText('My splits')).toBeVisible();
+      expect(screen.queryByText(OFFLINE_MESSAGE)).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
   });
 
   it('shows the same active split in both preview views', async () => {
