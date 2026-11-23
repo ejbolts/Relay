@@ -35,6 +35,7 @@ import { Icon } from '../../ui/Icon';
 import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
+import { AdminSettingsSection } from '../admin';
 import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { restTimerPreference } from './devicePreferences';
@@ -199,6 +200,8 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
       <AutoSaveSection />
       <NotificationsSection />
       <AccountSection />
+      {/* Mobile batch 4, B6: the admin console, for administrators only. */}
+      <AdminSettingsSection />
       <AboutSection />
     </SettingsPage>
   );

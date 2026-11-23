@@ -102,6 +102,9 @@ function Navigation() {
             <Stack.Screen name="cardio/log" />
             <Stack.Screen name="cardio/metrics/[id]" />
             <Stack.Screen name="cardio/zones" />
+            {/* Mobile batch 4, B6: the admin console (admins only) and the videos tab. */}
+            <Stack.Screen name="admin" />
+            <Stack.Screen name="videos" />
           </Stack.Protected>
           <Stack.Protected guard={mustChangePassword}>
             <Stack.Screen name="password-required" />
