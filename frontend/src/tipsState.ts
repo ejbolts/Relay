@@ -36,9 +36,10 @@ export const freshTips = (): TipState => ({
   shows: {},
 });
 export const tipStorageKey = (account: string) => `relay:tips:v1:${account}`;
-export function loadTips(account: string): TipState {
+/** A device's stored tips, as saved by either app; anything unreadable starts fresh. */
+export function parseTips(raw: string | null): TipState {
   try {
-    const value = JSON.parse(localStorage.getItem(tipStorageKey(account)) ?? 'null');
+    const value = JSON.parse(raw ?? 'null');
     if (!value || typeof value !== 'object') return freshTips();
     const tipIds = (list: unknown) =>
       Array.isArray(list)
@@ -93,13 +94,6 @@ export function loadTips(account: string): TipState {
     } as TipState;
   } catch {
     return freshTips();
-  }
-}
-export function saveTips(account: string, state: TipState) {
-  try {
-    localStorage.setItem(tipStorageKey(account), JSON.stringify(state));
-  } catch {
-    /* In-memory state still works when storage is unavailable. */
   }
 }
 /** Priority tips explain something easy to get wrong, so they skip the onboarding gates. */

@@ -57,18 +57,22 @@ export function Screen({
         onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined
       }
     >
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          {!!eyebrow && (
-            <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
-              {eyebrow}
-            </Text>
-          )}
-          <Text accessibilityRole="header" style={[type.largeTitle, { color: colors.text }]}>
+      <View>
+        {/* The full width, so header buttons never cut it short. */}
+        {!!eyebrow && (
+          <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
+            {eyebrow}
+          </Text>
+        )}
+        <View style={styles.header}>
+          <Text
+            accessibilityRole="header"
+            style={[type.largeTitle, { color: colors.text, flex: 1 }]}
+          >
             {title}
           </Text>
+          {actions}
         </View>
-        {actions}
       </View>
       {children}
     </ScrollView>

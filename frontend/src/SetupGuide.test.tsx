@@ -19,7 +19,8 @@ import { onTipTarget, type TipAction } from './tipActions';
 import { TipsProvider, useTips } from './Tips';
 import { TrainingBlockDialog } from './TrainingBlockDialog';
 import { TrainingBlocksContext } from './trainingBlocksContext';
-import { freshTips, loadTips, saveTips } from './tipsState';
+import { freshTips } from './tipsState';
+import { loadTips, saveTips } from './tipsStorage';
 import type {
   Exercise,
   ExerciseProgress,

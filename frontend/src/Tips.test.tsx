@@ -9,7 +9,8 @@ import { SetupGuideHost } from './SetupGuide';
 import { activeGuide, exitGuide } from './setupGuides';
 import { onTipTarget, type TipAction } from './tipActions';
 import { Toast, ToastProvider } from './Toast';
-import { loadTips, saveTips, freshTips, TIP_COOLDOWN } from './tipsState';
+import { freshTips, TIP_COOLDOWN } from './tipsState';
+import { loadTips, saveTips } from './tipsStorage';
 
 let root: Root, container: HTMLDivElement;
 let controller: ReturnType<typeof useTips>;

@@ -1,4 +1,5 @@
 import { AdminRequestDialog } from './AdminRequestDialog';
+import { USERNAME_REMINDER_REQUEST } from './accountHelpRequests';
 import { api } from './api';
 
 /**
@@ -8,19 +9,9 @@ import { api } from './api';
 export function ForgotUsernameDialog({ onClose }: { onClose: () => void }) {
   return (
     <AdminRequestDialog
-      title="Forgot username"
+      {...USERNAME_REMINDER_REQUEST}
       className="forgot-username-dialog"
-      label="Name on your profile"
-      name="name"
-      autoComplete="name"
-      autoCapitalize="words"
-      maxLength={80}
-      emptyError="Enter your name."
-      clean={(value) => value.trim().replace(/\s+/g, ' ')}
       send={(name) => api.auth.requestUsernameReminder(name)}
-      submitLabel="Ask admin"
-      sentTitle={(name) => `Request sent for ${name}`}
-      sentMessage="Your admin will tell you your username."
       onClose={onClose}
     />
   );

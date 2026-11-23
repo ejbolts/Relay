@@ -19,8 +19,6 @@ import {
   freshTips,
   isPriorityTip,
   isQuietTip,
-  loadTips,
-  saveTips,
   tipAction,
   tipShown,
   tipStorageKey,
@@ -29,6 +27,7 @@ import {
   type TipId,
   type TipState,
 } from './tipsState';
+import { loadTips, saveTips } from './tipsStorage';
 import './tips.css';
 
 type Environment = { page: string; ready: boolean; resting: boolean; workoutCount: number };

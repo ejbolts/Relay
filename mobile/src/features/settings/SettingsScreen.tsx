@@ -35,6 +35,7 @@ import { Icon } from '../../ui/Icon';
 import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
+import { HelpSettings } from '../guides/HelpSettings';
 import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { restTimerPreference, restTimesPreference } from './devicePreferences';
@@ -204,6 +205,8 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
           onPress={() => router.push('/settings/appearance')}
         />
       </Section>
+      {/* B4 (guides): Help and Workout sharing. */}
+      <HelpSettings />
       <AutoSaveSection />
       <NotificationsSection />
       <AccountSection />
