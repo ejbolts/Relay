@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { prettyDate } from '../../../../frontend/src/appShared';
+import { hasCardioMetrics } from '../../../../frontend/src/cardioForm';
 import {
   CARDIO_HISTORY_FILTERS,
   CARDIO_HISTORY_WEEKS_PER_PAGE,
@@ -26,7 +27,7 @@ import { useWeightUnit } from '../../data/queries';
 import { Button, Card, CardHeader } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
-import { useWorkout } from '../workout/WorkoutProvider';
+import { CardioAllStats } from '../cardio/CardioAllStats';
 import { trainingIcons } from './icons';
 import { Chip, Divider, MoreButton, Note, Segmented } from './parts';
 import { useCardioOverview } from './trainingQueries';
@@ -40,7 +41,7 @@ const shortDay = (value: string) =>
 /** Cardio: the weekly trend, the session history and the weekly zone goals, as on the web. */
 export function CardioSection() {
   const overview = useCardioOverview();
-  const workout = useWorkout();
+  const router = useRouter();
   if (overview.isPending) return <Note>Loading cardio…</Note>;
   if (overview.isError)
     return (
@@ -54,7 +55,7 @@ export function CardioSection() {
     );
   return (
     <View style={{ gap: 20 }}>
-      <Button label="Log session" icon="cardio" onPress={() => workout.start({ kind: 'cardio' })} />
+      <Button label="Log session" icon="plus" onPress={() => router.push('/cardio/log')} />
       <CardioTrend overview={overview.data} />
       <CardioHistory overview={overview.data} />
       <ZoneGoals overview={overview.data} />
@@ -181,6 +182,7 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
           }
         />
       </View>
+      <CardioAllStats periods={overview.energy_periods} weekEnd={overview.current_week.week_end} />
     </Card>
   );
 }
@@ -300,6 +302,14 @@ function CardioRow({
           <Text style={[type.footnote, { color: colors.secondary }]}>
             {cardioSessionPerformance(session)}
           </Text>
+          <Button
+            label={hasCardioMetrics(session) ? 'Edit metrics' : 'Log metrics'}
+            variant="link"
+            onPress={() =>
+              router.push({ pathname: '/cardio/metrics/[id]', params: { id: session.id } })
+            }
+            style={{ alignSelf: 'flex-start' }}
+          />
           {!!linked && (
             <Button
               label="Open workout"
@@ -321,12 +331,18 @@ function CardioRow({
 
 function ZoneGoals({ overview }: { overview: CardioOverview }) {
   const { colors, radius, type } = useTheme();
+  const router = useRouter();
   const zones = overview.cardio_preferences?.heart_rate_zones ?? [];
   const zonesSet = zones.length > 0;
   const goals = overview.goal_weeks ?? [{ zone: 2, ...overview.current_week }];
   return (
     <Card accessibilityLabel="Weekly zone goals">
-      <CardHeader title="Weekly zone goals" />
+      <CardHeader
+        title="Weekly zone goals"
+        action={
+          <Button label="Edit zones" variant="link" onPress={() => router.push('/cardio/zones')} />
+        }
+      />
       {goals.map((goal, index) => {
         const range = zones.find((item) => item.zone === goal.zone);
         const share = zonesSet

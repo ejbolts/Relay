@@ -4,10 +4,16 @@ import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import type { CardioPreferences } from './types';
 import {
+  CARDIO_GOAL_MINUTES,
+  CARDIO_MAX_HEART_RATE,
+  CARDIO_ZONE_BPM,
+  CARDIO_ZONE_NUMBERS,
+  cardioZoneDrafts,
   invalidZoneFields,
+  parseCardioZoneRanges,
+  validCardioInteger,
   withZoneMax,
   zonesFromMaxHeartRate,
-  type ZoneDraft,
 } from './cardioZones';
 import './cardioZones.css';
 
@@ -20,16 +26,7 @@ export function CardioZoneSettings({
   onClose: () => void;
   onSaved: () => Promise<void>;
 }) {
-  const [zones, setZones] = useState<ZoneDraft[]>(() =>
-    Array.from({ length: 5 }, (_, index) => {
-      const saved = preferences.heart_rate_zones.find((item) => item.zone === index + 1);
-      return {
-        zone: index + 1,
-        min: saved?.min_bpm.toString() ?? '',
-        max: saved?.max_bpm.toString() ?? '',
-      };
-    }),
-  );
+  const [zones, setZones] = useState(() => cardioZoneDrafts(preferences));
   const [goals, setGoals] = useState(preferences.goals);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,8 +35,8 @@ export function CardioZoneSettings({
   const [checked, setChecked] = useState(false);
   const invalid = checked ? invalidZoneFields(zones) : new Set<string>();
   const maxBpm = Number(maxHeartRate);
-  const canFill = Number.isInteger(maxBpm) && maxBpm >= 100 && maxBpm <= 250;
-  const unusedZone = [1, 2, 3, 4, 5].find((zone) => !goals.some((goal) => goal.zone === zone));
+  const canFill = validCardioInteger(maxBpm, CARDIO_MAX_HEART_RATE);
+  const unusedZone = CARDIO_ZONE_NUMBERS.find((zone) => !goals.some((goal) => goal.zone === zone));
   const formId = useId();
   return (
     <PopupDialog
@@ -63,28 +60,12 @@ export function CardioZoneSettings({
         onSubmit={async (event) => {
           event.preventDefault();
           setError(null);
-          const anyRange = zones.some((zone) => zone.min !== '' || zone.max !== '');
-          const ranges = anyRange
-            ? zones.map((zone) => ({
-                zone: zone.zone,
-                min_bpm: Number(zone.min),
-                max_bpm: Number(zone.max),
-              }))
-            : [];
-          if (anyRange && zones.some((zone) => !zone.min || !zone.max)) {
+          let ranges;
+          try {
+            ranges = parseCardioZoneRanges(zones);
+          } catch (reason) {
             setChecked(true);
-            setError('Enter a minimum and maximum for all five zones.');
-            return;
-          }
-          if (
-            ranges.some(
-              (zone, index) =>
-                zone.min_bpm > zone.max_bpm ||
-                (index > 0 && ranges[index - 1].max_bpm >= zone.min_bpm),
-            )
-          ) {
-            setChecked(true);
-            setError('Zone ranges must increase without overlapping.');
+            setError(reason instanceof Error ? reason.message : 'Check the heart-rate zones.');
             return;
           }
           setSaving(true);
@@ -108,8 +89,8 @@ export function CardioZoneSettings({
               <input
                 type="number"
                 inputMode="numeric"
-                min="100"
-                max="250"
+                min={CARDIO_MAX_HEART_RATE.min}
+                max={CARDIO_MAX_HEART_RATE.max}
                 step="1"
                 placeholder="bpm"
                 value={maxHeartRate}
@@ -147,8 +128,8 @@ export function CardioZoneSettings({
                   key={bound}
                   type="number"
                   inputMode="numeric"
-                  min="20"
-                  max="250"
+                  min={CARDIO_ZONE_BPM.min}
+                  max={CARDIO_ZONE_BPM.max}
                   step="1"
                   aria-label={`Zone ${zone.zone} ${bound === 'min' ? 'minimum' : 'maximum'} bpm`}
                   aria-invalid={invalid.has(`${zone.zone}:${bound}`) || undefined}
@@ -192,7 +173,7 @@ export function CardioZoneSettings({
                   )
                 }
               >
-                {[1, 2, 3, 4, 5].map((zone) => (
+                {CARDIO_ZONE_NUMBERS.map((zone) => (
                   <option
                     key={zone}
                     value={zone}
@@ -204,8 +185,8 @@ export function CardioZoneSettings({
               </select>
               <input
                 type="number"
-                min="1"
-                max="10080"
+                min={CARDIO_GOAL_MINUTES.min}
+                max={CARDIO_GOAL_MINUTES.max}
                 step="1"
                 required
                 inputMode="numeric"
