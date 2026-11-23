@@ -5,8 +5,6 @@ import {
   canShowTip,
   countTipEvent,
   freshTips,
-  loadTips,
-  saveTips,
   scheduleTipReminders,
   TIP_COOLDOWN,
   tipAction,
@@ -15,6 +13,7 @@ import {
   withTipReminders,
   type TipState,
 } from './tipsState';
+import { loadTips, saveTips } from './tipsStorage';
 beforeEach(() => localStorage.clear());
 describe('tip persistence and allowance', () => {
   it('isolates settings, learning and counters by account', () => {

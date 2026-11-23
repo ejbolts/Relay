@@ -4,6 +4,7 @@ import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { exitGuide, finishGuide, useActiveGuide } from './setupGuides';
+import { blocksGuideSteps } from './setupGuideSteps';
 import {
   blockFormDraft,
   blockFormInput,
@@ -144,30 +145,25 @@ export function TrainingBlockDialog({
         : 'Training blocks';
 
   const lift = guide?.facts.lift;
+  const copy = blocksGuideSteps(lift ?? null);
   const coachSteps: CoachStep[] = [
     {
-      title: 'Name this phase',
-      body: 'Something like Strength or Summer cut. Your first session of each lift in a block sets a fresh baseline, so you can earn Block PRs below your all-time best.',
+      ...copy[0],
       target: '.training-block-form fieldset > label:first-of-type input',
       next: { disabled: !name.trim(), onClick: () => setGuideStep(1) },
     },
     {
-      title: 'Pick a start',
-      body: 'Today, 1 January, or Custom for a past date so recent workouts count towards this block.',
+      ...copy[1],
       target: '.training-block-starts:not(.plan)',
       next: { onClick: () => setGuideStep(2) },
     },
     {
-      title: 'Plan an end, if you like',
-      body: 'Home counts down the days left. A block never closes by itself.',
+      ...copy[2],
       target: '.training-block-starts.plan',
       next: { onClick: () => setGuideStep(3) },
     },
     {
-      title: 'Start the block',
-      body: lift
-        ? `Home then shows the week you’re on, and ${lift.name} records start fresh from your next session.`
-        : 'Home then shows the week you’re on, and records start fresh from your next session.',
+      ...copy[3],
       target: '.training-block-dialog .popup-dialog-footer button[type="submit"]',
     },
   ];

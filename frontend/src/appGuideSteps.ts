@@ -7,7 +7,11 @@ export interface AppGuideStep {
   tab: AppTab;
 }
 
-export function appGuideSteps(videosAllowed: boolean): AppGuideStep[] {
+/**
+ * The quick tour. `app` is the native app, which is already on the phone's home screen, so its
+ * last step leaves out the web's Add to Home Screen steps.
+ */
+export function appGuideSteps(videosAllowed: boolean, { app = false } = {}): AppGuideStep[] {
   return [
     {
       title: 'Your training, at a glance',
@@ -71,13 +75,24 @@ export function appGuideSteps(videosAllowed: boolean): AppGuideStep[] {
       : []),
     {
       title: 'Make Relay your own',
-      description:
-        'Settings has illustrated Add to Home Screen steps, timers, phone alerts and display preferences. Use Replay guide here whenever you need a refresher.',
+      description: app
+        ? 'Settings has timers, notifications and display preferences. Use Replay guide in its Guides whenever you need a refresher.'
+        : 'Settings has illustrated Add to Home Screen steps, timers, phone alerts and display preferences. Use Replay guide here whenever you need a refresher.',
       target: 'installation',
       tab: 'settings',
     },
   ];
 }
+
+/** The tour's last page, after its steps. */
+export const APP_GUIDE_THANKS = {
+  kicker: 'YOU ARE READY',
+  title: 'Thanks for trying Relay!',
+  body: 'We hope it makes your next workout a little easier. What worked well, and what could be better?',
+  contributeTitle: 'Want to help build Relay?',
+  contributeBody:
+    'Check existing issues, discuss bigger changes first, then work on a focused branch or fork. Use sample data, run the project checks and include screenshots for UI changes in your pull request.',
+} as const;
 
 export const PROJECT_URL = 'https://github.com/ejbolts/Relay';
 export const CONTRIBUTING_URL = `${PROJECT_URL}/blob/main/CONTRIBUTING.md`;

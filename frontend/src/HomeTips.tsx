@@ -11,17 +11,13 @@ import { createPortal } from 'react-dom';
 import { api } from './api';
 import { weightGoalReached } from './bodyMeasurementHistory';
 import { Icon } from './Icon';
+import { homeTipCopy, homeTipCount, homeTipFacts, homeTipList } from './homeTipList';
 import { useTips } from './Tips';
-import { multiMachineExerciseId } from './machineUsage';
 import { useTrainingBlocks } from './trainingBlocksContext';
-import { daysBetween } from './trainingSummary';
 import { localDate } from './utils';
-import { tipAction, TIP_DEFINITIONS, type TipId } from './tipsState';
+import { tipAction } from './tipsState';
 import { GUIDE_FOR_TIP, openSetupGuide } from './setupGuides';
 import type { BodyWeightGoal, TrackedWorkout } from './types';
-
-/** The most new tips the bulb counts out loud; beyond it, it says "9+". */
-const COUNTED_TIPS = 9;
 
 /**
  * Tips at the end of Home's date line: amber with a count while tips are unread, grey once read.
@@ -43,28 +39,12 @@ export function HomeTips({
   const tips = useTips();
   const { learn, readHome } = tips;
   const blocks = useTrainingBlocks();
-  const real = useMemo(() => workouts.filter((workout) => !workout.is_sample), [workouts]);
-  const weeks = useMemo(
-    () =>
-      new Set(
-        real.map((workout) => {
-          const date = new Date(`${workout.workout_date}T12:00:00`);
-          date.setDate(date.getDate() - ((date.getDay() + 6) % 7));
-          return date.toISOString().slice(0, 10);
-        }),
-      ).size,
-    [real],
-  );
   useEffect(() => {
     if (blocks.config.blocks.length) learn('blocks');
   }, [blocks.config.blocks.length, learn]);
   useEffect(() => {
     if (hasSplit) learn('split');
   }, [hasSplit, learn]);
-  const experienced = real.length >= 3;
-  const oldEnough = !!createdAt && daysBetween(createdAt.slice(0, 10), localDate()) >= 7;
-  // Comparing machines only helps once one exercise has been logged on two of them.
-  const machineExerciseId = useMemo(() => multiMachineExerciseId(real), [real]);
   // A maintenance range is worth raising once a loss or gain goal is reached, as on Body.
   const hasWeighIn = latestWeightKg !== null;
   const [goals, setGoals] = useState<BodyWeightGoal[] | null>(null);
@@ -86,40 +66,14 @@ export function HomeTips({
     goals?.find((goal) => goal.active),
     latestWeightKg,
   );
-  const eligible = useMemo(() => {
-    // Most useful first: features that change what the app can tell you, then personal touches.
-    const pool: TipId[] = [
-      ...(machineExerciseId ? ['normalise' as const] : []),
-      ...(weeks >= 4 && !blocks.loading && !blocks.error && blocks.config.blocks.length === 0
-        ? ['blocks' as const]
-        : []),
-      ...(experienced && !hasSplit ? ['split' as const] : []),
-      ...(hasSplit && weeks >= 3 ? ['repRange' as const] : []),
-      ...(goalReached ? ['maintenance' as const] : []),
-      ...(oldEnough ? ['home' as const] : []),
-      'friends',
-      'appearance',
-    ];
-    const done = tips.state.homeDone ?? [];
-    return pool.filter(
-      (id) =>
-        tips.state.seen[id] !== 'learned' &&
-        tips.state.seen[id] !== 'dismissed' &&
-        !done.includes(id),
-    );
-  }, [
-    machineExerciseId,
-    goalReached,
-    weeks,
-    blocks.loading,
-    blocks.error,
-    blocks.config.blocks.length,
-    oldEnough,
-    experienced,
-    hasSplit,
-    tips.state.seen,
-    tips.state.homeDone,
-  ]);
+  const blockCount = blocks.loading || blocks.error ? null : blocks.config.blocks.length;
+  const facts = useMemo(
+    () =>
+      homeTipFacts({ workouts, createdAt, today: localDate(), blockCount, hasSplit, goalReached }),
+    [workouts, createdAt, blockCount, hasSplit, goalReached],
+  );
+  const { machineExerciseId } = facts;
+  const eligible = useMemo(() => homeTipList(facts, tips.state), [facts, tips.state]);
   const read = tips.state.homeRead ?? [];
   const unread = eligible.filter((id) => !read.includes(id));
   const [open, setOpen] = useState(false);
@@ -173,13 +127,7 @@ export function HomeTips({
     };
   }, [showing]);
   if (!shown) return null;
-  const definition = current ? TIP_DEFINITIONS[current] : null;
-  const tip = definition
-    ? {
-        title: definition.title,
-        body: 'homeBody' in definition ? definition.homeBody : definition.body,
-      }
-    : { title: "You're all caught up", body: 'New tips appear here as you use more of Relay.' };
+  const tip = homeTipCopy(current);
   const action = current ? tipAction(current) : null;
   const guide = current ? GUIDE_FOR_TIP[current] : undefined;
   const toggle = () => {
@@ -193,7 +141,7 @@ export function HomeTips({
     setOpen(false);
     button.current?.focus();
   };
-  const count = unread.length > COUNTED_TIPS ? `${COUNTED_TIPS}+` : String(unread.length);
+  const count = homeTipCount(unread.length);
   return (
     <>
       <button
