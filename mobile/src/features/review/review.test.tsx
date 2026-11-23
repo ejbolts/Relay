@@ -228,6 +228,16 @@ it('lists the release, the weekly review and an administrator’s requests in th
   await waitFor(() => expectSaved({ release_seen: version }));
 });
 
+it('opens an administrator’s request at that account in the app’s admin console', async () => {
+  mockUser = { ...mockUser, is_admin: true };
+  await show(<NotificationsBell />);
+  await fireEvent.press(
+    await screen.findByRole('button', { name: /^Notifications/ }, { timeout: 4000 }),
+  );
+  await fireEvent.press(await screen.findByRole('button', { name: /^Review Sam’s/ }));
+  expect(mockRouter.push).toHaveBeenCalledWith('/admin/account/sam');
+});
+
 it('closing What’s new dismisses it for the account', async () => {
   await show(<ReleaseNotesOverHome />);
   expect(await screen.findByText('Changes', {}, { timeout: 4000 })).toBeVisible();

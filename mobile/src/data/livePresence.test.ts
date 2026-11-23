@@ -1,6 +1,6 @@
 import { onlineManager } from '@tanstack/react-query';
 import { AppState, type AppStateStatus } from 'react-native';
-import { connectLivePresence } from './livePresence';
+import { connectLivePresence, onAdminActivity } from './livePresence';
 import { sessionToken } from './session';
 
 jest.mock('./api', () => ({
@@ -142,4 +142,25 @@ test('does not open a late socket after losing the network while reading the tok
   onlineManager.setOnline(true);
   await Promise.resolve();
   expect(Socket.instances).toHaveLength(1);
+});
+
+// Mobile batch 4, B6: the admin console's live activity.
+test('subscribes to admin activity only while the console listens, and relays it', async () => {
+  live = connectLivePresence(listeners());
+  await Promise.resolve();
+  const [socket] = Socket.instances;
+  socket.open();
+  const sent = () => socket.send.mock.calls.map(([data]) => JSON.parse(data));
+  expect(sent().some((message) => message.type === 'admin_activity')).toBe(false);
+
+  const heard = jest.fn();
+  const stop = onAdminActivity(heard);
+  expect(sent().at(-1)).toEqual({ type: 'admin_activity', enabled: true });
+  const presence = { online: true, last_active_at: '2026-01-01T00:00:00Z', workout: null };
+  socket.onmessage?.({ data: JSON.stringify({ type: 'admin_activity', user_id: 'u1', presence }) });
+  socket.onmessage?.({ data: '{"type":"admin_activity_sync"}' });
+  expect(heard.mock.calls).toEqual([[{ userId: 'u1', presence }], [null]]);
+
+  stop();
+  expect(sent().at(-1)).toEqual({ type: 'admin_activity', enabled: false });
 });

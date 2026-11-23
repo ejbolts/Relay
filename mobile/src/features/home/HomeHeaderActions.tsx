@@ -1,28 +1,42 @@
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { profileButtonLabel } from '../../../../frontend/src/profileButton';
+import { StyleSheet, View } from 'react-native';
 import { useUser } from '../../session/SessionProvider';
+import { AccountHeaderActions } from '../../ui/AccountHeaderActions';
 import { IconButton } from '../../ui/components';
-import { haptics } from '../../ui/haptics';
-import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { useTheme } from '../../ui/theme';
 import { NotificationsBell, socialRoutes } from '../social';
+import { videoRoutes } from '../videos';
+import { videoIcons } from '../videos/icons';
 
 /**
- * Home's header buttons, as on the web: the layout pencil, the notifications bell (which counts
- * friend requests waiting for an answer), your profile, then Settings. Each is the web's 40 pt
- * square `.icon-button-pulse`.
+ * Home's header buttons, as on the web: the layout pencil and the Video logger (for accounts that
+ * can upload), then the account trio every tab shares: the bell, your profile and Settings.
  */
 export function HomeHeaderActions({ canEdit }: { canEdit: boolean }) {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const router = useRouter();
   const user = useUser();
-  const square = [
-    styles.square,
-    { backgroundColor: colors.surface, borderColor: colors.line },
-  ] as const;
   return (
-    <View style={styles.row}>
+    <AccountHeaderActions
+      notifications={
+        // Social's bell is still round; drawn here as the shared 40 pt square until it is an
+        // IconButton itself. Its icon is about half its size: 35 gives the 18 pt icon.
+        <View style={styles.touch}>
+          <NotificationsBell
+            size={35}
+            style={[
+              styles.square,
+              {
+                backgroundColor: colors.surface,
+                borderColor: scheme === 'light' ? colors.lineStrong : colors.line,
+              },
+            ]}
+          />
+        </View>
+      }
+      profile={{ user, onPress: () => router.push(socialRoutes.profile(user.id)) }}
+      onSettings={() => router.push('/settings')}
+    >
       {/* Editing waits for the server's layout, so an older copy is never saved over a newer one. */}
       <IconButton
         icon="edit"
@@ -30,39 +44,18 @@ export function HomeHeaderActions({ canEdit }: { canEdit: boolean }) {
         disabled={!canEdit}
         onPress={() => router.push('/home-layout')}
       />
-      {/* Its icon is about half its size: 35 gives the 18 pt icon the other buttons use. */}
-      <NotificationsBell size={35} style={square} />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={profileButtonLabel(user.display_name.trim() || user.username, 0, 0)}
-        hitSlop={2}
-        onPress={() => {
-          haptics.tap();
-          router.push(socialRoutes.profile(user.id));
-        }}
-        style={({ pressed }) => [...square, pressed && { opacity: 0.7 }]}
-      >
-        <ProfilePhoto user={user} size={28} />
-      </Pressable>
-      <IconButton
-        icon="settings"
-        accessibilityLabel="Settings"
-        onPress={() => router.push('/settings')}
-      />
-    </View>
+      {user.can_upload_videos !== false && (
+        <IconButton
+          icon={videoIcons.video}
+          accessibilityLabel="Video logger"
+          onPress={() => router.push(videoRoutes.videos)}
+        />
+      )}
+    </AccountHeaderActions>
   );
 }
 
-const SIZE = 40;
-
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  square: {
-    width: SIZE,
-    height: SIZE,
-    borderRadius: 12,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  touch: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  square: { width: 40, height: 40, borderRadius: 12, borderWidth: 1 },
 });

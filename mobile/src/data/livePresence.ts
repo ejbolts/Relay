@@ -9,6 +9,7 @@ import {
   workoutPresence,
   type FriendPresenceEvent,
 } from '../../../frontend/src/presenceProtocol';
+import type { FriendPresence } from '../../../frontend/src/types';
 import type { ActiveWorkoutDraft } from '../../../frontend/src/workoutDraft';
 import { apiOrigin, clientVersionHeaders, serverOrigin } from './api';
 import { newId, readJson, writeJson } from './deviceStorage';
@@ -34,6 +35,30 @@ interface Listeners {
   onSignedOut: () => void;
 }
 
+// Admin live activity (mobile batch 4, B6). The admin console listens while it is open; the
+// socket asks the server for every account's activity only while someone is listening, as the
+// web does. Null asks the console to reload its list after the socket subscribes again.
+export interface AdminActivity {
+  userId: string;
+  presence: FriendPresence;
+}
+type AdminActivityListener = (activity: AdminActivity | null) => void;
+const adminListeners = new Set<AdminActivityListener>();
+const adminSubscriptionWatchers = new Set<() => void>();
+
+export function onAdminActivity(listener: AdminActivityListener): () => void {
+  adminListeners.add(listener);
+  adminSubscriptionWatchers.forEach((watcher) => watcher());
+  return () => {
+    adminListeners.delete(listener);
+    adminSubscriptionWatchers.forEach((watcher) => watcher());
+  };
+}
+
+function publishAdminActivity(activity: AdminActivity | null) {
+  adminListeners.forEach((listener) => listener(activity));
+}
+
 /** One socket for the signed-in engine, while the app is visible and the network is available. */
 export function connectLivePresence(listeners: Listeners) {
   let socket: WebSocket | null = null;
@@ -44,6 +69,7 @@ export function connectLivePresence(listeners: Listeners) {
   let active = AppState.currentState == null || AppState.currentState === 'active';
   let lastSent = '';
   let attempts = 0;
+  let adminSubscribed = false;
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   const eligible = () => !stopped && !signedOut && active && onlineManager.isOnline();
 
@@ -59,6 +85,13 @@ export function connectLivePresence(listeners: Listeners) {
       socket.send(state);
       lastSent = state;
     }
+  }
+
+  function sendAdminSubscription() {
+    const enabled = adminListeners.size > 0;
+    if (socket?.readyState !== WebSocket.OPEN || enabled === adminSubscribed) return;
+    socket.send(JSON.stringify({ type: 'admin_activity', enabled }));
+    adminSubscribed = enabled;
   }
 
   function retry() {
@@ -92,6 +125,8 @@ export function connectLivePresence(listeners: Listeners) {
         if (socket !== current) return;
         attempts = 0;
         report(true);
+        adminSubscribed = false;
+        sendAdminSubscription();
         listeners.onOpen();
       };
       current.onmessage = (event) => {
@@ -100,6 +135,9 @@ export function connectLivePresence(listeners: Listeners) {
         if (message?.type === 'active_workout') listeners.onActiveWorkout();
         if (message?.type === 'presence') listeners.onFriendPresence(message);
         if (message?.type === 'notifications') listeners.onNotifications?.();
+        if (message?.type === 'admin_activity_sync') publishAdminActivity(null);
+        if (message?.type === 'admin_activity')
+          publishAdminActivity({ userId: message.user_id, presence: message.presence });
       };
       current.onclose = (event) => {
         if (socket !== current) return;
@@ -139,6 +177,7 @@ export function connectLivePresence(listeners: Listeners) {
   });
   const net = onlineManager.subscribe(updateConnection);
   const heartbeat = setInterval(() => report(true), PRESENCE_HEARTBEAT_MS);
+  adminSubscriptionWatchers.add(sendAdminSubscription);
   updateConnection();
   return {
     report,
@@ -148,6 +187,7 @@ export function connectLivePresence(listeners: Listeners) {
       app?.remove();
       net();
       clearInterval(heartbeat);
+      adminSubscriptionWatchers.delete(sendAdminSubscription);
     },
   };
 }

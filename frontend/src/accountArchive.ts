@@ -13,6 +13,10 @@ export const ARCHIVE_COUNT_LABELS: Array<[keyof ArchiveCounts, string]> = [
 
 export const ARCHIVE_FILE_TYPES = ['.zip', 'application/zip'];
 
+/** The server's limit on an uploaded backup, so a phone can refuse a larger one before sending. */
+export const ARCHIVE_MAX_BYTES = 512 * 1024 * 1024;
+export const ARCHIVE_TOO_LARGE = 'This archive is too large to restore.';
+
 export const ARCHIVE_RESTORE_WARNING =
   'This replaces your current training data. A copy of it is kept on the server.';
 
