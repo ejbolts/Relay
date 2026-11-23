@@ -21,12 +21,14 @@ import { effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
 import { calendarDayTarget } from '../../../../frontend/src/plannedDay';
 import { splitCalendarDays } from '../../../../frontend/src/trainingSplit';
 import { useDashboard } from '../../data/queries';
-import { Button, Card, CardHeader } from '../../ui/components';
+import { Button, Card, CardHeader, IconButton } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { useCreateWorkoutOn } from '../home/calendarActions';
 import { PlannedDaySheet } from '../home/PlannedDaySheet';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { CalendarDaySheet } from './CalendarDaySheet';
+import { MachineFilterSheet } from './MachineFilterSheet';
+import { machineWorkoutsRoute, type MachineFilter } from './MachinePhotos';
 import {
   calendarBounds,
   entriesByMonth,
@@ -144,6 +146,13 @@ export function SessionsSection({ history }: { history: History }) {
     router.push({ pathname: '/training/exercise/[id]', params: { id } });
   }
 
+  // Filter by machine lists every workout on one machine, as the web's filtered Sessions do.
+  const [machinePicker, setMachinePicker] = useState(false);
+  function filterByMachine(filter: MachineFilter) {
+    setMachinePicker(false);
+    router.push(machineWorkoutsRoute(filter));
+  }
+
   if (history.loading) return <Note>Loading your training…</Note>;
   if (history.error && !workouts.length)
     return (
@@ -160,7 +169,18 @@ export function SessionsSection({ history }: { history: History }) {
   return (
     <View style={{ gap: 20 }}>
       <Card accessibilityLabel="Workout calendar">
-        <CardHeader title="Calendar" />
+        <CardHeader
+          title="Calendar"
+          action={
+            (workouts.length > 0 || hasOlder) && (
+              <IconButton
+                icon="filter"
+                accessibilityLabel="Filter by machine"
+                onPress={() => setMachinePicker(true)}
+              />
+            )
+          }
+        />
         <WorkoutCalendar
           months={months}
           month={shownMonth}
@@ -237,6 +257,7 @@ export function SessionsSection({ history }: { history: History }) {
                           bodyweight={context.bodyweightOn(item.workout_date)}
                           unit={unit}
                           onOpenExercise={openExercise}
+                          onFilterMachine={filterByMachine}
                         />
                         <View style={styles.actions}>
                           <RepeatWorkoutButton workout={item} unit={unit} />
@@ -277,6 +298,11 @@ export function SessionsSection({ history }: { history: History }) {
         onOpenWorkout={openWorkout}
       />
       <PlannedDaySheet date={plannedDate} onClose={() => setPlannedDate(null)} />
+      <MachineFilterSheet
+        visible={machinePicker}
+        onSelect={filterByMachine}
+        onClose={() => setMachinePicker(false)}
+      />
     </View>
   );
 }

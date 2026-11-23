@@ -30,6 +30,7 @@ import { useWeightUnit } from '../../data/queries';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { trainingIcons } from './icons';
+import { MachinePhotoStrip, type MachineFilter } from './MachinePhotos';
 import { Badge } from './parts';
 import { haptics } from '../../ui/haptics';
 
@@ -130,6 +131,8 @@ export function WorkoutDetails({
   unit,
   highlightExerciseId,
   onOpenExercise,
+  onFilterMachine,
+  machineFilterId,
 }: {
   workout: TrackedWorkout;
   personalRecords: PersonalRecord[];
@@ -138,6 +141,10 @@ export function WorkoutDetails({
   unit: WeightUnit;
   highlightExerciseId?: string | null;
   onOpenExercise?: (exerciseId: string) => void;
+  /** Lists only workouts that pinned a machine. Omitted for shared, read-only history. */
+  onFilterMachine?: (filter: MachineFilter) => void;
+  /** The machine the list is already filtered by. */
+  machineFilterId?: string | null;
 }) {
   const { colors, type } = useTheme();
   // Exercises planned but never done are listed by name only, not as empty tables.
@@ -168,6 +175,8 @@ export function WorkoutDetails({
           recordColumn={recordColumn}
           highlighted={movement.exercise.id === highlightExerciseId}
           onOpenExercise={onOpenExercise}
+          onFilterMachine={onFilterMachine}
+          machineFilterId={machineFilterId}
         />
       ))}
       {skipped.length > 0 && (
@@ -191,6 +200,8 @@ function MovementBlock({
   recordColumn,
   highlighted,
   onOpenExercise,
+  onFilterMachine,
+  machineFilterId,
 }: {
   movement: TrackedMovement;
   personalRecords: PersonalRecord[];
@@ -200,6 +211,8 @@ function MovementBlock({
   recordColumn: boolean;
   highlighted: boolean;
   onOpenExercise?: (exerciseId: string) => void;
+  onFilterMachine?: (filter: MachineFilter) => void;
+  machineFilterId?: string | null;
 }) {
   const { colors, radius, type } = useTheme();
   const best = topWorkingSet(movement.sets);
@@ -246,6 +259,12 @@ function MovementBlock({
           </Text>
         )}
       </View>
+      <MachinePhotoStrip
+        photos={movement.machine_photos ?? []}
+        exerciseName={movement.exercise.name}
+        onFilterMachine={onFilterMachine}
+        machineFilterId={machineFilterId}
+      />
       {settings.length > 0 && (
         <Text style={[type.footnote, { color: colors.muted }]}>
           {settings.map((item) => `${item.name} ${item.value}`).join(' · ')}
