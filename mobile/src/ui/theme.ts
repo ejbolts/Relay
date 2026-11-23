@@ -14,6 +14,8 @@ const dark = {
   surface: '#15181b',
   surface2: '#1d2125',
   surface3: '#272c31',
+  /** Floating surfaces such as toasts (--p-surface-raised). */
+  surfaceRaised: '#15181b',
   line: 'rgba(255,255,255,0.07)',
   lineStrong: 'rgba(255,255,255,0.12)',
   text: '#f3f5f6',
@@ -24,10 +26,14 @@ const dark = {
   accentSoft: 'rgba(44,116,208,0.20)',
   onAccent: '#ffffff',
   good: '#2fb84a',
+  /** A soft tint of `good`, for current or finished states. */
+  goodSoft: 'rgba(47,184,74,0.15)',
   gold: '#e9b44a',
   goldSoft: 'rgba(201,133,0,0.15)',
   onGold: '#1c1404',
   danger: '#e66767',
+  /** A soft tint of `danger` (the web's danger-soft fill). Follows each style's `danger`. */
+  dangerSoft: 'rgba(230,103,103,0.10)',
   dangerFill: '#c53b3b',
   grid: '#22272b',
   axis: '#3a4046',
@@ -38,6 +44,18 @@ const dark = {
   cardShadow: false as boolean,
   /** The toast and floating surfaces' drop shadow. */
   shadow: 'rgba(0,0,0,0.45)',
+  /** Effort colours from workoutSetColours.css, by RPE. */
+  rpe: {
+    low: '#8ed4a1',
+    '6.5': '#abd68b',
+    '7': '#c8d775',
+    '7.5': '#d6d36e',
+    '8': '#e4cf66',
+    '8.5': '#f2bf69',
+    '9': '#ffae6b',
+    '9.5': '#ff9577',
+    '10': '#ff7c83',
+  },
 };
 
 const light: typeof dark = {
@@ -45,20 +63,25 @@ const light: typeof dark = {
   surface: '#ffffff',
   surface2: '#eef1f3',
   surface3: '#e2e6ea',
+  surfaceRaised: '#ffffff',
   line: 'rgba(16,24,32,0.09)',
   lineStrong: 'rgba(16,24,32,0.16)',
   text: '#14181c',
   secondary: '#48515a',
-  muted: '#69727a',
+  // The web's #69727a falls just under 4.5:1 on the raised surfaces and Stained tints, so the
+  // app's small muted text is a shade darker.
+  muted: '#5d666e',
   accent: '#2c74d0',
   accentText: '#1f5fb0',
   accentSoft: 'rgba(44,116,208,0.12)',
   onAccent: '#ffffff',
   good: '#1d8534',
+  goodSoft: 'rgba(29,133,52,0.12)',
   gold: '#a36800',
   goldSoft: 'rgba(201,133,0,0.14)',
   onGold: '#ffffff',
   danger: '#c53b3b',
+  dangerSoft: 'rgba(197,59,59,0.10)',
   dangerFill: '#c53b3b',
   grid: '#e4e8eb',
   axis: '#c3cad0',
@@ -66,6 +89,17 @@ const light: typeof dark = {
   cardBorder: 'rgba(16,24,32,0.09)',
   cardShadow: false,
   shadow: 'rgba(16,24,32,0.18)',
+  rpe: {
+    low: '#256b39',
+    '6.5': '#48651d',
+    '7': '#586319',
+    '7.5': '#696117',
+    '8': '#786000',
+    '8.5': '#8b510c',
+    '9': '#a04708',
+    '9.5': '#ac3520',
+    '10': '#b32336',
+  },
 };
 
 export type Palette = typeof dark;
@@ -127,11 +161,12 @@ export function themedPalette(
       surface: mixHex(theme.accent, '#ffffff', 4),
       surface2: mixHex(theme.accent, '#eef1f3', 9),
       surface3: mixHex(theme.accent, '#e2e6ea', 14),
+      surfaceRaised: mixHex(theme.accent, '#ffffff', 4),
       line: mixOver(theme.accent, [16, 24, 32, 0.09], 16),
       lineStrong: mixOver(theme.accent, [16, 24, 32, 0.16], 26),
       cardBorder: mixOver(theme.accent, [16, 24, 32, 0.09], 16),
       secondary: mixHex(theme.accent, '#48515a', 14),
-      muted: mixHex(theme.accent, '#69727a', 14),
+      muted: mixHex(theme.accent, '#5d666e', 14),
       grid: mixHex(theme.accent, '#e4e8eb', 12),
       deemph: mixHex(theme.accent, '#cdd3d8', 18),
     };
@@ -143,6 +178,7 @@ export function themedPalette(
       surface: mixHex(theme.accent, '#151a21', 13),
       surface2: mixHex(theme.accent, '#1d242d', 17),
       surface3: mixHex(theme.accent, '#262e38', 23),
+      surfaceRaised: mixHex(theme.accent, '#1a2129', 17),
       line: `${accentText}24`,
       lineStrong: `${accentText}42`,
       cardBorder: `${accentText}24`,
@@ -153,6 +189,7 @@ export function themedPalette(
       axis: mixHex(theme.accent, '#3e4750', 20),
       deemph: mixHex(theme.accent, '#37404a', 20),
       danger: '#f47a7a',
+      dangerSoft: 'rgba(244,122,122,0.10)',
     };
   }
   if (scheme === 'dark' && dark === 'oled') {
@@ -162,6 +199,7 @@ export function themedPalette(
       surface: '#000000',
       surface2: '#121417',
       surface3: '#1f2226',
+      surfaceRaised: '#000000',
       line: '#ffffff24',
       lineStrong: '#ffffff3d',
       text: '#ffffff',
@@ -172,6 +210,7 @@ export function themedPalette(
       axis: '#3d434a',
       deemph: '#33393f',
       danger: '#f47a7a',
+      dangerSoft: 'rgba(244,122,122,0.10)',
     };
   }
   return colors;

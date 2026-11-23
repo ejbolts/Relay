@@ -113,6 +113,9 @@ function Navigation() {
             />
             {/* Mobile batch 4, data stream: CSV import with review and undo, and data export. */}
             <Stack.Screen name="data" />
+            {/* Mobile batch 4, B6: the admin console (admins only) and the videos tab. */}
+            <Stack.Screen name="admin" />
+            <Stack.Screen name="videos" />
           </Stack.Protected>
           <Stack.Protected guard={mustChangePassword}>
             <Stack.Screen name="password-required" />

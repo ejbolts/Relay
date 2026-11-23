@@ -55,15 +55,28 @@ export function sheetScreenOptions({
 }
 
 /**
- * The body of a route opened with `sheetScreenOptions`. iOS draws the sheet itself, so this only
- * paints the surface; Android gets the same bottom sheet drawn here, over a dimmed backdrop that
- * closes it when tapped.
+ * The body of a route opened with `sheetScreenOptions`; pass it the same `detents`. iOS draws the
+ * sheet itself, so this only paints the surface: sized by its content for `'fitToContents'` (a
+ * form sheet sized to its content needs a content-sized root, not `flex: 1`), and filling the
+ * sheet for fraction detents. Android gets the same bottom sheet drawn here, over a dimmed
+ * backdrop that closes it when tapped.
  */
-export function SheetFrame({ onClose, children }: { onClose?: () => void; children: ReactNode }) {
+export function SheetFrame({
+  detents = 'fitToContents',
+  onClose,
+  children,
+}: {
+  detents?: SheetDetents;
+  onClose?: () => void;
+  children: ReactNode;
+}) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
+  const fill = detents !== 'fitToContents';
   if (Platform.OS === 'ios')
-    return <View style={{ flex: 1, backgroundColor: colors.surface }}>{children}</View>;
+    return (
+      <View style={[{ backgroundColor: colors.surface }, fill && styles.fill]}>{children}</View>
+    );
   return (
     <View style={styles.backdrop}>
       {/* Screen readers close with Back, so the backdrop stays hidden from them. */}
@@ -80,16 +93,20 @@ export function SheetFrame({ onClose, children }: { onClose?: () => void; childr
             paddingBottom: insets.bottom,
             marginTop: insets.top + 48,
           },
+          // Fraction detents set the sheet's height. This sheet can't be dragged between them,
+          // so it opens at the tallest.
+          fill && { height: `${Math.round(Math.max(...detents) * 100)}%` },
         ]}
       >
         <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
-        {children}
+        {fill ? <View style={styles.fill}>{children}</View> : children}
       </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  fill: { flex: 1 },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.45)' },
   card: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '92%' },
   grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, marginTop: 8 },

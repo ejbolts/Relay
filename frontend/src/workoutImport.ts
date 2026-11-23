@@ -42,6 +42,10 @@ export const STRONG_DISTANCE_UNITS = [
 export const STRONG_UNITS_NOTE =
   'Match Strong’s export settings. Measurement files include their own units.';
 
+/** The server's limit on an imported file, so a phone can refuse a larger one before sending. */
+export const IMPORT_MAX_BYTES = 20 * 1024 * 1024;
+export const IMPORT_TOO_LARGE = 'CSV imports are limited to 20 MB.';
+
 /** The file types the import accepts, for a file picker. */
 export const IMPORT_FILE_TYPES = ['.csv', '.tsv', '.txt', 'text/csv', 'text/tab-separated-values'];
 

@@ -42,6 +42,7 @@ export function Screen({
   // iOS insets the first scroll view in a native tab itself; Android needs the status bar room.
   const insets = useSafeAreaInsets();
   const top = Platform.OS === 'ios' ? 0 : insets.top;
+  const bottom = Platform.OS === 'ios' ? 0 : insets.bottom;
   const page = (
     <ScrollView
       ref={scrollRef}
@@ -52,7 +53,8 @@ export function Screen({
         padding: space.gutter,
         paddingTop: top + space.lg,
         gap: space.stack,
-        paddingBottom: space.xxl * 2,
+        // iOS insets the scroll view itself; Android keeps the last card clear of the gesture bar.
+        paddingBottom: Math.max(space.xxl * 2, bottom + space.xl),
       }}
       refreshControl={
         onRefresh ? (
@@ -200,8 +202,8 @@ const SIZES = {
 
 /**
  * The web's .pulse-button. Primary is the one main action on a surface; secondary is the default
- * look elsewhere; tonal a softer accent; danger-soft a reversible red. Small buttons keep a
- * 44 pt touch target.
+ * look elsewhere; tonal a softer accent; danger-soft a reversible red. A small button draws at
+ * 36 pt inside a 44 pt touch area, so its hit area never depends on the parent's bounds.
  */
 export function Button({
   label,
@@ -212,6 +214,7 @@ export function Button({
   block,
   loading,
   disabled,
+  align,
   accessibilityLabel,
   style,
 }: {
@@ -225,6 +228,11 @@ export function Button({
   /** Shows a spinner in place of the icon and stops presses, for a save in flight. */
   loading?: boolean;
   disabled?: boolean;
+  /**
+   * Where the label sits in the button's box. Links start at the leading edge, as the web's text
+   * links do; the other variants centre. Pass `'center'` for a link that should centre.
+   */
+  align?: 'start' | 'center';
   accessibilityLabel?: string;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -233,54 +241,63 @@ export function Button({
   const link = variant === 'link';
   const metrics = SIZES[size];
   const inactive = !!disabled || !!loading;
+  const compact = size === 'small' && !link;
+  const start = (align ?? (link ? 'start' : 'center')) === 'start';
+  const look = (pressed: boolean): StyleProp<ViewStyle> => [
+    styles.button,
+    {
+      minHeight: metrics.minHeight,
+      paddingHorizontal: metrics.padding,
+      backgroundColor: fill,
+      borderColor: border,
+      borderRadius: metrics.radius,
+    },
+    link && styles.link,
+    start && styles.start,
+    pressed && !inactive && { opacity: 0.7, transform: [{ scale: 0.98 }] },
+    disabled && { opacity: 0.45 },
+  ];
+  const content = (
+    <>
+      {loading ? (
+        <ActivityIndicator size="small" color={ink} />
+      ) : (
+        icon && <Icon name={icon} size={size === 'small' ? 14 : 16} color={ink} />
+      )}
+      <Text style={{ color: ink, fontSize: metrics.font, fontWeight: '600' }}>{label}</Text>
+    </>
+  );
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ disabled: !!disabled, busy: !!loading }}
       disabled={inactive}
-      hitSlop={link || size === 'small' ? 6 : undefined}
+      hitSlop={link ? 6 : undefined}
       onPress={() => {
         if (!link) haptics.tap();
         onPress();
       }}
-      style={({ pressed }) => [
-        styles.button,
-        {
-          minHeight: metrics.minHeight,
-          paddingHorizontal: metrics.padding,
-          backgroundColor: fill,
-          borderColor: border,
-          borderRadius: metrics.radius,
-        },
-        link && styles.link,
-        block && styles.block,
-        pressed && !inactive && { opacity: 0.7, transform: [{ scale: 0.98 }] },
-        disabled && { opacity: 0.45 },
-        style,
-      ]}
+      style={({ pressed }) =>
+        compact
+          ? [styles.touchArea, block && styles.block, style]
+          : [look(pressed), block && styles.block, style]
+      }
     >
-      {loading ? (
-        <ActivityIndicator size="small" color={ink} />
-      ) : (
-        icon && <Icon name={icon} size={size === 'small' ? 14 : 16} color={ink} />
-      )}
-      <Text
-        style={{
-          color: ink,
-          fontSize: metrics.font,
-          fontWeight: '600',
-        }}
-      >
-        {label}
-      </Text>
+      {({ pressed }) => (compact ? <View style={look(pressed)}>{content}</View> : content)}
     </Pressable>
   );
 }
 
-/** A square icon button, as the web's .icon-button-pulse beside a page title. */
+/**
+ * A square icon button, as the web's .icon-button-pulse: 40 pt, drawn inside a 44 pt touch area.
+ * Give it an `icon`, or `children` (such as a profile photo) to draw instead, and an optional
+ * `badge` (a short count) in the web's red pill.
+ */
 export function IconButton({
   icon,
+  children,
+  badge,
   accessibilityLabel,
   onPress,
   accent,
@@ -288,7 +305,9 @@ export function IconButton({
   disabled,
   style,
 }: {
-  icon: IconName | IconPair;
+  icon?: IconName | IconPair;
+  children?: ReactNode;
+  badge?: string | null;
   accessibilityLabel: string;
   onPress: () => void;
   /** The filled accent look, for a page's main action. */
@@ -298,31 +317,44 @@ export function IconButton({
   disabled?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
-  const { colors } = useTheme();
+  const { colors, scheme } = useTheme();
   const ink = accent ? colors.onAccent : on ? colors.accentText : colors.secondary;
+  // The web's outline is --p-line; light mode needs the stronger line to read on the page.
+  const outline = scheme === 'light' ? colors.lineStrong : colors.line;
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
       accessibilityState={{ disabled: !!disabled, ...(on !== undefined && { selected: on }) }}
       disabled={disabled}
-      hitSlop={2}
       onPress={() => {
         haptics.tap();
         onPress();
       }}
-      style={({ pressed }) => [
-        styles.iconButton,
-        {
-          backgroundColor: accent ? colors.accent : colors.surface,
-          borderColor: accent ? 'transparent' : on ? colors.accent : colors.line,
-        },
-        pressed && { opacity: 0.7 },
-        disabled && { opacity: 0.45 },
-        style,
-      ]}
+      style={[styles.iconTouch, style]}
     >
-      <Icon name={icon} size={18} color={ink} />
+      {({ pressed }) => (
+        <View
+          style={[
+            styles.iconButton,
+            {
+              backgroundColor: accent ? colors.accent : colors.surface,
+              borderColor: accent ? 'transparent' : on ? colors.accent : outline,
+            },
+            pressed && { opacity: 0.7 },
+            disabled && { opacity: 0.45 },
+          ]}
+        >
+          {children ?? (icon && <Icon name={icon} size={18} color={ink} />)}
+          {!!badge && (
+            <View
+              style={[styles.badge, { backgroundColor: colors.danger, borderColor: colors.page }]}
+            >
+              <Text style={styles.badgeText}>{badge}</Text>
+            </View>
+          )}
+        </View>
+      )}
     </Pressable>
   );
 }
@@ -415,7 +447,10 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   link: { minHeight: 32, paddingHorizontal: 4, borderWidth: 0 },
+  start: { justifyContent: 'flex-start' },
+  touchArea: { minHeight: 44, justifyContent: 'center' },
   block: { alignSelf: 'stretch' },
+  iconTouch: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   iconButton: {
     width: 40,
     height: 40,
@@ -424,6 +459,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // The web's .profile-request-badge.
+  badge: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 2,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  badgeText: { color: '#ffffff', fontSize: 10, fontWeight: '700' },
   center: { padding: 24, alignItems: 'center', justifyContent: 'center' },
   empty: {
     borderWidth: 1,
