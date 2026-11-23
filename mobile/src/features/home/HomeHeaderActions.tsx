@@ -6,12 +6,14 @@ import { Icon } from '../../ui/Icon';
 import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { useTheme } from '../../ui/theme';
 import { NotificationsBell, socialRoutes } from '../social';
+import { VideosButton } from '../videos';
 
 const SIZE = 38;
 
 /**
- * Home's header buttons, as on the web: the notifications bell (which counts friend requests
- * waiting for an answer), your profile, then Settings.
+ * Home's header buttons, as on the web: the Video logger (for accounts that can upload), the
+ * notifications bell (which counts friend requests waiting for an answer), your profile, then
+ * Settings.
  */
 export function HomeHeaderActions() {
   const { colors } = useTheme();
@@ -19,6 +21,7 @@ export function HomeHeaderActions() {
   const user = useUser();
   return (
     <View style={styles.row}>
+      <VideosButton size={SIZE} />
       <NotificationsBell size={SIZE} />
       <Pressable
         accessibilityRole="button"

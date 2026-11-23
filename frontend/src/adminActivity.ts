@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { requestsFirst, withAdminActivity } from './adminAccounts';
 import { api } from './api';
 import type { AdminUser, FriendPresence } from './types';
 
@@ -28,18 +29,8 @@ export function onAdminActivity(listener: Listener): () => void {
   };
 }
 
-function waiting(user: AdminUser): boolean {
-  return Boolean(user.password_reset_requested_at || user.username_reminder_requested_at);
-}
-
-/**
- * Accounts waiting for a password reset or their username first, otherwise in the server's order.
- * Sorted only when the list loads, so a card stays in place after its request is handled until the
- * next refresh.
- */
-export function requestsFirst(users: AdminUser[]): AdminUser[] {
-  return [...users].sort((a, b) => Number(waiting(b)) - Number(waiting(a)));
-}
+/** Re-exported for existing callers; the rule lives in adminAccounts. */
+export { requestsFirst };
 
 /** Update only user cards; incoming activity never reloads editable server settings. */
 export function useAdminUsers(active: boolean) {
@@ -57,9 +48,7 @@ export function useAdminUsers(active: boolean) {
     setUsers(
       requestsFirst(snapshot).map((user) => {
         const update = updates.current.get(user.id);
-        return update && update.revision > before
-          ? { ...user, presence: update.presence, last_active_at: update.presence.last_active_at }
-          : user;
+        return update && update.revision > before ? withAdminActivity(user, update.presence) : user;
       }),
     );
     setSnapshots((count) => count + 1);
@@ -87,13 +76,7 @@ export function useAdminUsers(active: boolean) {
       setUsers(
         (current) =>
           current?.map((user) =>
-            user.id === activity.userId
-              ? {
-                  ...user,
-                  presence: activity.presence,
-                  last_active_at: activity.presence.last_active_at,
-                }
-              : user,
+            user.id === activity.userId ? withAdminActivity(user, activity.presence) : user,
           ) ?? null,
       );
     });

@@ -1,6 +1,11 @@
 import { Host as ComposeHost, DatePickerDialog, TimePickerDialog } from '@expo/ui/jetpack-compose';
 import { DatePicker, Host } from '@expo/ui/swift-ui';
-import { datePickerStyle, labelsHidden, tint } from '@expo/ui/swift-ui/modifiers';
+import {
+  datePickerStyle,
+  disabled as swiftDisabled,
+  labelsHidden,
+  tint,
+} from '@expo/ui/swift-ui/modifiers';
 import { useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { prettyDate } from '../../../frontend/src/appShared';
@@ -55,8 +60,17 @@ export function DateField({
               ...(max ? { end: parseLocalDate(max) } : {}),
             }}
             displayedComponents={['date']}
-            onDateChange={(date) => onChange(isoLocalDate(date))}
-            modifiers={[datePickerStyle('compact'), labelsHidden(), tint(colors.accent)]}
+            // SwiftUI's picker ignores React's disabled state, so it gets the native modifier and
+            // a guard against a change already on its way.
+            onDateChange={(date) => {
+              if (!disabled) onChange(isoLocalDate(date));
+            }}
+            modifiers={[
+              datePickerStyle('compact'),
+              labelsHidden(),
+              tint(colors.accent),
+              swiftDisabled(!!disabled),
+            ]}
           />
         </Host>
       </View>
@@ -129,10 +143,12 @@ export function TimeField({
   label,
   value,
   onChange,
+  disabled,
 }: {
   label: string;
   value: string;
   onChange: (time: string) => void;
+  disabled?: boolean;
 }) {
   const { colors, type, radius, scheme } = useTheme();
   const [open, setOpen] = useState(false);
@@ -155,8 +171,15 @@ export function TimeField({
             title={label}
             selection={timeOnToday(value)}
             displayedComponents={['hourAndMinute']}
-            onDateChange={(date) => onChange(hhmm(date))}
-            modifiers={[datePickerStyle('compact'), labelsHidden(), tint(colors.accent)]}
+            onDateChange={(date) => {
+              if (!disabled) onChange(hhmm(date));
+            }}
+            modifiers={[
+              datePickerStyle('compact'),
+              labelsHidden(),
+              tint(colors.accent),
+              swiftDisabled(!!disabled),
+            ]}
           />
         </Host>
       </View>
@@ -167,6 +190,8 @@ export function TimeField({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`${label}, ${value || 'not set'}`}
+        accessibilityState={{ disabled: !!disabled }}
+        disabled={disabled}
         onPress={() => setOpen(true)}
         style={({ pressed }) => [
           styles.row,
