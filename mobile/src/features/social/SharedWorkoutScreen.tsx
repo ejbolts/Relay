@@ -28,7 +28,7 @@ import { Avatar } from './Avatar';
 import { CommentComposer, CommentList, useCommentThread } from './Comments';
 import { useSocialNavigation } from './navigation';
 import { ReactionBar } from './ReactionBar';
-import { socialHeader } from './screenOptions';
+import { pushedScreenOptions } from '../../ui/navigation';
 import { useSharedProfile, useSharedWorkout } from './socialQueries';
 import { WorkoutPhotoActions } from './WorkoutPhotoActions';
 import { WorkoutPhotos } from './WorkoutPhotos';
@@ -62,7 +62,7 @@ export function SharedWorkoutScreen({
   const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
   const composer = useRef<ComponentRef<typeof TextInput>>(null);
   const scrolled = useRef(false);
-  const header = <Stack.Screen options={socialHeader(colors, 'Workout')} />;
+  const header = <Stack.Screen options={pushedScreenOptions(colors, 'Workout')} />;
 
   if (!data) {
     return (

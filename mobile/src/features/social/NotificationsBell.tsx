@@ -1,7 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { reactionEmoji } from '../../../../frontend/src/friendFeedData';
 import {
   ADMIN_REQUEST_TEXT,
@@ -53,9 +61,14 @@ import { requestWorkoutFocus } from './workoutFocus';
  * administrators, people waiting for a reset or their username, with a count of what's unread or
  * waiting for an answer.
  */
-export function NotificationsBell(props: { size?: number }) {
-  // Kept optional while HomeHeaderActions migrates to AccountHeaderActions.
-  void props.size;
+export function NotificationsBell({
+  style,
+}: {
+  /** Ignored: the bell is the shared 40 pt header button. Kept so older callers still compile. */
+  size?: number;
+  /** Restyles the button, such as Home's header buttons. */
+  style?: StyleProp<ViewStyle>;
+}) {
   const query = useNotifications();
   const bell = useBellNotices();
   const [open, setOpen] = useState(false);
@@ -68,6 +81,7 @@ export function NotificationsBell(props: { size?: number }) {
         badge={badge}
         accessibilityLabel={notificationsLabel(count)}
         onPress={() => setOpen(true)}
+        style={style}
       />
       {open && <NotificationsSheet notices={bell} onClose={() => setOpen(false)} />}
     </>

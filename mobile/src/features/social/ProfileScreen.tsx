@@ -73,7 +73,7 @@ import {
   useSharedProfile,
   useSharedWorkouts,
 } from './socialQueries';
-import { socialHeader } from './screenOptions';
+import { pushedScreenOptions } from '../../ui/navigation';
 
 /**
  * A member's profile, or your own: who they are and how you're connected, then what they share
@@ -120,7 +120,7 @@ export function ProfileScreen({
 
   return (
     <>
-      <Stack.Screen options={socialHeader(colors, title)} />
+      <Stack.Screen options={pushedScreenOptions(colors, title)} />
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.page }}
         contentContainerStyle={{

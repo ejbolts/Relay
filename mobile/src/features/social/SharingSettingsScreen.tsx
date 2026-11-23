@@ -28,7 +28,7 @@ import { haptics } from '../../ui/haptics';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { Avatar } from './Avatar';
-import { socialHeader } from './screenOptions';
+import { pushedScreenOptions } from '../../ui/navigation';
 import { socialApi } from './socialApi';
 import { refreshSocial, socialKeys, useSharingChoices } from './socialQueries';
 
@@ -59,7 +59,7 @@ export function SharingSettingsScreen() {
     },
     onError: () => setDraft(null),
   });
-  const header = <Stack.Screen options={socialHeader(colors, 'Profile sharing')} />;
+  const header = <Stack.Screen options={pushedScreenOptions(colors, 'Profile sharing')} />;
 
   if (!saved) {
     return (
