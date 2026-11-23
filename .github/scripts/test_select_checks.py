@@ -17,6 +17,7 @@ from select_checks import (
     git,
     main,
     mobile_shared_files,
+    module_specifiers,
     select_event,
     select_paths,
 )
@@ -100,8 +101,27 @@ class PathSelectionTests(unittest.TestCase):
         for path in mobile_shared_files():
             with self.subTest(path=path):
                 text = (ROOT / path).read_text(encoding="utf-8")
-                packages = re.findall(r"""\bfrom\s*['"]([^./'"][^'"]*)['"]""", text)
+                packages = [name for name in module_specifiers(text) if not name.startswith(".")]
                 self.assertEqual(packages, [])
+
+    def test_imports_are_read_from_code_not_comments(self):
+        text = """import { a } from './rules';
+import type {
+  B,
+  C,
+} from "./types";
+export * from './more';
+import './side-effect';
+const lazy = import('./lazy');
+const old = require('./legacy');
+/** "Alex" from "Alex Morgan"; import { x } from './gone' once lived here. */
+// export { y } from 'some-package'
+const greeting = 'hello from the app';
+"""
+        self.assertEqual(
+            module_specifiers(text),
+            ["./rules", "./types", "./more", "./side-effect", "./lazy", "./legacy"],
+        )
 
     def test_mobile_shared_files_follow_imports_through_the_web(self):
         with tempfile.TemporaryDirectory() as directory:
