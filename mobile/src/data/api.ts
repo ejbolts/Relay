@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import type { User } from '../../../frontend/src/types';
 import {
   finishSignOut,
-  forgetSessionToken,
+  forgetSessionTokenIf,
   pendingSignOut,
   saveSessionToken,
   sessionToken,
@@ -93,7 +93,10 @@ export async function request<T>(
   }
   if (!response.ok) {
     // The session ended on the server (signed out elsewhere, password changed or expired).
-    if (response.status === 401 && token === undefined && bearer) await forgetSessionToken();
+    // Only while it is still the saved one: a late refusal of a previous account's token mustn't
+    // delete the account that signed in since.
+    if (response.status === 401 && token === undefined && bearer)
+      await forgetSessionTokenIf(origin, bearer);
     const body = await response.json().catch(() => null);
     throw new ApiError(
       response.status,

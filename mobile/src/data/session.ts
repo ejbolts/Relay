@@ -25,6 +25,14 @@ export const sessionToken = (origin: string) => read(SESSION, origin);
 export const saveSessionToken = (origin: string, token: string) => write(SESSION, origin, token);
 export const forgetSessionToken = () => SecureStore.deleteItemAsync(SESSION);
 
+/**
+ * Forgets the saved session only while it is still `token`. A request that was refused after
+ * another account signed in carries the old token; it mustn't delete the new account's.
+ */
+export async function forgetSessionTokenIf(origin: string, token: string) {
+  if ((await sessionToken(origin)) === token) await forgetSessionToken();
+}
+
 /** Signs out on this device at once, keeping the token to end its server session later. */
 export async function startSignOut(origin: string) {
   const token = await sessionToken(origin);
