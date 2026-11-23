@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { Alert } from 'react-native';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { prettyDate } from '../../../../frontend/src/appShared';
@@ -204,6 +205,22 @@ test('a calendar day lists its workouts, and the legend hides a type from the lo
   expect(screen.getByRole('switch', { name: 'Cardio', checked: false })).toBeVisible();
   expect(screen.queryByRole('button', { name: /^Sample conditioning/ })).toBeNull();
   expect(screen.getByText('2 workouts · 3 sets · 1.8 t')).toBeVisible();
+});
+
+test('an empty day ahead opens its plan, and an empty past day offers a workout dated then', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  try {
+    await open(<TrainingTabScreen />);
+    await fireEvent.press(await screen.findByRole('button', { name: prettyDate('2026-11-25') }));
+    // The plan reads the split from the dashboard, which loads on its own.
+    expect(await screen.findByText('Nothing planned', {}, { timeout: 5000 })).toBeVisible();
+    expect(alert).not.toHaveBeenCalled();
+    await fireEvent.press(screen.getByRole('button', { name: prettyDate('2026-11-12') }));
+    expect(alert).toHaveBeenCalledTimes(1);
+    expect(alert.mock.calls[0][1]).toMatch(prettyDate('2026-11-12'));
+  } finally {
+    alert.mockRestore();
+  }
 });
 
 test('going back past the loaded months reads older history', async () => {

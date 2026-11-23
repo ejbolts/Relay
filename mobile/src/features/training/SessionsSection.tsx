@@ -18,8 +18,13 @@ import {
   historyPageWindow,
 } from '../../../../frontend/src/workoutHistory';
 import { effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
+import { calendarDayTarget } from '../../../../frontend/src/plannedDay';
+import { splitCalendarDays } from '../../../../frontend/src/trainingSplit';
+import { useDashboard } from '../../data/queries';
 import { Button, Card, CardHeader } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
+import { useCreateWorkoutOn } from '../home/calendarActions';
+import { PlannedDaySheet } from '../home/PlannedDaySheet';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { CalendarDaySheet } from './CalendarDaySheet';
 import { calendarBounds, calendarMonthView, monthOf, shiftMonth } from './calendarModel';
@@ -50,6 +55,9 @@ export function SessionsSection({ history }: { history: History }) {
     month < bounds.first ? bounds.first : month > bounds.last ? bounds.last : month;
   // Types switched off in the legend leave the calendar, the session list and its totals.
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  // The split's planned days ahead and missed days behind, as the web's calendar shows them.
+  const split = useDashboard().data?.training_split;
+  const splitDays = useMemo(() => splitCalendarDays(split, today, 42), [split, today]);
   const view = useMemo(
     () =>
       calendarMonthView({
@@ -60,10 +68,21 @@ export function SessionsSection({ history }: { history: History }) {
         hidden,
         weekStartDay,
         today,
+        splitDays,
       }),
-    [shownMonth, heatmap, types, categoryColors, hidden, weekStartDay, today],
+    [shownMonth, heatmap, types, categoryColors, hidden, weekStartDay, today, splitDays],
   );
   const [selectedDay, setSelectedDay] = useState<HeatmapDay | null>(null);
+  const [plannedDate, setPlannedDate] = useState<string | null>(null);
+  const createOn = useCreateWorkoutOn();
+  // A day opens its workouts, its plan (days ahead, or today with a split) or, on an empty past
+  // day, a new workout dated that day: the web's rule (plannedDay.ts).
+  const pressDay = (date: string, entry: HeatmapDay | undefined) => {
+    const target = calendarDayTarget(date, today, !!entry, !!split?.enabled);
+    if (entry) setSelectedDay(entry);
+    else if (target === 'planned') setPlannedDate(date);
+    else createOn(date);
+  };
 
   // The log counts pages of two weeks, as the web does; earlier pages are added below.
   const [pages, setPages] = useState(1);
@@ -145,8 +164,8 @@ export function SessionsSection({ history }: { history: History }) {
           canGoForward={shownMonth < bounds.last}
           onBack={() => setMonth(shiftMonth(shownMonth, -1))}
           onForward={() => setMonth(shiftMonth(shownMonth, 1))}
-          selectedDate={selectedDay?.workout_date ?? null}
-          onSelectDay={(day) => day.entry && setSelectedDay(day.entry)}
+          selectedDate={selectedDay?.workout_date ?? plannedDate}
+          onSelectDay={(day) => pressDay(day.date, day.entry)}
           loadingOlder={loadingOlder && `${shownMonth}-01` < historyStart}
           olderError={`${shownMonth}-01` < historyStart ? olderError : null}
           onRetryOlder={history.retryOlder}
@@ -255,6 +274,7 @@ export function SessionsSection({ history }: { history: History }) {
         onClose={() => setSelectedDay(null)}
         onOpenWorkout={openWorkout}
       />
+      <PlannedDaySheet date={plannedDate} onClose={() => setPlannedDate(null)} />
     </View>
   );
 }
