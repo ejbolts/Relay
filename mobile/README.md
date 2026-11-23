@@ -8,6 +8,8 @@ Set `EXPO_PUBLIC_RELAY_API_ORIGIN` in `mobile/.env.local` (Git ignores it) to th
 
 Run `npm run typecheck`, `npm run lint` and `npm test` here. GitHub's **Checks** workflow runs the same three as **Mobile checks** when a PR changes `mobile/` or a web file the app imports.
 
+What the app covers compared with the web, and what's still web-only, is tracked in [PARITY.md](PARITY.md).
+
 ## How it fits together
 
 | Location                    | Contents                                                                  |
