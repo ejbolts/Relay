@@ -57,6 +57,7 @@ import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
+import { pushedScreenOptions } from '../../ui/navigation';
 import { workoutColor } from '../training/useTrainingContext';
 import { WorkoutCard, WorkoutDetails } from '../training/WorkoutCard';
 import { Avatar } from './Avatar';
@@ -73,7 +74,6 @@ import {
   useSharedProfile,
   useSharedWorkouts,
 } from './socialQueries';
-import { pushedScreenOptions } from '../../ui/navigation';
 
 /**
  * A member's profile, or your own: who they are and how you're connected, then what they share

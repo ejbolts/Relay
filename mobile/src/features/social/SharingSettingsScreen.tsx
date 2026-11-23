@@ -27,8 +27,8 @@ import { Switch } from '../../ui/controls';
 import { haptics } from '../../ui/haptics';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
-import { Avatar } from './Avatar';
 import { pushedScreenOptions } from '../../ui/navigation';
+import { Avatar } from './Avatar';
 import { socialApi } from './socialApi';
 import { refreshSocial, socialKeys, useSharingChoices } from './socialQueries';
 

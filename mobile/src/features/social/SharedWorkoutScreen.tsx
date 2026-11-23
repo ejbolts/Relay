@@ -1,8 +1,8 @@
 import { Stack } from 'expo-router';
-import { useRef, type ComponentRef } from 'react';
+import { HeaderHeightContext } from 'expo-router/react-navigation';
+import { useContext, useRef, type ComponentRef } from 'react';
 import {
   KeyboardAvoidingView,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,13 +22,13 @@ import { localDate } from '../../../../frontend/src/utils';
 import { useWeightUnit } from '../../data/queries';
 import { Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
+import { pushedScreenOptions } from '../../ui/navigation';
 import { useTheme } from '../../ui/theme';
 import { WorkoutDetails } from '../training/WorkoutCard';
 import { Avatar } from './Avatar';
 import { CommentComposer, CommentList, useCommentThread } from './Comments';
 import { useSocialNavigation } from './navigation';
 import { ReactionBar } from './ReactionBar';
-import { pushedScreenOptions } from '../../ui/navigation';
 import { useSharedProfile, useSharedWorkout } from './socialQueries';
 import { WorkoutPhotoActions } from './WorkoutPhotoActions';
 import { WorkoutPhotos } from './WorkoutPhotos';
@@ -52,6 +52,7 @@ export function SharedWorkoutScreen({
   highlightCommentId?: string;
 }) {
   const { colors, space, type } = useTheme();
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const insets = useSafeAreaInsets();
   const nav = useSocialNavigation();
   const unit = useWeightUnit();
@@ -94,8 +95,10 @@ export function SharedWorkoutScreen({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.page }}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 96 : 0}
+      // Padding on both: with Android's edge-to-edge window the screen no longer resizes for the
+      // keyboard, so the composer would sit under it. The offset is the native header above.
+      behavior="padding"
+      keyboardVerticalOffset={headerHeight}
     >
       {header}
       <ScrollView
