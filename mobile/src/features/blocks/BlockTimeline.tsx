@@ -1,13 +1,7 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-  type ScrollViewInstance,
-} from 'react-native';
-import { GestureDetector, usePinchGesture } from 'react-native-gesture-handler';
+import { useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, View, type ScrollViewInstance } from 'react-native';
+// Gesture Handler's ScrollView, so the pinch can run alongside its native scrolling.
+import { GestureDetector, ScrollView, usePinchGesture } from 'react-native-gesture-handler';
 import {
   timelineCentreYear,
   timelineMarks,
@@ -59,25 +53,29 @@ export function BlockTimeline({
   const scrollLeft = useRef(0);
   const pendingScroll = useRef<number | null>(null);
   const placed = useRef(false);
-  const pinchZoom = useRef<number | null>(null);
+  // Where the pinch began; every step zooms from there, so steps never compound.
+  const pinchStart = useRef<{ zoom: number; scrollLeft: number; focal: number } | null>(null);
   const reportedYear = useRef<number | null>(null);
+  // The pinch reads the newest zoom and width, whichever render its callback came from.
+  const latest = useRef({ zoom, view, total: span.total });
+  useEffect(() => {
+    latest.current = { zoom, view, total: span.total };
+  });
 
   // After a zoom, keep the date under the fingers in place; on first layout, open with today a
-  // little right of centre so recent blocks lead into it.
-  useLayoutEffect(() => {
+  // little right of centre so recent blocks lead into it. Both wait for the new content width,
+  // or the scroll would stop at the old one's end.
+  const placeScroll = () => {
     const element = scroller.current;
     if (!element || !width) return;
-    if (pendingScroll.current !== null) {
-      element.scrollTo({ x: Math.max(0, pendingScroll.current), animated: false });
-      scrollLeft.current = Math.max(0, pendingScroll.current);
-      pendingScroll.current = null;
-    } else if (!placed.current) {
-      placed.current = true;
-      const left = Math.max(0, timelineX(span, zoom, today) - width * 0.6);
-      element.scrollTo({ x: left, animated: false });
-      scrollLeft.current = left;
-    }
-  });
+    const left =
+      pendingScroll.current ?? (placed.current ? null : timelineX(span, zoom, today) - width * 0.6);
+    if (left === null) return;
+    placed.current = true;
+    pendingScroll.current = null;
+    scrollLeft.current = Math.max(0, left);
+    element.scrollTo({ x: scrollLeft.current, animated: false });
+  };
 
   const requestKey = scrollRequest?.key;
   useEffect(() => {
@@ -90,20 +88,25 @@ export function BlockTimeline({
   const pinch = usePinchGesture({
     runOnJS: true,
     onUpdate: (event) => {
-      pinchZoom.current ??= zoom;
+      const now = latest.current;
+      const start = (pinchStart.current ??= {
+        zoom: now.zoom,
+        scrollLeft: scrollLeft.current,
+        focal: event.focalX,
+      });
       const next = zoomAbout(
-        scrollLeft.current,
-        event.focalX,
-        zoom,
-        pinchZoom.current * event.scale,
-        view,
-        span.total,
+        start.scrollLeft,
+        start.focal,
+        start.zoom,
+        start.zoom * event.scale,
+        now.view,
+        now.total,
       );
       pendingScroll.current = next.scrollLeft;
       setChosenZoom(next.zoom);
     },
     onFinalize: () => {
-      pinchZoom.current = null;
+      pinchStart.current = null;
     },
   });
 
@@ -120,6 +123,8 @@ export function BlockTimeline({
           ref={scroller}
           horizontal
           showsHorizontalScrollIndicator={false}
+          simultaneousWith={pinch}
+          onContentSizeChange={placeScroll}
           scrollEventThrottle={32}
           onScroll={(event) => {
             const left = event.nativeEvent.contentOffset.x;

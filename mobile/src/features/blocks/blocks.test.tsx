@@ -39,6 +39,7 @@ const mockPinches: { onUpdate?: (event: { scale: number; focalX: number }) => vo
 jest.mock('react-native-gesture-handler', () => ({
   GestureHandlerRootView: ({ children }: { children: unknown }) => children,
   GestureDetector: ({ children }: { children: unknown }) => children,
+  ScrollView: jest.requireActual<typeof import('react-native')>('react-native').ScrollView,
   usePinchGesture: (config: (typeof mockPinches)[number]) => {
     mockPinches.push(config);
     return config;
