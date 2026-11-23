@@ -1,0 +1,133 @@
+import * as Notifications from 'expo-notifications';
+import { Alert, Linking } from 'react-native';
+import { readJson, writeJson } from '../../data/deviceStorage';
+import { showToast } from '../../ui/Toast';
+import { restTimerPreference } from '../settings/devicePreferences';
+
+// The web's two workout reminders, adapted to the app's own local notifications:
+// - "Turn on rest alerts?" when a workout starts and rest alerts are off (RestAlertReminder.tsx);
+// - "Still working out?" when the live workout has had no activity for a while. On the web the
+//   server pushes it (backend/app/notifications.py, deliver_inactive, which replaced the elapsed
+//   time reminder in activeWorkoutReminder.ts for clients that share their live workout). The app
+//   has no push subscription, so the phone schedules it itself.
+
+/** Set once the app has asked for notification permission at the first rest (restAlerts.ts). */
+export const REST_ALERTS_ASKED_KEY = 'relay.mobile.rest-alert-asked.v1';
+const REMINDER_DISMISSED_KEY = 'relay.mobile.rest-alert-reminder-dismissed.v1';
+
+/** As the server's reminder: 45 minutes after the last change to the workout. */
+export const INACTIVE_REMINDER_MS = 45 * 60_000;
+const INACTIVE_ID = 'relay-workout-inactive';
+
+async function notificationPermission() {
+  try {
+    return await Notifications.getPermissionsAsync();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether starting a workout should ask to turn rest alerts on: the rest timer is on, the app
+ * has already asked once at a rest (the first ask comes from there), alerts are still off, and
+ * the person hasn't asked not to be reminded.
+ */
+export async function restAlertReminderDue(): Promise<boolean> {
+  if (
+    !restTimerPreference.get() ||
+    !readJson<boolean>(REST_ALERTS_ASKED_KEY) ||
+    readJson<boolean>(REMINDER_DISMISSED_KEY)
+  )
+    return false;
+  const permission = await notificationPermission();
+  // Unknown permission: alerts may well be on, so do not nag.
+  return permission !== null && !permission.granted;
+}
+
+async function turnOnRestAlerts() {
+  const current = await notificationPermission();
+  if (current?.canAskAgain) {
+    const asked = await Notifications.requestPermissionsAsync().catch(() => null);
+    if (asked?.granted) {
+      showToast('Rest alerts on');
+      return;
+    }
+    if (asked && !asked.canAskAgain) return;
+  }
+  // Refused before: only the phone's Settings can turn them back on.
+  await Linking.openSettings().catch(() => undefined);
+}
+
+/** Asks to turn rest alerts on, as the web's reminder does when a workout starts. */
+export async function remindAboutRestAlerts(): Promise<void> {
+  if (!(await restAlertReminderDue())) return;
+  Alert.alert(
+    'Turn on rest alerts?',
+    'Get a notification when your rest is over, even with your phone locked.',
+    [
+      {
+        text: "Don't show again",
+        style: 'destructive',
+        onPress: () => void writeJson(REMINDER_DISMISSED_KEY, true),
+      },
+      { text: 'Not now', style: 'cancel' },
+      { text: 'Turn on', onPress: () => void turnOnRestAlerts() },
+    ],
+  );
+}
+
+let wantedAt: number | null = null;
+let scheduledAt: number | null = null;
+let queue: Promise<void> = Promise.resolve();
+
+async function applyInactiveReminder() {
+  const target = wantedAt;
+  if (target === scheduledAt) return;
+  await Notifications.cancelScheduledNotificationAsync(INACTIVE_ID).catch(() => undefined);
+  scheduledAt = null;
+  if (target === null) {
+    await Notifications.dismissNotificationAsync(INACTIVE_ID).catch(() => undefined);
+    return;
+  }
+  // Never asks: the rest alerts ask for permission, and this reminder follows that answer.
+  if (target <= Date.now() || !(await notificationPermission())?.granted) return;
+  await Notifications.scheduleNotificationAsync({
+    identifier: INACTIVE_ID,
+    content: {
+      title: 'Still working out?',
+      body: 'No workout activity for 45 minutes. Resume your workout or finish and save it.',
+      data: { kind: 'workout' },
+    },
+    trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: target },
+  });
+  scheduledAt = target;
+}
+
+/**
+ * Keeps the "Still working out?" reminder 45 minutes after the live workout's last activity:
+ * moved on by every change, and cancelled (`null`) when the workout is finished or discarded.
+ */
+export function syncInactiveReminder(lastActiveAt: number | null): Promise<void> {
+  wantedAt = lastActiveAt === null ? null : lastActiveAt + INACTIVE_REMINDER_MS;
+  queue = queue.then(applyInactiveReminder).catch(() => undefined);
+  return queue;
+}
+
+/** Calls `onOpen` when a workout reminder is tapped; returns the unsubscribe. */
+export function onWorkoutReminderOpened(onOpen: () => void): () => void {
+  try {
+    const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
+      if (response.notification.request.content.data?.kind === 'workout') onOpen();
+    });
+    return () => subscription?.remove?.();
+  } catch {
+    return () => undefined;
+  }
+}
+
+/** For tests: forget what was scheduled. */
+export function resetWorkoutRemindersForTests() {
+  wantedAt = null;
+  scheduledAt = null;
+  queue = Promise.resolve();
+}

@@ -111,6 +111,11 @@ import {
 import { useHistoryBaselines, useWorkoutAutoSave } from './loggerQueries';
 import { forgetOfflineQueries, saveOfflineQueries, seedOfflineQueries } from './offlineQueries';
 import { askForRestAlerts, syncRestAlert } from './restAlerts';
+import {
+  onWorkoutReminderOpened,
+  remindAboutRestAlerts,
+  syncInactiveReminder,
+} from './workoutReminders';
 import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
 import {
   adjustRest as adjustRestRule,
@@ -595,6 +600,20 @@ const WorkoutEngine = memo(function WorkoutEngine({
   }, [rest, weightUnit]);
   useEffect(() => () => void syncRestAlert(NO_REST, null), []);
 
+  // "Still working out?" follows the live workout's last activity; tapping it opens the logger.
+  const lastActiveAt = logger?.lastActiveAt ?? null;
+  useEffect(() => {
+    void syncInactiveReminder(lastActiveAt);
+  }, [lastActiveAt]);
+  useEffect(() => () => void syncInactiveReminder(null), []);
+  useEffect(
+    () =>
+      onWorkoutReminderOpened(() => {
+        if (loggerRef.current) router.push('/workout');
+      }),
+    [router],
+  );
+
   // Finished workouts send until the server confirms them, retrying when the connection or the
   // app comes back.
   const senderRef = useRef<FinishedQueueSender | null>(null);
@@ -814,6 +833,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
           ),
         );
         commitRest(NO_REST);
+        // As on the web, starting a workout asks to turn rest alerts on while they are off.
+        void remindAboutRestAlerts();
       }
       if (options?.replace) router.replace('/workout');
       else router.push('/workout');
