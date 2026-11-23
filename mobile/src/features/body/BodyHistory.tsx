@@ -110,11 +110,7 @@ export function BodyHistory({
           </Text>
         </View>
         {count === 0 ? (
-          <EmptyState
-            icon={bodyIcons.scale}
-            title="No check-ins yet"
-            message="Your first check-in will appear here."
-          />
+          <EmptyState icon={bodyIcons.scale} title="Your first check-in will appear here." />
         ) : (
           <View accessible={false} style={[styles.tableHead, { borderBottomColor: colors.line }]}>
             <Text style={[type.caption, styles.date, { color: colors.muted, fontWeight: '600' }]}>
@@ -123,7 +119,14 @@ export function BodyHistory({
             <Text style={[type.caption, { color: colors.muted, fontWeight: '600', flex: 1 }]}>
               Bodyweight
             </Text>
-            <Text style={[type.caption, styles.fat, { color: colors.muted, fontWeight: '600' }]}>
+            <Text
+              style={[
+                type.caption,
+                styles.fat,
+                styles.fatText,
+                { color: colors.muted, fontWeight: '600' },
+              ]}
+            >
               Body fat
             </Text>
             {view === 'daily' && <View style={styles.moreSpacer} />}
@@ -144,6 +147,7 @@ export function BodyHistory({
                 detail={measurement.is_sample ? 'Sample' : null}
                 notes={measurement.notes}
                 fat={measurement.body_fat_pct !== null ? `${measurement.body_fat_pct}%` : '–'}
+                fatNote={measurement.body_fat_pct !== null ? 'estimate' : undefined}
                 menu={
                   <MenuButton
                     accessibilityLabel={`Actions for ${prettyDate(measurement.measurement_date)}`}
@@ -224,6 +228,7 @@ function Row({
   detail,
   notes,
   fat,
+  fatNote,
   menu,
 }: {
   first: boolean;
@@ -237,6 +242,8 @@ function Row({
   detail: string | null;
   notes: string | null;
   fat: string;
+  /** Small print under the body fat, as the web's "estimate". */
+  fatNote?: string;
   menu?: ReactNode;
 }) {
   const { colors, type } = useTheme();
@@ -276,12 +283,18 @@ function Row({
           </Text>
         )}
       </View>
-      <Text
-        accessibilityLabel={`Body fat ${fat === '–' ? 'not logged' : fat}`}
-        style={[type.callout, type.number, styles.fat, { color: colors.secondary }]}
+      <View
+        accessible
+        accessibilityLabel={`Body fat ${fat === '–' ? 'not logged' : `${fat}${fatNote ? `, ${fatNote}` : ''}`}`}
+        style={styles.fat}
       >
-        {fat}
-      </Text>
+        <Text style={[type.callout, type.number, styles.fatText, { color: colors.secondary }]}>
+          {fat}
+        </Text>
+        {!!fatNote && (
+          <Text style={[type.caption, styles.fatText, { color: colors.muted }]}>{fatNote}</Text>
+        )}
+      </View>
       {menu}
     </View>
   );
@@ -380,7 +393,8 @@ const styles = StyleSheet.create({
   date: { width: 72 },
   weight: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   change: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  fat: { width: 52, textAlign: 'right' },
+  fat: { width: 56 },
+  fatText: { textAlign: 'right' },
   more: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   moreSpacer: { width: 32 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },

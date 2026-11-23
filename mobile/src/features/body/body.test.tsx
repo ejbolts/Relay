@@ -245,6 +245,9 @@ test('Body shows the latest weight, goal and body fat, the trend and the history
     ),
   ).toBeVisible();
   expect(screen.getByText('After travel')).toBeVisible();
+  // As on the web, a logged body fat is marked as an estimate.
+  expect(screen.getByLabelText('Body fat 18.5%, estimate')).toBeVisible();
+  expect(screen.getAllByLabelText('Body fat not logged').length).toBeGreaterThan(0);
 
   // The weekly view averages each week's check-ins.
   await fireEvent.press(screen.getByRole('tab', { name: 'Avg Week' }));

@@ -29,6 +29,7 @@ export function NumberStepper({
   label,
   stepLabel,
   placeholder,
+  unitWhenEmpty = true,
   step = 0.1,
   disabled,
   onSubmit,
@@ -46,6 +47,8 @@ export function NumberStepper({
   /** What a step changes, for its buttons: "body fat by 0.1%". Defaults to "by 0.1 kg". */
   stepLabel?: string;
   placeholder?: string;
+  /** Show the unit beside the placeholder too; off for a word placeholder such as "Optional". */
+  unitWhenEmpty?: boolean;
   step?: number;
   disabled?: boolean;
   onSubmit?: () => void;
@@ -60,7 +63,7 @@ export function NumberStepper({
     setText(format(value));
   }, [value, format]);
 
-  const showUnit = text.length > 0 || (placeholder !== undefined && placeholder !== 'Optional');
+  const showUnit = text.length > 0 || unitWhenEmpty;
   const button = (delta: number, side: 'left' | 'right') => (
     <Pressable
       accessibilityRole="button"
@@ -150,6 +153,7 @@ export function BodyFatStepper(
   return (
     <NumberStepper
       placeholder="Optional"
+      unitWhenEmpty={false}
       {...props}
       format={formatPlain}
       parse={parsePlain}
