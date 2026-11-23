@@ -1,8 +1,8 @@
-import * as Haptics from 'expo-haptics';
 import { useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import { formatSeconds } from '../../../../frontend/src/utils';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { MenuButton } from '../../ui/MenuButton';
 import { useTheme } from '../../ui/theme';
@@ -19,26 +19,36 @@ function InsertButton({ beforeSet, onInsert }: { beforeSet: number; onInsert: ()
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      hitSlop={8}
+      // A 26 pt circle with a 44 pt touch target, as the web's outlined "+".
+      hitSlop={9}
       onPress={() => {
-        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+        haptics.tap();
         onInsert();
       }}
       style={({ pressed }) => [
         styles.insert,
-        { backgroundColor: colors.surface2, borderColor: colors.line },
+        { backgroundColor: colors.surface, borderColor: `${colors.accent}8C` },
         pressed && { opacity: 0.6 },
       ]}
     >
-      <Icon name="plus" size={11} color={colors.accentText} />
+      <Icon name="plus" size={14} color={colors.accentText} />
     </Pressable>
   );
 }
 
-/** The divider's hairline, either side of the rest. */
-function Rule() {
+const DASHES = Array.from({ length: 48 }, (_, index) => index);
+
+/** The divider's line either side of the rest: solid under a rest, dashed in an open gap. */
+function Rule({ dashed }: { dashed?: boolean }) {
   const { colors } = useTheme();
-  return <View style={[styles.rule, { backgroundColor: colors.line }]} />;
+  if (!dashed) return <View style={[styles.rule, { backgroundColor: colors.line }]} />;
+  return (
+    <View style={styles.dashes}>
+      {DASHES.map((index) => (
+        <View key={index} style={[styles.dash, { backgroundColor: colors.lineStrong }]} />
+      ))}
+    </View>
+  );
 }
 
 /**
@@ -98,23 +108,29 @@ export function SetRestRow({
           accessibilityLabel={`Rest after set ${setNumber}: ${text}${ghost ? ', suggested' : ''}`}
           title={`Rest after set ${setNumber}`}
           items={restMenuItems({ current: seconds, onPick: onChange, onNone: onRemove })}
-          trigger={{ text: `${text} rest`, color }}
-          width={86}
-          height={26}
+          trigger={{ text: `${text} ↕`, color }}
+          width={76}
+          height={32}
           fill={ghost ? colors.surface : colors.surface2}
-          cornerRadius={13}
+          cornerRadius={16}
           style={[
             styles.pill,
             {
               backgroundColor: ghost ? colors.surface : colors.surface2,
-              borderColor: ghost ? colors.line : 'transparent',
+              borderColor: ghost ? colors.lineStrong : 'transparent',
             },
           ]}
         >
-          <Text style={[type.footnote, type.number, { color, fontWeight: '600' }]}>
-            {text} rest
-          </Text>
+          <View style={styles.pillContent}>
+            <Text style={[type.callout, type.number, { color, fontWeight: '600' }]}>{text}</Text>
+            <Icon
+              name={{ sf: 'chevron.up.chevron.down', md: 'unfold-more' }}
+              size={14}
+              color={color}
+            />
+          </View>
         </MenuButton>
+        <Text style={[styles.restWord, { color: colors.muted }]}>Rest</Text>
         <Rule />
       </View>
     </ReanimatedSwipeable>
@@ -139,14 +155,14 @@ export function SetInsertRow({
   /** Where Custom… starts, usually the nearest rest in the exercise. */
   suggestedRest?: number;
 }) {
-  const { colors, type } = useTheme();
+  const { colors } = useTheme();
   if (!onInsert && !onAddRest) return null;
   return (
     <View style={[styles.row, styles.insertRow]}>
       <View style={styles.lead}>
         {onInsert && <InsertButton beforeSet={beforeSet} onInsert={onInsert} />}
       </View>
-      <Rule />
+      <Rule dashed />
       {onAddRest && (
         <>
           <MenuButton
@@ -157,16 +173,19 @@ export function SetInsertRow({
               onPick: onAddRest,
               customStart: suggestedRest,
             })}
-            trigger={{ text: 'Rest', color: colors.muted }}
-            width={52}
-            height={22}
+            trigger={{ text: '+ REST', color: colors.muted }}
+            width={76}
+            height={30}
             fill={colors.surface}
-            cornerRadius={11}
-            style={[styles.pill, styles.addRest, { borderColor: colors.line }]}
+            cornerRadius={15}
+            style={[styles.pill, styles.addRest, { borderColor: colors.lineStrong }]}
           >
-            <Text style={[type.caption, { color: colors.muted, fontWeight: '600' }]}>Rest</Text>
+            <View style={styles.pillContent}>
+              <Icon name="plus" size={12} color={colors.muted} />
+              <Text style={[styles.restWord, { color: colors.muted }]}>Rest</Text>
+            </View>
           </MenuButton>
-          <Rule />
+          <Rule dashed />
         </>
       )}
     </View>
@@ -179,29 +198,33 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 4,
-    minHeight: 30,
+    minHeight: 40,
   },
-  insertRow: { minHeight: 24 },
+  insertRow: { minHeight: 34 },
   lead: { width: 34, alignItems: 'center' },
   insert: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: StyleSheet.hairlineWidth,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },
   rule: { flex: 1, height: StyleSheet.hairlineWidth },
+  dashes: { flex: 1, height: 1, flexDirection: 'row', gap: 4, overflow: 'hidden' },
+  dash: { width: 4, height: 1 },
   pill: {
     minWidth: 52,
-    height: 26,
-    paddingHorizontal: 10,
-    borderRadius: 13,
-    borderWidth: StyleSheet.hairlineWidth,
+    height: 32,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  addRest: { height: 22, borderRadius: 11 },
+  pillContent: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  restWord: { fontSize: 11, fontWeight: '600', letterSpacing: 0.6, textTransform: 'uppercase' },
+  addRest: { height: 30, borderRadius: 15, borderStyle: 'dashed' },
   remove: {
     width: 56,
     marginLeft: 6,
