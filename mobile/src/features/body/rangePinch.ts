@@ -17,13 +17,14 @@ export function useRangePinch(
   setRange: (range: TimeRange) => void,
 ) {
   const [spanDays, setSpanDays] = useState<number | null>(null);
-  const base = useRef<TimeRange | null>(null);
+  // The span showing when the pinch began, so a refresh mid-gesture can't move it.
+  const base = useRef<number | null>(null);
   const { earliest, latest } = dateBounds(dates);
   const spans = useMemo(() => timeRangeSpans(earliest, latest), [earliest, latest]);
   const pinching = spanDays !== null && latest !== '';
   return {
     onPinch: (scale: number) => {
-      base.current ??= range;
+      base.current ??= spans[range];
       const step = pinchStep(base.current, scale, spans);
       setSpanDays(step.spanDays);
       if (step.range !== range) setRange(step.range);
