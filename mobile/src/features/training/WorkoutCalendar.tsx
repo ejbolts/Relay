@@ -1,12 +1,17 @@
-import { memo } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { memo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import type { WorkoutType, WorkoutTypeColors } from '../../../../frontend/src/types';
 import { workoutTypeColor } from '../../../../frontend/src/dayColors';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
-import { ringSegments, type CalendarDay, type CalendarMonthView } from './calendarModel';
+import {
+  ringSegments,
+  type CalendarDay,
+  type CalendarMonthView,
+  type MonthKey,
+} from './calendarModel';
 import { haptics } from '../../ui/haptics';
 
 const BOX = 38;
@@ -140,23 +145,27 @@ const DayCell = memo(function DayCell({
   );
 });
 
+/**
+ * The calendar as the web's: a month to a page, swiped sideways between months (the arrows do the
+ * same, for screen readers and one-handed use). Until the card has been measured, and in tests,
+ * it shows the current month alone.
+ */
 export function WorkoutCalendar({
-  view,
-  canGoBack,
-  canGoForward,
-  onBack,
-  onForward,
+  months,
+  month,
+  viewFor,
+  onMonthChange,
   selectedDate,
   onSelectDay,
   loadingOlder,
   olderError,
   onRetryOlder,
 }: {
-  view: CalendarMonthView;
-  canGoBack: boolean;
-  canGoForward: boolean;
-  onBack: () => void;
-  onForward: () => void;
+  /** The pages, oldest first. */
+  months: readonly MonthKey[];
+  month: MonthKey;
+  viewFor: (month: MonthKey) => CalendarMonthView;
+  onMonthChange: (month: MonthKey) => void;
   selectedDate: string | null;
   onSelectDay: (day: CalendarDay) => void;
   loadingOlder: boolean;
@@ -164,12 +173,49 @@ export function WorkoutCalendar({
   onRetryOlder: () => void;
 }) {
   const { colors, type } = useTheme();
+  const [width, setWidth] = useState(0);
+  const pager = useRef<FlatList<MonthKey>>(null);
+  const index = Math.max(0, months.indexOf(month));
+  const go = (delta: number) => {
+    const next = months[index + delta];
+    if (!next) return;
+    onMonthChange(next);
+    pager.current?.scrollToIndex({ index: index + delta, animated: true });
+  };
+  const page = (key: MonthKey) => (
+    <MonthPage view={viewFor(key)} selectedDate={selectedDate} onSelectDay={onSelectDay} />
+  );
   return (
-    <View style={{ gap: 8 }}>
-      <View style={styles.monthRow}>
-        <Text accessibilityRole="header" style={[type.headline, { color: colors.text, flex: 1 }]}>
-          {view.title}
-        </Text>
+    <View onLayout={(event) => setWidth(Math.round(event.nativeEvent.layout.width))}>
+      {width > 0 ? (
+        <FlatList
+          // A new oldest month shifts every page: start again at the month on show.
+          key={months[0]}
+          ref={pager}
+          horizontal
+          pagingEnabled
+          showsHorizontalScrollIndicator={false}
+          data={months}
+          keyExtractor={(key) => key}
+          initialScrollIndex={index}
+          getItemLayout={(_, item) => ({ length: width, offset: width * item, index: item })}
+          initialNumToRender={1}
+          windowSize={3}
+          extraData={[selectedDate, viewFor]}
+          onMomentumScrollEnd={(event) => {
+            const shown = months[Math.round(event.nativeEvent.contentOffset.x / width)];
+            if (shown && shown !== month) {
+              haptics.selection();
+              onMonthChange(shown);
+            }
+          }}
+          renderItem={({ item }) => <View style={{ width }}>{page(item)}</View>}
+        />
+      ) : (
+        page(month)
+      )}
+      {/* Over the month's title, on every page. */}
+      <View style={styles.monthControls}>
         {loadingOlder && (
           <ActivityIndicator accessibilityLabel="Loading earlier months" color={colors.muted} />
         )}
@@ -181,15 +227,36 @@ export function WorkoutCalendar({
         <MonthButton
           label="Previous month"
           icon="chevronLeft"
-          enabled={canGoBack}
-          onPress={onBack}
+          enabled={index > 0}
+          onPress={() => go(-1)}
         />
         <MonthButton
           label="Next month"
           icon="chevronRight"
-          enabled={canGoForward}
-          onPress={onForward}
+          enabled={index < months.length - 1}
+          onPress={() => go(1)}
         />
+      </View>
+    </View>
+  );
+}
+
+const MonthPage = memo(function MonthPage({
+  view,
+  selectedDate,
+  onSelectDay,
+}: {
+  view: CalendarMonthView;
+  selectedDate: string | null;
+  onSelectDay: (day: CalendarDay) => void;
+}) {
+  const { colors, type } = useTheme();
+  return (
+    <View style={{ gap: 8 }} accessibilityLabel={view.title}>
+      <View style={styles.monthRow}>
+        <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
+          {view.title}
+        </Text>
       </View>
       <View style={styles.week} importantForAccessibility="no-hide-descendants">
         {view.weekdays.map((weekday, index) => (
@@ -216,7 +283,7 @@ export function WorkoutCalendar({
       ))}
     </View>
   );
-}
+});
 
 function MonthButton({
   label,
@@ -236,20 +303,13 @@ function MonthButton({
       accessibilityLabel={label}
       accessibilityState={{ disabled: !enabled }}
       disabled={!enabled}
-      hitSlop={6}
       onPress={() => {
         haptics.selection();
         onPress();
       }}
-      style={({ pressed }) => [
-        styles.monthButton,
-        {
-          backgroundColor: colors.surface2,
-          opacity: !enabled ? 0.35 : pressed ? 0.6 : 1,
-        },
-      ]}
+      style={({ pressed }) => [styles.monthButton, { opacity: !enabled ? 0.3 : pressed ? 0.6 : 1 }]}
     >
-      <Icon name={icon} size={16} color={colors.text} />
+      <Icon name={icon} size={17} color={colors.secondary} />
     </Pressable>
   );
 }
@@ -312,19 +372,16 @@ export function CalendarLegend({
 }
 
 const styles = StyleSheet.create({
-  monthRow: {
+  monthRow: { minHeight: 44, justifyContent: 'center', paddingLeft: 4 },
+  monthControls: {
+    position: 'absolute',
+    top: 0,
+    right: -8,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: 4,
   },
-  monthButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  monthButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   week: { flexDirection: 'row' },
   weekday: { flex: 1, textAlign: 'center', fontWeight: '600' },
   cell: { flex: 1, height: 46, alignItems: 'center', justifyContent: 'center' },

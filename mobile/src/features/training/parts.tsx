@@ -33,12 +33,17 @@ export function Chip({
         haptics.selection();
         onPress();
       }}
+      hitSlop={{ top: 5, bottom: 5 }}
+      // The web's .exercise-muscle-filters pills: outlined, and on a raised fill with a 2 pt accent
+      // ring once chosen.
       style={({ pressed }) => [
         styles.chip,
         {
           borderRadius: radius.pill,
-          backgroundColor: selected ? colors.accentSoft : colors.surface2,
-          borderColor: selected ? colors.accent : 'transparent',
+          backgroundColor: selected ? colors.surface3 : 'transparent',
+          borderColor: selected ? colors.accent : colors.lineStrong,
+          borderWidth: selected ? 2 : 1,
+          paddingHorizontal: selected ? 11 : 12,
           opacity: pressed ? 0.7 : 1,
         },
       ]}
@@ -48,7 +53,7 @@ export function Chip({
         style={[
           type.footnote,
           {
-            color: selected ? colors.accentText : colors.secondary,
+            color: selected ? colors.text : colors.muted,
             fontWeight: '600',
           },
         ]}
@@ -171,9 +176,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    minHeight: 32,
-    borderWidth: 1,
+    minHeight: 35,
   },
   badge: { paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'center' },
   more: {

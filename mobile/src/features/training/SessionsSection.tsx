@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
   groupWorkoutsByWeek,
@@ -27,7 +27,7 @@ import { useCreateWorkoutOn } from '../home/calendarActions';
 import { PlannedDaySheet } from '../home/PlannedDaySheet';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { CalendarDaySheet } from './CalendarDaySheet';
-import { calendarBounds, calendarMonthView, monthOf, shiftMonth } from './calendarModel';
+import { calendarBounds, calendarMonthView, monthOf, monthsBetween } from './calendarModel';
 import { Divider, MoreButton, Note } from './parts';
 import { RepeatWorkoutButton } from './RepeatWorkoutButton';
 import { trainingKeys, type useTrainingHistory } from './trainingQueries';
@@ -58,10 +58,10 @@ export function SessionsSection({ history }: { history: History }) {
   // The split's planned days ahead and missed days behind, as the web's calendar shows them.
   const split = useDashboard().data?.training_split;
   const splitDays = useMemo(() => splitCalendarDays(split, today, 42), [split, today]);
-  const view = useMemo(
-    () =>
+  const viewFor = useCallback(
+    (month: string) =>
       calendarMonthView({
-        month: shownMonth,
+        month,
         entries: heatmap,
         types,
         categoryColors,
@@ -70,8 +70,13 @@ export function SessionsSection({ history }: { history: History }) {
         today,
         splitDays,
       }),
-    [shownMonth, heatmap, types, categoryColors, hidden, weekStartDay, today, splitDays],
+    [heatmap, types, categoryColors, hidden, weekStartDay, today, splitDays],
   );
+  const months = useMemo(
+    () => monthsBetween(bounds.first, bounds.last),
+    [bounds.first, bounds.last],
+  );
+  const view = useMemo(() => viewFor(shownMonth), [viewFor, shownMonth]);
   const [selectedDay, setSelectedDay] = useState<HeatmapDay | null>(null);
   const [plannedDate, setPlannedDate] = useState<string | null>(null);
   const createOn = useCreateWorkoutOn();
@@ -159,11 +164,10 @@ export function SessionsSection({ history }: { history: History }) {
       <Card accessibilityLabel="Workout calendar">
         <CardHeader title="Calendar" />
         <WorkoutCalendar
-          view={view}
-          canGoBack={shownMonth > bounds.first}
-          canGoForward={shownMonth < bounds.last}
-          onBack={() => setMonth(shiftMonth(shownMonth, -1))}
-          onForward={() => setMonth(shiftMonth(shownMonth, 1))}
+          months={months}
+          month={shownMonth}
+          viewFor={viewFor}
+          onMonthChange={setMonth}
           selectedDate={selectedDay?.workout_date ?? plannedDate}
           onSelectDay={(day) => pressDay(day.date, day.entry)}
           loadingOlder={loadingOlder && `${shownMonth}-01` < historyStart}

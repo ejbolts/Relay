@@ -1,5 +1,11 @@
 import { builtinTypeColors, DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
-import { calendarBounds, calendarMonthView, ringSegments, shiftMonth } from './calendarModel';
+import {
+  calendarBounds,
+  calendarMonthView,
+  monthsBetween,
+  ringSegments,
+  shiftMonth,
+} from './calendarModel';
 import { chartModel, nearestPoint } from './ProgressChart';
 import { dashboard } from './trainingFixtures';
 
@@ -52,6 +58,11 @@ test('outlines the split’s planned and missed days, a mixed day in each of its
 test('pages months across year ends', () => {
   expect(shiftMonth('2026-01', -1)).toBe('2025-12');
   expect(shiftMonth('2026-12', 1)).toBe('2027-01');
+});
+
+test('lists the month pager’s pages, oldest first, across a year end', () => {
+  expect(monthsBetween('2025-11', '2026-02')).toEqual(['2025-11', '2025-12', '2026-01', '2026-02']);
+  expect(monthsBetween('2026-11', '2026-11')).toEqual(['2026-11']);
 });
 
 test('reaches from the oldest workout to this month', () => {

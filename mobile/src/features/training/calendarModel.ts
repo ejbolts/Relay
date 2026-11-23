@@ -20,6 +20,13 @@ export function shiftMonth(month: MonthKey, delta: number): MonthKey {
   return isoLocalDate(shifted).slice(0, 7);
 }
 
+/** Every month from `first` to `last`, oldest first: the pages of the calendar's month pager. */
+export function monthsBetween(first: MonthKey, last: MonthKey): MonthKey[] {
+  const months: MonthKey[] = [];
+  for (let month = first; month <= last; month = shiftMonth(month, 1)) months.push(month);
+  return months;
+}
+
 /**
  * The months the calendar pages through: from the oldest workout the account has (or the oldest
  * day loaded) up to the current month, as the web's calendar scrolls.
