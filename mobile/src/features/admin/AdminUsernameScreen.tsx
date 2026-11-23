@@ -46,7 +46,14 @@ function UsernameForm({ account }: { account: AdminUser }) {
 
   const [saved, setSaved] = useState(false);
 
-  usePreventRemove(saving, () => showToast('Wait for the username to save.'));
+  usePreventRemove(saving, ({ repeat }) => {
+    // The hold lifts a render after the save settles; leaving in between goes ahead.
+    if (!sending.current) {
+      repeat();
+      return;
+    }
+    showToast('Wait for the username to save.');
+  });
   // Goes back once the save has settled and leaving is no longer held.
   useEffect(() => {
     if (saved && !saving) router.back();
