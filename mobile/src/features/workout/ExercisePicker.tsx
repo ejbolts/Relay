@@ -41,6 +41,7 @@ import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { useTheme } from '../../ui/theme';
 import { ExerciseIcon } from '../../ui/ExerciseIcon';
+import { ExerciseMuscleHelpButton, ExerciseMuscleHelpSheet } from '../training/ExerciseMuscleHelp';
 import { CreateExerciseSheet } from './CreateExerciseSheet';
 import { loggerKeys, useAllMachinePhotos } from './loggerQueries';
 import { PickerMachineStrip } from './PickerMachineStrip';
@@ -92,8 +93,10 @@ export function ExercisePicker({
 }) {
   const [query, setQuery] = useState('');
   const [bodyPart, setBodyPart] = useState<WorkoutCategory | 'all'>('all');
+  const [customOnly, setCustomOnly] = useState(false);
   const [equipment, setEquipment] = useState('');
   const [selected, setSelected] = useState<Exercise[]>([]);
+  const [helpExercise, setHelpExercise] = useState<Exercise | null>(null);
   const [creating, setCreating] = useState<{ name: string; category: WorkoutCategory | '' } | null>(
     null,
   );
@@ -118,10 +121,13 @@ export function ExercisePicker({
   );
   const equipmentOptions = useMemo(() => exerciseEquipmentOptions(exercises), [exercises]);
   const eligible = useMemo(() => exercises.filter((exercise) => !exercise.hidden), [exercises]);
-  // The web's Body part and Equipment filters narrow the list before the search ranks it.
+  // The web's Body part, Equipment and Custom filters narrow the list before the search ranks it.
   const available = useMemo(
-    () => eligible.filter((exercise) => matchesExerciseFilters(exercise, bodyPart, equipment)),
-    [eligible, bodyPart, equipment],
+    () =>
+      eligible.filter((exercise) =>
+        matchesExerciseFilters(exercise, bodyPart, equipment, customOnly),
+      ),
+    [eligible, bodyPart, equipment, customOnly],
   );
   const today = localDate();
   const shown = useMemo(() => {
@@ -137,8 +143,10 @@ export function ExercisePicker({
   const close = () => {
     setQuery('');
     setBodyPart('all');
+    setCustomOnly(false);
     setEquipment('');
     setSelected([]);
+    setHelpExercise(null);
     setMachineChoices({});
     setOpenMachinesId(null);
     onClose();
@@ -190,7 +198,7 @@ export function ExercisePicker({
       visible={visible}
       animationType="slide"
       presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
-      onRequestClose={close}
+      onRequestClose={() => (helpExercise ? setHelpExercise(null) : close())}
     >
       <View
         style={[
@@ -285,13 +293,31 @@ export function ExercisePicker({
           />
           <FilterMenu
             label="Equipment"
-            value={equipment || null}
+            value={customOnly ? 'Custom' : equipment || null}
             items={[
-              { label: 'All equipment', checked: !equipment, onPress: () => setEquipment('') },
+              {
+                label: 'All equipment',
+                checked: !customOnly && !equipment,
+                onPress: () => {
+                  setCustomOnly(false);
+                  setEquipment('');
+                },
+              },
+              {
+                label: 'Custom',
+                checked: customOnly,
+                onPress: () => {
+                  setCustomOnly(true);
+                  setEquipment('');
+                },
+              },
               ...equipmentOptions.map((option) => ({
                 label: option,
-                checked: equipment === option,
-                onPress: () => setEquipment(option),
+                checked: !customOnly && equipment === option,
+                onPress: () => {
+                  setCustomOnly(false);
+                  setEquipment(option);
+                },
               })),
             ]}
           />
@@ -364,61 +390,65 @@ export function ExercisePicker({
             const chosen = machines.find((machine) => machine.id === chosenId);
             return (
               <View style={machinesOpen && { backgroundColor: colors.surface }}>
-                <Pressable
-                  accessibilityRole="checkbox"
-                  accessibilityLabel={item.name}
-                  accessibilityState={{
-                    checked: order >= 0 || added,
-                    disabled: added,
-                  }}
-                  disabled={added}
-                  onPress={() => toggle(item)}
-                  style={({ pressed }) => [
+                <View
+                  style={[
                     styles.row,
                     { borderColor: colors.line },
                     order >= 0 && { backgroundColor: colors.accentSoft },
-                    pressed && { backgroundColor: colors.surface2 },
                   ]}
                 >
-                  <View style={added && { opacity: 0.55 }}>
-                    <ExerciseIcon exercise={item} size={44} />
-                  </View>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text
-                      style={[
-                        type.callout,
-                        { color: added ? colors.muted : colors.text, fontWeight: '600' },
-                      ]}
-                      numberOfLines={2}
-                    >
-                      {item.name}
-                    </Text>
-                    <View style={styles.tags}>
-                      <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
-                        {[item.muscle_group, item.equipment].filter(Boolean).join(' · ')}
+                  <Pressable
+                    accessibilityRole="checkbox"
+                    accessibilityLabel={item.name}
+                    accessibilityState={{
+                      checked: order >= 0 || added,
+                      disabled: added,
+                    }}
+                    disabled={added}
+                    onPress={() => toggle(item)}
+                    style={({ pressed }) => [styles.rowSelect, pressed && { opacity: 0.7 }]}
+                  >
+                    <View style={added && { opacity: 0.55 }}>
+                      <ExerciseIcon exercise={item} size={44} />
+                    </View>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text
+                        style={[
+                          type.callout,
+                          { color: added ? colors.muted : colors.text, fontWeight: '600' },
+                        ]}
+                        numberOfLines={2}
+                      >
+                        {item.name}
                       </Text>
-                      {lastDone.has(item.id) && (
-                        <View
-                          accessible
-                          accessibilityLabel={`Last done ${formatLastDone(lastDone.get(item.id)!, today)}`}
-                          style={styles.lastDone}
+                      <View style={styles.tags}>
+                        <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
+                          {[item.muscle_group, item.equipment].filter(Boolean).join(' · ')}
+                        </Text>
+                        {lastDone.has(item.id) && (
+                          <View
+                            accessible
+                            accessibilityLabel={`Last done ${formatLastDone(lastDone.get(item.id)!, today)}`}
+                            style={styles.lastDone}
+                          >
+                            <Icon name="training" size={11} color={colors.muted} />
+                            <Text style={[type.footnote, { color: colors.muted }]}>
+                              {formatLastDone(lastDone.get(item.id)!, today)}
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                      {order >= 0 && machines.length > 0 && (
+                        <Text
+                          style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}
+                          numberOfLines={1}
                         >
-                          <Icon name="training" size={11} color={colors.muted} />
-                          <Text style={[type.footnote, { color: colors.muted }]}>
-                            {formatLastDone(lastDone.get(item.id)!, today)}
-                          </Text>
-                        </View>
+                          {chosen?.caption || (chosen ? 'Machine' : 'Baseline exercise')}
+                        </Text>
                       )}
                     </View>
-                    {order >= 0 && machines.length > 0 && (
-                      <Text
-                        style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}
-                        numberOfLines={1}
-                      >
-                        {chosen?.caption || (chosen ? 'Machine' : 'Baseline exercise')}
-                      </Text>
-                    )}
-                  </View>
+                  </Pressable>
+                  <ExerciseMuscleHelpButton exercise={item} onPress={() => setHelpExercise(item)} />
                   {machines.length > 0 && (
                     <Pressable
                       accessibilityRole="button"
@@ -444,27 +474,36 @@ export function ExercisePicker({
                     </Pressable>
                   )}
                   {(order >= 0 || added || !swap) && (
-                    <View
-                      style={[
-                        styles.tick,
-                        order >= 0 || added
-                          ? {
-                              backgroundColor: added ? colors.surface3 : colors.accent,
-                              borderColor: 'transparent',
-                            }
-                          : { borderColor: colors.lineStrong },
-                      ]}
+                    <Pressable
+                      accessible={false}
+                      disabled={added}
+                      hitSlop={8}
+                      onPress={() => toggle(item)}
                     >
-                      {order >= 0 ? (
-                        <Text style={[type.caption, { color: colors.onAccent, fontWeight: '700' }]}>
-                          {order + 1}
-                        </Text>
-                      ) : added ? (
-                        <Icon name="check" size={12} color={colors.secondary} />
-                      ) : null}
-                    </View>
+                      <View
+                        style={[
+                          styles.tick,
+                          order >= 0 || added
+                            ? {
+                                backgroundColor: added ? colors.surface3 : colors.accent,
+                                borderColor: 'transparent',
+                              }
+                            : { borderColor: colors.lineStrong },
+                        ]}
+                      >
+                        {order >= 0 ? (
+                          <Text
+                            style={[type.caption, { color: colors.onAccent, fontWeight: '700' }]}
+                          >
+                            {order + 1}
+                          </Text>
+                        ) : added ? (
+                          <Icon name="check" size={12} color={colors.secondary} />
+                        ) : null}
+                      </View>
+                    </Pressable>
                   )}
-                </Pressable>
+                </View>
                 {machinesOpen && (
                   <PickerMachineStrip
                     exercise={item}
@@ -505,6 +544,9 @@ export function ExercisePicker({
           onCreate={onCreate}
           onUseExisting={(exercise) => {
             setCreating(null);
+            setBodyPart('all');
+            setCustomOnly(false);
+            setEquipment('');
             setQuery('');
             if (swap) {
               onAdd([exercise], {});
@@ -517,6 +559,11 @@ export function ExercisePicker({
           onClose={() => setCreating(null)}
         />
       )}
+      <ExerciseMuscleHelpSheet
+        exercise={helpExercise}
+        inline
+        onClose={() => setHelpExercise(null)}
+      />
     </Modal>
   );
 }
@@ -610,10 +657,16 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 10,
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  rowSelect: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
   tick: {
     width: 24,

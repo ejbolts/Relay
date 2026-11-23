@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -36,8 +37,11 @@ import { useScopedExerciseProgress, useWeightMapping } from '../exercises/exerci
 import { MachineFilter } from '../exercises/MachineFilter';
 import { MergeNudge } from '../exercises/MergeNudge';
 import { exerciseRoutes } from '../exercises/routes';
+import { exerciseInfoKeys } from './exerciseInfoQueries';
+import { ExerciseMuscleHelpButton, ExerciseMuscleHelpSheet } from './ExerciseMuscleHelp';
 import { trainingIcons } from './icons';
 import { LandscapeChartView } from '../body/LandscapeChart';
+import { LiftLeaderboardCard } from './LiftLeaderboardCard';
 import { Badge, Divider, MoreButton, Note, Segmented } from './parts';
 import { ProgressChart, type ChartPoint } from './ProgressChart';
 
@@ -51,6 +55,7 @@ const SESSION_PAGE = 8;
 export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
   const { colors, space, type } = useTheme();
   const router = useRouter();
+  const client = useQueryClient();
   const unit = useWeightUnit();
   const exercises = useExercises().data;
   const exercise = exercises?.find((item) => item.id === exerciseId);
@@ -66,6 +71,7 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
   // Only a pull shows the spinner; refreshes after a change happen quietly.
   const [refreshing, setRefreshing] = useState(false);
   const [landscape, setLandscape] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const today = localDate();
   const name = exercise?.name ?? progress.data?.exercise.name ?? 'Exercise';
   // The chosen block's records; without a block, the whole history's.
@@ -140,7 +146,18 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
       <Stack.Screen
         options={{
           title: name,
-          headerRight: exercise ? () => <ExerciseOptionsMenu exercise={exercise} /> : undefined,
+          headerRight: exercise
+            ? () => (
+                <View style={styles.headerActions}>
+                  <ExerciseMuscleHelpButton
+                    exercise={exercise}
+                    variant="header"
+                    onPress={() => setHelpOpen(true)}
+                  />
+                  <ExerciseOptionsMenu exercise={exercise} />
+                </View>
+              )
+            : undefined,
         }}
       />
       <ScrollView
@@ -156,7 +173,12 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
             refreshing={refreshing}
             onRefresh={() => {
               setRefreshing(true);
-              void progress.refetch().finally(() => setRefreshing(false));
+              void Promise.all([
+                progress.refetch(),
+                client.invalidateQueries({
+                  queryKey: exerciseInfoKeys.liftLeaderboard(exerciseId),
+                }),
+              ]).finally(() => setRefreshing(false));
             }}
           />
         }
@@ -181,21 +203,24 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
             Could not load exercise progress.
           </Note>
         ) : !points.length ? (
-          <Note
-            action={
-              block ? (
-                <Button
-                  label="Show all time"
-                  variant="secondary"
-                  onPress={() => blocks.select('all')}
-                />
-              ) : undefined
-            }
-          >
-            {block
-              ? `No sessions in ${block.name}.`
-              : 'Complete this exercise in a workout to start its progress graph.'}
-          </Note>
+          <>
+            <Note
+              action={
+                block ? (
+                  <Button
+                    label="Show all time"
+                    variant="secondary"
+                    onPress={() => blocks.select('all')}
+                  />
+                ) : undefined
+              }
+            >
+              {block
+                ? `No sessions in ${block.name}.`
+                : 'Complete this exercise in a workout to start its progress graph.'}
+            </Note>
+            <LiftLeaderboardCard exerciseId={exerciseId} />
+          </>
         ) : (
           <>
             <Segmented
@@ -317,6 +342,7 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                 />
               </View>
             </Card>
+            <LiftLeaderboardCard exerciseId={exerciseId} />
             <Card accessibilityLabel="Exercise session history">
               <CardHeader
                 title="Sessions"
@@ -434,11 +460,16 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
           )}
         </LandscapeChartView>
       )}
+      <ExerciseMuscleHelpSheet
+        exercise={helpOpen ? (exercise ?? null) : null}
+        onClose={() => setHelpOpen(false)}
+      />
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   delta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   rangeRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   bests: { padding: 0, gap: 0 },

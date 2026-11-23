@@ -32,6 +32,7 @@ import { blockRoutes } from '../blocks/routes';
 import { useScopedExerciseLibrary } from '../exercises/exerciseQueries';
 import { exerciseRoutes } from '../exercises/routes';
 import { CreateExerciseSheet } from '../workout/CreateExerciseSheet';
+import { ExerciseMuscleHelpButton, ExerciseMuscleHelpSheet } from './ExerciseMuscleHelp';
 import { trainingIcons } from './icons';
 import { Chip, Divider, MoreButton, Note, Segmented } from './parts';
 
@@ -70,6 +71,7 @@ export function ExercisesSection() {
   const [shown, setShown] = useState(PAGE);
   const [optionsOpen, setOptionsOpen] = useState(false);
   const [creating, setCreating] = useState(false);
+  const [helpExercise, setHelpExercise] = useState<Exercise | null>(null);
   const [searchFocused, setSearchFocused] = useState(false);
   // The exercise just created, told apart from an existing one picked from the suggestions.
   const created = useRef<string | null>(null);
@@ -241,6 +243,7 @@ export function ExercisesSection() {
                 trendsLoading={library.isPending}
                 unit={unit}
                 onPress={() => openExercise(exercise.id)}
+                onHelp={() => setHelpExercise(exercise)}
               />
             </View>
           ))}
@@ -371,6 +374,7 @@ export function ExercisesSection() {
         }}
         onClose={() => setCreating(false)}
       />
+      <ExerciseMuscleHelpSheet exercise={helpExercise} onClose={() => setHelpExercise(null)} />
     </View>
   );
 }
@@ -381,12 +385,14 @@ function ExerciseRow({
   trendsLoading,
   unit,
   onPress,
+  onHelp,
 }: {
   exercise: Exercise;
   summary: ExerciseLibrarySummary | undefined;
   trendsLoading: boolean;
   unit: 'kg' | 'lb';
   onPress: () => void;
+  onHelp: () => void;
 }) {
   const { colors, type } = useTheme();
   const change = summary?.change_kg ?? null;
@@ -403,60 +409,69 @@ function ExerciseRow({
     .filter(Boolean)
     .join(' · ');
   return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${exercise.name}, ${meta}`}
-      onPress={onPress}
-      style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
-    >
-      <View style={[styles.initials, { backgroundColor: colors.surface2 }]}>
-        <Text style={[type.footnote, { color: colors.secondary, fontWeight: '700' }]}>
-          {initials}
-        </Text>
-      </View>
-      {/* Long names and details wrap onto a second line, as on the web, instead of cutting off. */}
-      <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]} numberOfLines={2}>
-          {exercise.name}
-        </Text>
-        <Text style={[type.caption, { color: colors.muted }]} numberOfLines={2}>
-          {meta}
-        </Text>
-      </View>
-      <Sparkline summary={summary} />
-      <View style={styles.value}>
-        {summary?.latest_estimated_1rm != null && (
-          <Text
-            accessibilityLabel="Estimated one-rep max"
-            style={[type.caption, { color: colors.muted, fontSize: 11 }]}
-          >
-            e1RM
+    <View style={styles.row}>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${exercise.name}, ${meta}`}
+        onPress={onPress}
+        style={({ pressed }) => [styles.rowMain, pressed && { opacity: 0.6 }]}
+      >
+        <View style={[styles.initials, { backgroundColor: colors.surface2 }]}>
+          <Text style={[type.footnote, { color: colors.secondary, fontWeight: '700' }]}>
+            {initials}
           </Text>
-        )}
-        <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>
-          {summary?.latest_estimated_1rm == null
-            ? '—'
-            : `${summary.normalised ? '≈ ' : ''}${formatWeightNumber(summary.latest_estimated_1rm, unit, 1)}`}
+        </View>
+        {/* Long names and details wrap onto a second line, as on the web, instead of cutting off. */}
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]} numberOfLines={2}>
+            {exercise.name}
+          </Text>
+          <Text style={[type.caption, { color: colors.muted }]} numberOfLines={2}>
+            {meta}
+          </Text>
+        </View>
+      </Pressable>
+      <ExerciseMuscleHelpButton exercise={exercise} onPress={onHelp} />
+      <Pressable
+        accessible={false}
+        onPress={onPress}
+        style={({ pressed }) => [styles.rowStats, pressed && { opacity: 0.6 }]}
+      >
+        <Sparkline summary={summary} />
+        <View style={styles.value}>
           {summary?.latest_estimated_1rm != null && (
-            <Text style={[type.caption, { color: colors.muted }]}> {unit}</Text>
+            <Text
+              accessibilityLabel="Estimated one-rep max"
+              style={[type.caption, { color: colors.muted, fontSize: 11 }]}
+            >
+              e1RM
+            </Text>
           )}
-        </Text>
-        {change != null && (
-          <Text
-            style={[
-              type.caption,
-              type.number,
-              {
-                color: change > 0 ? colors.good : change < 0 ? colors.danger : colors.muted,
-              },
-            ]}
-          >
-            {change > 0 ? '+' : change < 0 ? '−' : ''}
-            {Number(weightFromKg(Math.abs(change), unit).toFixed(1))} {unit}
+          <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>
+            {summary?.latest_estimated_1rm == null
+              ? '—'
+              : `${summary.normalised ? '≈ ' : ''}${formatWeightNumber(summary.latest_estimated_1rm, unit, 1)}`}
+            {summary?.latest_estimated_1rm != null && (
+              <Text style={[type.caption, { color: colors.muted }]}> {unit}</Text>
+            )}
           </Text>
-        )}
-      </View>
-    </Pressable>
+          {change != null && (
+            <Text
+              style={[
+                type.caption,
+                type.number,
+                {
+                  color: change > 0 ? colors.good : change < 0 ? colors.danger : colors.muted,
+                },
+              ]}
+            >
+              {change > 0 ? '+' : change < 0 ? '−' : ''}
+              {Number(weightFromKg(Math.abs(change), unit).toFixed(1))} {unit}
+            </Text>
+          )}
+        </View>
+      </Pressable>
+    </View>
   );
 }
 
@@ -507,19 +522,30 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
+    gap: 8,
     minHeight: 60,
     paddingVertical: 8,
   },
+  rowMain: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  rowStats: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   initials: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 38,
+    height: 38,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  spark: { width: 44, height: 22 },
-  value: { alignItems: 'flex-end', minWidth: 64, gap: 1 },
+  spark: { width: 40, height: 22 },
+  value: { alignItems: 'flex-end', minWidth: 60, gap: 1 },
   equipment: { overflow: 'hidden' },
   option: {
     flexDirection: 'row',

@@ -75,3 +75,56 @@ test('a name only hidden by a filter is not offered to create again', async () =
   await fireEvent.changeText(screen.getByLabelText('Search exercises'), 'zercher squat');
   expect(screen.getByRole('button', { name: 'Create Zercher Squat' })).toBeVisible();
 });
+
+test('Custom in the Equipment menu filters to custom exercises and swaps cleanly with equipment', async () => {
+  const customCurl: Exercise = {
+    ...bench,
+    id: 'custom-curl',
+    name: 'Custom Dumbbell Curl',
+    category: 'pull',
+    muscle_group: 'Biceps',
+    equipment: 'Dumbbell',
+    is_custom: true,
+  };
+  await openPicker([bench, press, customCurl]);
+  await fireEvent.press(screen.getByRole('button', { name: 'Equipment' }));
+  await act(async () => fireEvent.press(screen.getByText('Custom')));
+  expect(screen.getByRole('button', { name: 'Equipment: Custom' })).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Custom Dumbbell Curl' })).toBeVisible();
+  expect(screen.queryByRole('checkbox', { name: 'Bench Press' })).toBeNull();
+
+  // Picking an equipment option replaces Custom rather than combining with it.
+  await fireEvent.press(screen.getByRole('button', { name: 'Equipment: Custom' }));
+  await act(async () => fireEvent.press(screen.getByText('Barbell')));
+  expect(screen.getByRole('button', { name: 'Equipment: Barbell' })).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Bench Press' })).toBeVisible();
+  expect(screen.queryByRole('checkbox', { name: 'Custom Dumbbell Curl' })).toBeNull();
+
+  // Returning to All equipment shows everything again.
+  await fireEvent.press(screen.getByRole('button', { name: 'Equipment: Barbell' }));
+  await act(async () => fireEvent.press(screen.getByText('All equipment')));
+  expect(screen.getByRole('button', { name: 'Equipment' })).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Bench Press' })).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Custom Dumbbell Curl' })).toBeVisible();
+});
+
+test('the (?) button opens muscle set credits without selecting the exercise', async () => {
+  const benchCredits: Exercise = {
+    ...bench,
+    default_muscle_set_credits: [
+      { muscle_name: 'Pectorals', sets: 1 },
+      { muscle_name: 'Triceps', sets: 0.5 },
+    ],
+  };
+  await openPicker([benchCredits, press]);
+  await fireEvent.press(screen.getByRole('button', { name: 'Muscle set credits for Bench Press' }));
+  expect(screen.getByText('MUSCLE SET CREDITS')).toBeVisible();
+  expect(screen.getByText('Pectorals')).toBeVisible();
+  expect(screen.getByText('1 set')).toBeVisible();
+  expect(screen.getByText('Triceps')).toBeVisible();
+  expect(screen.getByText('0.5 sets')).toBeVisible();
+  expect(screen.getByRole('checkbox', { name: 'Bench Press' })).not.toBeChecked();
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.queryByText('MUSCLE SET CREDITS')).toBeNull();
+});
