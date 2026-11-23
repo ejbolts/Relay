@@ -1,10 +1,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { Alert, Platform } from 'react-native';
 import type { TrackedWorkout, WorkoutInput } from '../../../../frontend/src/types';
 import { apiGet, apiSend, currentUser } from '../../data/api';
 import { useUpNext } from '../../data/queries';
+import { showMenu, type MenuOption } from '../../ui/prompts';
 import { SessionProvider } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { EditWorkoutScreen } from './EditWorkoutScreen';
@@ -211,4 +212,51 @@ test('a 24-hour workout keeps its duration and is not offered start and end time
   await fireEvent.press(screen.getByRole('button', { name: 'Save workout' }));
   await waitFor(() => expect(puts).toHaveLength(1));
   expect(puts[0].body).toMatchObject({ duration_minutes: 1440, start_time: null, end_time: null });
+});
+
+test('the bodyweight comes from the workout as opened, so removing a set changes nothing', async () => {
+  // One set logged at an 80 kg bodyweight, an older one saved without one, and a later 85 kg
+  // check-in for that day.
+  const opened: TrackedWorkout = {
+    ...saved,
+    movements: [
+      {
+        ...lastPush.movements[0],
+        sets: [
+          trackedSet(0, { reps: 8, weight_kg: 80, bodyweight_kg: 80 }),
+          trackedSet(1, { reps: 5, weight_kg: 100 }),
+        ],
+      },
+    ],
+  };
+  jest
+    .mocked(apiGet)
+    .mockImplementation(async (path: string) =>
+      path === '/api/workouts/w1'
+        ? opened
+        : path === '/api/active-workout'
+          ? { revision: 0, draft: null }
+          : path === '/api/body-measurements'
+            ? [{ id: 'm1', measurement_date: opened.workout_date, weight_kg: 85 }]
+            : [],
+    );
+  await renderEditor();
+  await waitFor(() =>
+    expect(apiGet).toHaveBeenCalledWith('/api/body-measurements', expect.anything()),
+  );
+  // The heaviest set, saved without a bodyweight, uses the workout's own 80 kg.
+  expect(await screen.findByText('1.25× BW · at 80 kg BW')).toBeVisible();
+
+  // Removing the set that carried the bodyweight changes neither the ratio nor new sets.
+  await fireEvent.press(screen.getByRole('button', { name: 'Set 1 type: Working set' }));
+  const setMenu = jest.mocked(showMenu).mock.calls.at(-1)![1] as MenuOption[];
+  await act(async () => setMenu.find((item) => item.label === 'Delete set')!.onPress());
+  expect(screen.queryByRole('button', { name: 'Set 2 type: Working set' })).toBeNull();
+  expect(screen.getByText('1.25× BW · at 80 kg BW')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set to Bench Press' }));
+  const added = screen.getByRole('button', { name: /^(Complete|Mark) set 2/ });
+  if (added.props.accessibilityLabel?.startsWith('Complete')) await fireEvent.press(added);
+  await fireEvent.press(screen.getByRole('button', { name: 'Save workout' }));
+  await waitFor(() => expect(puts).toHaveLength(1));
+  expect(puts[0].body.movements[0].sets.map((item) => item.bodyweight_kg)).toEqual([null, 80]);
 });

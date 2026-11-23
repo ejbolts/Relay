@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   heaviestLoggedSetKey,
+  savedWorkoutBodyweight,
   bodyweightContext,
   bodyweightOn,
   relativeStrength,
@@ -68,5 +69,20 @@ describe('heaviestLoggedSetKey', () => {
 
   it('treats a set with no weight as zero', () => {
     expect(heaviestLoggedSetKey([set('a', null), set('b', null)])).toBe('a');
+  });
+});
+
+describe('savedWorkoutBodyweight', () => {
+  const workout = (...weights: (number | null)[]) => ({
+    movements: [{ sets: weights.map((bodyweight_kg) => ({ bodyweight_kg })) }],
+  });
+
+  it('takes the first set that recorded one', () => {
+    expect(savedWorkoutBodyweight(workout(null, 80, 82))).toBe(80);
+  });
+
+  it('is null for a workout saved without one, or none at all', () => {
+    expect(savedWorkoutBodyweight(workout(null, null))).toBeNull();
+    expect(savedWorkoutBodyweight(null)).toBeNull();
   });
 });

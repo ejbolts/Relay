@@ -467,6 +467,7 @@ import {
   bodyweightContext,
   heaviestLoggedSetKey,
   relativeStrength,
+  savedWorkoutBodyweight,
 } from './relativeStrength';
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
@@ -3372,13 +3373,6 @@ function InteractiveWorkoutCalendar({
         />
       )}
     </>
-  );
-}
-
-function savedWorkoutBodyweight(workout: TrackedWorkout | null): number | null {
-  return (
-    workout?.movements.flatMap((movement) => movement.sets).find((set) => set.bodyweight_kg != null)
-      ?.bodyweight_kg ?? null
   );
 }
 
