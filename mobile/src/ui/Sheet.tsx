@@ -34,24 +34,30 @@ export function Sheet({
           {title}
         </Text>
       </View>
+      {/* A 32 pt mark in a 44 pt touch area, pulled out so the mark lines up with the title. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Close"
-        hitSlop={8}
         onPress={onClose}
-        style={({ pressed }) => [
-          styles.close,
-          { backgroundColor: colors.surface2 },
-          pressed && { opacity: 0.6 },
-        ]}
+        style={styles.closeTouch}
       >
-        <Icon name="close" size={14} color={colors.secondary} />
+        {({ pressed }) => (
+          <View
+            style={[
+              styles.close,
+              { backgroundColor: colors.surface2 },
+              pressed && { opacity: 0.6 },
+            ]}
+          >
+            <Icon name="close" size={15} color={colors.secondary} />
+          </View>
+        )}
       </Pressable>
     </View>
   );
   const body = (
     <ScrollView
-      contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 24 }]}
+      contentContainerStyle={[styles.body, { paddingBottom: Math.max(insets.bottom, 16) + 20 }]}
       showsVerticalScrollIndicator={false}
     >
       {header}
@@ -101,10 +107,17 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
   header: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  closeTouch: {
+    width: 44,
+    height: 44,
+    margin: -6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   close: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
