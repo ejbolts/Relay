@@ -6,6 +6,7 @@ import {
   friendSession,
   relativeDay,
 } from './friendFeedData';
+import { ExerciseIcon } from './ExerciseIcon';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { PopupDialog } from './PopupDialog';
@@ -92,9 +93,7 @@ function FeedCard({
   const movements = feedExercises(workout);
   const listExercises = movements.length > 0;
   const hidden = movements.length - FEED_SHOWN_EXERCISES;
-  const [showAll, setShowAll] = useState(false);
-  const exercisesId = `feed-exercises-${workout.id}`;
-  const listed = showAll ? movements : movements.slice(0, FEED_SHOWN_EXERCISES);
+  const listed = movements.slice(0, FEED_SHOWN_EXERCISES);
   const card = useRef<HTMLLIElement>(null);
   const [highlighted, setHighlighted] = useState(false);
   const focusKey = focus?.key;
@@ -195,28 +194,21 @@ function FeedCard({
         )}
         <FeedStats workout={workout} records={item.record_count} />
         {listExercises && (
-          <ul id={exercisesId} className="feed-exercises" aria-label="Exercises">
-            {listed.map((movement, index) => (
+          <ul className="feed-exercises" aria-label="Exercises">
+            {listed.map((movement) => (
               <li key={movement.id}>
-                {movement.exercise.name}
-                {/* The space lets "+N more" wrap to the next line without an indent. */}
-                {index < listed.length - 1 ? ', ' : hidden > 0 ? ' ' : null}
+                <ExerciseIcon exercise={movement.exercise} />
+                <span>{movement.exercise.name}</span>
               </li>
             ))}
             {hidden > 0 && (
               <li className="feed-exercises-more">
                 <button
                   type="button"
-                  aria-label={
-                    showAll
-                      ? 'Show less'
-                      : `Show ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`
-                  }
-                  aria-expanded={showAll}
-                  aria-controls={exercisesId}
-                  onClick={() => setShowAll((current) => !current)}
+                  aria-label={`Open ${subject} workout, with ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`}
+                  onClick={onOpenWorkout}
                 >
-                  {showAll ? 'Show less' : `+${hidden} more`}
+                  +{hidden} {hidden === 1 ? 'exercise' : 'exercises'}
                 </button>
               </li>
             )}
