@@ -3,6 +3,7 @@ import { HeaderHeightContext } from 'expo-router/react-navigation';
 import { useContext, useRef, type ComponentRef } from 'react';
 import {
   KeyboardAvoidingView,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -100,10 +101,10 @@ export function SharedWorkoutScreen({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1, backgroundColor: colors.page }}
-      // Padding on both: with Android's edge-to-edge window the screen no longer resizes for the
-      // keyboard, so the composer would sit under it. The offset is the native header above.
-      behavior="padding"
-      keyboardVerticalOffset={headerHeight}
+      // iOS pads by the keyboard, offset by the native header above. Android resizes the window
+      // for the keyboard itself, so adding height or padding there pushed the composer off screen.
+      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? headerHeight : 0}
     >
       {header}
       <ScrollView
