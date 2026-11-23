@@ -35,7 +35,7 @@ export function RefusedSaveCard({
       accessibilityLabel={`${save.name} not saved`}
       style={[
         styles.card,
-        { backgroundColor: colors.surface2, borderRadius: radius.card, borderColor: colors.danger },
+        { backgroundColor: colors.surface, borderRadius: radius.card, borderColor: colors.danger },
       ]}
     >
       <View style={styles.heading}>
