@@ -17,13 +17,14 @@ import { cleanMachineSettings } from '../../../../frontend/src/setMachines';
 import type { Exercise, MachinePhotoUsage, MachineSetting } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { apiSend } from '../../data/api';
+import { useAuthorisedImage } from '../../data/authorisedImage';
 import { Button } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { promptText, showMenu } from '../../ui/prompts';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 import { loggerKeys, machineSettings, useMachinePhotos } from './loggerQueries';
-import { uploadMachinePhoto, useAccountImage } from './machineMedia';
+import { uploadMachinePhoto } from './machineMedia';
 
 export interface MachineTarget {
   movementKey: string;
@@ -225,7 +226,7 @@ function MachineRow({
   onPress: () => void;
 }) {
   const { colors, type, radius } = useTheme();
-  const image = useAccountImage(photo.thumbnail_url);
+  const image = useAuthorisedImage(photo.thumbnail_url);
   return (
     <Pressable
       accessibilityRole="checkbox"
