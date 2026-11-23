@@ -43,13 +43,22 @@ import type {
 import { localDate } from '../../../../frontend/src/utils';
 import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
-import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
+import {
+  Button,
+  Card,
+  CardHeader,
+  ErrorState,
+  errorMessage,
+  IconButton,
+  Loading,
+} from '../../ui/components';
+import { Segmented } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { pendingActions, usePendingActions } from '../../ui/pendingActions';
 import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
-import { Segmented } from '../training/parts';
+import { pushedScreenOptions } from '../../ui/navigation';
 import { workoutColor } from '../training/useTrainingContext';
 import { WorkoutCard, WorkoutDetails } from '../training/WorkoutCard';
 import { Avatar } from './Avatar';
@@ -67,7 +76,6 @@ import {
   useSharedProfile,
   useSharedWorkouts,
 } from './socialQueries';
-import { socialHeader } from './screenOptions';
 
 /**
  * A member's profile, or your own: who they are and how you're connected, then what they share
@@ -114,11 +122,23 @@ export function ProfileScreen({
 
   return (
     <>
-      <Stack.Screen options={socialHeader(colors, title)} />
+      <Stack.Screen options={pushedScreenOptions(colors, title)} />
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.page }}
-        contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: space.xxl * 2 }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void refresh()} />}
+        contentContainerStyle={{
+          padding: space.gutter,
+          gap: space.stack,
+          paddingBottom: space.xxl * 2,
+        }}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => void refresh()}
+            tintColor={colors.muted}
+            colors={[colors.accent]}
+            progressBackgroundColor={colors.surface2}
+          />
+        }
       >
         {body}
       </ScrollView>
@@ -197,15 +217,11 @@ function ProfileBody({ profile, onBlocked }: { profile: SharedProfile; onBlocked
 
 /** The web's Consistency numbers for the last 12 weeks; the calendar is still web-only. */
 function ConsistencySummary({ consistency }: { consistency: SharedConsistency }) {
-  const { colors, type } = useTheme();
   const streak = consistency.current_streak;
   const weeks = consistencyWeeks(firstTrainingDay(consistency.heatmap), localDate());
   return (
     <Card>
-      <CardHeader
-        title="Consistency"
-        action={<Text style={[type.footnote, { color: colors.muted }]}>Last 12 weeks</Text>}
-      />
+      <CardHeader title="Consistency" detail="Last 12 weeks" />
       <StatRow
         stats={[
           { label: 'Streak', value: `${streak} ${streak === 1 ? 'day' : 'days'}` },
@@ -273,25 +289,35 @@ function ProfileHeader({ profile, onBlocked }: { profile: SharedProfile; onBlock
             <Text style={[type.footnote, { color: colors.secondary }]}>Joined {memberSince}</Text>
           )}
         </View>
+        {profile.is_you && (
+          <View style={styles.ownActions}>
+            <IconButton
+              icon={socialIcons.qr}
+              accessibilityLabel="QR code"
+              onPress={() => setQrOpen(true)}
+              style={{ borderColor: colors.lineStrong }}
+            />
+            <IconButton
+              icon={socialIcons.edit}
+              accessibilityLabel="Edit profile"
+              onPress={() => router.push('/settings/profile')}
+              style={{ borderColor: colors.lineStrong }}
+            />
+          </View>
+        )}
       </View>
       {profile.is_you ? (
         <View style={styles.controls}>
-          <SmallButton
-            label="Edit profile"
-            icon={socialIcons.edit}
-            onPress={() => router.push('/settings/profile')}
-          />
           <SmallButton
             label={`Sharing: ${VISIBILITY_LABELS[profile.visibility]}`}
             icon={socialIcons.people}
             onPress={nav.openSharing}
           />
-          <SmallButton label="QR code" icon={socialIcons.qr} onPress={() => setQrOpen(true)} />
         </View>
       ) : (
         <FriendControl profile={profile} onBlocked={onBlocked} />
       )}
-      {profile.can_view && <StatRow stats={profileStats(profile)} />}
+      {profile.can_view && <StatRow boxed stats={profileStats(profile)} />}
       {profile.is_you && (
         <FriendQrSheet
           visible={qrOpen}
@@ -304,14 +330,39 @@ function ProfileHeader({ profile, onBlocked }: { profile: SharedProfile; onBlock
   );
 }
 
-function StatRow({ stats }: { stats: { label: string; value: string }[] }) {
-  const { colors, type } = useTheme();
+function StatRow({
+  stats,
+  boxed = false,
+}: {
+  stats: { label: string; value: string }[];
+  boxed?: boolean;
+}) {
+  const { colors, radius, type } = useTheme();
   return (
     <View style={styles.stats}>
       {stats.map((stat) => (
-        <View key={stat.label} style={{ flex: 1, gap: 2 }}>
-          <Text style={[type.caption, { color: colors.muted }]}>{stat.label}</Text>
-          <Text style={[type.headline, type.number, { color: colors.text }]}>{stat.value}</Text>
+        <View
+          key={stat.label}
+          style={[
+            styles.statTile,
+            boxed && {
+              backgroundColor: colors.surface2,
+              borderRadius: radius.md,
+              padding: 12,
+            },
+          ]}
+        >
+          <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
+            {stat.label}
+          </Text>
+          <Text
+            style={[styles.statValue, type.number, { color: colors.text }]}
+            numberOfLines={1}
+            adjustsFontSizeToFit
+            minimumFontScale={0.8}
+          >
+            {stat.value}
+          </Text>
         </View>
       ))}
     </View>
@@ -405,7 +456,7 @@ function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlock
     { label: 'Block', destructive: true, onPress: confirmBlock },
   ];
   const since = status === 'friends' ? sinceMonthLabel(profile.friends_since) : null;
-  const pillWidth = pill === 'Requested' ? 116 : 100;
+  const pillWidth = pill === 'Requested' ? 132 : 114;
   return (
     <View style={{ gap: 8 }}>
       <View style={styles.controls}>
@@ -442,29 +493,46 @@ function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlock
             items={items}
             trigger={{ text: `${pill} ▾`, color: colors.text }}
             width={pillWidth}
-            height={32}
+            height={44}
             fill={colors.surface2}
-            cornerRadius={16}
+            cornerRadius={radius.md}
           >
             <View
-              style={[styles.pill, { backgroundColor: colors.surface2, borderRadius: radius.pill }]}
+              style={[
+                styles.pill,
+                {
+                  backgroundColor: colors.surface2,
+                  borderColor: colors.lineStrong,
+                  borderRadius: radius.md,
+                },
+              ]}
             >
               {status === 'friends' && <Icon name="check" size={14} color={colors.good} />}
-              <Text style={[type.footnote, { color: colors.text, fontWeight: '600' }]}>{pill}</Text>
-              <Icon name="chevronDown" size={12} color={colors.secondary} />
+              <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]}>{pill}</Text>
+              <Icon name="chevronDown" size={13} color={colors.secondary} />
             </View>
           </MenuButton>
         ) : (
           <MenuButton
             accessibilityLabel={`More options for ${profile.display_name}`}
             items={items}
-            trigger={{ sf: 'ellipsis', color: colors.text, size: 15 }}
-            width={32}
-            height={32}
+            trigger={{ sf: 'ellipsis', color: colors.text, size: 16 }}
+            width={44}
+            height={44}
             fill={colors.surface2}
+            cornerRadius={radius.md}
           >
-            <View style={[styles.more, { backgroundColor: colors.surface2 }]}>
-              <Icon name="more" size={16} color={colors.text} />
+            <View
+              style={[
+                styles.more,
+                {
+                  backgroundColor: colors.surface2,
+                  borderColor: colors.lineStrong,
+                  borderRadius: radius.md,
+                },
+              ]}
+            >
+              <Icon name="more" size={18} color={colors.text} />
             </View>
           </MenuButton>
         )}
@@ -571,18 +639,13 @@ function BodyWeightCard({ profile }: { profile: SharedProfile }) {
     <Card>
       <CardHeader
         title="Body weight"
-        action={
-          summary && (
-            <Text style={[type.footnote, { color: colors.muted }]}>
-              {dayMonth(summary.latest.measurement_date)}
-            </Text>
-          )
-        }
+        detail={summary ? dayMonth(summary.latest.measurement_date) : undefined}
       />
       {!summary ? (
         <Text style={[type.callout, { color: colors.secondary }]}>No weigh-ins yet.</Text>
       ) : (
         <StatRow
+          boxed
           stats={[
             { label: 'Latest', value: formatWeight(summary.latest.weight_kg, unit, 1) },
             ...(summary.change !== null
@@ -762,7 +825,7 @@ function ProfileWorkouts({ profile }: { profile: SharedProfile }) {
         <Button
           label={query.isFetchingNextPage ? 'Loading…' : 'Show older workouts'}
           variant="secondary"
-          disabled={query.isFetchingNextPage}
+          loading={query.isFetchingNextPage}
           onPress={() => void query.fetchNextPage()}
         />
       )}
@@ -773,16 +836,26 @@ function ProfileWorkouts({ profile }: { profile: SharedProfile }) {
 const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  ownActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   badge: { paddingHorizontal: 8, paddingVertical: 2 },
   controls: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   pill: {
-    minHeight: 32,
-    paddingHorizontal: 12,
+    minHeight: 44,
+    paddingHorizontal: 14,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
   },
-  more: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  stats: { flexDirection: 'row', gap: 12 },
+  more: {
+    width: 44,
+    height: 44,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  stats: { flexDirection: 'row', gap: 10 },
+  statTile: { flex: 1, gap: 4 },
+  statValue: { fontSize: 20, fontWeight: '700', letterSpacing: -0.3 },
   track: { height: 8, overflow: 'hidden', marginTop: 4 },
 });

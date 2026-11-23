@@ -1,10 +1,12 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
+import { ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { commentTime } from '../../../../frontend/src/commentDisplay';
 import { feedStats } from '../../../../frontend/src/friendFeedData';
 import { connectionDate } from '../../../../frontend/src/sharedProfileDisplay';
+import { VISIBILITY_CONFIRM } from '../../../../frontend/src/sharingChoices';
 import type {
   FriendConnections,
   FriendFeed,
@@ -21,12 +23,17 @@ import { ToastHost } from '../../ui/Toast';
 import { FriendQrSheet } from './FriendQrSheet';
 import { FriendsActivityCard } from './FriendsActivityCard';
 import { ProfileScreen } from './ProfileScreen';
+import { commentSpoken } from './Comments';
 import { SharedWorkoutScreen } from './SharedWorkoutScreen';
+import { SharingSettingsScreen } from './SharingSettingsScreen';
 import { SocialScreen } from './SocialScreen';
 
 const mockRouter = { push: jest.fn(), navigate: jest.fn(), setParams: jest.fn(), back: jest.fn() };
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
+  get router() {
+    return mockRouter;
+  },
   useIsFocused: () => true,
   Stack: { Screen: () => null },
 }));
@@ -103,10 +110,12 @@ jest.mock('@react-native-segmented-control/segmented-control', () => {
 });
 // The native menu draws its items as buttons here.
 jest.mock('../../ui/MenuButton', () => {
+  const actual = jest.requireActual<typeof import('../../ui/MenuButton')>('../../ui/MenuButton');
   const { createElement } = jest.requireActual<typeof import('react')>('react');
   const { Pressable, Text, View } =
     jest.requireActual<typeof import('react-native')>('react-native');
   return {
+    ...actual,
     MenuButton: (props: {
       accessibilityLabel: string;
       items: { label: string; onPress: () => void }[];
@@ -325,7 +334,8 @@ test("the feed shows friends' workouts, and a reaction is sent and shown", async
 test('Friends lists requests and friends, and accepting a request asks the server', async () => {
   jest.mocked(apiSend).mockResolvedValue({ status: 'friends' });
   await show(<SocialScreen />);
-  await fireEvent.press(await screen.findByRole('tab', { name: 'Friends (1)' }));
+  expect(await screen.findByLabelText('Social sections, 1 friend request')).toBeVisible();
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Friends' }));
   expect(screen.getByText('Friend requests')).toBeVisible();
   expect(screen.getByText(connectionDate('request', '2026-11-20T10:00:00Z'))).toBeVisible();
   expect(screen.getByText('Active now')).toBeVisible();
@@ -334,6 +344,11 @@ test('Friends lists requests and friends, and accepting a request asks the serve
   await waitFor(() =>
     expect(apiSend).toHaveBeenCalledWith('/api/sharing/friends/jordan/accept', 'POST'),
   );
+  // The Search people header opens the QR code sheet, and the Social header reaches Settings.
+  await fireEvent.press(screen.getByRole('button', { name: 'Settings' }));
+  expect(mockRouter.push).toHaveBeenCalledWith('/settings');
+  await fireEvent.press(screen.getByRole('button', { name: 'QR code' }));
+  expect(await screen.findByLabelText('QR code to add Preview as a friend')).toBeVisible();
 });
 
 test('a private profile is asked to share before it sees Social', async () => {
@@ -546,4 +561,204 @@ test('a shared workout shows its comments and sends a reply', async () => {
       reaction: null,
     }),
   );
+});
+
+test('profile sharing shows the visibility status badge and selectable visibility cards', async () => {
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing')
+      return {
+        visibility: 'public',
+        share_notes: true,
+        share_body_weight: true,
+        share_body_sizes: false,
+        share_goals: true,
+        share_machine_photos: false,
+        share_online_status: true,
+        share_live_workouts: true,
+      };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  await show(<SharingSettingsScreen />);
+  // The pill is uppercased by its style, beside the Public choice.
+  expect(await screen.findAllByText('Public')).toHaveLength(2);
+  expect(screen.getByRole('radio', { name: /Public/ })).toHaveProp(
+    'accessibilityState',
+    expect.objectContaining({ checked: true }),
+  );
+  await fireEvent.press(screen.getByRole('radio', { name: /Friends only/ }));
+  expect(await screen.findByRole('button', { name: VISIBILITY_CONFIRM.followers })).toBeVisible();
+});
+
+const comment = (id: string, author = alex, body = `Comment ${id}`): WorkoutComment => ({
+  id,
+  author,
+  body,
+  parent_id: null,
+  reply_to: null,
+  created_at: `${today}T09:30:00Z`,
+  edited_at: null,
+  can_edit: false,
+  can_delete: false,
+  reactions: { counts: [], yours: null },
+});
+const jordan = { id: 'jordan', display_name: 'Jordan Lee', profile_photo_url: null };
+function workoutWithComments(
+  pages: Record<number, { items: WorkoutComment[]; next: number | null }>,
+) {
+  const total = Object.values(pages).reduce((sum, page) => sum + page.items.length, 0);
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path.startsWith('/api/sharing/profiles/alex/workouts'))
+      return { total: 1, workouts: [upper], personal_records: [], reactions: { w1: reactions } };
+    if (path === '/api/sharing/profiles/alex') return { ...casey, ...alex, can_view: true };
+    const offset = /\/api\/sharing\/workouts\/w1\/comments\?offset=(\d+)/.exec(path);
+    if (offset) {
+      const page = pages[Number(offset[1])];
+      return { total, next_offset: page.next, items: page.items };
+    }
+    throw new Error(`Unexpected GET ${path}`);
+  });
+}
+
+test('a reply waiting offline posts to its comment, whatever is chosen meanwhile', async () => {
+  const first = comment('c1', alex, 'Strong pressing!');
+  const second = comment('c2', jordan, 'Nice session');
+  workoutWithComments({ 0: { items: [first, second], next: null } });
+  jest.mocked(apiSend).mockResolvedValue({ ...first, id: 'c3' });
+  await show(<SharedWorkoutScreen workoutId="w1" memberId="alex" date={today} />);
+  expect(await screen.findByText('Strong pressing!')).toBeVisible();
+  try {
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Reply' })[0]);
+    await fireEvent.changeText(screen.getByLabelText('Comment'), 'Thanks!');
+    onlineManager.setOnline(false);
+    await fireEvent.press(screen.getByRole('button', { name: 'Send comment' }));
+    // A menu opened before (or while) the send waits can't move the reply to another comment.
+    await fireEvent(screen.getByLabelText(commentSpoken(second)), 'accessibilityAction', {
+      nativeEvent: { actionName: 'Reply' },
+    });
+    expect(screen.getByText('Replying to @Alex Morgan')).toBeVisible();
+    expect(apiSend).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => onlineManager.setOnline(true));
+  }
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/sharing/workouts/w1/comments', 'POST', {
+      body: 'Thanks!',
+      reply_to_id: 'c1',
+      reaction: null,
+    }),
+  );
+  expect(apiSend).toHaveBeenCalledTimes(1);
+});
+
+test('a comment notification loads later pages and scrolls to its comment', async () => {
+  const roots = Array.from({ length: 20 }, (_, index) => comment(`c${index}`));
+  const target = comment('c20', jordan, 'Going for 80 kg');
+  workoutWithComments({ 0: { items: roots, next: 20 }, 20: { items: [target], next: null } });
+  const scrollTo = jest.spyOn(ScrollView.prototype, 'scrollTo');
+  await show(
+    <SharedWorkoutScreen
+      workoutId="w1"
+      memberId="alex"
+      date={today}
+      showComments
+      highlightCommentId="c20"
+    />,
+  );
+  expect(await screen.findByText('Going for 80 kg')).toBeVisible();
+  expect(apiGet).toHaveBeenCalledWith(
+    '/api/sharing/workouts/w1/comments?offset=20',
+    expect.anything(),
+  );
+  const layout = (testID: string, y: number) =>
+    fireEvent(screen.getByTestId(testID), 'layout', {
+      nativeEvent: { layout: { x: 0, y, width: 360, height: 100 } },
+    });
+  await layout('comments-box', 900);
+  await layout('comments-list', 48);
+  await layout('comment-thread-c20', 1500);
+  await layout('comment-c20', 0);
+  await waitFor(() =>
+    expect(scrollTo).toHaveBeenCalledWith({ y: 900 + 48 + 1500 - 16, animated: true }),
+  );
+  scrollTo.mockRestore();
+});
+
+test('a visibility this release does not know shows neutrally', async () => {
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing')
+      return {
+        visibility: 'circles',
+        share_notes: true,
+        share_body_weight: false,
+        share_body_sizes: false,
+        share_goals: false,
+        share_machine_photos: false,
+        share_online_status: true,
+        share_live_workouts: true,
+      };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  await show(<SharingSettingsScreen />);
+  expect(await screen.findByText('Other')).toBeVisible();
+  for (const name of [/Private/, /Friends only/, /Public/])
+    expect(screen.getByRole('radio', { name })).toHaveProp(
+      'accessibilityState',
+      expect.objectContaining({ checked: false }),
+    );
+});
+
+test('one reaction picker opens at a time, and a refused reaction can be tried again', async () => {
+  const sam = { id: 'sam', display_name: 'Sam Rivera', profile_photo_url: null };
+  const legs = { ...upper, id: 'w2', name: 'Leg day' } as unknown as TrackedWorkout;
+  const twoCards: Timeline = {
+    items: [
+      ...timeline.items,
+      { member: { ...sam, is_you: false }, workout: legs, reactions, record_count: 0 },
+    ],
+    has_more: false,
+  };
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path.startsWith('/api/sharing/timeline')) return twoCards;
+    if (path === '/api/sharing/friends') return friends;
+    if (path.startsWith('/api/sharing/suggestions'))
+      return { profiles: [], total: 0, page: 1, page_size: 10 };
+    if (path === '/api/sharing') return { visibility: 'public', pending_requests: 1 };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  await show(<SocialScreen />);
+  expect(await screen.findByText('Leg day')).toBeVisible();
+  const alexPicker = 'Choose a reaction to Alex Morgan’s Upper body';
+  const samPicker = 'Choose a reaction to Sam Rivera’s Leg day';
+  await fireEvent.press(screen.getByRole('button', { name: 'React to Alex Morgan’s Upper body' }));
+  expect(screen.getByLabelText(alexPicker)).toBeVisible();
+  // Opening the other card's picker closes the first.
+  await fireEvent.press(screen.getByRole('button', { name: 'React to Sam Rivera’s Leg day' }));
+  expect(screen.getByLabelText(samPicker)).toBeVisible();
+  expect(screen.queryByLabelText(alexPicker)).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'React to Sam Rivera’s Leg day' }));
+  expect(screen.queryByLabelText(samPicker)).toBeNull();
+
+  // A refused reaction leaves the server's reactions as they were and the picker open to retry.
+  jest.mocked(apiSend).mockRejectedValueOnce(new ApiError(500, 'Relay hit a snag.'));
+  await fireEvent.press(screen.getByRole('button', { name: 'React to Alex Morgan’s Upper body' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Strong' }));
+  expect(await screen.findByText('Relay hit a snag.')).toBeVisible();
+  expect(screen.getByLabelText(alexPicker)).toBeVisible();
+  expect(
+    screen.getByRole('button', { name: 'View 2 reactions on Alex Morgan’s Upper body' }),
+  ).toBeVisible();
+  jest.mocked(apiSend).mockResolvedValueOnce({
+    counts: [
+      { reaction: 'fire', count: 2 },
+      { reaction: 'strong', count: 1 },
+    ],
+    yours: 'strong',
+  });
+  await fireEvent.press(screen.getByRole('button', { name: 'Strong' }));
+  expect(
+    await screen.findByRole('button', {
+      name: 'Your reaction to Alex Morgan’s Upper body: Strong. Change reaction',
+    }),
+  ).toBeVisible();
+  expect(screen.queryByLabelText(alexPicker)).toBeNull();
 });
