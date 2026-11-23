@@ -1,3 +1,4 @@
+import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { WorkoutType } from '../../../../frontend/src/types';
@@ -22,6 +23,7 @@ type Colouring = { kind: 'existing'; type: WorkoutType } | { kind: 'new'; name: 
  * web: add, recolour and remove (removed types can be restored); custom types can be renamed.
  */
 export function WorkoutTypesScreen() {
+  const router = useRouter();
   const types = useWorkoutTypes();
   const { colors } = useTheme();
   const actions = useWorkoutTypeActions();
@@ -105,6 +107,11 @@ export function WorkoutTypesScreen() {
   function typeMenu(type: WorkoutType) {
     setError(null);
     showMenu(type.name, [
+      {
+        label: 'Edit exercises',
+        onPress: () =>
+          router.push({ pathname: '/settings/type-exercises', params: { id: type.id } }),
+      },
       { label: 'Change colour', onPress: () => setColouring({ kind: 'existing', type }) },
       ...(type.is_custom ? [{ label: 'Rename', onPress: () => rename(type) }] : []),
       { label: 'Remove', destructive: true, onPress: () => remove(type) },

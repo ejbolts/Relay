@@ -1,12 +1,14 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useState } from 'react';
-import { Platform } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Appearance, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createQueryClient } from '../data/queryClient';
+import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
+import { useDeferredFriendInvite } from '../session/friendInvite';
 import { SessionProvider, useSession } from '../session/SessionProvider';
 import { PromptHost } from '../ui/prompts';
 import { useTheme } from '../ui/theme';
@@ -29,9 +31,13 @@ export default function RootLayout() {
 function Navigation() {
   const { status } = useSession();
   const { scheme, colors } = useTheme();
+  const mode = colourMode.use();
+  const reducedMotion = useReduceMotion();
+  useEffect(() => Appearance.setColorScheme(mode === 'auto' ? 'unspecified' : mode), [mode]);
   const signedIn = status.kind === 'signed-in';
   // After an admin reset nothing else works until a new password is chosen, as on the web.
   const mustChangePassword = signedIn && !!status.user.must_change_password;
+  useDeferredFriendInvite(signedIn && !mustChangePassword);
   const base = scheme === 'dark' ? DarkTheme : DefaultTheme;
   const theme = {
     ...base,
@@ -46,10 +52,14 @@ function Navigation() {
   };
   return (
     <ThemeProvider value={theme}>
-      <StatusBar style="auto" />
+      <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <WorkoutProvider>
         <Stack
-          screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.page } }}
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.page },
+            ...(reducedMotion && { animation: 'none' }),
+          }}
         >
           <Stack.Protected guard={signedIn && !mustChangePassword}>
             <Stack.Screen name="(tabs)" />
@@ -66,7 +76,7 @@ function Navigation() {
                 sheetGrabberVisible: true,
                 sheetCornerRadius: 28,
                 ...(Platform.OS !== 'ios' && {
-                  animation: 'fade',
+                  animation: reducedMotion ? 'none' : 'fade',
                   contentStyle: { backgroundColor: 'transparent' },
                 }),
               }}

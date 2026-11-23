@@ -17,7 +17,8 @@ import {
   signIn as requestSignIn,
   signOut as requestSignOut,
 } from '../data/api';
-import { forgetCachedUser, offlineUser, rememberUser } from './cachedUser';
+import { forgetSessionToken } from '../data/session';
+import { forgetCachedUser, offlineUser, publicUser, rememberUser } from './cachedUser';
 
 type Status =
   | { kind: 'loading' }
@@ -30,6 +31,7 @@ interface Session {
   status: Status;
   signIn: (username: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  accountDeleted: () => Promise<void>;
   retry: () => void;
   /** The server's newer copy of the signed-in account, such as after a profile edit. */
   updateUser: (user: User) => void;
@@ -64,11 +66,14 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
   const signedIn = useRef(false);
+  const generation = useRef(0);
   useEffect(() => {
     signedIn.current = status.kind === 'signed-in';
   }, [status]);
 
   const endSession = useCallback(() => {
+    generation.current += 1;
+    signedIn.current = false;
     forgetCachedUser();
     setStatus({ kind: 'signed-out' });
     client.clear();
@@ -109,8 +114,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const recheck = useCallback(async () => {
     if (!signedIn.current || checking.current) return;
     checking.current = true;
+    const startedIn = generation.current;
     try {
       const user = await currentUser(new AbortController().signal);
+      if (generation.current !== startedIn) return;
       rememberUser(user);
       setStatus((current) =>
         current.kind === 'signed-in' &&
@@ -120,7 +127,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           : { kind: 'signed-in', user },
       );
     } catch (error) {
-      if (signedOutError(error) && signedIn.current) endSession();
+      if (signedOutError(error) && generation.current === startedIn && signedIn.current)
+        endSession();
     } finally {
       checking.current = false;
     }
@@ -153,7 +161,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const signIn = useCallback(
     async (username: string, password: string) => {
-      const user = await requestSignIn(username, password);
+      const user = publicUser(await requestSignIn(username, password));
+      generation.current += 1;
       client.clear();
       rememberUser(user);
       setStatus({ kind: 'signed-in', user });
@@ -162,10 +171,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   );
   const signOut = useCallback(async () => {
     await requestSignOut();
-    forgetCachedUser();
-    client.clear();
-    setStatus({ kind: 'signed-out' });
-  }, [client]);
+    endSession();
+  }, [endSession]);
+  const accountDeleted = useCallback(async () => {
+    endSession();
+    await forgetSessionToken().catch(() => undefined);
+  }, [endSession]);
   const retry = useCallback(() => {
     setStatus({ kind: 'loading' });
     setAttempt((value) => value + 1);
@@ -177,8 +188,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ status, signIn, signOut, retry, updateUser }),
-    [status, signIn, signOut, retry, updateUser],
+    () => ({ status, signIn, signOut, retry, updateUser, accountDeleted }),
+    [status, signIn, signOut, retry, updateUser, accountDeleted],
   );
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

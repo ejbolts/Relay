@@ -14,6 +14,7 @@ import {
   type AuthFieldErrors,
   type AuthMode,
 } from './authForm';
+import { SIGNUP_NAME_HELP, SIGNUP_USERNAME_HELP } from './authRules';
 import {
   applyColourTheme,
   applyDarkStyle,
@@ -402,7 +403,7 @@ export function AuthScreen({
                 id={ids.name}
                 label="Name"
                 error={fieldErrors.displayName}
-                help="Your display name for friends to see on your profile."
+                help={SIGNUP_NAME_HELP}
               >
                 <input
                   id={ids.name}
@@ -425,11 +426,7 @@ export function AuthScreen({
               id={ids.username}
               label="Username"
               error={fieldErrors.username}
-              help={
-                creating
-                  ? 'Used to sign in and shown as your handle so friends can find you. Must be unique.'
-                  : undefined
-              }
+              help={creating ? SIGNUP_USERNAME_HELP : undefined}
               labelAction={
                 creating ? undefined : (
                   <button

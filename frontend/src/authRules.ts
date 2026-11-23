@@ -2,6 +2,79 @@
 // file free of packages and browser APIs: the app bundles it as it is.
 
 export const MIN_PASSWORD_LENGTH = 10;
+export const USERNAME_HINT =
+  '3–32 letters, numbers, dots, underscores or hyphens. Start with a letter or number.';
+
+export type AuthMode = 'sign-in' | 'create-account';
+
+export interface AuthFormValues {
+  displayName: string;
+  username: string;
+  password: string;
+  inviteCode: string;
+}
+
+export type AuthFieldErrors = Partial<Record<keyof AuthFormValues, string>>;
+
+export const SIGNUP_NAME_HELP = 'Your display name for friends to see on your profile.';
+export const SIGNUP_USERNAME_HELP =
+  'Used to sign in and shown as your handle so friends can find you. Must be unique.';
+
+export function sampleProfileIdentity(displayName: string, username: string) {
+  return {
+    display_name: displayName.trim().replace(/\s+/g, ' ') || 'Sam Sample',
+    username: username.trim().toLowerCase() || 'sam.sample',
+    profile_photo_url: null,
+  };
+}
+
+export function validateUsername(username: string): string | null {
+  return /^[a-zA-Z0-9][a-zA-Z0-9._-]{2,31}$/.test(username.trim()) ? null : USERNAME_HINT;
+}
+
+export function validateAuthForm(
+  mode: AuthMode,
+  values: AuthFormValues,
+  config: { invite_code_required: boolean },
+): AuthFieldErrors {
+  const errors: AuthFieldErrors = {};
+  const usernameError = validateUsername(values.username);
+  if (usernameError) errors.username = usernameError;
+  if (mode === 'sign-in') {
+    if (!values.password) errors.password = 'Enter your password.';
+    return errors;
+  }
+  const nameError = profileNameError(values.displayName);
+  if (nameError) errors.displayName = nameError;
+  const passwordError = validateNewPassword(values.password);
+  if (passwordError) errors.password = passwordError;
+  if (config.invite_code_required && !values.inviteCode.trim()) {
+    errors.inviteCode = 'Enter your invite code.';
+  }
+  return errors;
+}
+
+export function registrationFields(values: AuthFormValues) {
+  return {
+    username: values.username.trim().toLowerCase(),
+    password: values.password,
+    display_name: values.displayName.trim(),
+    invite_code: values.inviteCode.trim() || null,
+  };
+}
+
+export function registrationFieldErrors(code?: string): AuthFieldErrors {
+  switch (code) {
+    case 'username_taken':
+      return { username: 'This username is already registered.' };
+    case 'display_name_taken':
+      return { displayName: 'This name is already used.' };
+    case 'invalid_invite_code':
+      return { inviteCode: 'This invite code was not accepted.' };
+    default:
+      return {};
+  }
+}
 
 export function validateNewPassword(password: string): string | null {
   return password.length >= MIN_PASSWORD_LENGTH
