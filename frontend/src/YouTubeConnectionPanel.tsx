@@ -3,19 +3,14 @@ import { api } from './api';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { Toast } from './Toast';
 import type { YouTubeConnection } from './types';
+import {
+  youtubeAvailable,
+  youtubeCallbackResult,
+  youtubeConnectLabel,
+  youtubePrivacyCopy,
+  youtubeStatusLabel,
+} from './videoSessions';
 import './YouTubeConnectionPanel.css';
-
-// After returning from Google; only these two are confirmations, the rest need action.
-const CALLBACK_CONFIRMATIONS = new Set(['connected', 'cancelled']);
-const callbackMessages: Record<string, string> = {
-  connected: 'YouTube connected. Your next upload will go to the channel shown below.',
-  cancelled: 'Connection cancelled. Your previous connection has not changed.',
-  expired: 'That connection link expired or belongs to another sign-in. Try connecting again.',
-  permission: 'Allow the requested YouTube permission to upload and check your videos.',
-  no_channel: 'Create a channel on YouTube first, then choose Connect YouTube again.',
-  busy: 'A video is still processing. Reconnect its original channel, or wait before changing channels.',
-  failed: 'Could not connect YouTube. Your previous connection has not changed. Try again.',
-};
 
 export function YouTubeConnectionPanel({
   disabled = false,
@@ -35,10 +30,7 @@ export function YouTubeConnectionPanel({
     const url = new URL(window.location.href);
     url.searchParams.delete('youtube');
     window.history.replaceState(window.history.state, '', url);
-    return {
-      message: callbackMessages[result] ?? callbackMessages.failed,
-      confirmation: CALLBACK_CONFIRMATIONS.has(result),
-    };
+    return youtubeCallbackResult(result);
   });
   const [error, setError] = useState<string | null>(null);
   // A failed return from Google stays until the next attempt; connection checks don't clear it.
@@ -101,8 +93,8 @@ export function YouTubeConnectionPanel({
   }
 
   const connected = connection?.status === 'connected';
-  const reconnect = connection?.status === 'reconnect_required';
-  const available = connection && !['mock', 'unavailable'].includes(connection.status);
+  const available = connection && youtubeAvailable(connection);
+  const privacy = connection ? youtubePrivacyCopy(connection.privacy_status) : null;
 
   return (
     <section className="youtube-connection card" aria-labelledby={titleId}>
@@ -116,17 +108,7 @@ export function YouTubeConnectionPanel({
         <div>
           <h2 id={titleId}>Your YouTube channel</h2>
           <span className={`youtube-connection-status ${connected ? 'connected' : ''}`}>
-            {!connection
-              ? 'Checking connection…'
-              : connected
-                ? 'Connected'
-                : reconnect
-                  ? 'Reconnect needed'
-                  : connection.status === 'mock'
-                    ? 'Demo mode'
-                    : connection.status === 'unavailable'
-                      ? 'Setup needed'
-                      : 'Not connected'}
+            {youtubeStatusLabel(connection)}
           </span>
         </div>
       </div>
@@ -144,18 +126,8 @@ export function YouTubeConnectionPanel({
       {connection && <p>{connection.message}</p>}
       {available && (
         <p className="youtube-privacy-copy">
-          <strong>
-            {connection.privacy_status === 'private'
-              ? 'Your videos upload as Private'
-              : connection.privacy_status === 'unlisted'
-                ? 'Your videos upload as Unlisted'
-                : 'Your videos upload as Public'}
-          </strong>
-          {connection.privacy_status === 'private'
-            ? 'Only you and people you invite on YouTube can watch. A link alone does not give access.'
-            : connection.privacy_status === 'unlisted'
-              ? "They aren't listed on your channel's Videos tab. Anyone with the link can watch and share them."
-              : 'Anyone can find and watch them.'}
+          <strong>{privacy?.title}</strong>
+          {privacy?.detail}
         </p>
       )}
       {available && (
@@ -176,11 +148,7 @@ export function YouTubeConnectionPanel({
             disabled={disabled || working}
             onClick={() => void connect()}
           >
-            {working
-              ? 'Working…'
-              : connected || reconnect
-                ? 'Reconnect YouTube'
-                : 'Connect YouTube'}
+            {working ? 'Working…' : youtubeConnectLabel(connection)}
           </button>
         )}
         {connection?.channel_id && (
