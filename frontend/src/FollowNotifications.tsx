@@ -7,6 +7,22 @@ import { PaginationControls } from './PaginationControls';
 import { PopupDialog } from './PopupDialog';
 import { reactionEmoji } from './friendFeedData';
 import {
+  commentNoticeText,
+  newestFirst,
+  noticeTime,
+  notificationDate,
+  notificationKey,
+  notificationPageCount,
+  notificationPageRows,
+  notificationReference,
+  notificationsInRows,
+  notificationsLabel,
+  NOTIFICATIONS_EMPTY,
+  socialNotificationCount,
+  socialNotificationRows,
+  type SocialNotificationRow,
+} from './notificationInbox';
+import {
   markNotificationSnapshotRead,
   unreadNotificationReferences,
 } from './notificationReadState';
@@ -19,6 +35,7 @@ import { formatReleaseDate, type Release } from './releaseMetadata';
 import { dayMonth } from './trainingSummary';
 import { useUserSession } from './userContext';
 import { requestWorkoutFocus } from './workoutFocus';
+import { notificationWorkoutFocus } from './workoutFocusRequest';
 import {
   requestWeeklyReview,
   useWeeklyReviewNotice,
@@ -28,24 +45,20 @@ import type {
   NotificationReadReference,
   SharingConnection,
   SharingNotifications,
-  ReactionNotice,
   CommentNotice,
   PasswordResetRequest,
   UsernameReminderRequest,
 } from './types';
 import './FollowNotifications.css';
 
-export const NOTIFICATIONS_PER_PAGE = 10;
+export { NOTIFICATIONS_PER_PAGE } from './notificationInbox';
 
 type NotificationRow =
   | { kind: 'release'; item: Release }
   | { kind: 'weekly-review'; item: WeeklyReviewNotice }
   | { kind: 'password-reset'; item: PasswordResetRequest }
   | { kind: 'username-reminder'; item: UsernameReminderRequest }
-  | { kind: 'comment'; item: CommentNotice }
-  | { kind: 'request'; item: SharingConnection }
-  | { kind: 'reaction'; item: ReactionNotice }
-  | { kind: 'accepted'; item: SharingConnection };
+  | SocialNotificationRow;
 
 interface LocalNotices {
   release?: Release;
@@ -80,31 +93,22 @@ function notificationRows(
     ...(weeklyReview ? [{ kind: 'weekly-review' as const, item: weeklyReview }] : []),
     ...resetRequests.map((item) => ({ kind: 'password-reset' as const, item })),
     ...usernameRequests.map((item) => ({ kind: 'username-reminder' as const, item })),
-    ...(items.comments ?? []).map((item) => ({ kind: 'comment' as const, item })),
-    ...items.requests.map((item) => ({ kind: 'request' as const, item })),
-    ...(items.reactions ?? []).map((item) => ({ kind: 'reaction' as const, item })),
-    ...items.accepted.map((item) => ({ kind: 'accepted' as const, item })),
+    ...socialNotificationRows(items),
   ];
   const timestamp = (row: NotificationRow) => {
     if (row.kind === 'weekly-review') return weeklyReviewTime(row.item);
-    const value = Date.parse(
+    return noticeTime(
       row.kind === 'release'
-        ? (row.item.date ?? '')
+        ? row.item.date
         : row.kind === 'password-reset' || row.kind === 'username-reminder'
           ? row.item.requested_at
           : row.item.since,
     );
-    return Number.isNaN(value) ? 0 : value;
   };
   // The app's own unread notices stay at the top of the first page, above newer social rows.
   const pinned = (row: NotificationRow) =>
     (row.kind === 'release' && releaseUnread) || (row.kind === 'weekly-review' && row.item.unread);
-  return rows.sort((a, b) => Number(pinned(b)) - Number(pinned(a)) || timestamp(b) - timestamp(a));
-}
-
-/** Identifies a social notice, including when it happened, so a repeat counts as new. */
-function rowKey(reference: NotificationReadReference): string {
-  return `${reference.kind}:${reference.id}:${reference.workout_id ?? ''}:${reference.since}`;
+  return newestFirst(rows, timestamp, pinned);
 }
 
 interface PersonProps {
@@ -142,12 +146,7 @@ function notificationPage(
   page: number,
   notices: LocalNotices,
 ): NotificationRow[] {
-  const rows = notificationRows(items, notices);
-  const currentPage = Math.min(page, Math.max(1, Math.ceil(rows.length / NOTIFICATIONS_PER_PAGE)));
-  return rows.slice(
-    (currentPage - 1) * NOTIFICATIONS_PER_PAGE,
-    currentPage * NOTIFICATIONS_PER_PAGE,
-  );
+  return notificationPageRows(notificationRows(items, notices), page);
 }
 
 function displayedNotifications(
@@ -155,14 +154,7 @@ function displayedNotifications(
   page: number,
   notices: LocalNotices,
 ): SharingNotifications {
-  const visible: SharingNotifications = { requests: [], accepted: [], reactions: [], comments: [] };
-  for (const row of notificationPage(items, page, notices)) {
-    if (row.kind === 'request') visible.requests.push(row.item);
-    else if (row.kind === 'accepted') visible.accepted.push(row.item);
-    else if (row.kind === 'reaction') visible.reactions!.push(row.item);
-    else if (row.kind === 'comment') visible.comments!.push(row.item);
-  }
-  return visible;
+  return notificationsInRows(notificationPage(items, page, notices));
 }
 
 /** The workout's name, as a button that covers the row and opens the workout in Social. */
@@ -186,13 +178,7 @@ function NotificationDate({ since }: { since: string }) {
   return (
     <span className="follow-notification-date">
       {' · '}
-      <time dateTime={since}>
-        {new Date(since).toLocaleDateString('en-GB', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric',
-        })}
-      </time>
+      <time dateTime={since}>{notificationDate(since)}</time>
     </span>
   );
 }
@@ -329,7 +315,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
 
   useEffect(() => {
     if (!open || !items) return;
-    const unread = unreadNotificationReferences(items).map(rowKey);
+    const unread = unreadNotificationReferences(items).map(notificationKey);
     setFreshKeys((current) =>
       unread.every((key) => current.has(key)) ? current : new Set([...current, ...unread]),
     );
@@ -342,15 +328,10 @@ export function FollowNotifications({ active }: { active: boolean }) {
   /** Both the workout name and Reply open the comment in its workout on the Social feed. */
   function openComment(notice: CommentNotice) {
     setOpen(false);
-    requestWorkoutFocus({
-      workoutId: notice.workout_id,
-      workoutName: notice.workout_name,
-      panel: 'comments',
-      commentId: notice.comment_id,
-    });
+    requestWorkoutFocus(notificationWorkoutFocus({ kind: 'comment', item: notice })!);
   }
   function fresh(reference: NotificationReadReference): boolean {
-    return freshKeys.has(rowKey(reference));
+    return freshKeys.has(notificationKey(reference));
   }
 
   async function respond(person: SharingConnection, action: 'accept' | 'decline') {
@@ -377,10 +358,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
 
   // Waiting friend requests always count; everything else counts until it has been read.
   const count =
-    (items
-      ? items.requests.length +
-        unreadNotificationReferences(items).filter((item) => item.kind !== 'request').length
-      : 0) +
+    socialNotificationCount(items) +
     Number(announcement?.noticeUnread ?? false) +
     Number(weeklyReview?.unread ?? false) +
     // Like friend requests, these count until they have been dealt with.
@@ -396,7 +374,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
   };
   const rows = notificationRows(currentItems, notices);
   const total = rows.length;
-  const pageCount = Math.max(1, Math.ceil(total / NOTIFICATIONS_PER_PAGE));
+  const pageCount = notificationPageCount(total);
   const currentPage = Math.min(page, pageCount);
   const pageRows = notificationPage(currentItems, page, notices);
   return (
@@ -405,7 +383,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
         ref={bell}
         type="button"
         className="icon-button-pulse follow-notification-button"
-        aria-label={`Notifications${count ? `, ${count} unread` : ''}`}
+        aria-label={notificationsLabel(count)}
         aria-haspopup="dialog"
         onClick={() => {
           setPage(1);
@@ -443,12 +421,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
               Loading notifications…
             </p>
           )}
-          {items && total === 0 && (
-            <p className="shared-card-empty">
-              You're all caught up. Friend requests, workout reactions, comments and replies appear
-              here.
-            </p>
-          )}
+          {items && total === 0 && <p className="shared-card-empty">{NOTIFICATIONS_EMPTY}</p>}
           <ul className="follow-notification-list" ref={list}>
             {pageRows.map((row) =>
               row.kind === 'release' ? (
@@ -567,11 +540,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
               ) : row.kind === 'comment' ? (
                 <li
                   key={`comment-${row.item.notice_id}`}
-                  className={`is-openable${
-                    fresh({ kind: 'comment', id: row.item.notice_id, since: row.item.since })
-                      ? ' is-new'
-                      : ''
-                  }`}
+                  className={`is-openable${fresh(notificationReference(row)) ? ' is-new' : ''}`}
                 >
                   <PersonAvatar person={row.item} onOpen={openPerson} />
                   <div className="follow-notification-copy">
@@ -579,19 +548,11 @@ export function FollowNotifications({ active }: { active: boolean }) {
                       <strong>
                         <PersonName person={row.item} onOpen={openPerson} />
                       </strong>
-                      {row.item.kind === 'comment_reaction'
-                        ? ' reacted to your comment on '
-                        : row.item.kind === 'reply'
-                          ? ' replied on '
-                          : ' commented on '}
+                      {commentNoticeText(row.item.kind).verb}
                       <OpenWorkoutButton
                         name={row.item.workout_name}
                         label={`Open ${row.item.display_name}’s ${
-                          row.item.kind === 'comment_reaction'
-                            ? 'reaction to your comment'
-                            : row.item.kind === 'reply'
-                              ? 'reply'
-                              : 'comment'
+                          commentNoticeText(row.item.kind).noun
                         } on ${row.item.workout_name}`}
                         onOpen={() => openComment(row.item)}
                       />
@@ -619,11 +580,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
               ) : row.kind === 'request' ? (
                 <li
                   key={`request-${row.item.id}`}
-                  className={
-                    fresh({ kind: 'request', id: row.item.id, since: row.item.since })
-                      ? 'is-new'
-                      : undefined
-                  }
+                  className={fresh(notificationReference(row)) ? 'is-new' : undefined}
                 >
                   <PersonAvatar person={row.item} onOpen={openPerson} />
                   <div className="follow-notification-copy">
@@ -659,16 +616,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
               ) : row.kind === 'reaction' ? (
                 <li
                   key={`reaction-${row.item.workout_id}-${row.item.id}`}
-                  className={`is-openable${
-                    fresh({
-                      kind: 'reaction',
-                      id: row.item.id,
-                      since: row.item.since,
-                      workout_id: row.item.workout_id,
-                    })
-                      ? ' is-new'
-                      : ''
-                  }`}
+                  className={`is-openable${fresh(notificationReference(row)) ? ' is-new' : ''}`}
                 >
                   <PersonAvatar person={row.item} onOpen={openPerson} />
                   <div className="follow-notification-copy">
@@ -682,12 +630,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
                         label={`Open ${row.item.display_name}’s reaction on ${row.item.workout_name}`}
                         onOpen={() => {
                           setOpen(false);
-                          requestWorkoutFocus({
-                            workoutId: row.item.workout_id,
-                            workoutName: row.item.workout_name,
-                            panel: 'people',
-                            personId: row.item.id,
-                          });
+                          requestWorkoutFocus(notificationWorkoutFocus(row)!);
                         }}
                       />
                       <NotificationDate since={row.item.since} />
@@ -703,11 +646,7 @@ export function FollowNotifications({ active }: { active: boolean }) {
               ) : (
                 <li
                   key={`accepted-${row.item.id}`}
-                  className={
-                    fresh({ kind: 'accepted', id: row.item.id, since: row.item.since })
-                      ? 'is-new'
-                      : undefined
-                  }
+                  className={fresh(notificationReference(row)) ? 'is-new' : undefined}
                 >
                   <PersonAvatar person={row.item} onOpen={openPerson} />
                   <div className="follow-notification-copy">

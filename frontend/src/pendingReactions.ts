@@ -2,20 +2,25 @@ import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { api, isConnectionFailure } from './api';
 import { captureAccountCacheScope } from './accountCacheScope';
 import { browserAccountStorage, type AccountStorage } from './deviceAccount';
-import type { WorkoutReactionKind, WorkoutReactions } from './types';
+import {
+  PENDING_REACTION_RETRY_MS,
+  PENDING_REACTIONS_KEY,
+  pendingReactionsFor,
+  readPendingReactionQueue,
+  sendPendingReactions,
+  withPendingReaction,
+  writePendingReactionQueue,
+  type PendingReaction,
+} from './pendingReactionQueue';
+import type { WorkoutReactions } from './types';
 
-/**
- * Reactions chosen without a connection wait here, per account, until the server can be reached.
- * Only the latest choice per workout is kept; `null` removes your reaction.
- */
-export const PENDING_REACTIONS_KEY = 'relay-pending-reactions';
-export const PENDING_REACTION_RETRY_MS = 5000;
-
-export type PendingReaction = WorkoutReactionKind | null;
-interface Saved {
-  owner: string;
-  items: Record<string, PendingReaction>;
-}
+// Reactions chosen without a connection wait here, per account, until the server can be reached.
+// The queue's rules are shared with the app (see pendingReactionQueue.ts).
+export {
+  PENDING_REACTION_RETRY_MS,
+  PENDING_REACTIONS_KEY,
+  type PendingReaction,
+} from './pendingReactionQueue';
 
 const listeners = new Set<() => void>();
 const sentListeners = new Set<(workoutId: string, value: WorkoutReactions) => void>();
@@ -23,35 +28,12 @@ let timer: ReturnType<typeof setInterval> | undefined;
 let listening = false;
 let syncing: Promise<void> | null = null;
 
-function read(storage: AccountStorage | null = browserAccountStorage()): Saved | null {
-  try {
-    const saved = JSON.parse(storage?.getItem(PENDING_REACTIONS_KEY) ?? 'null') as Saved | null;
-    return saved &&
-      typeof saved.owner === 'string' &&
-      saved.items &&
-      typeof saved.items === 'object'
-      ? saved
-      : null;
-  } catch {
-    return null;
-  }
-}
-
 function currentItems(): Record<string, PendingReaction> {
-  const owner = captureAccountCacheScope().owner;
-  const saved = read();
-  return owner && saved?.owner === owner ? saved.items : {};
+  return pendingReactionsFor(browserAccountStorage(), captureAccountCacheScope().owner);
 }
 
 function write(owner: string, items: Record<string, PendingReaction>) {
-  const storage = browserAccountStorage();
-  try {
-    if (Object.keys(items).length)
-      storage?.setItem(PENDING_REACTIONS_KEY, JSON.stringify({ owner, items }));
-    else storage?.removeItem(PENDING_REACTIONS_KEY);
-  } catch {
-    // Storage is full or blocked; the in-flight choice is still lost only if the page closes.
-  }
+  writePendingReactionQueue(browserAccountStorage(), owner, items);
   for (const listener of listeners) listener();
 }
 
@@ -65,7 +47,7 @@ export function pendingReaction(workoutId: string): PendingReaction | undefined 
 export function queueReaction(workoutId: string, reaction: PendingReaction): void {
   const owner = captureAccountCacheScope().owner;
   if (!owner) return;
-  write(owner, { ...currentItems(), [workoutId]: reaction });
+  write(owner, withPendingReaction(currentItems(), workoutId, reaction));
   ensureRetrying();
 }
 
@@ -104,25 +86,17 @@ export function syncPendingReactions(): Promise<void> {
       const scope = captureAccountCacheScope();
       const owner = scope.owner;
       if (!owner) return;
-      for (const [workoutId, reaction] of Object.entries(currentItems())) {
-        if (!scope.isCurrent()) return;
-        let value: WorkoutReactions | null = null;
-        try {
-          value = reaction
-            ? await api.sharing.react(workoutId, reaction)
-            : await api.sharing.removeReaction(workoutId);
-        } catch (reason) {
-          if (isConnectionFailure(reason) || !scope.isCurrent()) return;
-        }
-        const items = currentItems();
-        // A newer choice made while this one was sending stays queued.
-        if (items[workoutId] === reaction) {
-          const rest = { ...items };
-          delete rest[workoutId];
-          write(owner, rest);
-        }
-        if (value) for (const listener of sentListeners) listener(workoutId, value);
-      }
+      await sendPendingReactions({
+        items: currentItems,
+        send: (workoutId, reaction) =>
+          reaction ? api.sharing.react(workoutId, reaction) : api.sharing.removeReaction(workoutId),
+        connectionFailed: isConnectionFailure,
+        current: scope.isCurrent,
+        save: (items) => write(owner, items),
+        sent: (workoutId, value) => {
+          for (const listener of sentListeners) listener(workoutId, value);
+        },
+      });
     } finally {
       syncing = null;
       if (!Object.keys(currentItems()).length) stopRetrying();
@@ -182,6 +156,6 @@ export function clearPendingReactions(storage: AccountStorage | null) {
 
 /** A different account signing in never sends the previous account's reactions. */
 export function reconcilePendingReactions(owner: string, storage: AccountStorage | null) {
-  const saved = read(storage);
+  const saved = readPendingReactionQueue(storage);
   if (saved && saved.owner !== owner) clearPendingReactions(storage);
 }

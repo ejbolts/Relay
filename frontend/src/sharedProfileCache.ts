@@ -1,4 +1,5 @@
 import { api } from './api';
+import { PREFETCH_LIMIT, prefetchedCopyIsCurrent } from './profilePrefetch';
 import { SHARED_WORKOUT_PAGE_SIZE } from './sharedProfileDisplay';
 import type {
   SharedProfile,
@@ -22,12 +23,9 @@ export interface CachedSharedProfile extends SharedProfileData {
 }
 type Entry = CachedSharedProfile;
 
-/** Friends warmed in the background from the top of the Friends tab. */
-export const PREFETCH_LIMIT = 5;
+export { PREFETCH_LIMIT } from './profilePrefetch';
 /** A copy this old is no longer shown while the fresh one loads. */
 const SHOW_MAX_AGE_MS = 10 * 60_000;
-/** Background warming leaves a copy alone until it is this old or the friend logs a session. */
-const REFRESH_AFTER_MS = 5 * 60_000;
 const MAX_ENTRIES = 12;
 
 // Held in memory only, for the signed-in account: nothing is written to the device.
@@ -136,13 +134,7 @@ export function prefetchSharedProfile(
   const running = inFlight.get(profileId);
   if (running) return running;
   const entry = entries.get(profileId);
-  if (
-    entry &&
-    now - entry.fetchedAt < REFRESH_AFTER_MS &&
-    (signature === null || entry.signature === signature)
-  ) {
-    return Promise.resolve(entry);
-  }
+  if (entry && prefetchedCopyIsCurrent(entry, signature, now)) return Promise.resolve(entry);
   if (cannotPrefetch()) return Promise.resolve(null);
   const request = Promise.all([
     api.sharing.profile(profileId),
