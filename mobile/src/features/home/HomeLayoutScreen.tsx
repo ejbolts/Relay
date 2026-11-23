@@ -214,18 +214,26 @@ function Editor({ saved }: { saved: HomeLayout }) {
                     disabled={index === visible.length - 1}
                     onPress={() => change(stepHomeSection(draft, visible, id, 1))}
                   />
-                  <MenuButton
-                    accessibilityLabel={`More for ${title(id)}`}
-                    items={items}
-                    trigger={{ sf: 'ellipsis', color: colors.text, size: 15 }}
-                    width={ROUND}
-                    height={ROUND}
-                    fill={colors.surface2}
-                  >
-                    <View style={[styles.round, { backgroundColor: colors.surface2 }]}>
-                      <Icon name="more" size={18} color={colors.text} />
-                    </View>
-                  </MenuButton>
+                  {/* A 44 pt touch frame around the 38 pt circle. iOS draws its native trigger
+                      over the circle with an almost clear fill, so the whole frame takes taps. */}
+                  <View style={[styles.menuTouch, styles.menuOuter]}>
+                    <View
+                      pointerEvents="none"
+                      style={[styles.round, styles.menuFace, { backgroundColor: colors.surface2 }]}
+                    />
+                    <MenuButton
+                      accessibilityLabel={`More for ${title(id)}`}
+                      items={items}
+                      trigger={{ sf: 'ellipsis', color: colors.text, size: 15 }}
+                      width={TOUCH}
+                      height={TOUCH}
+                      fill={NEARLY_CLEAR}
+                    >
+                      <View style={styles.menuTouch}>
+                        <Icon name="more" size={18} color={colors.text} />
+                      </View>
+                    </MenuButton>
+                  </View>
                 </Row>
               );
             })
@@ -341,6 +349,9 @@ function RoundButton({
 }
 
 const ROUND = 38;
+const TOUCH = 44;
+// SwiftUI skips fully clear backgrounds when hit-testing; this one still takes taps.
+const NEARLY_CLEAR = 'rgba(0,0,0,0.01)';
 
 const styles = StyleSheet.create({
   row: {
@@ -359,4 +370,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   empty: { padding: 16 },
+  menuTouch: { width: TOUCH, height: TOUCH, alignItems: 'center', justifyContent: 'center' },
+  menuFace: { position: 'absolute' },
+  // The frame overhangs the circle by 3 pt a side; keep the circles evenly spaced.
+  menuOuter: { marginHorizontal: -(TOUCH - ROUND) / 2 },
 });

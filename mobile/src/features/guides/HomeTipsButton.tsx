@@ -18,11 +18,11 @@ import { Icon } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
 import { haptics } from '../../ui/haptics';
 import { useTheme } from '../../ui/theme';
-import { mixColor } from '../home/color';
 import { useBodyGoals, useBodyMeasurements } from '../body/bodyQueries';
 import { useTrainingBlocks } from '../blocks';
 import { guideIcons } from './icons';
 import { SetupGuideSheet } from './SetupGuideSheet';
+import { tipPillColors } from './tipPill';
 import { openTipTarget } from './tipTargets';
 import { useTips } from './tips';
 
@@ -35,7 +35,7 @@ export function HomeTipsButton() {
   const user = useUser();
   const tips = useTips();
   const { learn, readHome } = tips;
-  const { colors, type } = useTheme();
+  const { colors, scheme, type } = useTheme();
   const workouts = useWorkoutHistory().data;
   const blocks = useTrainingBlocks();
   const hasSplit = !!useDashboard().data?.recommendation?.split_name;
@@ -105,27 +105,28 @@ export function HomeTipsButton() {
     });
   };
   const amber = unread.length > 0;
+  const pill = tipPillColors(colors, scheme, amber);
   return (
     <>
-      {/* The web's pill at the end of the date line: amber with the count while tips are unread. */}
+      {/* The web's pill at the end of the date line: amber with the count while tips are unread.
+          The 22 pt pill sits centred in a real 44 x 44 pt (or wider) touch box. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={amber ? `Tips, ${unread.length} new` : 'Tips'}
-        hitSlop={{ top: 11, bottom: 11, left: 4, right: 4 }}
         onPress={() => {
           haptics.tap();
           toggle();
         }}
-        style={({ pressed }) => [
-          styles.pill,
-          { backgroundColor: amber ? colors.goldSoft : mixColor(colors.muted, colors.page, 0.14) },
-          pressed && { opacity: 0.7 },
-        ]}
+        style={styles.pillTouch}
       >
-        <Icon name={guideIcons.bulb} size={14} color={amber ? colors.gold : colors.muted} />
-        <Text style={[styles.pillText, { color: amber ? colors.gold : colors.muted }]}>
-          {amber ? homeTipCount(unread.length) : 'Tips'}
-        </Text>
+        {({ pressed }) => (
+          <View style={[styles.pill, { backgroundColor: pill.fill }, pressed && { opacity: 0.7 }]}>
+            <Icon name={guideIcons.bulb} size={14} color={pill.ink} />
+            <Text style={[styles.pillText, { color: pill.ink }]}>
+              {amber ? homeTipCount(unread.length) : 'Tips'}
+            </Text>
+          </View>
+        )}
       </Pressable>
       <Sheet visible={showing} title={tip.title} onClose={() => setOpen(false)}>
         <Text style={[type.body, { color: colors.secondary }]}>{tip.body}</Text>
@@ -193,6 +194,7 @@ export function HomeTipsButton() {
 }
 
 const styles = StyleSheet.create({
+  pillTouch: { minWidth: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   pill: {
     height: 22,
     flexDirection: 'row',

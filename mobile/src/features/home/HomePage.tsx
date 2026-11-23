@@ -29,15 +29,20 @@ export function HomePage({
   // iOS insets the first scroll view in a native tab itself; Android needs the status bar room.
   const insets = useSafeAreaInsets();
   const top = Platform.OS === 'ios' ? 0 : insets.top;
+  const bottom = Platform.OS === 'ios' ? 0 : insets.bottom;
   const page = (
     <ScrollView
       style={{ flex: 1, backgroundColor: colors.page }}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{
         padding: space.gutter,
-        paddingTop: top + space.lg,
+        // The date row is 44 pt tall for the Tips pill's touch box; take the extra out of the top
+        // padding so the date sits where Screen puts its eyebrow.
+        paddingTop: top + space.lg - EYEBROW_OVERHANG,
         gap: space.stack,
-        paddingBottom: space.xxl * 2,
+        // As Screen: iOS insets the scroll view itself; Android keeps the last card clear of the
+        // gesture bar.
+        paddingBottom: Math.max(space.xxl * 2, bottom + space.xl),
       }}
       refreshControl={
         <RefreshControl
@@ -56,15 +61,17 @@ export function HomePage({
           </Text>
           {eyebrowAccessory}
         </View>
+        {/* The title keeps its full width: when large text leaves no room beside it, the buttons
+            wrap onto their own row, at the right, instead of cutting the title short. */}
         <View style={styles.header}>
           <Text
             accessibilityRole="header"
-            style={[type.largeTitle, { color: colors.text, flex: 1 }]}
+            style={[type.largeTitle, styles.title, { color: colors.text }]}
             numberOfLines={1}
           >
             {title}
           </Text>
-          {actions}
+          {!!actions && <View style={styles.actions}>{actions}</View>}
         </View>
       </View>
       {children}
@@ -84,17 +91,24 @@ export function HomePage({
   );
 }
 
+// Half of the 22 pt the date row grew by (44 pt touch box, 22 pt pill).
+const EYEBROW_OVERHANG = 11;
+
 const styles = StyleSheet.create({
   statusBand: { position: 'absolute', top: 0, left: 0, right: 0 },
   pageHeader: { paddingHorizontal: 6, paddingBottom: 4 },
-  // As tall as the tips pill, so the date line doesn't jump when tips are turned off.
-  eyebrowRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    minHeight: 22,
-    marginBottom: 6,
-  },
+  // As tall as the Tips pill's touch box, so the date line doesn't jump when tips are turned off,
+  // and the box ends where the header buttons begin.
+  eyebrowRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 44 },
   eyebrow: { flex: 1, fontWeight: '500' },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  header: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: 12,
+    rowGap: 4,
+  },
+  // Grows to push the buttons right, but never shrinks below its own width.
+  title: { flexGrow: 1, flexShrink: 0, maxWidth: '100%' },
+  actions: { marginLeft: 'auto' },
 });
