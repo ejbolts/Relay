@@ -61,8 +61,8 @@ export function WorkoutTimeSheet({
         />
       </View>
       <View style={styles.actions}>
-        <Button label="Cancel" variant="secondary" onPress={onClose} style={styles.action} />
-        <Button label="Set time" onPress={save} style={styles.action} />
+        <Button label="Set time" onPress={save} block />
+        <Button label="Cancel" variant="secondary" onPress={onClose} block />
       </View>
     </Sheet>
   );
@@ -71,6 +71,5 @@ export function WorkoutTimeSheet({
 const styles = StyleSheet.create({
   fields: { flexDirection: 'row', gap: 12 },
   field: { flex: 1 },
-  actions: { flexDirection: 'row', gap: 12, marginTop: 20 },
-  action: { flex: 1 },
+  actions: { gap: 12, marginTop: 20 },
 });

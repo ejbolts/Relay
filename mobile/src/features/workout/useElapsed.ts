@@ -10,13 +10,15 @@ import { useNow } from '../../ui/useNow';
 export function useElapsed(startedAt: number, pause?: WorkoutPause, previousMinutes = 0) {
   const ticked = useNow();
   // A pause, resume or clock correction shows straight away, as on the web, rather than at the
-  // next tick: the clock reads the time again on the next frame.
-  const [synced, setSynced] = useState<{ pause?: WorkoutPause; at: number } | null>(null);
+  // next tick: the clock reads the time again on the next frame. It compares the pause by value,
+  // since the same pause can arrive as a new object (a restored or synced draft).
+  const pauseKey = pause ? `${pause.pausedMs}|${pause.pausedAt}|${pause.adjustedMs ?? ''}` : '';
+  const [synced, setSynced] = useState<{ key: string; at: number } | null>(null);
   useEffect(() => {
-    const frame = requestAnimationFrame(() => setSynced({ pause, at: Date.now() }));
+    const frame = requestAnimationFrame(() => setSynced({ key: pauseKey, at: Date.now() }));
     return () => cancelAnimationFrame(frame);
-  }, [pause]);
-  const now = synced && synced.pause === pause ? Math.max(ticked, synced.at) : ticked;
+  }, [pauseKey]);
+  const now = synced && synced.key === pauseKey ? Math.max(ticked, synced.at) : ticked;
   return formatElapsed(
     previousMinutes * 60_000 +
       (pause ? activeElapsedSeconds(startedAt, pause, now) * 1000 : now - startedAt),
