@@ -3,7 +3,7 @@ import { api } from './api';
 import { CreateExerciseDialog } from './CreateExerciseDialog';
 import { exerciseNameFromSearch } from './exerciseCreation';
 import { ExerciseEquipmentFilter } from './ExerciseEquipmentFilter';
-import { exerciseEquipment } from './exerciseEquipment';
+import { EXERCISE_BODY_PARTS, matchesExerciseFilters } from './exerciseFilters';
 import { ExerciseIcon } from './ExerciseIcon';
 import { formatLastDone } from './exerciseLastDone';
 import {
@@ -90,8 +90,7 @@ export function ExercisePicker({
       !exercise.hidden &&
       !excludedIds.includes(exercise.id) &&
       (!customOnly || exercise.is_custom) &&
-      (bodyPart === 'all' || exercise.category === bodyPart) &&
-      (!equipment || exerciseEquipment(exercise.equipment) === equipment),
+      matchesExerciseFilters(exercise, bodyPart, equipment),
   );
   const recent = recentExerciseIds
     .slice(0, 10)
@@ -396,17 +395,7 @@ export function ExercisePicker({
             onChange={(event) => setBodyPart(event.target.value as WorkoutCategory | 'all')}
           >
             <option value="all">Body part</option>
-            {(
-              [
-                'push',
-                'pull',
-                'lower',
-                'upper',
-                'full_body',
-                'cardio',
-                'other',
-              ] as WorkoutCategory[]
-            ).map((category) => (
+            {EXERCISE_BODY_PARTS.map((category) => (
               <option key={category} value={category}>
                 {CATEGORY_LABELS[category]}
               </option>

@@ -67,7 +67,12 @@ jest.mock('../../ui/prompts', () => ({
   showMenu: jest.fn(),
   PromptHost: () => null,
 }));
-jest.mock('../../ui/Toast', () => ({ showToast: jest.fn(), ToastHost: () => null }));
+jest.mock('../../ui/Toast', () => ({
+  showToast: jest.fn(),
+  ToastHost: () => null,
+  toastAccount: () => 'u1',
+  isToastAccountCurrent: () => true,
+}));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
@@ -460,13 +465,14 @@ describe('picking exercises', () => {
   it('adds two or more picks as a superset', async () => {
     jest.mocked(apiGet).mockImplementation(async () => []);
     const { onCreateSuperset } = await openPicker();
-    const add = screen.getByRole('button', { name: 'Add superset' });
-    expect(add).toBeDisabled();
+    // The superset bar only appears once there are two picks to group.
+    expect(screen.queryByRole('button', { name: 'Add superset' })).toBeNull();
     await act(async () =>
       fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })),
     );
+    expect(screen.queryByRole('button', { name: 'Add superset' })).toBeNull();
     await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Bench Press' })));
-    await act(async () => fireEvent.press(add));
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Add superset' })));
     expect(onCreateSuperset).toHaveBeenCalledWith([press, bench], {});
   });
 

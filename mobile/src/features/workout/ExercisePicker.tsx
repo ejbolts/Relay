@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import {
   FlatList,
@@ -13,6 +12,12 @@ import {
 import { useQueryClient } from '@tanstack/react-query';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { exerciseNameFromSearch } from '../../../../frontend/src/exerciseCreation';
+import { exerciseEquipmentOptions } from '../../../../frontend/src/exerciseEquipment';
+import {
+  EXERCISE_BODY_PARTS,
+  matchesExerciseFilters,
+} from '../../../../frontend/src/exerciseFilters';
+import { formatLastDone } from '../../../../frontend/src/exerciseLastDone';
 import {
   lastUsedMachineId,
   machinesByExercise,
@@ -27,15 +32,21 @@ import type {
   MachinePhotoUsage,
   WorkoutCategory,
 } from '../../../../frontend/src/types';
+import { CATEGORY_LABELS } from '../../../../frontend/src/trainingSummary';
+import { localDate } from '../../../../frontend/src/utils';
 import { supersetGroupName } from '../../../../frontend/src/workoutSupersets';
 import { Button } from '../../ui/components';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
+import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { useTheme } from '../../ui/theme';
+import { ExerciseIcon } from '../../ui/ExerciseIcon';
 import { CreateExerciseSheet } from './CreateExerciseSheet';
 import { loggerKeys, useAllMachinePhotos } from './loggerQueries';
 import { PickerMachineStrip } from './PickerMachineStrip';
 
 const NO_MACHINES: MachinePhotoUsage[] = [];
+const NO_DATES: ReadonlyMap<string, string> = new Map();
 
 /**
  * Picks exercises to add, in the order tapped, searched with the web's exercise search (names,
@@ -54,6 +65,7 @@ export function ExercisePicker({
   onAdd,
   onCreateSuperset,
   chooseMachines = false,
+  lastDone = NO_DATES,
   onCreate,
   onClose,
 }: {
@@ -71,12 +83,16 @@ export function ExercisePicker({
   onCreateSuperset?: (selected: Exercise[], machineChoices: ExerciseMachineChoices) => void;
   /** Offers each picked exercise's saved machines. */
   chooseMachines?: boolean;
+  /** The day each exercise was last done, shown on its row as on the web. */
+  lastDone?: ReadonlyMap<string, string>;
   /** Creates an exercise that isn't in the list. Without it (as in the split editor, like the
    * web's routine editor) the picker only chooses existing exercises. */
   onCreate?: (input: ExerciseCreateInput) => Promise<Exercise>;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
+  const [bodyPart, setBodyPart] = useState<WorkoutCategory | 'all'>('all');
+  const [equipment, setEquipment] = useState('');
   const [selected, setSelected] = useState<Exercise[]>([]);
   const [creating, setCreating] = useState<{ name: string; category: WorkoutCategory | '' } | null>(
     null,
@@ -100,7 +116,14 @@ export function ExercisePicker({
     savedMachines,
     machineChoices,
   );
-  const available = useMemo(() => exercises.filter((exercise) => !exercise.hidden), [exercises]);
+  const equipmentOptions = useMemo(() => exerciseEquipmentOptions(exercises), [exercises]);
+  const eligible = useMemo(() => exercises.filter((exercise) => !exercise.hidden), [exercises]);
+  // The web's Body part and Equipment filters narrow the list before the search ranks it.
+  const available = useMemo(
+    () => eligible.filter((exercise) => matchesExerciseFilters(exercise, bodyPart, equipment)),
+    [eligible, bodyPart, equipment],
+  );
+  const today = localDate();
   const shown = useMemo(() => {
     if (query.trim()) return rankExerciseSearchMatches(available, query, recentIds);
     const recency = new Map(recentIds.map((id, index) => [id, index]));
@@ -113,13 +136,15 @@ export function ExercisePicker({
 
   const close = () => {
     setQuery('');
+    setBodyPart('all');
+    setEquipment('');
     setSelected([]);
     setMachineChoices({});
     setOpenMachinesId(null);
     onClose();
   };
   const toggle = (exercise: Exercise) => {
-    void Haptics.selectionAsync();
+    haptics.selection();
     if (swap) {
       onAdd([exercise], {});
       close();
@@ -216,7 +241,14 @@ export function ExercisePicker({
           </Pressable>
         </View>
         <View
-          style={[styles.search, { backgroundColor: colors.surface2, borderRadius: radius.md }]}
+          style={[
+            styles.search,
+            {
+              backgroundColor: colors.surface2,
+              borderColor: colors.lineStrong,
+              borderRadius: radius.md,
+            },
+          ]}
         >
           <Icon name="search" size={16} color={colors.muted} />
           <TextInput
@@ -224,21 +256,60 @@ export function ExercisePicker({
             onChangeText={setQuery}
             placeholder="Search exercises"
             placeholderTextColor={colors.muted}
+            selectionColor={colors.accent}
+            cursorColor={colors.accent}
             accessibilityLabel="Search exercises"
             autoCorrect={false}
             autoCapitalize="none"
             clearButtonMode="while-editing"
             returnKeyType="search"
-            style={[type.body, { flex: 1, color: colors.text, paddingVertical: 10 }]}
+            style={[type.body, { flex: 1, color: colors.text, paddingVertical: 11 }]}
+          />
+        </View>
+        <View style={styles.filters}>
+          <FilterMenu
+            label="Body part"
+            value={bodyPart === 'all' ? null : CATEGORY_LABELS[bodyPart]}
+            items={[
+              {
+                label: 'All body parts',
+                checked: bodyPart === 'all',
+                onPress: () => setBodyPart('all'),
+              },
+              ...EXERCISE_BODY_PARTS.map((part) => ({
+                label: CATEGORY_LABELS[part],
+                checked: bodyPart === part,
+                onPress: () => setBodyPart(part),
+              })),
+            ]}
+          />
+          <FilterMenu
+            label="Equipment"
+            value={equipment || null}
+            items={[
+              { label: 'All equipment', checked: !equipment, onPress: () => setEquipment('') },
+              ...equipmentOptions.map((option) => ({
+                label: option,
+                checked: equipment === option,
+                onPress: () => setEquipment(option),
+              })),
+            ]}
           />
           {onCreate && (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Create new exercise"
-              hitSlop={8}
-              onPress={() => setCreating({ name: query.trim(), category: '' })}
+              onPress={() => {
+                haptics.tap();
+                setCreating({ name: query.trim(), category: '' });
+              }}
+              style={({ pressed }) => [
+                styles.createButton,
+                { backgroundColor: colors.accent, borderRadius: radius.md },
+                pressed && { opacity: 0.7 },
+              ]}
             >
-              <Icon name="plus" size={18} color={colors.accentText} />
+              <Icon name="plus" size={20} color={colors.onAccent} />
             </Pressable>
           )}
         </View>
@@ -248,7 +319,8 @@ export function ExercisePicker({
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           contentContainerStyle={{
-            paddingBottom: onCreateSuperset && !swap ? 24 : insets.bottom + 24,
+            paddingBottom:
+              onCreateSuperset && !swap && selected.length >= 2 ? 24 : insets.bottom + 24,
           }}
           initialNumToRender={20}
           ListEmptyComponent={
@@ -259,7 +331,8 @@ export function ExercisePicker({
           ListFooterComponent={
             onCreate &&
             query.trim() &&
-            !available.some(
+            // An exact name anywhere in the catalogue, filtered out or not, already exists.
+            !eligible.some(
               (exercise) =>
                 exercise.name.trim().toLocaleLowerCase() === query.trim().toLocaleLowerCase(),
             ) ? (
@@ -303,16 +376,40 @@ export function ExercisePicker({
                   style={({ pressed }) => [
                     styles.row,
                     { borderColor: colors.line },
+                    order >= 0 && { backgroundColor: colors.accentSoft },
                     pressed && { backgroundColor: colors.surface2 },
                   ]}
                 >
-                  <View style={{ flex: 1 }}>
-                    <Text style={[type.body, { color: added ? colors.muted : colors.text }]}>
+                  <View style={added && { opacity: 0.55 }}>
+                    <ExerciseIcon exercise={item} size={44} />
+                  </View>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text
+                      style={[
+                        type.callout,
+                        { color: added ? colors.muted : colors.text, fontWeight: '600' },
+                      ]}
+                      numberOfLines={2}
+                    >
                       {item.name}
                     </Text>
-                    <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
-                      {[item.muscle_group, item.equipment].filter(Boolean).join(' · ')}
-                    </Text>
+                    <View style={styles.tags}>
+                      <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
+                        {[item.muscle_group, item.equipment].filter(Boolean).join(' · ')}
+                      </Text>
+                      {lastDone.has(item.id) && (
+                        <View
+                          accessible
+                          accessibilityLabel={`Last done ${formatLastDone(lastDone.get(item.id)!, today)}`}
+                          style={styles.lastDone}
+                        >
+                          <Icon name="training" size={11} color={colors.muted} />
+                          <Text style={[type.footnote, { color: colors.muted }]}>
+                            {formatLastDone(lastDone.get(item.id)!, today)}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
                     {order >= 0 && machines.length > 0 && (
                       <Text
                         style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}
@@ -346,22 +443,25 @@ export function ExercisePicker({
                       />
                     </Pressable>
                   )}
-                  {(order >= 0 || added) && (
+                  {(order >= 0 || added || !swap) && (
                     <View
                       style={[
                         styles.tick,
-                        {
-                          backgroundColor: added ? colors.surface3 : colors.accent,
-                        },
+                        order >= 0 || added
+                          ? {
+                              backgroundColor: added ? colors.surface3 : colors.accent,
+                              borderColor: 'transparent',
+                            }
+                          : { borderColor: colors.lineStrong },
                       ]}
                     >
                       {order >= 0 ? (
                         <Text style={[type.caption, { color: colors.onAccent, fontWeight: '700' }]}>
                           {order + 1}
                         </Text>
-                      ) : (
+                      ) : added ? (
                         <Icon name="check" size={12} color={colors.secondary} />
-                      )}
+                      ) : null}
                     </View>
                   )}
                 </Pressable>
@@ -379,15 +479,15 @@ export function ExercisePicker({
             );
           }}
         />
-        {onCreateSuperset && !swap && (
+        {onCreateSuperset && !swap && selected.length >= 2 && (
           <View
             style={[styles.footer, { borderColor: colors.line, paddingBottom: insets.bottom + 10 }]}
           >
             <Button
               label={`Add ${selected.length > 2 ? supersetGroupName(selected.length).toLowerCase() : 'superset'}`}
               icon={{ sf: 'link', md: 'link' }}
-              variant="secondary"
-              disabled={selected.length < 2}
+              variant="tonal"
+              block
               onPress={() => {
                 onCreateSuperset(selected, resolvedChoices);
                 close();
@@ -421,6 +521,54 @@ export function ExercisePicker({
   );
 }
 
+/** One of the web picker's filter selects, as a native menu: its label until a value is chosen. */
+function FilterMenu({
+  label,
+  value,
+  items,
+}: {
+  label: string;
+  value: string | null;
+  items: MenuItem[];
+}) {
+  const { colors, type, radius } = useTheme();
+  const [width, setWidth] = useState(0);
+  const ink = value ? colors.accentText : colors.text;
+  const text = value ?? label;
+  return (
+    <View style={styles.filter} onLayout={(event) => setWidth(event.nativeEvent.layout.width)}>
+      {/* iOS sizes its native menu host from the layout; Android draws a plain button. */}
+      {(Platform.OS !== 'ios' || width > 0) && (
+        <MenuButton
+          accessibilityLabel={value ? `${label}: ${value}` : label}
+          title={label}
+          items={items}
+          trigger={{ text: `${text} ⌄`, color: ink }}
+          width={width}
+          height={44}
+          fill={value ? colors.accentSoft : colors.surface2}
+          cornerRadius={radius.md}
+          style={[
+            styles.filterButton,
+            {
+              backgroundColor: value ? colors.accentSoft : colors.surface2,
+              borderColor: value ? `${colors.accent}8C` : colors.lineStrong,
+              borderRadius: radius.md,
+            },
+          ]}
+        >
+          <View style={styles.filterContent}>
+            <Text style={[type.callout, { flex: 1, color: ink }]} numberOfLines={1}>
+              {text}
+            </Text>
+            <Icon name="chevronDown" size={16} color={colors.secondary} />
+          </View>
+        </MenuButton>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   page: { flex: 1 },
   bar: {
@@ -437,20 +585,41 @@ const styles = StyleSheet.create({
     gap: 8,
     marginHorizontal: 16,
     marginBottom: 8,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
+    borderWidth: 1,
   },
+  filters: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  filter: { flex: 1, height: 44 },
+  filterButton: { height: 44, borderWidth: 1, overflow: 'hidden' },
+  filterContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+  },
+  createButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  tags: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', columnGap: 6 },
+  lastDone: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   tick: {
     width: 24,
     height: 24,
     borderRadius: 12,
+    borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
   },

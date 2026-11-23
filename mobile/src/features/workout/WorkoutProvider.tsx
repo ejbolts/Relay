@@ -84,7 +84,7 @@ import {
   useWorkoutTypes,
 } from '../../data/queries';
 import { useOptionalSession } from '../../session/SessionProvider';
-import { showToast, ToastHost } from '../../ui/Toast';
+import { isToastAccountCurrent, showToast, toastAccount, ToastHost } from '../../ui/Toast';
 import { restTimerPreference } from '../settings/devicePreferences';
 import { refreshFriendPresence, socialKeys, updateFriendPresence } from '../social/socialQueries';
 import { FinishedQueueSender, type QueueStatus } from './finishedQueueSender';
@@ -245,7 +245,13 @@ export interface LoggerApi {
   createExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   /** Changes the live workout; it is stored before the next frame. */
   change: (update: (state: LoggerState) => LoggerState) => void;
-  updateSet: (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => void;
+  /** `workoutBodyweight` (the workout day's weigh-in) stamps a newly logged strength set. */
+  updateSet: (
+    movementKey: string,
+    setKey: string,
+    update: Partial<WorkoutDraftSet>,
+    workoutBodyweight?: number | null,
+  ) => void;
   /** Adds a set at the end, or at `position` (the "+" between sets). */
   addSet: (movementKey: string, position?: number) => void;
   chooseType: (type: WorkoutType) => void;
@@ -636,6 +642,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const finishedSessionRef = useRef<string | null>(null);
   const reviewRef = useRef<(key: string) => void>(() => undefined);
   useEffect(() => {
+    // The queue belongs to this account; its late toasts never show for another session.
+    const account = toastAccount();
     const sender = new FinishedQueueSender({
       storage: deviceStorage,
       userId: user.id,
@@ -665,7 +673,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
             : current,
         );
         // Finished a while ago (offline): say it reached the server.
-        if (Date.now() - item.pendingSave.finishedAt > 10_000) showToast('Workout saved');
+        if (Date.now() - item.pendingSave.finishedAt > 10_000)
+          showToast('Workout saved', undefined, { account });
         apiGet<PersonalRecord[]>(
           `/api/personal-records?workout_id=${encodeURIComponent(workout.id)}&include_blocks=true&include_fresh_start=true`,
         )
@@ -683,10 +692,11 @@ const WorkoutEngine = memo(function WorkoutEngine({
           const item = readFinishedWorkouts(deviceStorage).find(
             (entry) => finishedWorkoutKey(entry) === key,
           );
-          showToast(`${item?.pendingSave.payload.name ?? 'A workout'} wasn't saved`, {
-            label: 'Review',
-            run: () => reviewRef.current(key),
-          });
+          showToast(
+            `${item?.pendingSave.payload.name ?? 'A workout'} wasn't saved`,
+            { label: 'Review', run: () => reviewRef.current(key) },
+            { account },
+          );
         }
         refusalsSeen.current = next.refusals;
         setQueue(next);
@@ -733,12 +743,19 @@ const WorkoutEngine = memo(function WorkoutEngine({
   );
 
   const updateSet = useCallback(
-    (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => {
+    (
+      movementKey: string,
+      setKey: string,
+      update: Partial<WorkoutDraftSet>,
+      workoutBodyweight: number | null = null,
+    ) => {
       const current = loggerRef.current;
       if (!current) return;
+      // A logged set keeps the day's bodyweight, as on the web, so its ratio doesn't move when
+      // a weigh-in is later edited; a set that already has one keeps its own.
       const result = updateSetRule(current, movementKey, setKey, update, {
         addedByHand: addedSetKeys.current.has(setKey),
-        workoutBodyweight: null,
+        workoutBodyweight,
       });
       const wasPaused = current.pause.pausedAt !== null;
       commit(withActivity(result.state, Date.now()));
@@ -1328,8 +1345,11 @@ const WorkoutEngine = memo(function WorkoutEngine({
     );
     const workoutId = item?.pendingSave.workoutId;
     if (!item || !workoutId) return;
+    const account = toastAccount();
     apiGet<TrackedWorkout>(`/api/workouts/${encodeURIComponent(workoutId)}`)
       .then((latest) => {
+        // Signed out or switched account meanwhile: this phone no longer holds that save.
+        if (!isToastAccountCurrent(account)) return;
         if (!addFinishedWorkout(rebasedFinishedWorkout(item, latest.revision), deviceStorage))
           throw new Error('Could not store the workout on the phone. Free some storage.');
         senderRef.current?.forget(key);
@@ -1342,6 +1362,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
             : reason instanceof Error
               ? reason.message
               : 'Could not check the latest version. Try again.',
+          undefined,
+          { account },
         ),
       );
   }, []);

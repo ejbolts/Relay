@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  heaviestLoggedSetKey,
   bodyweightContext,
   bodyweightOn,
   relativeStrength,
@@ -46,5 +47,26 @@ describe('sharedBodyweight', () => {
     expect(sharedBodyweight([at(82.5), at(83)])).toBeNull();
     expect(sharedBodyweight([at(null), at(null)])).toBeNull();
     expect(sharedBodyweight([])).toBeNull();
+  });
+});
+
+describe('heaviestLoggedSetKey', () => {
+  const set = (key: string, weight_kg: number | null, completed = true) => ({
+    key,
+    weight_kg,
+    completed,
+  });
+
+  it('picks the heaviest logged set, the first of equal ones', () => {
+    expect(heaviestLoggedSetKey([set('a', 80), set('b', 85), set('c', 85)])).toBe('b');
+  });
+
+  it('skips sets not yet logged', () => {
+    expect(heaviestLoggedSetKey([set('a', 80), set('b', 100, false)])).toBe('a');
+    expect(heaviestLoggedSetKey([set('a', 80, false)])).toBeNull();
+  });
+
+  it('treats a set with no weight as zero', () => {
+    expect(heaviestLoggedSetKey([set('a', null), set('b', null)])).toBe('a');
   });
 });

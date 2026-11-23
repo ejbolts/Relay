@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineAliases } from '../../../../frontend/src/exerciseHistory';
+import { bodyweightOn, sharedBodyweight } from '../../../../frontend/src/relativeStrength';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
 import type { Exercise, TrackedWorkout, WorkoutInput } from '../../../../frontend/src/types';
 import {
@@ -36,7 +37,7 @@ import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prom
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
 import { DateField, TimeField } from '../body/DateField';
-import { useSavedWorkout } from '../training/trainingQueries';
+import { useBodyMeasurements, useSavedWorkout } from '../training/trainingQueries';
 import { ExercisePicker } from './ExercisePicker';
 import {
   addExercises,
@@ -237,6 +238,22 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
     () => new Set(state.movements.map((movement) => movement.exercise.id)),
     [state.movements],
   );
+  // The bodyweight the workout was logged at: the one its sets share, or the day's weigh-in for
+  // older rows saved without one, as the web's editor finds it.
+  const measurements = useBodyMeasurements().data;
+  const bodyweight = bodyweightOn(
+    measurements ?? [],
+    state.workoutDate,
+    sharedBodyweight(
+      state.movements.flatMap((movement) =>
+        movement.sets.map((item) => ({ bodyweight_kg: item.bodyweight_kg ?? null })),
+      ),
+    ),
+  );
+  const bodyweightRef = useRef(bodyweight);
+  useEffect(() => {
+    bodyweightRef.current = bodyweight;
+  }, [bodyweight]);
   const swapMovement = state.movements.find((item) => item.key === swapping) ?? null;
   const machineMovement = state.movements.find((item) => item.key === machinesFor) ?? null;
 
@@ -291,7 +308,7 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
           (latest) =>
             updateSet(latest, movementKey, setKey, values, {
               addedByHand: true,
-              workoutBodyweight: null,
+              workoutBodyweight: bodyweightRef.current,
               editing: true,
             }).state,
         ),
@@ -525,14 +542,16 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
             style={[type.body, styles.notes, { color: colors.text, borderColor: colors.line }]}
           />
         </View>
-        {state.movements.map((movement) => (
+        {state.movements.map((movement, index) => (
           <MovementCard
             key={movement.key}
+            number={index + 1}
             movement={movement}
             supersetNames={supersetNames(movement.supersetKey)}
             history={history}
             excludedWorkoutId={workout.id}
             workoutDate={state.workoutDate}
+            bodyweight={bodyweight}
             weightUnit={weightUnit}
             skipHighRepWarning={state.skipHighRepWarning}
             actions={actions}

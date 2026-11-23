@@ -167,13 +167,13 @@ test('with the rest timer off, a logged set starts no rest, and turning it off e
   await fireEvent.press(screen.getByRole('button', { name: 'Up next: Push day' }));
   expect(await screen.findByText('Bench Press')).toBeVisible();
   await fireEvent.press(screen.getByRole('button', { name: 'Complete set 1' }));
-  expect(screen.getByRole('button', { name: 'Skip rest' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'End rest timer' })).toBeVisible();
   try {
     await act(async () => restTimerPreference.set(false));
-    expect(screen.queryByRole('button', { name: 'Skip rest' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'End rest timer' })).toBeNull();
     expect(screen.queryByLabelText('Rest timer')).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: 'Complete set 2' }));
-    expect(screen.queryByRole('button', { name: 'Skip rest' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'End rest timer' })).toBeNull();
   } finally {
     restTimerPreference.set(true);
   }
@@ -194,7 +194,7 @@ test('logs Up next, starts the rest, and finishes into a saved summary', async (
   await fireEvent.changeText(weight, '85');
   await fireEvent.press(screen.getByRole('button', { name: 'Complete set 1' }));
   expect(screen.getByRole('button', { name: 'Mark set 1 incomplete' })).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Skip rest' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'End rest timer' })).toBeVisible();
   // The untouched next set now suggests what was just lifted.
   expect(screen.getByLabelText('Weight kilograms for set 2, suggested value').props.value).toBe(
     '85',
