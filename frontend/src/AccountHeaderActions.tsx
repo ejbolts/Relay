@@ -8,12 +8,15 @@ export function ProfileButton({
   onClick,
   name,
   photoUrl,
+  border,
   friendRequests = 0,
   openFeedback = 0,
 }: {
   onClick: () => void;
   name?: string;
   photoUrl?: string | null;
+  /** The profile border the account wears. */
+  border?: string | null;
   friendRequests?: number;
   openFeedback?: number;
 }) {
@@ -33,7 +36,12 @@ export function ProfileButton({
       {name ? (
         <ProfileAvatar
           className="profile-button-initial"
-          user={{ display_name: name, username: '', profile_photo_url: photoUrl }}
+          user={{
+            display_name: name,
+            username: '',
+            profile_photo_url: photoUrl,
+            profile_border: border,
+          }}
         />
       ) : (
         <Icon name="user" />
@@ -50,7 +58,7 @@ export function AccountHeaderActions({
   onOpenProfile,
 }: {
   active: boolean;
-  profile?: Pick<User, 'display_name' | 'profile_photo_url'>;
+  profile?: Pick<User, 'display_name' | 'profile_photo_url' | 'profile_border'>;
   openFeedback?: number;
   onOpenProfile?: () => void;
 }) {
@@ -62,6 +70,7 @@ export function AccountHeaderActions({
           onClick={onOpenProfile}
           name={profile?.display_name}
           photoUrl={profile?.profile_photo_url}
+          border={profile?.profile_border}
           openFeedback={openFeedback}
         />
       )}

@@ -180,6 +180,8 @@ def test_register_requires_explicit_login_before_access(anonymous_client):
         "must_change_password",
         "profile_photo_url",
         "sex",
+        "profile_border",
+        "profile_border_name",
     }
     assert body["profile_photo_url"] is None
     assert body["username"] == "lifter"
@@ -1039,6 +1041,7 @@ ACCOUNT_TABLES = {
     "account_backups",
     "app_feedback",
     "profile_sharing",
+    "profile_border_unlocks",
     "youtube_connections",
     "youtube_oauth_states",
     # Created only by signed-in accounts (user_id is required), so never legacy data.

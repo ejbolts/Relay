@@ -62,6 +62,7 @@ from .models import (
     MachinePhoto,
     PersonalRecord,
     ProfileBlock,
+    ProfileBorderUnlock,
     ProfileSharing,
     PushSubscription,
     SupersetGroup,
@@ -85,6 +86,14 @@ from .photo_storage import (
     delete_profile_photo_file,
     profile_photo_path,
     store_profile_photo,
+)
+from .profile_borders import (
+    BordersRead,
+    borders_for,
+    can_wear,
+    find_border,
+    worn_border,
+    worn_border_name,
 )
 from .profile_sex import Sex, known_sex
 from .server_settings import load_runtime_settings
@@ -241,6 +250,14 @@ class UserRead(BaseModel):
     # Versioned by the stored file's name, so a new photo never shows a cached old one.
     profile_photo_url: str | None = None
     sex: Sex | None = None
+    # The earned border worn around the photo, and its name; see profile_borders.
+    profile_border: str | None = None
+    profile_border_name: str | None = None
+
+
+class BorderChoice(BaseModel):
+    # None goes back to the plain photo.
+    border: str | None = Field(default=None, max_length=40)
 
 
 class LoginRead(UserRead):
@@ -264,6 +281,8 @@ def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
             else None
         ),
         sex=known_sex(user.sex),
+        profile_border=worn_border(user),
+        profile_border_name=worn_border_name(user),
     )
 
 
@@ -390,6 +409,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         delete(ActiveWorkoutSync).where(ActiveWorkoutSync.user_id == user_id),
         delete(PushSubscription).where(PushSubscription.user_id == user_id),
         delete(UserSetting).where(UserSetting.user_id == user_id),
+        delete(ProfileBorderUnlock).where(ProfileBorderUnlock.user_id == user_id),
         delete(ProfileSharing).where(ProfileSharing.user_id == user_id),
         delete(Friendship).where(
             (Friendship.member_a_id == user_id) | (Friendship.member_b_id == user_id)
@@ -645,6 +665,26 @@ def update_profile(
                 409, "sex_locked", "Your sex is already set. Ask an administrator to change it."
             )
         user.sex = payload.sex
+    db.commit()
+    db.refresh(user)
+    return user_to_read(db, user, settings)
+
+
+@profile_router.get("/borders", response_model=BordersRead)
+def profile_borders(user: CurrentUser, db: DbDependency) -> BordersRead:
+    return borders_for(db, user)
+
+
+@profile_router.put("/border", response_model=UserRead)
+def choose_profile_border(
+    payload: BorderChoice, user: CurrentUser, db: DbDependency, settings: AppSettings
+) -> UserRead:
+    if payload.border is not None:
+        if find_border(payload.border) is None:
+            raise api_error(404, "border_not_found", "That border is not available.")
+        if not can_wear(db, user, payload.border):
+            raise api_error(403, "border_locked", "Earn this border before you wear it.")
+    user.profile_border = payload.border
     db.commit()
     db.refresh(user)
     return user_to_read(db, user, settings)

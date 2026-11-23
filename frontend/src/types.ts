@@ -482,6 +482,12 @@ export interface TrainingTime {
   cardio_minutes: number;
   cardio_count: number;
   total_minutes: number;
+  /** The share of each total brought in by CSV import; missing from older servers. */
+  imported_workout_minutes?: number;
+  imported_workout_count?: number;
+  imported_cardio_minutes?: number;
+  imported_cardio_count?: number;
+  imported_total_minutes?: number;
 }
 
 /** Cardio for one week: all minutes, and each goal zone's progress. */
@@ -921,6 +927,61 @@ export interface User {
   profile_photo_url?: string | null;
   /** Set once by the owner; after that only an administrator can change it. */
   sex?: Sex | null;
+  /** Key of the earned border worn around the photo; null for the plain photo. */
+  profile_border?: string | null;
+  profile_border_name?: string | null;
+}
+
+export type BorderRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic';
+
+/** A streak border's runs: the latest one and the longest, in days, Mondays or weeks. */
+export interface BorderStreak {
+  /** "days", "Mondays" or "weeks"; an unknown unit is shown as sent. */
+  unit: string;
+  /** Length of the latest run, 0 if none. */
+  current: number;
+  current_start?: string | null;
+  current_end?: string | null;
+  /** The latest run can still be continued. */
+  active: boolean;
+  /** When the latest run is over: the first day, Monday or week that was missed. */
+  broken_on?: string | null;
+  best: number;
+  best_start?: string | null;
+  best_end?: string | null;
+}
+
+/** One profile border: a challenge, and how far the account is towards it. */
+export interface ProfileBorder {
+  key: string;
+  name: string;
+  group: string;
+  rarity: BorderRarity;
+  requirement: string;
+  unlocked: boolean;
+  /** The day the account first met the requirement; null while locked or from older servers. */
+  unlocked_on?: string | null;
+  /** Missing only for a strength border while the account has not set its sex. */
+  progress: { current: number; target: number; unit: string } | null;
+  needs_sex: boolean;
+  /** Streak borders only; a locked one's progress counts the current run. */
+  streak?: BorderStreak | null;
+  /** A tiered border's family and its place in it, from 1; absent for a single border. */
+  family?: string | null;
+  tier?: number | null;
+  /** Limited editions only: a season or a yearly event, and whether it can be earned now. */
+  kind?: 'season' | 'event' | null;
+  status?: 'active' | 'upcoming' | 'ended' | null;
+  starts_on?: string | null;
+  ends_on?: string | null;
+  /** Days left including today while open, or days until it opens while upcoming. */
+  days_left?: number | null;
+}
+
+export interface ProfileBorders {
+  selected: string | null;
+  sex: Sex | null;
+  borders: ProfileBorder[];
 }
 
 /** Who may upload workout videos: nobody, administrators only, or every account. */
@@ -1076,6 +1137,9 @@ export interface SharingSettings extends SharingChoices {
   pending_requests: number;
 }
 
+/** What identifies a member beside their name: their photo and the border around it. */
+type MemberAvatarField = 'id' | 'display_name' | 'profile_photo_url' | 'profile_border';
+
 /** `incoming` requests asked you; `outgoing` requests are yours, waiting for them. */
 export type FriendStatus = 'none' | 'incoming' | 'outgoing' | 'friends';
 
@@ -1083,6 +1147,11 @@ export interface SharedProfileSummary {
   id: string;
   display_name: string;
   profile_photo_url: string | null;
+  /** The earned border around the photo, and its name for the profile itself. */
+  profile_border?: string | null;
+  profile_border_name?: string | null;
+  /** The day the member unlocked the border they wear; null when unknown. */
+  profile_border_unlocked_on?: string | null;
   /** Sent only to those who can view the profile. */
   sex?: Sex | null;
   member_since: string;
@@ -1103,6 +1172,9 @@ export interface SharedProfileSummary {
   record_count?: number | null;
   /** Workouts other than cardio-only sessions; missing from older servers. */
   strength_workout_count?: number | null;
+  /** How many of the strength workouts, and of the workouts in the last 30 days, came from a CSV import. */
+  imported_workout_count?: number | null;
+  imported_recent_workout_count?: number | null;
   shares: {
     notes: boolean;
     body_weight: boolean;
@@ -1127,6 +1199,7 @@ export interface SharingConnection {
   id: string;
   display_name: string;
   profile_photo_url: string | null;
+  profile_border?: string | null;
   since: string;
   /** Present on notification snapshots; read notices remain available in the bell. */
   is_read?: boolean;
@@ -1198,7 +1271,7 @@ export interface LiftComparisons {
 }
 
 export interface LiftRanking {
-  member: Pick<SharedProfileSummary, 'id' | 'display_name' | 'profile_photo_url'>;
+  member: Pick<SharedProfileSummary, MemberAvatarField>;
   is_you: boolean;
   best: LiftBest;
 }
@@ -1215,6 +1288,7 @@ export interface WorkoutReactionPerson {
   id: string;
   display_name: string;
   profile_photo_url: string | null;
+  profile_border?: string | null;
   reaction: WorkoutReactionKind;
 }
 
@@ -1226,7 +1300,7 @@ export interface WorkoutReactionPage {
 
 export interface WorkoutComment {
   id: string;
-  author: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'>;
+  author: Pick<SharingConnection, MemberAvatarField>;
   body: string;
   reaction?: WorkoutReactionKind | null;
   parent_id: string | null;
@@ -1257,7 +1331,7 @@ export interface CommentNotice extends SharingConnection {
 
 /** A friend's latest workout or cardio session. */
 export interface FriendFeedItem {
-  friend: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'> & {
+  friend: Pick<SharingConnection, MemberAvatarField> & {
     presence?: FriendPresence | null;
   };
   workout: TrackedWorkout;
@@ -1266,7 +1340,7 @@ export interface FriendFeedItem {
 
 /** One workout in Social's feed: yours or a friend's, with only what its owner shares. */
 export interface TimelineItem {
-  member: Pick<SharingConnection, 'id' | 'display_name' | 'profile_photo_url'> & {
+  member: Pick<SharingConnection, MemberAvatarField> & {
     is_you: boolean;
   };
   workout: TrackedWorkout;

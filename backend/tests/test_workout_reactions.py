@@ -48,7 +48,13 @@ def test_reaction_people_show_current_reactions_to_owner_and_authorized_viewers(
         page = response.json()
         assert page["total"] == 2 and page["next_offset"] is None
         assert {person["id"]: person["reaction"] for person in page["items"]} == expected
-        assert set(page["items"][0]) == {"id", "display_name", "profile_photo_url", "reaction"}
+        assert set(page["items"][0]) == {
+            "id",
+            "display_name",
+            "profile_photo_url",
+            "profile_border",
+            "reaction",
+        }
     other_client.delete(url)
     assert client.get(people_url).json()["total"] == 1
     assert client.get(people_url + "?offset=-1").status_code == 422
@@ -151,6 +157,7 @@ def test_feed_shows_each_friends_latest_session(client, other_client, third_clie
         "id": other_client.user["id"],
         "display_name": "Other",
         "profile_photo_url": None,
+        "profile_border": None,
         "presence": {
             "online": False,
             "last_active_at": other["friend"]["presence"]["last_active_at"],

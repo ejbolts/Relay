@@ -20,6 +20,7 @@ from .models import (
     utc_now,
 )
 from .presence import hub
+from .profile_borders import worn_border
 from .sharing import (
     Db,
     FeedFriend,
@@ -106,7 +107,10 @@ def checked_comment(db, user, comment_id):
 def person(db, user_id):
     member = db.get(User, user_id)
     return FeedFriend(
-        id=member.id, display_name=member.display_name, profile_photo_url=photo_url(member)
+        id=member.id,
+        display_name=member.display_name,
+        profile_photo_url=photo_url(member),
+        profile_border=worn_border(member),
     )
 
 

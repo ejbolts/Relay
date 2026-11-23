@@ -45,6 +45,13 @@ export function formatMinutesDuration(minutes: number | null): string {
   return `${remainingMinutes}min`;
 }
 
+/** Imported time short enough for one line under a stat: 45min, 2.5h, then whole hours. */
+export function importedTime(minutes: number) {
+  if (minutes < 60) return `${Math.round(minutes)}min`;
+  if (minutes < 600) return `${Math.round(minutes / 6) / 10}h`;
+  return `${Math.round(minutes / 60).toLocaleString('en-GB')}h`;
+}
+
 export function workoutTimeInputValue(value: string | null): string {
   return value?.slice(0, 5) ?? '';
 }

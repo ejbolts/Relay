@@ -217,15 +217,25 @@ export function friendsOnlyNotice(
 export function profileStats(
   profile: Pick<
     SharedProfileSummary,
-    'strength_workout_count' | 'workout_count' | 'recent_workout_count' | 'last_workout_date'
+    | 'strength_workout_count'
+    | 'workout_count'
+    | 'recent_workout_count'
+    | 'last_workout_date'
+    | 'imported_workout_count'
+    | 'imported_recent_workout_count'
   >,
-): Array<{ label: string; value: string }> {
+): Array<{ label: string; value: string; imported?: number | null }> {
   return [
     {
       label: 'Workouts',
+      imported: profile.imported_workout_count,
       value: (profile.strength_workout_count ?? profile.workout_count ?? 0).toLocaleString('en-GB'),
     },
-    { label: 'Last 30 days', value: String(profile.recent_workout_count ?? 0) },
+    {
+      label: 'Last 30 days',
+      value: String(profile.recent_workout_count ?? 0),
+      imported: profile.imported_recent_workout_count,
+    },
     {
       label: 'Last workout',
       value: profile.last_workout_date ? dayMonth(profile.last_workout_date) : '–',

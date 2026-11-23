@@ -124,8 +124,10 @@ class User(Base):
     # A square WebP in data/profile-photos/; a new upload gets a new name, which busts caches.
     profile_photo_filename: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # "male" or "female". The owner chooses it once; after that only an administrator can change
-    # it. It sets the body measurement outline.
+    # it. It sets the body measurement outline and the strength standards for profile borders.
     sex: Mapped[str | None] = mapped_column(String(6), nullable=True)
+    # The earned border the account wears around its photo; see profile_borders.
+    profile_border: Mapped[str | None] = mapped_column(String(40), nullable=True)
     # Set by an admin; a disabled account cannot sign in and has no live sessions.
     disabled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     # Survives sign-out and session expiry, unlike the per-session last_seen_at.
@@ -346,6 +348,17 @@ class ServerSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utc_now, server_default=func.now(), onupdate=utc_now
     )
+
+
+class ProfileBorderUnlock(Base):
+    __tablename__ = "profile_border_unlocks"
+
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
+    border_key: Mapped[str] = mapped_column(String(40), primary_key=True)
+    unlocked_on: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class UserSession(Base):

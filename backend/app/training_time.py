@@ -6,6 +6,7 @@ from datetime import date
 from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
+from .imported_entries import imported_ids
 from .models import CardioSession, Exercise, ExerciseKind, TrainingWorkout, WorkoutMovement
 from .tracker_schemas import TrainingTimeRead
 
@@ -46,6 +47,8 @@ def is_cardio_only_workout():
 def training_time_totals(db: Session, user_id: str, since: date | None = None) -> TrainingTimeRead:
     """Exclude sample records and count cardio inside each workout once in Combined.
 
+    The ``imported_`` totals are the part of each total brought in by CSV import.
+
     ``since`` limits the totals to workouts and cardio sessions dated on or after it.
     """
     has_strength = has_strength_movement()
@@ -65,17 +68,29 @@ def training_time_totals(db: Session, user_id: str, since: date | None = None) -
         session_query = session_query.where(CardioSession.session_date >= since)
     workouts = db.execute(workout_query).all()
     sessions = db.execute(session_query).all()
+    imported, _ = imported_ids(db, user_id)
+    totals = _totals(workouts, sessions)
+    shares = _totals(
+        [row for row in workouts if row[0] in imported],
+        [row for row in sessions if row[0] in imported],
+    )
+    return TrainingTimeRead(
+        **totals, **{f"imported_{name}": value for name, value in shares.items()}
+    )
+
+
+def _totals(workouts: list, sessions: list) -> dict[str, int]:
     cardio_by_workout: defaultdict[str | None, int] = defaultdict(int)
     for workout_id, minutes in sessions:
         cardio_by_workout[workout_id] += minutes
     strength = [minutes or 0 for _, minutes, strength_workout in workouts if strength_workout]
-    return TrainingTimeRead(
-        workout_minutes=sum(strength),
-        workout_count=len(strength),
-        cardio_minutes=sum(minutes for _, minutes in sessions),
-        cardio_count=len(sessions),
-        total_minutes=cardio_by_workout[None]
+    return {
+        "workout_minutes": sum(strength),
+        "workout_count": len(strength),
+        "cardio_minutes": sum(minutes for _, minutes in sessions),
+        "cardio_count": len(sessions),
+        "total_minutes": cardio_by_workout[None]
         + sum(
             max(minutes or 0, cardio_by_workout[workout_id]) for workout_id, minutes, _ in workouts
         ),
-    )
+    }

@@ -52,6 +52,7 @@ import './restTimeSelect.css';
 import './setRestControl.css';
 import './setInsertButton.css';
 import './profileSex.css';
+import './profileBorders.css';
 import './liveSession.css';
 import './profilePhotoViewer.css';
 import './homeLayout.css';

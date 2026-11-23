@@ -49,6 +49,7 @@ ACCOUNT_ROWS: dict[str, str | None] = {
     "users": "id = :user_id",
     "user_settings": _OWNED,
     "profile_sharing": _OWNED,
+    "profile_border_unlocks": _OWNED,
     "sessions": _OWNED,
     "clips": f"session_id IN ({_SESSIONS})",
     "timestamps": f"session_id IN ({_SESSIONS})",

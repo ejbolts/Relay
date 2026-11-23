@@ -7,6 +7,7 @@ import { authErrorMessage } from './authForm';
 import { clipBodyWeightGoalPath } from './bodyTrend';
 import { Icon } from './Icon';
 import { ProfileAvatar } from './ProfileAvatar';
+import { SharedBorderChip } from './SharedBorderChip';
 import { ProfileAccountId } from './ProfileAccountId';
 import { ProfileIdentity } from './ProfileIdentity';
 import { SexMark } from './SexMark';
@@ -21,7 +22,7 @@ import { WorkoutCalendar, WorkoutCalendarLegend } from './WorkoutCalendar';
 import { splitCalendarDays } from './trainingSplit';
 import { builtinTypeColors, calendarLegendTypes } from './workoutTypes';
 import { entriesInMonths } from './calendarRange';
-import { TrainingTimeCard } from './TrainingTimeStats';
+import { ImportedShare, TrainingTimeCard } from './TrainingTimeStats';
 import { PopupDialog } from './PopupDialog';
 import { RoutinePanel } from './RoutinePanel';
 import { HeadToHeadCard } from './LiftComparison';
@@ -96,11 +97,16 @@ function loadStateFor(reason: unknown): LoadState {
   return 'error';
 }
 
-function avatarUser(member: { display_name: string; profile_photo_url: string | null }) {
+function avatarUser(member: {
+  display_name: string;
+  profile_photo_url: string | null;
+  profile_border?: string | null;
+}) {
   return {
     display_name: member.display_name,
     username: '',
     profile_photo_url: member.profile_photo_url,
+    profile_border: member.profile_border,
   };
 }
 
@@ -452,7 +458,11 @@ function FriendRow({
   onOpen,
   actions,
 }: {
-  person: { display_name: string; profile_photo_url: string | null };
+  person: {
+    display_name: string;
+    profile_photo_url: string | null;
+    profile_border?: string | null;
+  };
   detail?: string;
   onOpen?: () => void;
   actions?: ReactNode;
@@ -1179,6 +1189,7 @@ function ProfileStats({ profile }: { profile: SharedProfile }) {
         <div key={stat.label}>
           <dt>{stat.label}</dt>
           <dd className="num">{stat.value}</dd>
+          {!!stat.imported && <ImportedShare value={stat.imported.toLocaleString('en-GB')} />}
         </div>
       ))}
     </dl>
@@ -1671,7 +1682,12 @@ export function SharedProfileScreen({
       {ownIdentity ?? (
         <section className="settings-panel panel profile-summary" aria-label="Shared profile">
           <div className="profile-summary-main">
-            <ProfileAvatar className="profile-avatar" user={avatarUser(profile)} viewable />
+            <ProfileAvatar
+              className="profile-avatar"
+              user={avatarUser(profile)}
+              viewable
+              animated
+            />
             <div className="profile-summary-copy">
               <strong>
                 <span className="profile-name">
@@ -1684,6 +1700,13 @@ export function SharedProfileScreen({
                 <span className="shared-status-chips profile-joined">
                   <small>Joined {memberSince}</small>
                 </span>
+              )}
+              {profile.profile_border && profile.profile_border_name && (
+                <SharedBorderChip
+                  member={avatarUser(profile)}
+                  name={profile.profile_border_name}
+                  unlockedOn={profile.profile_border_unlocked_on}
+                />
               )}
               <ProfileFriendControl
                 profile={profile}

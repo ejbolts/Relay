@@ -19,7 +19,7 @@ sample data are never shared.
 
 from __future__ import annotations
 
-from collections import Counter
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta
 from typing import Annotated, Literal, NamedTuple, get_args
 from uuid import UUID
@@ -40,6 +40,7 @@ from .cardio_records import CARDIO_RECORD_TYPES
 from .cardio_zones import CardioGoalWeek, cardio_goal_weeks, cardio_preferences, classify_session
 from .database import get_db
 from .errors import api_error
+from .imported_entries import imported_workout_ids
 from .models import (
     BodyMeasurement,
     BodyWeightGoal,
@@ -50,6 +51,7 @@ from .models import (
     PersonalRecord,
     PersonalRecordType,
     ProfileBlock,
+    ProfileBorderUnlock,
     ProfileSharing,
     TrainingWorkout,
     User,
@@ -63,6 +65,7 @@ from .models import (
 )
 from .photo_storage import profile_photo_path
 from .presence import FriendPresence, hub, presence_by_member
+from .profile_borders import worn_border, worn_border_name
 from .profile_sex import Sex, known_sex
 from .relative_strength import BodyweightHistory
 from .tracker import build_heatmap, training_preferences, workout_options, zone2_week
@@ -132,6 +135,10 @@ class SharedProfileSummary(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    # The earned border worn around the photo, and its name for the profile itself.
+    profile_border: str | None = None
+    profile_border_name: str | None = None
+    profile_border_unlocked_on: date | None = None
     # Shown only to those who can view the profile.
     sex: Sex | None = None
     member_since: datetime
@@ -151,6 +158,9 @@ class SharedProfileSummary(BaseModel):
     record_count: int | None = None
     # Workouts other than cardio-only sessions, which add up with ``cardio_count``.
     strength_workout_count: int | None = None
+    # How many of ``strength_workout_count`` and ``recent_workout_count`` came from a CSV import.
+    imported_workout_count: int | None = None
+    imported_recent_workout_count: int | None = None
     shares: SharedContent | None = None
 
 
@@ -267,6 +277,7 @@ class ConnectionRead(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    profile_border: str | None = None
     since: datetime
 
 
@@ -292,6 +303,7 @@ class FeedFriend(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    profile_border: str | None = None
     presence: FriendPresence | None = None
 
 
@@ -313,6 +325,7 @@ class TimelineMember(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    profile_border: str | None = None
     is_you: bool = False
 
 
@@ -515,11 +528,14 @@ class ActivityStats(NamedTuple):
     cardio_sessions: int = 0
     records: int = 0
     strength_workouts: int = 0
+    imported_workouts: int = 0
+    imported_recent_workouts: int = 0
 
 
 def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
     """Per account: shared workouts, those in the last 30 days, the latest workout date, and
-    totals of shared cardio sessions, PR sets and strength workouts, as counted on Today."""
+    totals of shared cardio sessions, PR sets and strength workouts, as counted on Today, and
+    how many of the strength and recent workouts came from a CSV import."""
     if not user_ids:
         return {}
     cutoff = date.today() - timedelta(days=RECENT_DAYS)
@@ -563,12 +579,31 @@ def workout_stats(db: Session, user_ids: list[str]) -> dict[str, ActivityStats]:
             .group_by(PersonalRecord.user_id)
         ).all()
     )
+    imported_ids = imported_workout_ids(db, user_ids)
+    # Each imported workout's day, and whether it counts as a strength workout as above.
+    imported: defaultdict[str, list[tuple[date, bool]]] = defaultdict(list)
+    if imported_ids:
+        for user_id, workout_id, day, cardio_only in db.execute(
+            select(
+                TrainingWorkout.user_id,
+                TrainingWorkout.id,
+                TrainingWorkout.workout_date,
+                is_cardio_only_workout(),
+            ).where(
+                TrainingWorkout.user_id.in_(list(imported_ids)),
+                TrainingWorkout.is_sample.is_(False),
+            )
+        ):
+            if workout_id in imported_ids[user_id]:
+                imported[user_id].append((day, not cardio_only))
     return {
         user_id: ActivityStats(
             *workouts.get(user_id, (0, 0, None)),
             cardio_sessions=cardio.get(user_id, 0),
             records=records.get(user_id, 0),
             strength_workouts=strength.get(user_id, 0),
+            imported_workouts=sum(strength for _, strength in imported[user_id]),
+            imported_recent_workouts=sum(day >= cutoff for day, _ in imported[user_id]),
         )
         for user_id in user_ids
     }
@@ -578,12 +613,25 @@ def friends_since(friendship: Friendship) -> datetime:
     return as_utc(friendship.accepted_at or friendship.created_at)
 
 
+def worn_unlock_dates(db: Session, member_ids: list[str]) -> dict[str, date]:
+    if not member_ids:
+        return {}
+    return dict(
+        db.execute(
+            select(ProfileBorderUnlock.user_id, ProfileBorderUnlock.unlocked_on)
+            .join(User, User.id == ProfileBorderUnlock.user_id)
+            .where(User.id.in_(member_ids), User.profile_border == ProfileBorderUnlock.border_key)
+        ).all()
+    )
+
+
 def profile_summary(
     viewer: User,
     member: User,
     sharing: ProfileSharing,
     friendship: Friendship | None,
     stats: ActivityStats | None,
+    border_unlocked_on: date | None,
 ) -> SharedProfileSummary:
     viewable = can_view(viewer, member, sharing, friendship)
     stats = stats or ActivityStats()
@@ -592,6 +640,9 @@ def profile_summary(
         id=member.id,
         display_name=member.display_name,
         profile_photo_url=photo_url(member),
+        profile_border=worn_border(member),
+        profile_border_name=worn_border_name(member),
+        profile_border_unlocked_on=border_unlocked_on if viewable and worn_border(member) else None,
         sex=known_sex(member.sex) if viewable else None,
         member_since=as_utc(member.created_at),
         visibility=sharing.visibility,
@@ -605,6 +656,8 @@ def profile_summary(
         cardio_count=stats.cardio_sessions if viewable else None,
         record_count=stats.records if viewable else None,
         strength_workout_count=stats.strength_workouts if viewable else None,
+        imported_workout_count=stats.imported_workouts if viewable else None,
+        imported_recent_workout_count=stats.imported_recent_workouts if viewable else None,
         shares=(
             SharedContent(
                 notes=sharing.share_notes,
@@ -816,10 +869,13 @@ def suggested_profiles(user: CurrentUser, db: Db, page: int = Query(default=1, g
         .limit(8)
     ).all()
     stats = workout_stats(db, [member.id for member, _ in rows])
+    dates = worn_unlock_dates(db, [member.id for member, _ in rows])
     return SuggestedProfilePage(
         profiles=[
             SuggestedProfileSummary(
-                **profile_summary(user, member, sharing, None, stats.get(member.id)).model_dump(),
+                **profile_summary(
+                    user, member, sharing, None, stats.get(member.id), dates.get(member.id)
+                ).model_dump(),
                 username=member.username,
             )
             for member, sharing in rows
@@ -869,10 +925,16 @@ def list_shared_profiles(
         if can_view(user, member, sharing, friendships.get(member.id))
     ]
     stats = workout_stats(db, viewable_ids)
+    dates = worn_unlock_dates(db, viewable_ids)
     profiles = [
         SearchedProfileSummary(
             **profile_summary(
-                user, member, sharing, friendships.get(member.id), stats.get(member.id)
+                user,
+                member,
+                sharing,
+                friendships.get(member.id),
+                stats.get(member.id),
+                dates.get(member.id),
             ).model_dump(),
             username=member.username if q is not None and sharing.visibility == PUBLIC else None,
         )
@@ -942,6 +1004,7 @@ def get_shared_profile(user_id: str, user: CurrentUser, db: Db) -> SharedProfile
         sharing,
         find_friendship(db, user.id, member.id),
         workout_stats(db, [member.id]).get(member.id),
+        worn_unlock_dates(db, [member.id]).get(member.id),
     )
     if not summary.can_view:
         return SharedProfileRead(**summary.model_dump())
@@ -1397,6 +1460,7 @@ def friend_feed(
                     id=member.id,
                     display_name=member.display_name,
                     profile_photo_url=photo_url(member),
+                    profile_border=worn_border(member),
                     presence=presence[member.id],
                 ),
                 workout=shared_workout(workout, sharing),
@@ -1471,6 +1535,7 @@ def workout_timeline(
                     id=member.id,
                     display_name=member.display_name,
                     profile_photo_url=photo_url(member),
+                    profile_border=worn_border(member),
                     is_you=member.id == user.id,
                 ),
                 workout=shared_workout(
@@ -1499,6 +1564,7 @@ class ReactionPerson(BaseModel):
     id: str
     display_name: str
     profile_photo_url: str | None
+    profile_border: str | None = None
     reaction: Reaction
 
 
@@ -1543,6 +1609,7 @@ def workout_reaction_people(
                 id=member.id,
                 display_name=member.display_name,
                 profile_photo_url=photo_url(member),
+                profile_border=worn_border(member),
                 reaction=reaction.reaction,
             )
             for reaction, member in rows
@@ -1592,6 +1659,7 @@ def connection(member: User, since: datetime) -> ConnectionRead:
         id=member.id,
         display_name=member.display_name,
         profile_photo_url=photo_url(member),
+        profile_border=worn_border(member),
         since=as_utc(since),
     )
 
@@ -1766,6 +1834,7 @@ def friend_notifications(user: CurrentUser, db: Db) -> NotificationsRead:
                 id=member.id,
                 display_name=member.display_name,
                 profile_photo_url=photo_url(member),
+                profile_border=worn_border(member),
                 since=as_utc(reaction.created_at),
                 workout_id=reaction.workout_id,
                 workout_name=workout_name,

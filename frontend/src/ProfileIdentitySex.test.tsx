@@ -4,7 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from './api';
 import { ProfileIdentity } from './ProfileIdentity';
-import type { User } from './types';
+import type { ProfileBorders, User } from './types';
 
 const user: User = {
   id: 'sample',
@@ -14,6 +14,23 @@ const user: User = {
   can_upload_videos: false,
   created_at: '2026-10-01T12:00:00Z',
   profile_photo_url: null,
+};
+
+const borders: ProfileBorders = {
+  selected: null,
+  sex: null,
+  borders: [
+    {
+      key: 'bench-club-1',
+      name: 'Bench Club I',
+      group: 'Strength',
+      rarity: 'common',
+      requirement: 'Bench press 40 kg (men) or 25 kg (women)',
+      unlocked: false,
+      progress: null,
+      needs_sex: true,
+    },
+  ],
 };
 
 let root: Root;
@@ -101,5 +118,21 @@ describe('sex on the profile', () => {
     );
     expect(button('Save profile').disabled).toBe(true);
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('opens the borders from the profile and comes back to choose a sex', async () => {
+    vi.spyOn(api, 'profileBorders').mockResolvedValue(borders);
+    await show({ ...user, profile_border: 'first-steps', profile_border_name: 'First Steps' });
+    const chip = container.querySelector<HTMLButtonElement>('.profile-border-chip')!;
+    expect(chip.textContent).toBe('First Steps');
+    expect(chip.getAttribute('aria-label')).toBe('Borders, wearing First Steps');
+    expect(container.querySelector('.profile-avatar .profile-border-art')).not.toBeNull();
+
+    await press(chip);
+    const picker = document.querySelector<HTMLDialogElement>('dialog.border-picker')!;
+    await press(button('Set your sex to unlock', picker));
+    expect(document.querySelector('dialog.border-picker')).toBeNull();
+    expect(sexChoices()).toHaveLength(2);
+    expect(document.activeElement).toBe(sexChoices()[0]);
   });
 });
