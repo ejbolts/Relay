@@ -23,27 +23,44 @@ export function UsernameSheet({
   /** Rejects with the server's error, shown beside the field. */
   onSave: (username: string) => Promise<void>;
 }) {
+  // Held here, outside the form, so Close, Android Back and the backdrop all wait for a save
+  // that is on its way: its result, or its error beside the typed name, always shows.
+  const [saving, setSaving] = useState(false);
+  const close = () => {
+    if (!saving) onClose();
+  };
   return (
-    <Sheet visible={visible} onClose={onClose} title={`Change ${account.display_name}’s username`}>
+    <Sheet visible={visible} onClose={close} title={`Change ${account.display_name}’s username`}>
       {/* Mounted only while open, so each opening starts from the saved username. */}
-      {visible && <UsernameForm account={account} onClose={onClose} onSave={onSave} />}
+      {visible && (
+        <UsernameForm
+          account={account}
+          saving={saving}
+          setSaving={setSaving}
+          onClose={close}
+          onSave={onSave}
+        />
+      )}
     </Sheet>
   );
 }
 
 function UsernameForm({
   account,
+  saving,
+  setSaving,
   onClose,
   onSave,
 }: {
   account: AdminUser;
+  saving: boolean;
+  setSaving: (saving: boolean) => void;
   onClose: () => void;
   onSave: (username: string) => Promise<void>;
 }) {
   const { colors, type, radius } = useTheme();
   const [value, setValue] = useState(account.username);
   const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
 
   async function submit() {
     if (saving) return;
@@ -67,6 +84,7 @@ function UsernameForm({
           ? 'This username is already registered.'
           : errorMessage(reason),
       );
+    } finally {
       setSaving(false);
     }
   }

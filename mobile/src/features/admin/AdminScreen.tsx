@@ -223,17 +223,17 @@ function FeedbackSection({ feedback }: { feedback: AppFeedback[] }) {
     if (busy) return;
     setBusy(item.id);
     setError(null);
-    const current = guard();
+    const check = guard();
     try {
       const updated = await adminApi.setFeedbackResolved(item.id, resolved);
-      if (!current()) return;
+      if (!check.sameSession()) return;
       // Keep the row where it is until the next refresh, so it doesn't jump away mid-review.
       client.setQueryData<AppFeedback[]>(adminKeys.feedback, (current) =>
         current?.map((row) => (row.id === updated.id ? updated : row)),
       );
-      showToast(feedbackResolvedNotice(updated, resolved));
+      if (check.open()) showToast(feedbackResolvedNotice(updated, resolved));
     } catch (reason) {
-      setError({ id: item.id, message: errorMessage(reason) });
+      if (check.open()) setError({ id: item.id, message: errorMessage(reason) });
     } finally {
       setBusy(null);
     }
@@ -315,12 +315,13 @@ function SwitchesSection({ settings }: { settings: ServerSettings }) {
     if (saving) return;
     setSaving(update);
     setError(null);
-    // A response that arrives after this account signed out is dropped, so it can neither
-    // recreate the cleared settings nor install this admin's profile over the next account's.
-    const current = guard();
+    // A confirmed save still updates the cache and the profile after Back, but a response that
+    // arrives after this account signed out is dropped, so it can neither recreate the cleared
+    // settings nor install this admin's profile over the next account's.
+    const check = guard();
     try {
       const saved = await adminApi.updateSettings(update);
-      if (!current()) return;
+      if (!check.sameSession()) return;
       client.setQueryData(adminKeys.settings, saved);
       if (update.video_uploads) {
         // Show or hide Videos for this admin straight away; the switch is already saved, so a
@@ -329,14 +330,13 @@ function SwitchesSection({ settings }: { settings: ServerSettings }) {
         await adminApi
           .me()
           .then((fresh) => {
-            if (current() && fresh.id === before) updateUser(fresh);
+            if (check.sameSession() && fresh.id === before) updateUser(fresh);
           })
           .catch(() => undefined);
       }
-      if (!current()) return;
-      showToast(settingsSavedNotice(update, saved));
+      if (check.open()) showToast(settingsSavedNotice(update, saved));
     } catch (reason) {
-      setError(errorMessage(reason));
+      if (check.open()) setError(errorMessage(reason));
     } finally {
       setSaving(null);
     }

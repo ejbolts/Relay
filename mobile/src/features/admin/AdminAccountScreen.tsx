@@ -29,7 +29,7 @@ import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { useNow } from '../../ui/useNow';
 import { ChoiceRow, Row, Section, SettingsPage } from '../settings/SettingsList';
-import { useAccountGuard } from './accountGuard';
+import { useAccountGuard, type AccountCheck } from './accountGuard';
 import { AccountTags } from './AccountTags';
 import { adminApi, adminKeys, patchAccount, useAdminActivity, useAdminUsers } from './adminData';
 import { adminIcons } from './icons';
@@ -105,17 +105,20 @@ function AccountDetails({ account }: { account: AdminUser }) {
   const resetAt = account.password_reset_requested_at ?? null;
   const usernameAt = account.username_reminder_requested_at ?? null;
 
-  /** Runs one action at a time; `current` is false once this account has signed out. */
-  async function run(action: (current: () => boolean) => Promise<void>) {
+  /**
+   * Runs one action at a time. Its cache writes need `check.sameSession()`; toasts and this
+   * screen's state need `check.open()`.
+   */
+  async function run(action: (check: AccountCheck) => Promise<void>) {
     if (working.current) return;
     working.current = true;
     setBusy(true);
     setError(null);
-    const current = guard();
+    const check = guard();
     try {
-      await action(current);
+      await action(check);
     } catch (reason) {
-      if (current()) setError(errorMessage(reason));
+      if (check.open()) setError(errorMessage(reason));
     } finally {
       working.current = false;
       setBusy(false);
@@ -148,10 +151,10 @@ function AccountDetails({ account }: { account: AdminUser }) {
     resetsInFlight.add(account.id);
     setResetting(true);
     try {
-      await run(async (current) => {
+      await run(async (check) => {
         setTemporaryPassword(null);
         const { temporary_password } = await adminApi.resetPassword(account.id);
-        if (!current()) return;
+        if (!check.sameSession()) return;
         patchAccount(client, account.id, afterPasswordReset);
         setTemporaryPassword(temporary_password);
       });
@@ -163,11 +166,11 @@ function AccountDetails({ account }: { account: AdminUser }) {
 
   function changeDisabled(next: boolean) {
     const apply = () =>
-      void run(async (current) => {
+      void run(async (check) => {
         const updated = await adminApi.setDisabled(account.id, next);
-        if (!current()) return;
+        if (!check.sameSession()) return;
         replace(updated);
-        showToast(userDisabledNotice(updated, next));
+        if (check.open()) showToast(userDisabledNotice(updated, next));
       });
     if (!next) {
       apply();
@@ -185,11 +188,11 @@ function AccountDetails({ account }: { account: AdminUser }) {
 
   function changeSex(choice: SexChoice) {
     const sex = choice === NOT_SET ? null : choice;
-    void run(async (current) => {
+    void run(async (check) => {
       const updated = await adminApi.setSex(account.id, sex);
-      if (!current()) return;
+      if (!check.sameSession()) return;
       replace(updated);
-      showToast(userSexNotice(updated, sex));
+      if (check.open()) showToast(userSexNotice(updated, sex));
     });
   }
 
@@ -198,11 +201,12 @@ function AccountDetails({ account }: { account: AdminUser }) {
     if (working.current) return;
     working.current = true;
     setBusy(true);
-    const current = guard();
+    const check = guard();
     try {
       const updated = await adminApi.setUsername(account.id, username);
-      if (!current()) return;
+      if (!check.sameSession()) return;
       replace(updated);
+      if (!check.open()) return;
       setRenaming(false);
       showToast(usernameChangedNotice(updated));
     } finally {
@@ -212,16 +216,16 @@ function AccountDetails({ account }: { account: AdminUser }) {
   }
 
   function dismissRequests() {
-    void run(async (current) => {
+    void run(async (check) => {
       // The tags clear; the account keeps its place in the list until the next refresh.
       if (account.password_reset_requested_at) {
         await adminApi.dismissPasswordReset(account.id);
-        if (!current()) return;
+        if (!check.sameSession()) return;
         patchAccount(client, account.id, (row) => ({ ...row, password_reset_requested_at: null }));
       }
       if (account.username_reminder_requested_at) {
         await adminApi.dismissUsernameReminder(account.id);
-        if (!current()) return;
+        if (!check.sameSession()) return;
         patchAccount(client, account.id, (row) => ({
           ...row,
           username_reminder_requested_at: null,
