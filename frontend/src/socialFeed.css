@@ -25,8 +25,8 @@
 
 /*
  * A compact card, workout first. Row 1 holds the name with who and when, and the photo, reaction
- * and comment icons at the far right. Below it: one summary line, any photos, the exercises in a
- * sentence, then an open comment thread. Rows are placed by number so an absent one leaves no gap.
+ * and comment icons at the far right. Below it: one summary line, any photos, up to three
+ * exercises with their icons, then an open comment thread. Rows are placed by number so an absent one leaves no gap.
  */
 /* A card opened from a notification is outlined briefly. */
 .feed-card.is-focused {
@@ -219,27 +219,46 @@ html[data-reduce-motion] .feed-card.is-focused {
 
 .feed-exercises {
   grid-area: 5 / 1 / auto / -1;
-  margin: 0.4rem 0 0;
+  display: grid;
+  gap: 0.375rem;
+  margin: 0.625rem 0 0;
   padding: 0;
   list-style: none;
-  color: var(--p-muted);
-  font-size: 0.8125rem;
-  line-height: 1.45;
+  color: var(--p-ink-2);
+  font-size: 0.875rem;
+  font-weight: 600;
 }
 
 .feed-exercises > li {
-  display: inline;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  min-width: 0;
+}
+
+.feed-exercises > li > span:last-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.feed-exercises .exercise-icon {
+  width: 2rem;
+  height: 2rem;
+  border-color: var(--p-line);
+  border-radius: 9px;
 }
 
 .feed-exercises-more > button {
-  /* A text link, with the tap area extended above and below the line. */
-  margin: -0.625rem 0;
+  /* A text link lined up with the names, with the tap area extended above and below the line. */
+  margin: -0.5rem 0 -0.625rem calc(2rem + 0.625rem);
   border: 0;
   padding: 0.625rem 0.75rem 0.625rem 0;
   background: transparent;
   color: var(--p-accent-text);
   font: inherit;
-  font-weight: 600;
+  font-size: 0.8125rem;
   cursor: pointer;
 }
 
