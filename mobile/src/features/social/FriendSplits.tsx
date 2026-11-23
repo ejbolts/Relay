@@ -81,7 +81,6 @@ export function FriendSplits({ ownerId }: { ownerId: string }) {
               label="View my splits"
               variant="link"
               size="small"
-              icon="chevronRight"
               onPress={() => router.push(splitRoutes.library(importedId ?? undefined))}
             />
           ) : undefined

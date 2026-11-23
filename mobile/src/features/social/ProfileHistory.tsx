@@ -107,22 +107,18 @@ export function ProfileHistory({
 
   return (
     <Card>
-      {cardioTab ? (
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Segmented
-              accessibilityLabel="Training history"
-              values={SHARED_HISTORY_TABS.map(([, label]) => label)}
-              selectedIndex={SHARED_HISTORY_TABS.findIndex(([value]) => value === tab)}
-              onChange={(index) => setTab(SHARED_HISTORY_TABS[index][0])}
-            />
-          </View>
-          <HistoryFilterButton filters={filters} onPress={() => setFiltersOpen(true)} />
-        </View>
-      ) : (
-        <CardHeader
-          title="Workouts"
-          action={<HistoryFilterButton filters={filters} onPress={() => setFiltersOpen(true)} />}
+      {/* The web's tabs sit beside the filter button; a phone is too narrow for both in a row,
+          so the tabs take their own row under the history's name. */}
+      <CardHeader
+        title={cardioTab ? 'Training history' : 'Workouts'}
+        action={<HistoryFilterButton filters={filters} onPress={() => setFiltersOpen(true)} />}
+      />
+      {cardioTab && (
+        <Segmented
+          accessibilityLabel="Training history"
+          values={SHARED_HISTORY_TABS.map(([, label]) => label)}
+          selectedIndex={SHARED_HISTORY_TABS.findIndex(([value]) => value === tab)}
+          onChange={(index) => setTab(SHARED_HISTORY_TABS[index][0])}
         />
       )}
       {missing && (
@@ -221,7 +217,3 @@ export function ProfileHistory({
     </Card>
   );
 }
-
-const styles = StyleSheet.create({
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-});
