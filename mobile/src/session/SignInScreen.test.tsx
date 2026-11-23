@@ -7,6 +7,33 @@ import { friendInviteFromUrl } from './friendInvite';
 import { SessionProvider, useSession } from './SessionProvider';
 import { SignInScreen } from './SignInScreen';
 
+jest.mock('@react-native-segmented-control/segmented-control', () => {
+  const { createElement } = jest.requireActual<typeof import('react')>('react');
+  const { Pressable, Text, View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return function SegmentedControl(props: {
+    values: string[];
+    accessibilityLabel: string;
+    onChange: (event: { nativeEvent: { selectedSegmentIndex: number } }) => void;
+  }) {
+    return createElement(
+      View,
+      { accessibilityLabel: props.accessibilityLabel },
+      props.values.map((value, index) =>
+        createElement(
+          Pressable,
+          {
+            key: value,
+            accessibilityRole: 'tab',
+            onPress: () => props.onChange({ nativeEvent: { selectedSegmentIndex: index } }),
+          },
+          createElement(Text, null, value),
+        ),
+      ),
+    );
+  };
+});
+
 jest.mock('../data/api', () => ({
   ...jest.requireActual<typeof import('../data/api')>('../data/api'),
   apiOrigin: 'https://relay.test',
@@ -87,6 +114,17 @@ test('keeps the form and shows why a sign-in was refused', async () => {
   expect(screen.getByLabelText('Username')).toHaveProp('value', 'preview');
 });
 
+test('toggles password visibility on the sign-in form', async () => {
+  jest.mocked(currentUser).mockRejectedValue(signedOut());
+  await open();
+  const field = await screen.findByLabelText('Password');
+  expect(field).toHaveProp('secureTextEntry', true);
+  await fireEvent.press(screen.getByRole('button', { name: 'Show password' }));
+  expect(screen.getByLabelText('Password')).toHaveProp('secureTextEntry', false);
+  await fireEvent.press(screen.getByRole('button', { name: 'Hide password' }));
+  expect(screen.getByLabelText('Password')).toHaveProp('secureTextEntry', true);
+});
+
 test('registers with a required code, then signs in through the native session', async () => {
   jest.mocked(currentUser).mockRejectedValue(signedOut());
   jest
@@ -96,7 +134,7 @@ test('registers with a required code, then signs in through the native session',
   jest.mocked(signIn).mockResolvedValue(user);
   await open();
   const create = () => screen.getByRole('button', { name: 'Create account' });
-  await fireEvent.press(await screen.findByRole('button', { name: 'Create account' }));
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Create account' }));
   await fireEvent.changeText(screen.getByLabelText('Display name'), 'Sample Lifter');
   await fireEvent.changeText(screen.getByLabelText('Username'), 'Sample');
   await fireEvent.changeText(screen.getByLabelText('Password'), 'sample-password');
@@ -131,7 +169,7 @@ test('goes back to sign-in if the account was created and token sign-in failed',
     .mockResolvedValueOnce(user);
   jest.mocked(signIn).mockRejectedValue(new Error('Connection lost'));
   await open();
-  await fireEvent.press(await screen.findByRole('button', { name: 'Create account' }));
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Create account' }));
   await fireEvent.changeText(screen.getByLabelText('Display name'), 'Sample Lifter');
   await fireEvent.changeText(screen.getByLabelText('Username'), 'Sample');
   await fireEvent.changeText(screen.getByLabelText('Password'), 'sample-password');

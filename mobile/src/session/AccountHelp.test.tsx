@@ -7,6 +7,32 @@ import { SessionProvider } from './SessionProvider';
 import { SignInScreen } from './SignInScreen';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../testing/memoryKvStore'));
+jest.mock('@react-native-segmented-control/segmented-control', () => {
+  const { createElement } = jest.requireActual<typeof import('react')>('react');
+  const { Pressable, Text, View } =
+    jest.requireActual<typeof import('react-native')>('react-native');
+  return function SegmentedControl(props: {
+    values: string[];
+    accessibilityLabel: string;
+    onChange: (event: { nativeEvent: { selectedSegmentIndex: number } }) => void;
+  }) {
+    return createElement(
+      View,
+      { accessibilityLabel: props.accessibilityLabel },
+      props.values.map((value, index) =>
+        createElement(
+          Pressable,
+          {
+            key: value,
+            accessibilityRole: 'tab',
+            onPress: () => props.onChange({ nativeEvent: { selectedSegmentIndex: index } }),
+          },
+          createElement(Text, null, value),
+        ),
+      ),
+    );
+  };
+});
 jest.mock('../data/api', () => ({
   ...jest.requireActual<typeof import('../data/api')>('../data/api'),
   apiOrigin: 'https://relay.test',
@@ -97,7 +123,7 @@ test('keeps the form open with the reason when the request fails', async () => {
 
 test('is only offered on the sign-in form', async () => {
   await open();
-  await fireEvent.press(await screen.findByRole('button', { name: 'Create account' }));
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Create account' }));
   expect(screen.queryByRole('button', { name: 'Forgot password?' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Forgot username?' })).toBeNull();
 });

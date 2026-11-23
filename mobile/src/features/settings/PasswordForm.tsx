@@ -8,6 +8,7 @@ import {
 } from '../../../../frontend/src/authRules';
 import { ApiError } from '../../data/api';
 import { Button, errorMessage } from '../../ui/components';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { settingsIcons } from './icons';
@@ -106,12 +107,15 @@ export function PasswordForm({
         onSubmit={() => void submit()}
       />
       {!!error && (
-        <Text accessibilityRole="alert" style={[type.callout, { color: colors.danger }]}>
+        <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
           {error}
         </Text>
       )}
       <Button
         label={saving ? busyLabel : submitLabel}
+        size="large"
+        block
+        loading={saving}
         disabled={saving || (!temporary && (!values.current || !values.next || !values.confirm))}
         onPress={() => void submit()}
       />
@@ -140,17 +144,18 @@ function PasswordField({
   editable: boolean;
   returnKeyType?: 'next' | 'go';
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type, radius, scheme } = useTheme();
   const [revealed, setRevealed] = useState(false);
+  const [focused, setFocused] = useState(false);
   return (
     <View style={{ gap: 6 }}>
-      <Text style={[type.callout, { color: colors.secondary }]}>{label}</Text>
+      <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>{label}</Text>
       <View
         style={[
           styles.field,
           {
-            backgroundColor: colors.surface,
-            borderColor: colors.lineStrong,
+            backgroundColor: colors.surface2,
+            borderColor: focused ? colors.accent : colors.lineStrong,
             borderRadius: radius.md,
           },
         ]}
@@ -158,9 +163,14 @@ function PasswordField({
         <TextInput
           ref={ref}
           accessibilityLabel={label}
-          style={[styles.input, { color: colors.text }]}
+          style={[type.body, styles.input, { color: colors.text }]}
+          selectionColor={colors.accent}
+          cursorColor={colors.accent}
+          keyboardAppearance={scheme}
           value={value}
           onChangeText={onChange}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
           secureTextEntry={!revealed}
           autoCapitalize="none"
           autoCorrect={false}
@@ -175,14 +185,17 @@ function PasswordField({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`${revealed ? 'Hide' : 'Show'} ${label.toLowerCase()}`}
-          hitSlop={8}
-          onPress={() => setRevealed((shown) => !shown)}
+          hitSlop={4}
+          onPress={() => {
+            haptics.tap();
+            setRevealed((shown) => !shown);
+          }}
           style={styles.reveal}
         >
           <Icon
             name={revealed ? settingsIcons.hide : settingsIcons.show}
-            size={18}
-            color={colors.muted}
+            size={19}
+            color={colors.accentText}
           />
         </Pressable>
       </View>
@@ -191,7 +204,7 @@ function PasswordField({
 }
 
 const styles = StyleSheet.create({
-  field: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, minHeight: 50 },
-  input: { flex: 1, fontSize: 18, paddingHorizontal: 14, minHeight: 50 },
-  reveal: { paddingHorizontal: 14, alignSelf: 'stretch', justifyContent: 'center' },
+  field: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, minHeight: 46 },
+  input: { flex: 1, paddingHorizontal: 12, paddingVertical: 11, minHeight: 46 },
+  reveal: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
 });
