@@ -1,7 +1,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Linking,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { reactionEmoji } from '../../../../frontend/src/friendFeedData';
 import {
   ADMIN_REQUEST_TEXT,
@@ -54,7 +63,14 @@ import { requestWorkoutFocus } from './workoutFocus';
  * administrators, people waiting for a reset or their username, with a count of what's unread or
  * waiting for an answer.
  */
-export function NotificationsBell({ size = 36 }: { size?: number }) {
+export function NotificationsBell({
+  size = 36,
+  style,
+}: {
+  size?: number;
+  /** Restyles the button, such as Home's square header buttons. */
+  style?: StyleProp<ViewStyle>;
+}) {
   const { colors } = useTheme();
   const query = useNotifications();
   const bell = useBellNotices();
@@ -72,6 +88,7 @@ export function NotificationsBell({ size = 36 }: { size?: number }) {
           styles.round,
           { width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surface2 },
           pressed && { opacity: 0.6 },
+          style,
         ]}
       >
         <Icon name="bell" size={Math.round(size * 0.52)} color={colors.text} />

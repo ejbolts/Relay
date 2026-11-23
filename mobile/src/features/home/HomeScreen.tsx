@@ -1,15 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { homeSectionLists } from '../../../../frontend/src/homeLayout';
 import { calendarDayTarget } from '../../../../frontend/src/plannedDay';
 import { isoLocalDate, parseLocalDate } from '../../../../frontend/src/trainingSummary';
 import type { HeatmapDay } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { queryKeys, useDashboard } from '../../data/queries';
-import { Button, Screen } from '../../ui/components';
-import { Icon } from '../../ui/Icon';
+import { Button } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { LaunchNotices } from '../review';
 import { bodyKeys } from '../body/bodyQueries';
@@ -20,6 +18,7 @@ import { useCreateWorkoutOn } from './calendarActions';
 import { DaySheet } from './DaySheet';
 import { homeKeys, useHomeLayout } from './homeData';
 import { HomeHeaderActions } from './HomeHeaderActions';
+import { HomePage } from './HomePage';
 import { appDrawsSection, HomeSections } from './homeSections';
 import { PlannedDaySheet } from './PlannedDaySheet';
 
@@ -48,7 +47,6 @@ const HOME_QUERIES = [
  */
 export function HomeScreen() {
   const client = useQueryClient();
-  const router = useRouter();
   const workout = useWorkout();
   const { colors, type } = useTheme();
   const home = useHomeLayout();
@@ -86,35 +84,12 @@ export function HomeScreen() {
 
   return (
     <>
-      <Screen
+      <HomePage
         title="Home"
-        eyebrow={parseLocalDate(today).toLocaleDateString('en-GB', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-        })}
-        actions={
-          <View style={styles.actions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Edit Home layout"
-              accessibilityState={{ disabled: !canEdit }}
-              disabled={!canEdit}
-              hitSlop={6}
-              onPress={() => router.push('/home-layout')}
-              style={({ pressed }) => [
-                styles.edit,
-                { backgroundColor: colors.surface2 },
-                (pressed || !canEdit) && { opacity: canEdit ? 0.7 : 0.4 },
-              ]}
-            >
-              <Icon name="edit" size={18} color={colors.text} />
-            </Pressable>
-            {/* B4 (guides): the tips bulb, the quick tour and the "Still working out?" alert. */}
-            <HomeGuides />
-            <HomeHeaderActions />
-          </View>
-        }
+        eyebrow={dateLine(today)}
+        // B4 (guides): the tips pill, the quick tour and the "Still working out?" alert.
+        eyebrowAccessory={<HomeGuides />}
+        actions={<HomeHeaderActions canEdit={canEdit} />}
         refreshing={refreshing}
         onRefresh={() => void refresh()}
       >
@@ -138,7 +113,7 @@ export function HomeScreen() {
             Your Home Screen is clear. Use the edit button to add sections.
           </Text>
         )}
-      </Screen>
+      </HomePage>
       <DaySheet day={day} onClose={() => setDay(null)} onAdd={createOn} />
       <PlannedDaySheet date={plannedDate} onClose={() => setPlannedDate(null)} />
       {/* B3: What's new once per release, or last week's review at the start of a week. */}
@@ -148,7 +123,12 @@ export function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  edit: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
   layoutError: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
 });
+
+/** "Tuesday 24 November", as the web (Android's date format adds a comma after the weekday). */
+function dateLine(today: string) {
+  const date = parseLocalDate(today);
+  const part = (options: Intl.DateTimeFormatOptions) => date.toLocaleDateString('en-GB', options);
+  return `${part({ weekday: 'long' })} ${date.getDate()} ${part({ month: 'long' })}`;
+}

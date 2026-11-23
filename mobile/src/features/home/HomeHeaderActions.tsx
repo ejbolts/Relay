@@ -2,55 +2,66 @@ import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { profileButtonLabel } from '../../../../frontend/src/profileButton';
 import { useUser } from '../../session/SessionProvider';
-import { Icon } from '../../ui/Icon';
+import { IconButton } from '../../ui/components';
+import { haptics } from '../../ui/haptics';
 import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { useTheme } from '../../ui/theme';
 import { NotificationsBell, socialRoutes } from '../social';
 
-const SIZE = 38;
-
 /**
- * Home's header buttons, as on the web: the notifications bell (which counts friend requests
- * waiting for an answer), your profile, then Settings.
+ * Home's header buttons, as on the web: the layout pencil, the notifications bell (which counts
+ * friend requests waiting for an answer), your profile, then Settings. Each is the web's 40 pt
+ * square `.icon-button-pulse`.
  */
-export function HomeHeaderActions() {
+export function HomeHeaderActions({ canEdit }: { canEdit: boolean }) {
   const { colors } = useTheme();
   const router = useRouter();
   const user = useUser();
+  const square = [
+    styles.square,
+    { backgroundColor: colors.surface, borderColor: colors.line },
+  ] as const;
   return (
     <View style={styles.row}>
-      <NotificationsBell size={SIZE} />
+      {/* Editing waits for the server's layout, so an older copy is never saved over a newer one. */}
+      <IconButton
+        icon="edit"
+        accessibilityLabel="Edit Home layout"
+        disabled={!canEdit}
+        onPress={() => router.push('/home-layout')}
+      />
+      {/* Its icon is about half its size: 35 gives the 18 pt icon the other buttons use. */}
+      <NotificationsBell size={35} style={square} />
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={profileButtonLabel(user.display_name.trim() || user.username, 0, 0)}
-        hitSlop={6}
-        onPress={() => router.push(socialRoutes.profile(user.id))}
-        style={({ pressed }) => pressed && { opacity: 0.7 }}
+        hitSlop={2}
+        onPress={() => {
+          haptics.tap();
+          router.push(socialRoutes.profile(user.id));
+        }}
+        style={({ pressed }) => [...square, pressed && { opacity: 0.7 }]}
       >
-        <ProfilePhoto user={user} size={SIZE} />
+        <ProfilePhoto user={user} size={28} />
       </Pressable>
-      <Pressable
-        accessibilityRole="button"
+      <IconButton
+        icon="settings"
         accessibilityLabel="Settings"
-        hitSlop={6}
         onPress={() => router.push('/settings')}
-        style={({ pressed }) => [
-          styles.button,
-          { backgroundColor: colors.surface2, opacity: pressed ? 0.7 : 1 },
-        ]}
-      >
-        <Icon name="settings" size={20} color={colors.text} />
-      </Pressable>
+      />
     </View>
   );
 }
 
+const SIZE = 40;
+
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  button: {
+  row: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  square: {
     width: SIZE,
     height: SIZE,
-    borderRadius: SIZE / 2,
+    borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
