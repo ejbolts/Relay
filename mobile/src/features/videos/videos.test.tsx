@@ -260,7 +260,7 @@ async function pickAndUpload(names = ['one.mp4', 'two.mp4']) {
   await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
   const options = jest.mocked(showMenu).mock.lastCall![1];
   await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
-  await screen.findByText(`${names.length} clips`);
+  await screen.findByText(`${names.length} ${names.length === 1 ? 'clip' : 'clips'}`);
   await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
 }
 
@@ -616,4 +616,35 @@ it('finishes discarding after a lost cancel reply, a refusal and a cancelled rea
   await waitFor(() => expect(repeat).toHaveBeenCalledTimes(1));
   expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1', 'DELETE');
   expect(screen.queryByText(/Processing had already started/)).toBeNull();
+});
+
+// Journey report L6.
+
+it('counts a single clip in the singular', async () => {
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await open(<VideosScreen />);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  expect(await screen.findByText('1 clip')).toBeTruthy();
+  expect(screen.queryByText('1 clips')).toBeNull();
+});
+
+it('names a cancelled session in its kicker', async () => {
+  stoppableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/cancel') return { ...session, status: 'cancelled' };
+    throw new Error(`Unexpected ${path}`);
+  });
+  await pickAndUpload();
+  await screen.findByText('UPLOADING SESSION');
+  await fireEvent.press(screen.getByRole('button', { name: 'Cancel session' }));
+  expect(await screen.findByText('CANCELLED SESSION')).toBeTruthy();
+  expect(screen.queryByText('PROCESSING SESSION')).toBeNull();
+  expect(screen.getByText('Cancelled')).toBeTruthy();
 });
