@@ -63,6 +63,7 @@ import {
   setCounts,
   setMovementNotes,
   olderHistoryFor,
+  mergeMachines,
   setMachineSettings,
   setSetKind,
   swapExercise,
@@ -684,6 +685,9 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           const key = machinesFor;
           if (key) change((latest) => setMachineSettings(latest, key, settings));
         }}
+        onMerged={(mergedId, awayIds) =>
+          change((latest) => mergeMachines(latest, mergedId, awayIds))
+        }
         onClose={() => setMachinesFor(null)}
       />
       <SwapSheet

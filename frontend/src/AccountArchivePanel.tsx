@@ -1,41 +1,20 @@
 import { useRef, useState } from 'react';
 import { api } from './api';
 import { PopupDialog } from './PopupDialog';
-import type { ArchiveCounts, ArchivePreview } from './types';
+import type { ArchivePreview } from './types';
 import { localDate } from './utils';
-
-const COUNT_LABELS: Array<[keyof ArchiveCounts, string]> = [
-  ['workouts', 'Workouts'],
-  ['cardio_sessions', 'Cardio sessions'],
-  ['body_check_ins', 'Body check-ins'],
-  ['custom_exercises', 'Custom exercises'],
-  ['photos', 'Machine photos'],
-  ['workout_photos', 'Workout photos'],
-];
-
-function saveFile(blob: Blob, name: string) {
-  const href = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = href;
-  link.download = name;
-  document.body.append(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(href);
-}
-
-function savedOn(createdAt: string | null): string | null {
-  if (!createdAt) return null;
-  const date = new Date(createdAt);
-  if (Number.isNaN(date.getTime())) return null;
-  return date.toLocaleString(undefined, {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
+import {
+  ARCHIVE_DOWNLOAD_FAILED,
+  ARCHIVE_FILE_TYPES,
+  ARCHIVE_READ_FAILED,
+  ARCHIVE_RESTORE_FAILED,
+  ARCHIVE_RESTORE_WARNING,
+  archiveCountRows,
+  archiveFileName,
+  archiveKicker,
+  archiveSkippedNote,
+} from './accountArchive';
+import { downloadFile as saveFile } from './downloadFile';
 
 function message(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
@@ -56,9 +35,9 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
     setDownloading(true);
     setError(null);
     try {
-      saveFile(await api.downloadAccountArchive(), `relay-backup-${localDate()}.zip`);
+      saveFile(await api.downloadAccountArchive(), archiveFileName(localDate()));
     } catch (caught) {
-      setError(message(caught, 'Your backup could not be prepared. Try again.'));
+      setError(message(caught, ARCHIVE_DOWNLOAD_FAILED));
     } finally {
       setDownloading(false);
     }
@@ -71,7 +50,7 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
       setRestoreError(null);
       setPending({ file, preview: await api.previewAccountArchive(file) });
     } catch (caught) {
-      setError(message(caught, 'That backup could not be read.'));
+      setError(message(caught, ARCHIVE_READ_FAILED));
     } finally {
       setChecking(false);
     }
@@ -84,12 +63,12 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
     try {
       await onRestore(pending.file);
     } catch (caught) {
-      setRestoreError(message(caught, 'The backup could not be restored. Nothing was changed.'));
+      setRestoreError(message(caught, ARCHIVE_RESTORE_FAILED));
       setRestoring(false);
     }
   }
 
-  const created = pending ? savedOn(pending.preview.created_at) : null;
+  const skipped = pending ? archiveSkippedNote(pending.preview.photos_skipped) : null;
 
   return (
     <section
@@ -122,7 +101,7 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
         <input
           ref={fileInput}
           type="file"
-          accept=".zip,application/zip"
+          accept={ARCHIVE_FILE_TYPES.join(',')}
           hidden
           aria-label="Backup file"
           onChange={(event) => {
@@ -140,7 +119,7 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
       {pending && (
         <PopupDialog
           title="Restore this backup?"
-          kicker={created ? `SAVED ${created.toUpperCase()}` : 'RESTORE'}
+          kicker={archiveKicker(pending.preview)}
           className="account-archive-dialog"
           busy={restoring}
           onClose={() => setPending(null)}
@@ -171,30 +150,17 @@ export function AccountArchivePanel({ onRestore }: { onRestore: (file: File) => 
               </tr>
             </thead>
             <tbody>
-              {COUNT_LABELS.filter(
-                // A server from before workout photos does not count them.
-                ([key]) =>
-                  pending.preview.archive[key] !== undefined ||
-                  pending.preview.current[key] !== undefined,
-              ).map(([key, label]) => (
-                <tr key={key}>
-                  <th scope="row">{label}</th>
-                  <td className="num">{pending.preview.archive[key]}</td>
-                  <td className="num">{pending.preview.current[key]}</td>
+              {archiveCountRows(pending.preview).map((row) => (
+                <tr key={row.key}>
+                  <th scope="row">{row.label}</th>
+                  <td className="num">{row.archive}</td>
+                  <td className="num">{row.current}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-          {pending.preview.photos_skipped > 0 && (
-            <p className="account-archive-note">
-              {pending.preview.photos_skipped === 1
-                ? '1 photo in this backup is missing and will be left out.'
-                : `${pending.preview.photos_skipped} photos in this backup are missing and will be left out.`}
-            </p>
-          )}
-          <p className="account-archive-warning">
-            This replaces your current training data. A copy of it is kept on the server.
-          </p>
+          {skipped && <p className="account-archive-note">{skipped}</p>}
+          <p className="account-archive-warning">{ARCHIVE_RESTORE_WARNING}</p>
           {restoreError && (
             <p className="inline-error" role="alert">
               {restoreError}

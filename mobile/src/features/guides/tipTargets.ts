@@ -1,10 +1,11 @@
 import type { useRouter } from 'expo-router';
 import type { TipTarget } from '../../../../frontend/src/tipDefinitions';
+import { requestMaintainGoal } from '../body/maintainGoalRequest';
 import { socialRoutes } from '../social';
 
 /**
  * Opens the place a tip's button names, as the web's app shell does for `openTipTarget`. A weight
- * goal opens Body, where its goal sheet is.
+ * goal opens Body with its goal form on Maintain.
  */
 export function openTipTarget(
   router: ReturnType<typeof useRouter>,
@@ -21,6 +22,7 @@ export function openTipTarget(
       else router.navigate('/training');
       return;
     case 'weight-goal':
+      requestMaintainGoal();
       router.navigate('/body');
       return;
     case 'training-blocks':

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+  newerAppNotices,
+  recordableRelease,
   releaseNoticeState,
   storedReviewWeek,
   weeklyReviewShownThisWeek,
@@ -114,5 +116,26 @@ describe('weekly review wording', () => {
     expect(cardioReviewEmptyText({ totalMinutes: 20, previousTotalMinutes: null, zones: [] })).toBe(
       'No zone goals set.',
     );
+  });
+});
+
+describe('recording notices', () => {
+  it('keeps the later marker whichever answer arrives last', () => {
+    expect(
+      newerAppNotices(
+        { release_seen: '1.10.0', weekly_review_seen: '2026-11-23' },
+        { release_seen: '1.9.0', weekly_review_seen: '2026-11-16' },
+      ),
+    ).toEqual({ release_seen: '1.10.0', weekly_review_seen: '2026-11-23' });
+    expect(newerAppNotices(null, { weekly_review_seen: '2026-11-16' })).toEqual({
+      release_seen: null,
+      weekly_review_seen: '2026-11-16',
+    });
+  });
+
+  it('records no release newer than the app that saw it', () => {
+    expect(recordableRelease('1.4.0', '1.3.2')).toBe('1.3.2');
+    expect(recordableRelease('1.3.0', '1.3.2')).toBe('1.3.0');
+    expect(recordableRelease('1.4.0', null)).toBe('1.4.0');
   });
 });

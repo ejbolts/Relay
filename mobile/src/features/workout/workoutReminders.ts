@@ -77,6 +77,7 @@ export async function remindAboutRestAlerts(): Promise<void> {
 }
 
 let wantedAt: number | null = null;
+let wantedWorkout: number | null = null;
 let scheduledAt: number | null = null;
 let queue: Promise<void> = Promise.resolve();
 
@@ -96,7 +97,8 @@ async function applyInactiveReminder() {
     content: {
       title: 'Still working out?',
       body: 'No workout activity for 45 minutes. Resume your workout or finish and save it.',
-      data: { kind: 'workout' },
+      // Which workout it is about, so a tap on a stale reminder never opens another one.
+      data: { kind: 'workout', startedAt: wantedWorkout },
     },
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: target },
   });
@@ -107,17 +109,52 @@ async function applyInactiveReminder() {
  * Keeps the "Still working out?" reminder 45 minutes after the live workout's last activity:
  * moved on by every change, and cancelled (`null`) when the workout is finished or discarded.
  */
-export function syncInactiveReminder(lastActiveAt: number | null): Promise<void> {
+export function syncInactiveReminder(
+  lastActiveAt: number | null,
+  startedAt: number | null = null,
+): Promise<void> {
   wantedAt = lastActiveAt === null ? null : lastActiveAt + INACTIVE_REMINDER_MS;
+  wantedWorkout = startedAt;
   queue = queue.then(applyInactiveReminder).catch(() => undefined);
   return queue;
 }
 
-/** Calls `onOpen` when a workout reminder is tapped; returns the unsubscribe. */
-export function onWorkoutReminderOpened(onOpen: () => void): () => void {
+/** The workout a reminder response is about: its start time, null when unknown, or undefined. */
+function reminderWorkout(response: Notifications.NotificationResponse | null) {
+  const data = response?.notification.request.content.data;
+  if (data?.kind !== 'workout') return undefined;
+  return typeof data.startedAt === 'number' ? data.startedAt : null;
+}
+
+let launchTaken = false;
+
+/**
+ * The workout reminder that launched the app, if one did, taken once: the start time of the
+ * workout it is about (null when unknown), or undefined. Expo keeps the tap that cold-launched
+ * Relay, which happened before any listener existed.
+ */
+export async function takeLaunchReminder(): Promise<number | null | undefined> {
+  if (launchTaken) return undefined;
+  launchTaken = true;
+  try {
+    const workout = reminderWorkout(await Notifications.getLastNotificationResponseAsync());
+    if (workout !== undefined)
+      await Notifications.clearLastNotificationResponseAsync().catch(() => undefined);
+    return workout;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Calls `onOpen` with the reminder's workout (as takeLaunchReminder gives it) when a workout
+ * reminder is tapped while Relay runs; returns the unsubscribe.
+ */
+export function onWorkoutReminderOpened(onOpen: (startedAt: number | null) => void): () => void {
   try {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
-      if (response.notification.request.content.data?.kind === 'workout') onOpen();
+      const workout = reminderWorkout(response);
+      if (workout !== undefined) onOpen(workout);
     });
     return () => subscription?.remove?.();
   } catch {
@@ -128,6 +165,8 @@ export function onWorkoutReminderOpened(onOpen: () => void): () => void {
 /** For tests: forget what was scheduled. */
 export function resetWorkoutRemindersForTests() {
   wantedAt = null;
+  wantedWorkout = null;
   scheduledAt = null;
+  launchTaken = false;
   queue = Promise.resolve();
 }

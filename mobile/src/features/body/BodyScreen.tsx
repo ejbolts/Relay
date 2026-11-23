@@ -15,6 +15,7 @@ import { Icon } from '../../ui/Icon';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { BodyHistory } from './BodyHistory';
+import { syncBodyCheckIns } from './bodyCheckInQueue';
 import { CheckInSyncCard, MaintenanceTip } from './BodyNotices';
 import { bodyIcons } from './bodyIcons';
 import {
@@ -28,10 +29,13 @@ import {
 import { BodySizesCard } from './BodySizesCard';
 import { BodyTrendChart } from './BodyTrendChart';
 import { GoalSheet, type GoalRequest } from './GoalSheet';
+import { clearMaintainGoalRequest, useMaintainGoalRequested } from './maintainGoalRequest';
 import { WeighInSheet } from './WeighInSheet';
 
 /** How long a removed goal can be brought back: the Undo toast's time on screen. */
 const GOAL_UNDO_MS = 5000;
+/** The goal form on Maintain, as Home's maintenance tip asks for. */
+const MAINTAIN_GOAL: GoalRequest = { goal: null, kind: 'maintain' };
 
 /**
  * Removes a goal from view at once and deletes it only when its Undo window closes, as the
@@ -92,6 +96,7 @@ export function BodyScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [entry, setEntry] = useState<{ editing: BodyMeasurement | null } | null>(null);
   const [goalRequest, setGoalRequest] = useState<GoalRequest | null>(null);
+  const maintainRequested = useMaintainGoalRequested();
   const measurements = measurementsQuery.data ?? [];
   const goals = (goalsQuery.data ?? []).filter((goal) => goal.id !== removal.pendingId);
   const latest = measurements[0];
@@ -102,6 +107,8 @@ export function BodyScreen() {
   async function refresh() {
     setRefreshing(true);
     try {
+      // Pulling down also retries check-ins waiting on the phone, refused or not.
+      await syncBodyCheckIns(true).catch(() => undefined);
       await client.refetchQueries({ queryKey: bodyKeys.all, type: 'active' });
     } finally {
       setRefreshing(false);
@@ -255,10 +262,13 @@ export function BodyScreen() {
         onClose={() => setEntry(null)}
       />
       <GoalSheet
-        request={goalRequest}
+        request={goalRequest ?? (maintainRequested ? MAINTAIN_GOAL : null)}
         goals={goals}
         latestKg={latest?.weight_kg ?? null}
-        onClose={() => setGoalRequest(null)}
+        onClose={() => {
+          setGoalRequest(null);
+          clearMaintainGoalRequest();
+        }}
         onRemove={removal.start}
       />
     </>

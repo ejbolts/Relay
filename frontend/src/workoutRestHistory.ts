@@ -1,5 +1,6 @@
 import { setKindOf } from './setFieldValues';
 import type { WorkoutSetInput } from './types';
+import type { WorkoutDraftSet } from './workoutMovements';
 import type { ExerciseHistoryEntry } from './exerciseHistory';
 
 /** Match the nth set of its kind, so an extra warm-up cannot shift working-set history. */
@@ -43,4 +44,22 @@ export function restToAdd(
     }
   }
   return defaultRest ?? undefined;
+}
+
+/**
+ * Whether a set's rest shows between it and the next set: with Show rest times on, a strength
+ * set's rest shows once the set is logged, or straight away on a set that isn't a suggestion
+ * from last time, unless "+" slotted the set in (`restRevealed`).
+ */
+export function restRowShown(
+  item: Pick<WorkoutDraftSet, 'completed' | 'restRevealed' | 'fromPrevious' | 'rest_seconds'>,
+  cardio: boolean,
+  showRestTimes: boolean,
+): boolean {
+  return (
+    !cardio &&
+    showRestTimes &&
+    (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
+    (item.rest_seconds ?? 0) > 0
+  );
 }

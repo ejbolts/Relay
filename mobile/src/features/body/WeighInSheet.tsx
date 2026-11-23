@@ -25,6 +25,8 @@ import { BodyFatStepper, WeightStepper } from './NumberStepper';
 export function useSaveCheckIn() {
   const client = useQueryClient();
   return useMutation({
+    // The save lands in the phone's queue first, so it must run offline too; the queue sends it.
+    networkMode: 'always',
     mutationFn: (payload: BodyCheckInPayload) => bodyCheckInApi.saveBodyMeasurement(payload),
     onSettled: () => refreshBodyMeasurements(client),
   });

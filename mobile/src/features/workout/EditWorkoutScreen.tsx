@@ -18,6 +18,7 @@ import type { SetKind } from '../../../../frontend/src/setFieldValues';
 import type { Exercise, TrackedWorkout, WorkoutInput } from '../../../../frontend/src/types';
 import {
   formatMinutesDuration,
+  timesCanRecordDuration,
   workoutDurationMinutes,
   workoutTimeInputValue,
 } from '../../../../frontend/src/utils';
@@ -46,6 +47,7 @@ import {
   completeExercise,
   deleteSet,
   editInput,
+  mergeMachines,
   moveMovement,
   moveSet,
   removeMovement,
@@ -498,18 +500,21 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
             // Recorded start and end times set the duration, as on the web.
             onPress={timeRange ? undefined : editDuration}
           />
-          <Button
-            label={timeRange ? 'Clear start and end times' : 'Add start and end times'}
-            variant="link"
-            onPress={() => {
-              if (timeRange) editTimes('', '');
-              else {
-                const suggested = suggestedTimes(workout, times.durationMinutes);
-                editTimes(suggested.startTime, suggested.endTime);
-              }
-            }}
-            style={{ alignSelf: 'flex-start' }}
-          />
+          {/* Times can't record a 24-hour workout, which keeps its duration instead. */}
+          {(timeRange || timesCanRecordDuration(times.durationMinutes)) && (
+            <Button
+              label={timeRange ? 'Clear start and end times' : 'Add start and end times'}
+              variant="link"
+              onPress={() => {
+                if (timeRange) editTimes('', '');
+                else {
+                  const suggested = suggestedTimes(workout, times.durationMinutes);
+                  editTimes(suggested.startTime, suggested.endTime);
+                }
+              }}
+              style={{ alignSelf: 'flex-start' }}
+            />
+          )}
           <TextInput
             value={state.notes}
             onChangeText={(notes) => change((latest) => ({ ...latest, notes }))}
@@ -587,6 +592,9 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
           const key = machinesFor;
           if (key) change((latest) => setMachineSettings(latest, key, settings));
         }}
+        onMerged={(mergedId, awayIds) =>
+          change((latest) => mergeMachines(latest, mergedId, awayIds))
+        }
         onClose={() => setMachinesFor(null)}
       />
       <ExercisePicker

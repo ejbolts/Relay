@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import * as Notifications from 'expo-notifications';
 import type { ReactElement } from 'react';
+import { AppState } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { tipStorageKey } from '../../../../frontend/src/tipsState';
 import type { TrackedWorkout, User } from '../../../../frontend/src/types';
@@ -10,19 +10,12 @@ import { HelpSettings } from './HelpSettings';
 import { HomeGuides } from './HomeGuides';
 import { ShareReminderAction } from './ShareReminderAction';
 import { resetTipsForTests, tipsFor } from './tips';
-import { appTourWaiting, closeAppTour, queueAppTour } from './tourProgress';
-import { resetInactiveWorkoutAlertForTests, syncInactiveWorkoutAlert } from './workoutAlerts';
+import { launchPromptOpened, resetNoticeMemory } from '../review/noticeMemory';
+import { appTourWaiting, closeAppTour, queueAppTour, startAppTour } from './tourProgress';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 const mockRouter = { push: jest.fn(), navigate: jest.fn(), back: jest.fn() };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
-jest.mock('expo-notifications', () => ({
-  getPermissionsAsync: jest.fn(async () => ({ granted: true })),
-  scheduleNotificationAsync: jest.fn(async () => 'id'),
-  cancelScheduledNotificationAsync: jest.fn(async () => undefined),
-  addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
-  SchedulableTriggerInputTypes: { DATE: 'date' },
-}));
 const mockUser = { id: 'u1', username: 'sam', created_at: '2026-01-01T09:00:00Z' } as User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
 const mockWorkouts: { current: TrackedWorkout[] } = { current: [] };
@@ -40,10 +33,6 @@ jest.mock('../training/trainingQueries', () => ({
   useSavedWorkout: () => ({ data: { id: 'w1', workout_date: '2026-03-01' } }),
 }));
 jest.mock('../social/ShareWorkoutSheet', () => ({ ShareWorkoutSheet: () => null }));
-jest.mock('../workout/WorkoutProvider', () => ({
-  useLogger: () => null,
-  useWorkout: () => ({ open: jest.fn() }),
-}));
 
 const show = (element: ReactElement) =>
   render(
@@ -75,7 +64,8 @@ const stored = () => JSON.parse(memoryKv.get(tipStorageKey('u1')) ?? '{}');
 beforeEach(() => {
   memoryKv.clear();
   resetTipsForTests();
-  resetInactiveWorkoutAlertForTests();
+  resetNoticeMemory();
+  mockUser.id = 'u1';
   closeAppTour();
   mockWorkouts.current = [];
   jest.clearAllMocks();
@@ -143,6 +133,8 @@ test('Settings lists the guides, says why Compare machines must wait, and replay
 test('a new account takes the quick tour, which opens each tab it explains', async () => {
   queueAppTour('u1');
   await show(<HomeGuides />);
+  // The tour is this visit's one launch prompt, so What's new and the weekly review wait.
+  expect(launchPromptOpened('u1')).toBe('onboarding');
   expect(await screen.findByText('Quick tour · 1 of 8')).toBeVisible();
   await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
@@ -153,24 +145,48 @@ test('a new account takes the quick tour, which opens each tab it explains', asy
   expect(appTourWaiting('u1')).toBe(false);
 });
 
-test('schedules "Still working out?" 45 minutes after the last activity, and cancels it', async () => {
-  const lastActiveAt = Date.now();
-  await syncInactiveWorkoutAlert(lastActiveAt);
-  expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledWith(
-    expect.objectContaining({
-      identifier: 'relay-inactive-workout',
-      content: expect.objectContaining({ title: 'Still working out?' }),
-      trigger: { type: 'date', date: lastActiveAt + 45 * 60_000 },
-    }),
-  );
-  await syncInactiveWorkoutAlert(null);
-  expect(Notifications.cancelScheduledNotificationAsync).toHaveBeenLastCalledWith(
-    'relay-inactive-workout',
-  );
-  jest.mocked(Notifications.getPermissionsAsync).mockResolvedValueOnce({ granted: false } as never);
-  jest.mocked(Notifications.scheduleNotificationAsync).mockClear();
-  await syncInactiveWorkoutAlert(Date.now());
-  expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
+test('an open tour belongs to its account, and a session ending closes it', async () => {
+  // Fresh accounts: tour progress is also remembered in memory for the session.
+  mockUser.id = 'a1';
+  queueAppTour('a1');
+  const first = await show(<HomeGuides />);
+  expect(await screen.findByText('Quick tour · 1 of 8')).toBeVisible();
+  await first.unmount();
+  // Another account signs in on this phone while a1's tour was open.
+  mockUser.id = 'a2';
+  const second = await show(<HomeGuides />);
+  expect(screen.queryByText(/Quick tour/)).toBeNull();
+  await second.unmount();
+  // a1's guide was neither finished nor lost.
+  expect(appTourWaiting('a1')).toBe(true);
+  expect(appTourWaiting('a2')).toBe(false);
+  // The sign-in screen closes any open tour when a session ends.
+  mockUser.id = 'a1';
+  startAppTour('a1');
+  await act(async () => closeAppTour());
+  await show(<HomeGuides />);
+  expect(await screen.findByText('Quick tour · 1 of 8')).toBeVisible();
+});
+
+test('a tip put away comes back when its reminder is due, once the app returns', async () => {
+  let foreground: ((state: string) => void) | undefined;
+  jest.spyOn(AppState, 'addEventListener').mockImplementation((_, handler) => {
+    foreground = handler as (state: string) => void;
+    return { remove: jest.fn() } as never;
+  });
+  await show(<HomeGuides />);
+  // The split tip has a reminder. Put away while no split is set up, it is due in a week.
+  tipsFor('u1').doneHome('split');
+  const due: number = stored().reminders.split.at;
+  expect(due).toBeGreaterThan(Date.now() + 6 * 24 * 60 * 60 * 1000);
+  const now = jest.spyOn(Date, 'now').mockReturnValue(due + 1);
+  try {
+    await act(async () => foreground!('active'));
+    expect(stored().homeDone).not.toContain('split');
+    expect(stored().reminders.split.count).toBe(1);
+  } finally {
+    now.mockRestore();
+  }
 });
 
 test('the share reminder is on by default, offers Share, and turns off from Settings', async () => {

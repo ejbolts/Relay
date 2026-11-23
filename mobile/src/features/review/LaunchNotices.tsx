@@ -25,7 +25,7 @@ export function LaunchNotices() {
   const review = useWeeklyReview();
   const reviewDue = release.checked && review.ready && review.available && !review.shownThisWeek;
   const { currentStart } = review;
-  const tour = useAppTour();
+  const tour = useAppTour(user.id);
 
   useEffect(() => {
     if (!focused || launchPromptOpened(user.id) !== null) return;
@@ -42,7 +42,7 @@ export function LaunchNotices() {
     } else if (reviewDue) {
       openLaunchPrompt(user.id, 'weekly-review');
       markWeeklyReviewShown(user.id, currentStart);
-      recordAppNotices(client, { weekly_review_seen: currentStart });
+      recordAppNotices(client, user.id, { weekly_review_seen: currentStart });
       router.push(reviewRoutes.weeklyReview);
     }
   }, [focused, user.id, tour, release.automatic, reviewDue, currentStart, client, router]);

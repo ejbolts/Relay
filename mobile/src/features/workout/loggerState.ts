@@ -10,6 +10,7 @@ import {
 } from '../../../../frontend/src/exerciseHistory';
 import type { ExerciseMachineChoices } from '../../../../frontend/src/exerciseMachineChoices';
 import { swapMovementExercise } from '../../../../frontend/src/exerciseSwap';
+import { movementAfterMachineMerge } from '../../../../frontend/src/machinePhotoMerge';
 import { movementWithMachines } from '../../../../frontend/src/setMachines';
 import { setKindUpdate, type SetKind } from '../../../../frontend/src/setFieldValues';
 import type { SessionTemplate } from '../../../../frontend/src/trainingSummary';
@@ -583,6 +584,23 @@ export function chooseMachines(
       ),
     };
   });
+}
+
+/**
+ * After duplicate machines merge into `mergedId`, every exercise's pins and set assignments on a
+ * merged-away id (`awayIds`) move to it, as the server remaps saved sets; logged sets keep theirs.
+ */
+export function mergeMachines(
+  state: LoggerState,
+  mergedId: string,
+  awayIds: string[],
+): LoggerState {
+  const movements = state.movements.map((movement) =>
+    movementAfterMachineMerge(movement, mergedId, awayIds),
+  );
+  return movements.every((movement, index) => movement === state.movements[index])
+    ? state
+    : { ...state, movements };
 }
 
 export function setMachineSettings(

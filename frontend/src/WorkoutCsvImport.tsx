@@ -4,10 +4,24 @@ import { PopupDialog } from './PopupDialog';
 import { WorkoutCsvGuide } from './WorkoutCsvGuide';
 import { WorkoutImportSource } from './WorkoutImportSource';
 import { ImportBatchHistory } from './ImportBatchHistory';
-import { bestExerciseMatches } from './importExerciseMatches';
 import './importReview.css';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type { CsvImportPreview, WorkoutImportOptions } from './types';
+import {
+  defaultImportOptions,
+  IMPORT_FILE_TYPES,
+  IMPORT_SAFETY_NOTE,
+  importAddsAnything,
+  importReviewTotals,
+  importSourceSummary,
+  mappedExerciseId,
+  mappingChoices,
+  REVIEW_SESSION_LIMIT,
+  reviewSessionAction,
+  reviewSessionDetails,
+  reviewSessionsOverflow,
+  withExerciseMapping,
+} from './workoutImport';
 
 export function WorkoutImportReview({
   fileName,
@@ -36,6 +50,8 @@ export function WorkoutImportReview({
   onUpdateReview?: () => void;
 }) {
   const exercises = preview.available_exercises ?? [];
+  const totals = importReviewTotals(preview);
+  const overflow = reviewSessionsOverflow(preview.sessions.length);
   return (
     <PopupDialog
       title="Review import"
@@ -49,12 +65,7 @@ export function WorkoutImportReview({
           <button
             type="button"
             className="popup-primary-action"
-            disabled={
-              saving ||
-              reviewing ||
-              reviewStale ||
-              (preview.workouts_to_create === 0 && !preview.body_measurements_to_create)
-            }
+            disabled={saving || reviewing || reviewStale || !importAddsAnything(preview)}
             onClick={onSave}
           >
             {saving ? 'Saving…' : 'Save import'}
@@ -64,35 +75,19 @@ export function WorkoutImportReview({
     >
       <div className="workout-import-review">
         <p className="workout-import-filename">{fileName}</p>
-        {options && (
-          <p>
-            {options.source === 'gym'
-              ? 'Relay / spreadsheet'
-              : options.source === 'strengthlevel'
-                ? 'Strength Level'
-                : options.source === 'hevy'
-                  ? 'Hevy'
-                  : 'Strong'}
-            {options.source === 'strong'
-              ? ` · Workout units: ${options.weight_unit}, ${options.distance_unit}. Measurement units come from the file.`
-              : ''}
-          </p>
-        )}
+        {options && <p>{importSourceSummary(options)}</p>}
         {!!preview.exercise_matches?.length && onMappingChange && (
           <details className="import-mapping" open>
             <summary>Exercise mapping ({preview.exercise_matches.length})</summary>
             {preview.exercise_matches.map((match) => {
-              const best = bestExerciseMatches(match.incoming_name, exercises);
-              const rest = exercises.filter((exercise) => !best.includes(exercise));
+              const { best, rest } = mappingChoices(match.incoming_name, exercises);
               return (
                 <label key={match.incoming_name}>
                   <span>{match.incoming_name}</span>
                   <select
                     aria-label={`Map ${match.incoming_name}`}
                     disabled={saving || reviewing}
-                    value={
-                      options?.exercise_mappings?.[match.incoming_name] ?? match.exercise_id ?? ''
-                    }
+                    value={mappedExerciseId(options, match)}
                     onChange={(event) => onMappingChange(match.incoming_name, event.target.value)}
                   >
                     <option value="">Automatic match / new exercise</option>
@@ -128,59 +123,25 @@ export function WorkoutImportReview({
             Updating…
           </p>
         )}
-        {!reviewing &&
-          (preview.sessions.length > 0 ||
-            !(
-              (preview.body_measurements_to_create ?? 0) + (preview.body_measurements_to_skip ?? 0)
-            )) && (
-            <p>
-              <span className="workout-import-totals">
-                <strong>
-                  {preview.workouts_to_create}{' '}
-                  {preview.workouts_to_create === 1 ? 'session' : 'sessions'}
-                </strong>{' '}
-                and{' '}
-                <strong>
-                  {preview.sets_to_import} {preview.sets_to_import === 1 ? 'set' : 'sets'}
-                </strong>{' '}
-                will be added.
-              </span>
-              {preview.workouts_to_skip > 0 && (
-                <>
-                  {' '}
-                  {preview.workouts_to_skip} identical existing{' '}
-                  {preview.workouts_to_skip === 1 ? 'session' : 'sessions'} will be skipped.
-                </>
-              )}
-            </p>
-          )}
-        {!reviewing &&
-          (preview.body_measurements_to_create ?? 0) + (preview.body_measurements_to_skip ?? 0) >
-            0 && (
-            <p>
-              <span className="workout-import-totals">
-                <strong>
-                  {preview.body_measurements_to_create ?? 0} body-weight{' '}
-                  {preview.body_measurements_to_create === 1 ? 'check-in' : 'check-ins'}
-                </strong>{' '}
-                will be added.
-              </span>{' '}
-              {preview.body_measurements_to_skip ?? 0} existing{' '}
-              {preview.body_measurements_to_skip === 1 ? 'date' : 'dates'} will be kept.
-            </p>
-          )}
-        {preview.sessions.length > 0 && (
+        {!reviewing && totals.sessions && (
           <p>
-            {preview.new_exercises.length
-              ? `New exercises: ${preview.new_exercises.join(', ')}.`
-              : 'No new exercises.'}
+            <span className="workout-import-totals">
+              <strong>{totals.sessions.added}</strong> and <strong>{totals.sessions.sets}</strong>{' '}
+              will be added.
+            </span>
+            {totals.sessions.skipped && <> {totals.sessions.skipped}</>}
           </p>
         )}
-        <p className="workout-import-safety">
-          Nothing is saved until you choose Save import. Existing workouts and body-weight check-ins
-          are kept. Missing body-weight dates may be added from this file. Duplicates and save
-          limits are checked again when saving.
-        </p>
+        {!reviewing && totals.bodyweight && (
+          <p>
+            <span className="workout-import-totals">
+              <strong>{totals.bodyweight.added}</strong> will be added.
+            </span>{' '}
+            {totals.bodyweight.kept}
+          </p>
+        )}
+        {totals.newExercises && <p>{totals.newExercises}</p>}
+        <p className="workout-import-safety">{IMPORT_SAFETY_NOTE}</p>
         {preview.warnings.length > 0 && (
           <details className="workout-import-warnings" open>
             <summary>Warnings ({preview.warnings.length})</summary>
@@ -192,24 +153,17 @@ export function WorkoutImportReview({
           </details>
         )}
         <ul className="workout-import-sessions" aria-label="Sessions in this file">
-          {preview.sessions.slice(0, 50).map((session, index) => (
+          {preview.sessions.slice(0, REVIEW_SESSION_LIMIT).map((session, index) => (
             <li key={index}>
               <div>
                 <strong>{session.name}</strong>
-                <span>{session.duplicate ? 'Skip duplicate' : 'Add session'}</span>
+                <span>{reviewSessionAction(session)}</span>
               </div>
-              <small>
-                {session.workout_date} · {session.sets} {session.sets === 1 ? 'set' : 'sets'} ·{' '}
-                {session.exercises.join(', ')}
-              </small>
+              <small>{reviewSessionDetails(session)}</small>
             </li>
           ))}
         </ul>
-        {preview.sessions.length > 50 && (
-          <p>
-            Showing the first 50 of {preview.sessions.length} sessions. Totals include all rows.
-          </p>
-        )}
+        {overflow && <p>{overflow}</p>}
         {error && (
           <p role="alert" className="inline-error">
             {error}
@@ -245,11 +199,7 @@ export function WorkoutCsvImport({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const unit = useWeightUnit();
-  const [options, setOptions] = useState<WorkoutImportOptions>({
-    source: 'gym',
-    weight_unit: unit,
-    distance_unit: 'km',
-  });
+  const [options, setOptions] = useState<WorkoutImportOptions>(defaultImportOptions(unit));
   function changeOptions(value: WorkoutImportOptions) {
     setOptions(value);
     setError(null);
@@ -274,13 +224,7 @@ export function WorkoutCsvImport({
     setError(null);
   }
   async function save() {
-    if (
-      !review ||
-      saving ||
-      previewing ||
-      reviewStale ||
-      (review.preview.workouts_to_create === 0 && !review.preview.body_measurements_to_create)
-    )
+    if (!review || saving || previewing || reviewStale || !importAddsAnything(review.preview))
       return;
     setError(null);
     setSaving(true);
@@ -306,7 +250,7 @@ export function WorkoutCsvImport({
         className="sr-only"
         aria-label="Workout CSV file"
         type="file"
-        accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
+        accept={IMPORT_FILE_TYPES.join(',')}
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = '';
@@ -348,10 +292,7 @@ export function WorkoutCsvImport({
           reviewing={previewing}
           reviewStale={reviewStale}
           onMappingChange={(name, id) => {
-            const mapped = {
-              ...review.options,
-              exercise_mappings: { ...review.options.exercise_mappings, [name]: id },
-            };
+            const mapped = withExerciseMapping(review.options, name, id);
             setReview({ ...review, options: mapped });
             // Save stays off until the refreshed review arrives; a failure keeps it off.
             setReviewStale(true);

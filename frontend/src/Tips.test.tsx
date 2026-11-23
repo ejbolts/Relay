@@ -365,6 +365,21 @@ describe('shared tip presentation', () => {
     await advance();
     expect(popover()).not.toBeNull();
   });
+  it('offers Edit Home once the account turns a week old, with Home left open', async () => {
+    const child = <HomeTips workouts={[]} hasSplit createdAt="2026-11-04T09:00:00Z" />;
+    await homeBulb(child);
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 2 new');
+    vi.setSystemTime(new Date('2026-11-11T12:00:00Z'));
+    // The same Home renders again on the next day, with nothing else changed.
+    await render(
+      'alice',
+      <>
+        <Harness />
+        {child}
+      </>,
+    );
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 3 new');
+  });
   it('turns grey once every tip is read and opens on the next unread tip', async () => {
     await homeBulb();
     await act(async () => bulb()!.click());

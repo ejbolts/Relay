@@ -1,4 +1,4 @@
-import { useRef, useState, type ComponentRef } from 'react';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
 import {
   Alert,
   Image,
@@ -28,13 +28,14 @@ import {
   type AccountHelpRequest,
 } from '../../../frontend/src/accountHelpRequests';
 import { ApiError, apiOrigin } from '../data/api';
-import { queueAppTour } from '../features/guides/tourProgress';
+import { closeAppTour, queueAppTour } from '../features/guides/tourProgress';
 import { Button, Card, errorMessage, ErrorState, Loading } from '../ui/components';
 import { ProfilePhoto } from '../ui/ProfilePhoto';
 import { Sheet } from '../ui/Sheet';
 import { showToast, ToastHost } from '../ui/Toast';
 import { useTheme } from '../ui/theme';
 import { AccountHelpSheet } from './AccountHelpSheet';
+import { queueImportPrompt } from '../features/data/importPrompt';
 import { registerAccount, useRegistrationConfig } from './registration';
 import { useSession } from './SessionProvider';
 
@@ -55,6 +56,8 @@ export function SignInScreen() {
   const [help, setHelp] = useState<AccountHelpRequest | null>(null);
   const config = useRegistrationConfig(status.kind === 'signed-out');
   const inviteRequired = needsInviteCode || !!config.data?.invite_code_required;
+  // A session ended (signed out or expired): a tour left open belongs to that account.
+  useEffect(() => closeAppTour(), []);
   const passwordInput = useRef<ComponentRef<typeof TextInput>>(null);
   const inviteInput = useRef<ComponentRef<typeof TextInput>>(null);
 
@@ -83,8 +86,12 @@ export function SignInScreen() {
       if (creating) {
         const fields = registrationFields(values);
         const created = await registerAccount(fields);
-        // A new account takes the quick tour on its first Home, as on the web.
-        if (created?.id) queueAppTour(created.id);
+        // A new account takes the quick tour on its first Home, then is asked whether to import
+        // its history, as on the web.
+        if (created?.id) {
+          queueAppTour(created.id);
+          queueImportPrompt(created.id);
+        }
         try {
           await signIn(fields.username, password);
         } catch {

@@ -14,19 +14,19 @@ export function useRangePinchZoom(
   setRange: (range: TimeRange) => void,
 ) {
   const [spanDays, setSpanDays] = useState<number | null>(null);
-  const baseRangeRef = useRef<TimeRange | null>(null);
+  const baseSpanRef = useRef<number | null>(null);
   const { earliest, latest } = dateBounds(dates);
   const spans = useMemo(() => timeRangeSpans(earliest, latest), [earliest, latest]);
   const pinchZoom = useMemo(
     () => ({
       onChange: (scale: number) => {
-        baseRangeRef.current ??= range;
-        const step = pinchStep(baseRangeRef.current, scale, spans);
+        baseSpanRef.current ??= spans[range];
+        const step = pinchStep(baseSpanRef.current, scale, spans);
         setSpanDays(step.spanDays);
         setRange(step.range);
       },
       onEnd: () => {
-        baseRangeRef.current = null;
+        baseSpanRef.current = null;
         setSpanDays(null);
       },
     }),
@@ -34,7 +34,7 @@ export function useRangePinchZoom(
   );
   const selectRange = useCallback(
     (next: TimeRange) => {
-      baseRangeRef.current = null;
+      baseSpanRef.current = null;
       setSpanDays(null);
       setRange(next);
     },

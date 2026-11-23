@@ -187,3 +187,22 @@ test('clearing the times keeps the duration and saves without them', async () =>
   await waitFor(() => expect(puts).toHaveLength(1));
   expect(puts[0].body).toMatchObject({ start_time: null, end_time: null, duration_minutes: 70 });
 });
+
+test('a 24-hour workout keeps its duration and is not offered start and end times', async () => {
+  jest
+    .mocked(apiGet)
+    .mockImplementation(async (path: string) =>
+      path === '/api/workouts/w1'
+        ? { ...saved, duration_minutes: 1440 }
+        : path === '/api/active-workout'
+          ? { revision: 0, draft: null }
+          : [],
+    );
+  await renderEditor();
+  expect(screen.getByRole('button', { name: /^Duration: 24h/ })).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Add start and end times' })).toBeNull();
+  await fireEvent.changeText(screen.getByLabelText('Date'), '2026-11-02');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save workout' }));
+  await waitFor(() => expect(puts).toHaveLength(1));
+  expect(puts[0].body).toMatchObject({ duration_minutes: 1440, start_time: null, end_time: null });
+});

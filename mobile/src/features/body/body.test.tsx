@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { Alert, type AlertButton } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -19,7 +19,9 @@ import { memoryKv } from '../../testing/memoryKvStore';
 import { ToastHost } from '../../ui/Toast';
 import { resetTipsForTests } from '../guides/tips';
 import { bodyTrendPreference } from '../settings/devicePreferences';
+import { bodyCheckInStatus, setBodyCheckInOwner, syncBodyCheckIns } from './bodyCheckInQueue';
 import { BodyScreen } from './BodyScreen';
+import { clearMaintainGoalRequest, requestMaintainGoal } from './maintainGoalRequest';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 // Pinches can't be made in a test; the chart's pinch reaches its handlers through this stand-in.
@@ -147,6 +149,7 @@ let responses: Record<string, unknown>;
 beforeEach(() => {
   jest.clearAllMocks();
   memoryKv.delete(tipStorageKey(mockUser.id));
+  clearMaintainGoalRequest();
   resetTipsForTests();
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   responses = {
@@ -174,6 +177,9 @@ let client: QueryClient;
 afterEach(() => {
   client.clear();
   jest.useRealTimers();
+  onlineManager.setOnline(true);
+  setBodyCheckInOwner(null);
+  memoryKv.clear();
 });
 
 async function renderBody(latestWeight = '84.2 kg') {
@@ -373,6 +379,12 @@ test('reaching a loss goal suggests a maintenance range until it is dismissed', 
   expect(screen.queryByLabelText('Quick tip')).toBeNull();
 });
 
+test('Home’s maintenance tip opens the goal form on Maintain', async () => {
+  requestMaintainGoal();
+  await renderBody();
+  expect(await screen.findByLabelText('Minimum in kg')).toBeVisible();
+});
+
 test('the maintenance tip waits until the goal is reached', async () => {
   await renderBody();
   expect(await screen.findByText('Log weigh-in')).toBeVisible();
@@ -429,4 +441,51 @@ test('pinching the trend changes its range, and it opens full screen in landscap
   await waitFor(() =>
     expect(jest.requireMock('expo-screen-orientation').unlockAsync).toHaveBeenCalled(),
   );
+});
+
+const posts = () =>
+  jest
+    .mocked(apiSend)
+    .mock.calls.filter(([path, method]) => path === '/api/body-measurements' && method === 'POST');
+
+test('a weigh-in logged in airplane mode is queued on the phone before reconnecting', async () => {
+  setBodyCheckInOwner('u1');
+  await renderBody();
+  onlineManager.setOnline(false);
+  await fireEvent.press(screen.getByRole('button', { name: 'Log weigh-in' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Increase by 0.1 kg' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Update check-in' }));
+  // Saved on the phone at once, without waiting for the network.
+  expect(await screen.findByText('1 check-in saved on this phone')).toBeVisible();
+  expect(bodyCheckInStatus().pending).toBe(1);
+  expect(posts()).toHaveLength(0);
+
+  onlineManager.setOnline(true);
+  await act(async () => void (await syncBodyCheckIns()));
+  expect(posts()).toHaveLength(1);
+  expect(posts()[0][2]).toMatchObject({ measurement_date: today, weight_kg: 84.3 });
+  expect(bodyCheckInStatus().pending).toBe(0);
+});
+
+test('pulling Body down retries a check-in that is still waiting', async () => {
+  setBodyCheckInOwner('u1');
+  await renderBody();
+  jest.mocked(apiSend).mockRejectedValueOnce(new Error('Relay took too long to answer.'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Log weigh-in' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Increase by 0.1 kg' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Update check-in' }));
+  expect(await screen.findByText('Waiting to sync')).toBeVisible();
+  // A timeout isn't a refusal, so there is no Retry sync button; pulling down retries it.
+  expect(screen.queryByRole('button', { name: 'Retry sync' })).toBeNull();
+  // The page's scroll view carries the pull-to-refresh control.
+  let page = screen.getByText('Log weigh-in') as {
+    parent: typeof page | null;
+    props: { refreshControl?: { props: { onRefresh: () => void } } };
+  } | null;
+  while (page && !page.props.refreshControl) page = page.parent;
+  const pull = page!.props.refreshControl!.props.onRefresh;
+  await act(async () => pull());
+  await waitFor(() => expect(bodyCheckInStatus().pending).toBe(0));
+  expect(posts()).toHaveLength(2);
+  expect(screen.queryByText('Waiting to sync')).toBeNull();
 });
