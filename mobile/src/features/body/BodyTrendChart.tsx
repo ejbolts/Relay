@@ -302,6 +302,7 @@ export function TrendPlot({
   pinch,
   seriesLabel,
   accessibilityLabel,
+  lineColor,
 }: {
   points: Point[];
   dots?: Point[];
@@ -316,6 +317,8 @@ export function TrendPlot({
   seriesLabel?: string;
   /** Overrides the default screen-reader chart label. */
   accessibilityLabel?: string;
+  /** Overrides the trend line colour (defaults to `colors.text`). */
+  lineColor?: string;
 }) {
   const { colors, type, radius } = useTheme();
   const [width, setWidth] = useState(0);
@@ -489,7 +492,7 @@ export function TrendPlot({
             <Path
               d={line}
               fill="none"
-              stroke={colors.text}
+              stroke={lineColor ?? colors.text}
               strokeWidth={2}
               strokeLinejoin="round"
               strokeLinecap="round"
@@ -510,7 +513,7 @@ export function TrendPlot({
                 cx={activeCoord.x}
                 cy={activeCoord.y}
                 r={5}
-                fill={colors.text}
+                fill={lineColor ?? colors.text}
                 stroke={colors.surface}
                 strokeWidth={2}
               />
@@ -520,7 +523,7 @@ export function TrendPlot({
               cx={model.coords[model.coords.length - 1].x}
               cy={model.coords[model.coords.length - 1].y}
               r={4}
-              fill={colors.text}
+              fill={lineColor ?? colors.text}
               stroke={colors.surface}
               strokeWidth={2}
             />

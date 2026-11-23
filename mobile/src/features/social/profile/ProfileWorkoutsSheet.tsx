@@ -90,7 +90,6 @@ export function ProfileWorkoutsSheet({
                     label="Open workout"
                     variant="secondary"
                     size="small"
-                    icon="chevronRight"
                     onPress={() => {
                       onClose();
                       nav.openWorkout({

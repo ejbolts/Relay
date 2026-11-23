@@ -104,6 +104,7 @@ export function ProfileBodyWeightCard({
               height={170}
               active={active}
               onSelect={setSelected}
+              lineColor={colors.accent}
               seriesLabel="Body weight"
               accessibilityLabel={`Body weight over the last ${BODY_WEIGHT_CHART_DAYS} days`}
             />
