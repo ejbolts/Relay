@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
+import { Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import releaseMetadata from '../../../../frontend/release.json';
 import { releaseSeenKey, weeklyReviewShownKey } from '../../../../frontend/src/appNoticeRules';
@@ -14,10 +15,11 @@ import {
   reviewSet,
   reviewWorkout,
 } from '../../../../frontend/src/weeklyReviewFixtures';
-import { apiGet, apiSend } from '../../data/api';
+import { apiGet, request } from '../../data/api';
+import { recordAppNotices, resetAppNoticeSending, useAppNotices } from './appNotices';
 import { NotificationsBell } from '../social/NotificationsBell';
 import { LaunchNotices } from './LaunchNotices';
-import { resetNoticeMemory } from './noticeMemory';
+import { launchPromptOpened, openLaunchPrompt, resetNoticeMemory } from './noticeMemory';
 import { ReleaseNotesScreen } from './ReleaseNotesScreen';
 import { WeeklyReviewScreen } from './WeeklyReviewScreen';
 
@@ -38,6 +40,9 @@ jest.mock('../../data/api', () => ({
   apiOrigin: 'https://relay.test',
   apiGet: jest.fn(),
   apiSend: jest.fn(),
+  request: jest.fn(),
+  serverOrigin: () => 'https://relay.test',
+  clientVersionHeaders: () => ({ 'X-Relay-Version': mockAppVersion }),
 }));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/authorisedImage', () => ({ useAuthorisedImage: () => null }));
@@ -82,6 +87,13 @@ const reset = {
   display_name: 'Sam',
   requested_at: '2026-11-22T10:00:00Z',
 };
+let mockAppVersion = '99.0.0';
+const expectSaved = (body: object) =>
+  expect(request).toHaveBeenCalledWith(
+    '/api/app-notices',
+    expect.objectContaining({ method: 'PUT', body: JSON.stringify(body) }),
+    'token',
+  );
 let notices = { release_seen: null as string | null, weekly_review_seen: null as string | null };
 
 async function show(ui: ReactNode) {
@@ -102,6 +114,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockStore.clear();
   resetNoticeMemory();
+  resetAppNoticeSending();
+  mockAppVersion = '99.0.0';
   notices = { release_seen: null, weekly_review_seen: null };
   mockUser = {
     id: 'me',
@@ -111,9 +125,9 @@ beforeEach(() => {
     is_admin: false,
     created_at: '2025-01-01T00:00:00Z',
   } as User;
-  jest.mocked(apiSend).mockImplementation(async (_path, _method, body) => ({
+  jest.mocked(request).mockImplementation(async (_path, init) => ({
     ...notices,
-    ...(body as object),
+    ...JSON.parse(String(init?.body)),
   }));
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     if (path === '/release.json') return releaseMetadata;
@@ -146,9 +160,7 @@ it('opens What’s new once per release, then last week’s review on a later vi
   mockRouter.push.mockClear();
   await show(<LaunchNotices />);
   await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/weekly-review'));
-  expect(apiSend).toHaveBeenCalledWith('/api/app-notices', 'PUT', {
-    weekly_review_seen: thisWeek,
-  });
+  await waitFor(() => expectSaved({ weekly_review_seen: thisWeek }));
   expect(mockStore.get(weeklyReviewShownKey('me'))).toBe(thisWeek);
 });
 
@@ -202,13 +214,118 @@ it('lists the release, the weekly review and an administrator’s requests in th
     screen.getByRole('button', { name: `View Relay ${version} release notes` }),
   );
   expect(mockRouter.push).toHaveBeenCalledWith('/release-notes');
-  expect(apiSend).toHaveBeenCalledWith('/api/app-notices', 'PUT', { release_seen: version });
+  await waitFor(() => expectSaved({ release_seen: version }));
 });
 
 it('closing What’s new dismisses it for the account', async () => {
-  const screenView = await show(<ReleaseNotesScreen />);
+  await show(<ReleaseNotesOverHome />);
   expect(await screen.findByText('Changes', {}, { timeout: 4000 })).toBeVisible();
-  await screenView.unmount();
+  await fireEvent.press(screen.getByText('Close it'));
+  expect(screen.queryByText('Changes')).toBeNull();
   expect(mockStore.get(releaseSeenKey('me', version))).toBe('1');
-  expect(apiSend).toHaveBeenCalledWith('/api/app-notices', 'PUT', { release_seen: version });
+  await waitFor(() => expectSaved({ release_seen: version }));
+});
+
+/** What's new pushed over Home, whose bell keeps the account's notices loaded. */
+function ReleaseNotesOverHome() {
+  const [open, setOpen] = useState(true);
+  return (
+    <>
+      <AccountNotices userId="me" />
+      <Text onPress={() => setOpen(false)}>Close it</Text>
+      {open && <ReleaseNotesScreen />}
+    </>
+  );
+}
+
+/** Signs an account in for the notices: what it reads, as text. */
+function AccountNotices({ userId }: { userId: string }) {
+  const { notices } = useAppNotices(userId);
+  return <Text>{`${userId}: ${notices?.release_seen ?? 'none'}`}</Text>;
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+it('a save that finishes after switching accounts never reaches the next account', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const reply = deferred<unknown>();
+  jest.mocked(request).mockImplementationOnce(() => reply.promise as Promise<never>);
+  const a = await render(
+    <QueryClientProvider client={client}>
+      <AccountNotices userId="a" />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText('a: none')).toBeVisible();
+  recordAppNotices(client, 'a', { release_seen: '1.4.0' });
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  // A signs out and B signs in before A's save answers.
+  await a.unmount();
+  client.clear();
+  await render(
+    <QueryClientProvider client={client}>
+      <AccountNotices userId="b" />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText('b: none')).toBeVisible();
+  await act(async () => reply.resolve({ release_seen: '1.4.0', weekly_review_seen: null }));
+  expect(screen.getByText('b: none')).toBeVisible();
+  expect(client.getQueryData(['app-notices', 'b'])).toEqual(notices);
+  expect(request).toHaveBeenCalledTimes(1);
+});
+
+it('keeps a marker until the server has it, and an older answer never rolls one back', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  jest.mocked(request).mockRejectedValueOnce(new TypeError('Network request failed'));
+  const view = await render(
+    <QueryClientProvider client={client}>
+      <AccountNotices userId="a" />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText('a: none')).toBeVisible();
+  recordAppNotices(client, 'a', { release_seen: '1.10.0' });
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  expect(screen.getByText('a: 1.10.0')).toBeVisible();
+  expect(mockStore.get('relay.app-notices.pending:a')).toBe('{"release_seen":"1.10.0"}');
+
+  // Next visit: the marker is sent again; the server's older copy can't undo it.
+  await view.unmount();
+  jest
+    .mocked(request)
+    .mockResolvedValueOnce({ release_seen: '1.9.0', weekly_review_seen: null } as never);
+  await render(
+    <QueryClientProvider client={client}>
+      <AccountNotices userId="a" />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(mockStore.has('relay.app-notices.pending:a')).toBe(false));
+  expect(screen.getByText('a: 1.10.0')).toBeVisible();
+});
+
+it('records no release newer than the app, while the phone remembers the one it showed', async () => {
+  mockAppVersion = '1.0.0';
+  await show(<ReleaseNotesOverHome />);
+  expect(await screen.findByText('Changes', {}, { timeout: 4000 })).toBeVisible();
+  await fireEvent.press(screen.getByText('Close it'));
+  expect(screen.queryByText('Changes')).toBeNull();
+  expect(mockStore.get(releaseSeenKey('me', version))).toBe('1');
+  await waitFor(() => expectSaved({ release_seen: '1.0.0' }));
+});
+
+it('keeps each account’s launch prompt for the visit when switching accounts', () => {
+  openLaunchPrompt('a', 'release');
+  expect(launchPromptOpened('b')).toBeNull();
+  // B opens nothing: A keeps its own.
+  expect(launchPromptOpened('a')).toBe('release');
+  openLaunchPrompt('b', 'weekly-review');
+  expect(launchPromptOpened('a')).toBe('release');
+  expect(launchPromptOpened('b')).toBe('weekly-review');
 });

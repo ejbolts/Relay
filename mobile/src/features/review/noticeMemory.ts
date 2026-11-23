@@ -70,21 +70,22 @@ export const markWeeklyReviewShown = (userId: string, weekStart: string) =>
   write(weeklyReviewShownKey(userId), weekStart);
 
 /**
- * The prompt that opened by itself during this visit, per account. Only one does (see
- * frontend/src/launchPrompts.ts); the rest wait for the next time the app is opened.
+ * The prompt that opened by itself for each account during this visit, which lasts until the app
+ * is closed. Only one opens per account (see frontend/src/launchPrompts.ts); the rest wait for the
+ * next time the app is opened. Switching accounts keeps each account's own.
  */
-let launchPrompt: { userId: string; prompt: LaunchPrompt } | null = null;
+const launchPrompts = new Map<string, LaunchPrompt>();
 
 export function launchPromptOpened(userId: string): LaunchPrompt | null {
-  return launchPrompt?.userId === userId ? launchPrompt.prompt : null;
+  return launchPrompts.get(userId) ?? null;
 }
 
 export function openLaunchPrompt(userId: string, prompt: LaunchPrompt) {
-  launchPrompt = { userId, prompt };
+  launchPrompts.set(userId, prompt);
 }
 
 /** Starts a new visit, forgetting what this one kept in memory, for tests. */
 export function resetNoticeMemory() {
-  launchPrompt = null;
+  launchPrompts.clear();
   session.clear();
 }
