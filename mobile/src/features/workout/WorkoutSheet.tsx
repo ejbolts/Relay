@@ -1,6 +1,6 @@
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Platform,
@@ -12,8 +12,19 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { machineAliases } from '../../../../frontend/src/exerciseHistory';
+import { exerciseLastDoneDates } from '../../../../frontend/src/exerciseLastDone';
+import { liveMuscleSets, type MuscleSetsWeek } from '../../../../frontend/src/liveMuscleSets';
 import { bodyweightOn } from '../../../../frontend/src/relativeStrength';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
+import type { Exercise } from '../../../../frontend/src/types';
+import { localDate } from '../../../../frontend/src/utils';
+import {
+  shelfAfterExerciseComplete,
+  shelfAfterSetUpdate,
+} from '../../../../frontend/src/weeklySetsUpdate';
+import { completeRemainingSets } from '../../../../frontend/src/workoutSets';
+import { setUpdateEffects } from '../../../../frontend/src/workoutSetUpdate';
 import { warmupOnlyMovements, warmupSetLabel } from '../../../../frontend/src/workingSetCheck';
 import {
   calculateScopedDraftPrs,
@@ -24,6 +35,7 @@ import {
   type PrCelebrations,
 } from '../../../../frontend/src/workoutPr';
 import { newId } from '../../data/deviceStorage';
+import { useDashboard, useTrainingPreferences } from '../../data/queries';
 import { Button } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { MenuButton } from '../../ui/MenuButton';
@@ -37,8 +49,10 @@ import { loggerIcons } from './icons';
 import { useTrainingBlocks } from './loggerQueries';
 import {
   addExercises,
+  chooseMachines,
   completeExercise,
   deleteSet,
+  loggerToDraft,
   groupSuperset,
   moveMovement,
   moveSet,
@@ -48,13 +62,18 @@ import {
   setCounts,
   setMovementNotes,
   olderHistoryFor,
+  setMachineSettings,
   setSetKind,
+  swapExercise,
   ungroupSuperset,
   workoutIdentity,
   type LoggerState,
 } from './loggerState';
 import { MovementCard, type MovementActions } from './MovementCard';
 import { RestBar } from './RestBar';
+import { MachineSheet } from './MachineSheet';
+import { SwapSheet } from './SwapSheet';
+import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { restMenuItems } from './restChoices';
 import { useElapsed } from './useElapsed';
 import { useLogger, useWorkout, type LoggerApi } from './WorkoutProvider';
@@ -119,8 +138,11 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const { discard } = useWorkout();
   const insets = useSafeAreaInsets();
   const { colors, type, space, radius } = useTheme();
-  const [pickerOpen, setPickerOpen] = useState(false);
-  const { change, types, context, getState } = logger;
+  // The exercise picker adds exercises, or picks a replacement for the exercise being swapped.
+  const [picker, setPicker] = useState<{ swapping: string | null } | null>(null);
+  const [swapping, setSwapping] = useState<string | null>(null);
+  const [machinesFor, setMachinesFor] = useState<string | null>(null);
+  const { change, types, context, getState, updateSet: applySetUpdate } = logger;
   const identity = workoutIdentity(state, types);
   const elapsed = useElapsed(state.startedAt, state.pause);
   const paused = state.pause.pausedAt !== null;
@@ -139,6 +161,57 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     [state.movements],
   );
   const prBadges = useLivePrBadges(logger, state);
+  const lastDone = useMemo(
+    () =>
+      exerciseLastDoneDates(
+        logger.history,
+        olderHistoryFor(logger.context, state.workoutDate),
+        null,
+      ),
+    [logger.history, logger.context, state.workoutDate],
+  );
+  const swapMovement = state.movements.find((item) => item.key === swapping) ?? null;
+  const machineMovement = state.movements.find((item) => item.key === machinesFor) ?? null;
+
+  // This week's working sets per muscle, counting the live workout, for the shelf a logged
+  // working set opens (the web's useLiveMuscleSets).
+  const dashboard = useDashboard().data;
+  const preferences = useTrainingPreferences().data;
+  const weeklySets = dashboard?.weekly_sets;
+  const { exercises, history } = logger;
+  const week = useMemo(
+    () =>
+      weeklySets
+        ? liveMuscleSets(
+            weeklySets,
+            loggerToDraft(state, state.lastActiveAt),
+            exercises,
+            history,
+            localDate(),
+          )
+        : undefined,
+    [weeklySets, state, exercises, history],
+  );
+  const weekRef = useRef<MuscleSetsWeek | undefined>(week);
+  useLayoutEffect(() => {
+    weekRef.current = week;
+  }, [week]);
+  const [shelf, setShelf] = useState<WeeklySetsUpdate | null>(null);
+  const shelfId = useRef(0);
+  const closeShelf = useCallback(() => setShelf(null), []);
+
+  const swap = useCallback(
+    (movementKey: string, replacement: Exercise) => {
+      const before = getState();
+      if (!before) return;
+      change((current) => swapExercise(current, movementKey, replacement, context));
+      showToast(`Swapped to ${replacement.name}`, {
+        label: 'Undo',
+        run: () => change((current) => ({ ...current, movements: before.movements })),
+      });
+    },
+    [change, context, getState],
+  );
 
   const removeExercise = useCallback(
     (movementKey: string) => {
@@ -193,6 +266,10 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
               onSubmit: (notes) => change((latest) => setMovementNotes(latest, movementKey, notes)),
             }),
         },
+        { label: 'Swap exercise', onPress: () => setSwapping(movementKey) },
+        ...(movement.exercise.kind === 'cardio'
+          ? []
+          : [{ label: 'Machines', onPress: () => setMachinesFor(movementKey) }]),
       ];
       if (index > 0)
         options.push({
@@ -237,7 +314,24 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
 
   const actions = useMemo<MovementActions>(
     () => ({
-      updateSet: logger.updateSet,
+      updateSet: (movementKey, setKey, update) => {
+        const current = getState();
+        const movement = current?.movements.find((item) => item.key === movementKey);
+        const next = current
+          ? shelfAfterSetUpdate(
+              movement,
+              setKey,
+              update,
+              setUpdateEffects(movement, setKey, update, false),
+              weekRef.current,
+              current.workoutDate,
+              localDate(),
+            )
+          : null;
+        applySetUpdate(movementKey, setKey, update);
+        if (next === 'hide') setShelf(null);
+        else if (next) setShelf({ id: ++shelfId.current, gains: next });
+      },
       addSet: logger.addSet,
       deleteSet: (movementKey, setKey) => {
         const movement = getState()?.movements.find((item) => item.key === movementKey);
@@ -259,12 +353,39 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         change((latest) => moveSet(latest, movementKey, from, to)),
       setKind: (movementKey, setKey, kind: SetKind) =>
         change((latest) => setSetKind(latest, movementKey, setKey, kind)),
-      completeExercise: (movementKey, isComplete) =>
-        change((latest) => completeExercise(latest, movementKey, isComplete)),
+      completeExercise: (movementKey, isComplete) => {
+        const current = getState();
+        const movement = current?.movements.find((item) => item.key === movementKey);
+        const gains =
+          current && movement && isComplete
+            ? shelfAfterExerciseComplete(
+                movement,
+                completeRemainingSets(movement.exercise.kind, movement.sets),
+                weekRef.current,
+                current.workoutDate,
+                localDate(),
+              )
+            : null;
+        change((latest) => completeExercise(latest, movementKey, isComplete));
+        if (gains) setShelf({ id: ++shelfId.current, gains });
+      },
       openActions,
       skipHighRepWarning: () => change((latest) => ({ ...latest, skipHighRepWarning: true })),
+      openMachines: setMachinesFor,
+      restoreMachines: (movementKey, machinePhotoIds) =>
+        change((latest) =>
+          latest.movements.find((item) => item.key === movementKey)?.machinePhotosInitialized
+            ? latest
+            : chooseMachines(
+                latest,
+                movementKey,
+                machinePhotoIds,
+                { chosen: false, aliases: new Map() },
+                context,
+              ),
+        ),
     }),
-    [logger.updateSet, logger.addSet, change, getState, openActions],
+    [applySetUpdate, logger.addSet, change, getState, openActions, context],
   );
 
   function rename() {
@@ -496,7 +617,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           label="Add exercise"
           icon="plus"
           variant={state.movements.length ? 'secondary' : 'primary'}
-          onPress={() => setPickerOpen(true)}
+          onPress={() => setPicker({ swapping: null })}
         />
         <WorkoutNotes
           notes={state.notes}
@@ -512,13 +633,78 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         onSkip={logger.skipRest}
         onDismissDone={logger.dismissRestDone}
       />
+      {shelf && (
+        <WeeklySetsShelf
+          update={shelf}
+          goal={preferences?.weekly_muscle_set_goal ?? 10}
+          goals={preferences?.weekly_muscle_set_goals}
+          bottom={insets.bottom + (restShown ? 96 : 12)}
+          onDismiss={closeShelf}
+        />
+      )}
+      <MachineSheet
+        target={
+          machineMovement
+            ? {
+                movementKey: machineMovement.key,
+                exercise: machineMovement.exercise,
+                machinePhotoIds: machineMovement.machinePhotoIds,
+                machineSettings: machineMovement.machineSettings,
+              }
+            : null
+        }
+        onChoose={(machinePhotoIds, photos) => {
+          const key = machinesFor;
+          if (!key) return;
+          change((latest) =>
+            chooseMachines(
+              latest,
+              key,
+              machinePhotoIds,
+              { chosen: true, aliases: machineAliases(photos) },
+              context,
+            ),
+          );
+        }}
+        onSettings={(settings) => {
+          const key = machinesFor;
+          if (key) change((latest) => setMachineSettings(latest, key, settings));
+        }}
+        onClose={() => setMachinesFor(null)}
+      />
+      <SwapSheet
+        exercise={swapMovement?.exercise ?? null}
+        plannedSetCount={swapMovement?.sets.filter((item) => !item.completed).length ?? 0}
+        loggedSetCount={swapMovement?.sets.filter((item) => item.completed).length ?? 0}
+        exercises={logger.exercises}
+        excludedIds={state.movements.map((item) => item.exercise.id)}
+        recentIds={recentIds}
+        lastDone={lastDone}
+        onChoose={(replacement) => {
+          if (swapping) swap(swapping, replacement);
+          setSwapping(null);
+        }}
+        onBrowseAll={() => {
+          setPicker({ swapping });
+          setSwapping(null);
+        }}
+        onClose={() => setSwapping(null)}
+      />
       <ExercisePicker
-        visible={pickerOpen}
+        visible={!!picker}
+        mode={picker?.swapping ? 'swap' : 'add'}
         exercises={logger.exercises}
         recentIds={recentIds}
         addedIds={addedIds}
-        onAdd={(selected) => change((latest) => addExercises(latest, selected, context))}
-        onClose={() => setPickerOpen(false)}
+        category={identity.category}
+        onAdd={(selected) => {
+          const target = picker?.swapping;
+          if (target) {
+            if (selected[0]) swap(target, selected[0]);
+          } else change((latest) => addExercises(latest, selected, context));
+        }}
+        onCreate={logger.createExercise}
+        onClose={() => setPicker(null)}
       />
     </>
   );

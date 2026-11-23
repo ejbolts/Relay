@@ -11,33 +11,51 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { exerciseNameFromSearch } from '../../../../frontend/src/exerciseCreation';
 import { rankExerciseSearchMatches } from '../../../../frontend/src/exerciseSearch';
-import type { Exercise } from '../../../../frontend/src/types';
+import type {
+  Exercise,
+  ExerciseCreateInput,
+  WorkoutCategory,
+} from '../../../../frontend/src/types';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { CreateExerciseSheet } from './CreateExerciseSheet';
 
 /**
  * Picks exercises to add, in the order tapped, searched with the web's exercise search (names,
- * other names, muscles and equipment, with typos). Recently trained exercises come first.
+ * other names, muscles and equipment, with typos). Recently trained exercises come first. In
+ * swap mode one tap picks the replacement. An exercise that isn't there can be created.
  */
 export function ExercisePicker({
   visible,
+  mode = 'add',
   exercises,
   recentIds,
   addedIds,
+  category,
   onAdd,
+  onCreate,
   onClose,
 }: {
   visible: boolean;
+  mode?: 'add' | 'swap';
   exercises: Exercise[];
   recentIds: string[];
   /** Exercises already in the workout. */
   addedIds: Set<string>;
+  /** The workout's type, which a new exercise created from a search starts in. */
+  category: WorkoutCategory;
   onAdd: (selected: Exercise[]) => void;
+  onCreate: (input: ExerciseCreateInput) => Promise<Exercise>;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<Exercise[]>([]);
+  const [creating, setCreating] = useState<{ name: string; category: WorkoutCategory | '' } | null>(
+    null,
+  );
+  const swap = mode === 'swap';
   const { colors, type, radius } = useTheme();
   const insets = useSafeAreaInsets();
   const available = useMemo(() => exercises.filter((exercise) => !exercise.hidden), [exercises]);
@@ -58,6 +76,11 @@ export function ExercisePicker({
   };
   const toggle = (exercise: Exercise) => {
     void Haptics.selectionAsync();
+    if (swap) {
+      onAdd([exercise]);
+      close();
+      return;
+    }
     setSelected((current) =>
       current.some((item) => item.id === exercise.id)
         ? current.filter((item) => item.id !== exercise.id)
@@ -91,11 +114,13 @@ export function ExercisePicker({
             <Text style={[type.body, { color: colors.accentText }]}>Cancel</Text>
           </Pressable>
           <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
-            Add exercises
+            {swap ? 'Swap exercise' : 'Add exercises'}
           </Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={selected.length ? `Add ${selected.length}` : 'Add'}
+            accessibilityElementsHidden={swap}
+            importantForAccessibility={swap ? 'no-hide-descendants' : 'auto'}
             accessibilityState={{ disabled: !selected.length }}
             disabled={!selected.length}
             hitSlop={8}
@@ -103,7 +128,7 @@ export function ExercisePicker({
               onAdd(selected);
               close();
             }}
-            style={[styles.barButton, { alignItems: 'flex-end' }]}
+            style={[styles.barButton, { alignItems: 'flex-end', opacity: swap ? 0 : 1 }]}
           >
             <Text
               style={[
@@ -134,6 +159,14 @@ export function ExercisePicker({
             returnKeyType="search"
             style={[type.body, { flex: 1, color: colors.text, paddingVertical: 10 }]}
           />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Create new exercise"
+            hitSlop={8}
+            onPress={() => setCreating({ name: query.trim(), category: '' })}
+          >
+            <Icon name="plus" size={18} color={colors.accentText} />
+          </Pressable>
         </View>
         <FlatList
           data={shown}
@@ -146,6 +179,27 @@ export function ExercisePicker({
             <Text style={[type.callout, styles.empty, { color: colors.muted }]}>
               {exercises.length ? 'No matching exercises' : 'Exercises are still loading'}
             </Text>
+          }
+          ListFooterComponent={
+            query.trim() &&
+            !available.some(
+              (exercise) =>
+                exercise.name.trim().toLocaleLowerCase() === query.trim().toLocaleLowerCase(),
+            ) ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Create ${exerciseNameFromSearch(query.trim())}`}
+                onPress={() =>
+                  setCreating({ name: exerciseNameFromSearch(query.trim()), category })
+                }
+                style={({ pressed }) => [styles.create, pressed && { opacity: 0.7 }]}
+              >
+                <Icon name="plus" size={16} color={colors.accentText} />
+                <Text style={[type.body, { color: colors.accentText, fontWeight: '600' }]}>
+                  Create “{exerciseNameFromSearch(query.trim())}”
+                </Text>
+              </Pressable>
+            ) : undefined
           }
           renderItem={({ item }) => {
             const order = selected.findIndex((exercise) => exercise.id === item.id);
@@ -197,6 +251,25 @@ export function ExercisePicker({
           }}
         />
       </View>
+      <CreateExerciseSheet
+        visible={!!creating}
+        exercises={exercises}
+        initialName={creating?.name ?? ''}
+        initialCategory={creating?.category ?? ''}
+        onCreate={onCreate}
+        onUseExisting={(exercise) => {
+          setCreating(null);
+          setQuery('');
+          if (swap) {
+            onAdd([exercise]);
+            close();
+          } else if (!addedIds.has(exercise.id))
+            setSelected((current) =>
+              current.some((item) => item.id === exercise.id) ? current : [...current, exercise],
+            );
+        }}
+        onClose={() => setCreating(null)}
+      />
     </Modal>
   );
 }
@@ -235,4 +308,11 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   empty: { textAlign: 'center', padding: 32 },
+  create: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
 });

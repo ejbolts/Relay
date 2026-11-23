@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { exerciseSetGains, weeklySetGains } from './weeklySetsUpdate';
+import {
+  exerciseSetGains,
+  shelfAfterExerciseComplete,
+  shelfAfterSetUpdate,
+  weeklySetGains,
+} from './weeklySetsUpdate';
+import type { WorkoutDraftMovement, WorkoutDraftSet } from './workoutMovements';
+import { createWorkoutSet } from './workoutSets';
 import type { MuscleSetsWeek } from './liveMuscleSets';
 import type { Exercise } from './types';
 
@@ -108,5 +115,99 @@ describe('exerciseSetGains', () => {
       { muscle: 'Lower back', before: 0, gain: 3, after: 3 },
       { muscle: 'Glutes', before: 0, gain: 1.5, after: 1.5 },
     ]);
+  });
+});
+
+describe('the shelf after a set changes', () => {
+  const backExtension = exercise([{ muscle_name: 'Lower back', sets: 1 }]);
+  const set = (key: string, values: Partial<WorkoutDraftSet> = {}): WorkoutDraftSet => ({
+    ...createWorkoutSet('strength', undefined, false),
+    key,
+    reps: 10,
+    weight_kg: 40,
+    ...values,
+  });
+  const movement = (sets: WorkoutDraftSet[]): WorkoutDraftMovement => ({
+    key: 'm',
+    exercise: backExtension,
+    notes: '',
+    machinePhotoIds: [],
+    machinePhotosInitialized: true,
+    supersetKey: null,
+    isComplete: false,
+    sets,
+  });
+  const live = movement([set('a', { completed: true }), set('b'), set('c')]);
+
+  it('moves the totals by each working set as it is logged', () => {
+    expect(
+      shelfAfterSetUpdate(
+        live,
+        'b',
+        { completed: true },
+        { loggingSet: true, finishesExercise: false },
+        week,
+        '2026-11-06',
+        '2026-11-06',
+      ),
+    ).toEqual([{ muscle: 'Lower back', before: 6, gain: 1, after: 7 }]);
+  });
+
+  it("shows the whole exercise's sets when its last one is ticked, and hides on untick", () => {
+    expect(
+      shelfAfterSetUpdate(
+        live,
+        'c',
+        { completed: true },
+        { loggingSet: true, finishesExercise: true },
+        week,
+        '2026-11-06',
+        '2026-11-06',
+      ),
+    ).toEqual([{ muscle: 'Lower back', before: 5, gain: 2, after: 7 }]);
+    expect(
+      shelfAfterSetUpdate(
+        live,
+        'a',
+        { completed: false },
+        { loggingSet: false, finishesExercise: false },
+        week,
+        '2026-11-06',
+        '2026-11-06',
+      ),
+    ).toBe('hide');
+    // A warm-up, or a workout outside the week, changes nothing shown.
+    expect(
+      shelfAfterSetUpdate(
+        movement([set('w', { set_type: 'warmup', warmup: true })]),
+        'w',
+        { completed: true },
+        { loggingSet: true, finishesExercise: false },
+        week,
+        '2026-11-06',
+        '2026-11-06',
+      ),
+    ).toBeNull();
+    expect(
+      shelfAfterSetUpdate(
+        live,
+        'b',
+        { completed: true },
+        { loggingSet: true, finishesExercise: false },
+        week,
+        '2026-11-12',
+        '2026-11-12',
+      ),
+    ).toBeNull();
+  });
+
+  it('counts the sets Finish exercise ticks', () => {
+    const done = live.sets.map((item) => ({ ...item, completed: true }));
+    expect(shelfAfterExerciseComplete(live, done, week, '2026-11-06', '2026-11-06')).toEqual([
+      { muscle: 'Lower back', before: 5, gain: 3, after: 8 },
+    ]);
+    expect(
+      shelfAfterExerciseComplete(live, live.sets, week, '2026-11-06', '2026-11-06'),
+    ).toBeNull();
   });
 });

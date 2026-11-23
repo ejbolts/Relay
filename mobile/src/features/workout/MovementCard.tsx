@@ -1,9 +1,10 @@
 import * as Haptics from 'expo-haptics';
-import { memo, useMemo, useRef, useState, type ComponentRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import {
   lastWorkingSessionSets,
+  machineAliases,
   movementHistory,
   recentExerciseHistory,
 } from '../../../../frontend/src/exerciseHistory';
@@ -40,6 +41,7 @@ import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { promptText } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
+import { lastUsedMachines, useMachinePhotos } from './loggerQueries';
 import { formatPlain, NumberField, parseDecimal, parseWhole } from './NumberField';
 import { restMenuItems } from './restChoices';
 
@@ -52,10 +54,14 @@ export interface MovementActions {
   completeExercise: (movementKey: string, isComplete: boolean) => void;
   openActions: (movementKey: string) => void;
   skipHighRepWarning: () => void;
+  /** Opens the exercise's machines. */
+  openMachines: (movementKey: string) => void;
+  /** Pins the machines the exercise's last session used, for a movement that has none yet. */
+  restoreMachines: (movementKey: string, machinePhotoIds: string[]) => void;
 }
 
-const NO_ALIASES: ReadonlyMap<string, string> = new Map();
 const NO_BADGES: ReadonlyMap<string, string[]> = new Map();
+const MACHINE_EQUIPMENT = /machine|cable|smith/i;
 
 /** One exercise of the live workout: its target, sets and actions. */
 export const MovementCard = memo(function MovementCard({
@@ -87,8 +93,40 @@ export const MovementCard = memo(function MovementCard({
 }) {
   const { colors, type, radius, space } = useTheme();
   const cardio = movement.exercise.kind === 'cardio';
+  const exerciseId = movement.exercise.id;
+  // Machines show for machine, cable and Smith exercises, and whenever one is pinned.
+  const machineRow =
+    !cardio &&
+    (movement.machinePhotoIds.length > 0 ||
+      MACHINE_EQUIPMENT.test(movement.exercise.equipment ?? ''));
+  const machines = useMachinePhotos(exerciseId, machineRow).data;
+  const aliases = useMemo(() => machineAliases(machines ?? []), [machines]);
+  const machineNames = useMemo(
+    () => new Map((machines ?? []).map((photo) => [photo.id, photo.caption || 'Machine'])),
+    [machines],
+  );
+  const pinnedMachine = movement.machinePhotoIds.at(-1);
+  // A movement new to this workout starts on the machines its last session used, as on the web.
+  const { restoreMachines } = actions;
+  useEffect(() => {
+    if (cardio || movement.machinePhotosInitialized) return;
+    let active = true;
+    lastUsedMachines(exerciseId)
+      .then((photos) => {
+        if (active)
+          restoreMachines(
+            movement.key,
+            photos.map((photo) => photo.id),
+          );
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+  }, [cardio, exerciseId, movement.key, movement.machinePhotosInitialized, restoreMachines]);
   // Hints come from the last session with working sets, as on the web, reaching back into
-  // older history when the loaded workouts don't include the exercise.
+  // older history when the loaded workouts don't include the exercise. With a machine pinned,
+  // its own sessions supply them.
   const lastSession = useMemo(
     () =>
       lastWorkingSessionSets(
@@ -100,11 +138,19 @@ export const MovementCard = memo(function MovementCard({
             Number.POSITIVE_INFINITY,
             olderLatest,
           ),
-          null,
-          NO_ALIASES,
+          pinnedMachine,
+          aliases,
         ),
       ),
-    [history, movement.exercise.id, workoutDate, excludedWorkoutId, olderLatest],
+    [
+      history,
+      movement.exercise.id,
+      workoutDate,
+      excludedWorkoutId,
+      olderLatest,
+      pinnedMachine,
+      aliases,
+    ],
   );
   const target =
     movement.repRange && !cardio
@@ -143,6 +189,11 @@ export const MovementCard = memo(function MovementCard({
           <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
             {name}
           </Text>
+          {!!movement.swappedFrom && (
+            <Text style={[type.footnote, { color: colors.muted }]}>
+              Swapped from {movement.swappedFrom}
+            </Text>
+          )}
           {!!target && <Text style={[type.footnote, { color: colors.secondary }]}>{target}</Text>}
           {!!movement.notes.trim() && (
             <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={3}>
@@ -185,6 +236,44 @@ export const MovementCard = memo(function MovementCard({
         </Pressable>
       </View>
 
+      {machineRow && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            pinnedMachine
+              ? `Machine: ${machineNames.get(pinnedMachine) ?? 'pinned'}`
+              : `Choose a machine for ${name}`
+          }
+          onPress={() => actions.openMachines(movement.key)}
+          style={({ pressed }) => [
+            styles.machine,
+            { backgroundColor: colors.surface2, borderRadius: radius.md },
+            pressed && { opacity: 0.7 },
+          ]}
+        >
+          <Icon
+            name={{ sf: 'wrench.adjustable', md: 'build' }}
+            size={14}
+            color={colors.secondary}
+          />
+          <Text
+            style={[type.footnote, { color: colors.text, fontWeight: '600', flexShrink: 1 }]}
+            numberOfLines={1}
+          >
+            {pinnedMachine
+              ? `${machineNames.get(pinnedMachine) ?? 'Machine'}${movement.machinePhotoIds.length > 1 ? ` +${movement.machinePhotoIds.length - 1}` : ''}`
+              : 'Choose machine'}
+          </Text>
+          {!!movement.machineSettings?.length && (
+            <Text style={[type.footnote, { color: colors.muted, flexShrink: 1 }]} numberOfLines={1}>
+              {movement.machineSettings
+                .map((setting) => `${setting.name} ${setting.value}`)
+                .join(' · ')}
+            </Text>
+          )}
+        </Pressable>
+      )}
+
       <View style={styles.columns}>
         <Text style={[type.caption, styles.setColumn, { color: colors.muted }]}>Set</Text>
         <Text style={[type.caption, styles.previousColumn, { color: colors.muted }]}>Previous</Text>
@@ -206,6 +295,8 @@ export const MovementCard = memo(function MovementCard({
           label={labels[index]}
           previous={matchingLastSessionSet(movement.sets, index, lastSession)}
           records={prBadges.get(item.key) ?? null}
+          machines={movement.machinePhotoIds.length > 1 ? movement.machinePhotoIds : null}
+          machineNames={machineNames}
           weightUnit={weightUnit}
           skipHighRepWarning={skipHighRepWarning}
           actions={actions}
@@ -259,6 +350,8 @@ function SetRow({
   label,
   previous,
   records,
+  machines,
+  machineNames,
   weightUnit,
   skipHighRepWarning,
   actions,
@@ -270,6 +363,9 @@ function SetRow({
   previous: TrackedSet | undefined;
   /** The records this set beat, once it is logged. */
   records: string[] | null;
+  /** With several machines pinned, the ones each set chooses between. */
+  machines: string[] | null;
+  machineNames: ReadonlyMap<string, string>;
   weightUnit: WeightUnit;
   skipHighRepWarning: boolean;
   actions: MovementActions;
@@ -395,6 +491,20 @@ function SetRow({
       ],
     },
     { label: item.notes ? 'Edit note' : 'Add note', onPress: editNote },
+    ...(machines
+      ? [
+          {
+            label: item.machine_photo_id
+              ? `Machine: ${machineNames.get(item.machine_photo_id) ?? 'pinned'}`
+              : 'Machine',
+            items: machines.map((id) => ({
+              label: machineNames.get(id) ?? 'Machine',
+              checked: item.machine_photo_id === id,
+              onPress: () => update({ machine_photo_id: id }),
+            })),
+          },
+        ]
+      : []),
     ...(index > 0
       ? [{ label: 'Move up', onPress: () => actions.moveSet(movement.key, index, index - 1) }]
       : []),
@@ -544,7 +654,21 @@ function SetRow({
             <Icon name="check" size={18} color={item.completed ? colors.onAccent : colors.muted} />
           </Pressable>
         </View>
-        <SetDetails item={item} number={number} records={records} onEditNote={editNote} />
+        <SetDetails
+          item={item}
+          number={number}
+          records={records}
+          machine={
+            machines
+              ? item.machine_photo_id
+                ? (machineNames.get(item.machine_photo_id) ?? 'Machine')
+                : item.completed
+                  ? null
+                  : undefined
+              : undefined
+          }
+          onEditNote={editNote}
+        />
         {cardio && (
           <CardioExtras
             item={item}
@@ -565,16 +689,19 @@ function SetDetails({
   item,
   number,
   records,
+  machine,
   onEditNote,
 }: {
   item: WorkoutDraftSet;
   number: number;
   records: string[] | null;
+  /** The set's machine when several are pinned; null for a logged set that needs one. */
+  machine?: string | null;
   onEditNote: () => void;
 }) {
   const { colors, type, radius } = useTheme();
   const note = item.notes?.trim();
-  if (!records && item.rpe === null && !note) return null;
+  if (!records && item.rpe === null && !note && machine === undefined) return null;
   return (
     <View style={styles.details}>
       {records && (
@@ -588,6 +715,16 @@ function SetDetails({
             {records.join(' · ')}
           </Text>
         </View>
+      )}
+      {machine !== undefined && (
+        <Text
+          style={[
+            type.footnote,
+            { color: machine ? colors.secondary : colors.danger, fontWeight: '600' },
+          ]}
+        >
+          {machine ?? 'Choose a machine from the set menu'}
+        </Text>
       )}
       {(item.rpe !== null || !!note) && (
         <View style={styles.detailLine}>
@@ -772,6 +909,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   details: { paddingLeft: 44, paddingRight: 4, paddingBottom: 4, gap: 4 },
+  machine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginBottom: 4,
+  },
   record: {
     flexDirection: 'row',
     alignItems: 'center',
