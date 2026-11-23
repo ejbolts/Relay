@@ -13,7 +13,13 @@ import { showMenu, type MenuOption } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { restTimesPreference } from '../settings/devicePreferences';
 import { ExercisePicker } from './ExercisePicker';
-import { addExercises, chooseMachines, startLogger, swapExercise } from './loggerState';
+import {
+  addExercises,
+  chooseMachines,
+  mergeMachines,
+  startLogger,
+  swapExercise,
+} from './loggerState';
 import {
   bench,
   context,
@@ -447,7 +453,9 @@ describe('picking exercises', () => {
     const { onCreateSuperset } = await openPicker();
     const add = screen.getByRole('button', { name: 'Add superset' });
     expect(add).toBeDisabled();
-    await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })));
+    await act(async () =>
+      fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })),
+    );
     await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Bench Press' })));
     await act(async () => fireEvent.press(add));
     expect(onCreateSuperset).toHaveBeenCalledWith([press, bench], {});
@@ -489,4 +497,45 @@ describe('picking exercises', () => {
     expect(next.movements[0].sets.map((item) => item.weight_kg)).toEqual([60, 60]);
     expect(next.movements.map((item) => item.supersetKey)).toEqual(['group', 'group']);
   });
+});
+
+test('merging machines keeps a logged set on its machine, with a third machine still pinned', () => {
+  const started = startLogger(
+    {
+      template: pushDay,
+      startCategory: null,
+      startType: null,
+      recommendationCategory: 'push',
+      types,
+      date: '2026-11-22',
+      now: startedAt,
+      clientSessionId: sessionId,
+    },
+    context(),
+  );
+  const key = started.movements[0].key;
+  const pinned = chooseMachines(
+    started,
+    key,
+    ['a', 'b', 'c'],
+    { chosen: true, aliases: new Map() },
+    context(),
+  );
+  const logged = {
+    ...pinned,
+    movements: pinned.movements.map((movement, index) =>
+      index === 0
+        ? {
+            ...movement,
+            sets: movement.sets.map((set, setIndex) =>
+              setIndex === 0 ? { ...set, completed: true, machine_photo_id: 'a' } : set,
+            ),
+          }
+        : movement,
+    ),
+  };
+  const merged = mergeMachines(logged, 'b', ['a', 'b']);
+  expect(merged.movements[0].machinePhotoIds).toEqual(['b', 'c']);
+  expect(merged.movements[0].sets[0]).toMatchObject({ completed: true, machine_photo_id: 'b' });
+  expect(mergeMachines(logged, 'x', ['y'])).toBe(logged);
 });

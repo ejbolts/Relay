@@ -62,7 +62,10 @@ const option = (options: MenuOption[], label: string) => options.find((o) => o.l
 let client: QueryClient;
 afterEach(() => client?.clear());
 
-async function openSheet(pinned: string[] = ['cybex']) {
+async function openSheet(
+  pinned: string[] = ['cybex'],
+  onMerged?: (mergedId: string, awayIds: string[]) => void,
+) {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const onChoose = jest.fn();
   await render(
@@ -71,6 +74,7 @@ async function openSheet(pinned: string[] = ['cybex']) {
         target={{ movementKey: 'm1', exercise: bench, machinePhotoIds: pinned }}
         onChoose={onChoose}
         onSettings={jest.fn()}
+        onMerged={onMerged}
         onClose={jest.fn()}
       />
     </QueryClientProvider>,
@@ -146,4 +150,23 @@ test('duplicates merge into one machine, and its pin moves to it', async () => {
   expect(onChoose).toHaveBeenCalledWith(['hammer'], [expect.objectContaining({ id: 'hammer' })]);
   expect(showToast).toHaveBeenCalledWith('Machines merged');
   expect(await screen.findByRole('checkbox', { name: 'Hammer press' })).toBeVisible();
+});
+
+test('in the logger, a merge hands over every merged-away id instead of re-pinning', async () => {
+  jest.mocked(apiSend).mockResolvedValue(machine('hammer', 'Hammer', 3));
+  const onMerged = jest.fn();
+  const onChoose = await openSheet(['cybex'], onMerged);
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Merge duplicates' })));
+  await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Hammer' })));
+  await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Cybex' })));
+  await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Merge 2' })));
+  await act(async () =>
+    fireEvent.press(screen.getByRole('button', { name: 'Merge into 1 machine · 3 photos' })),
+  );
+  expect(onMerged).toHaveBeenCalledWith(
+    'hammer',
+    ['cybex', 'cybex-0', 'cybex-1', 'hammer', 'hammer-0'],
+    expect.any(Array),
+  );
+  expect(onChoose).not.toHaveBeenCalled();
 });

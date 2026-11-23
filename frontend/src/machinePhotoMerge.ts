@@ -33,3 +33,45 @@ export function pinnedAfterMerge(
   const sources = new Set(sourceIds);
   return [...new Set(pinnedIds.map((id) => (sources.has(id) ? mergedId : id)))];
 }
+
+/**
+ * Every id that now means the merged machine: the merged-away machines and the photos they held
+ * from earlier merges, which saved sets and pins may still name.
+ */
+export function mergedAwayIds(
+  photos: Pick<MachinePhoto, 'id' | 'images'>[],
+  sourceIds: string[],
+): string[] {
+  const sources = new Set(sourceIds);
+  return [
+    ...new Set(
+      photos
+        .filter((photo) => sources.has(photo.id))
+        .flatMap((photo) => [photo.id, ...(photo.images ?? []).map((image) => image.id)]),
+    ),
+  ];
+}
+
+/**
+ * An exercise's pins and set assignments after a merge, as the server remaps saved sets: every
+ * merged-away id becomes the merged machine, so a logged set keeps its machine.
+ */
+export function movementAfterMachineMerge<
+  T extends { machinePhotoIds: string[]; sets: { machine_photo_id?: string | null }[] },
+>(movement: T, mergedId: string, awayIds: string[]): T {
+  const away = new Set(awayIds);
+  if (
+    !movement.machinePhotoIds.some((id) => away.has(id)) &&
+    !movement.sets.some((set) => set.machine_photo_id && away.has(set.machine_photo_id))
+  )
+    return movement;
+  return {
+    ...movement,
+    machinePhotoIds: pinnedAfterMerge(movement.machinePhotoIds, mergedId, awayIds),
+    sets: movement.sets.map((set) =>
+      set.machine_photo_id && away.has(set.machine_photo_id)
+        ? { ...set, machine_photo_id: mergedId }
+        : set,
+    ),
+  };
+}
