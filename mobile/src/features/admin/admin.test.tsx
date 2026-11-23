@@ -20,6 +20,7 @@ import { AdminAccountScreen } from './AdminAccountScreen';
 import { AdminScreen } from './AdminScreen';
 import { AdminServerScreen } from './AdminServerScreen';
 import AdminLayout from '../../app/admin/_layout';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
 import { AdminSettingsSection } from './AdminSettingsSection';
 
 // A full parallel run is slow to render the first screen.
@@ -387,13 +388,31 @@ it('drops a settings save and its profile refresh that answer after signing out'
   await fireEvent.press(await screen.findByRole('button', { name: /^Video uploads/ }));
   const options = jest.mocked(showMenu).mock.lastCall![1];
   await act(async () => options.find((option) => option.label === 'Everyone')!.onPress());
-  // Signing out unmounts every signed-in screen and clears the account's cached data.
+  // Signing out moves the provider's session on, unmounts every signed-in screen and clears the
+  // account's cached data (the full provider transition is in accountGuard.test.tsx).
+  nextSessionEpoch();
   await act(async () => screen.unmount());
   client.clear();
   await act(async () => saved.resolve({ ...settings, video_uploads: 'everyone' }));
   expect(client.getQueryData(['admin', 'settings'])).toBeUndefined();
   expect(apiGet).not.toHaveBeenCalledWith('/api/auth/me');
   expect(mockSession.updateUser).not.toHaveBeenCalled();
+  expect(showToast).not.toHaveBeenCalled();
+});
+
+it('still saves a confirmed setting and refreshes the profile after an ordinary Back', async () => {
+  const saved = deferred<ServerSettings>();
+  jest.mocked(apiSend).mockImplementation(() => saved.promise as never);
+  await open(<AdminScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: /^Video uploads/ }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Off')!.onPress());
+  // Back closes the console; the same account is still signed in.
+  await act(async () => screen.unmount());
+  await act(async () => saved.resolve({ ...settings, video_uploads: 'off' }));
+  await waitFor(() => expect(mockSession.updateUser).toHaveBeenCalled());
+  expect(client.getQueryData<ServerSettings>(['admin', 'settings'])?.video_uploads).toBe('off');
+  // The console is gone, so no toast.
   expect(showToast).not.toHaveBeenCalled();
 });
 
@@ -444,6 +463,45 @@ it('keeps the screen and Reset locked until a reset answers, then asks before le
   await act(async () => mockPrevent.onLeave?.({ repeat }));
   await answerAlert('Leave');
   expect(repeat).toHaveBeenCalledTimes(1);
+});
+
+it('never sends a second reset for an account from another copy of its screen', async () => {
+  jest.spyOn(Alert, 'alert');
+  mockParams = { id: 'riley' };
+  const reset = deferred<{ temporary_password: string }>();
+  jest.mocked(apiSend).mockImplementation(() => reset.promise as never);
+  await open(<AdminAccountScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Reset password' }));
+  await answerAlert('Reset and sign out');
+  // The same account opened again elsewhere, such as from a notice, while the first is waiting.
+  await screen.rerender(
+    wrapped(
+      <>
+        <AdminAccountScreen />
+        <AdminAccountScreen />
+      </>,
+    ),
+  );
+  const buttons = await screen.findAllByRole('button', { name: 'Reset password' });
+  await fireEvent.press(buttons[1]);
+  await answerAlert('Reset and sign out');
+  expect(apiSend).toHaveBeenCalledTimes(1);
+  await act(async () => reset.resolve({ temporary_password: 'brisk-otter-42' }));
+});
+
+it('keeps the username editor open while its save is on its way', async () => {
+  mockParams = { id: 'riley' };
+  const rename = deferred<AdminUser>();
+  jest.mocked(apiSend).mockImplementation(() => rename.promise as never);
+  await open(<AdminAccountScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Change username' }));
+  await fireEvent.changeText(await screen.findByLabelText('Username'), 'casey');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  // The sheet's Close (the same path as Android Back and the backdrop) waits for the answer.
+  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.getByLabelText('Username')).toBeTruthy();
+  await act(async () => rename.resolve({ ...riley, username: 'casey' }));
+  await waitFor(() => expect(screen.queryByLabelText('Username')).toBeNull());
 });
 
 it('lets leaving go once the temporary password is dismissed', async () => {
