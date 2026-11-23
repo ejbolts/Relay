@@ -173,17 +173,33 @@ export function Slider({
     onChange(snapped);
   };
   // One grid of reachable values (from `min` in steps, then `max` itself) for the native track
-  // and for screen readers. Ranges the steps divide evenly get native stops. An uneven range is
-  // not supported (see the dev warning): its track moves freely and lands on the grid, and after
-  // a release that snaps back to the same value the native thumb can rest off it.
+  // and for screen readers. Supported: a range the step divides into at least three values,
+  // which gets native stops. Not supported (each warns once in development): an uneven range or
+  // only two values, where the track moves freely and lands on the grid, so after a release that
+  // snaps back to the same value the native thumb can rest off it.
   const grid = sliderGrid(min, max, step);
   const nativeChange = (next: number) => change(snapToStep(next, min, max, step));
+  // Bounds or a step that make no slider: a disabled track, never raw values passed to native.
+  if (!grid.valid)
+    return (
+      <View
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={{ disabled: true }}
+        style={[styles.slider, style]}
+      >
+        <View style={[styles.disabledTrack, { backgroundColor: colors.surface3 }]} />
+      </View>
+    );
   return (
     <View
       accessible
       accessibilityRole="adjustable"
       accessibilityLabel={accessibilityLabel}
-      accessibilityValue={valueText ? { text: valueText } : { min, max, now: value }}
+      accessibilityValue={
+        valueText ? { text: valueText } : { min: grid.min, max: grid.max, now: value }
+      }
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={(event) =>
         change(
@@ -196,9 +212,9 @@ export function Slider({
         <Host colorScheme={scheme} style={{ flex: 1 }}>
           <SwiftSlider
             value={value}
-            min={min}
-            max={max}
-            step={grid.even ? grid.step : undefined}
+            min={grid.min}
+            max={grid.max}
+            step={grid.stops ? grid.step : undefined}
             onValueChange={nativeChange}
             modifiers={[tint(colors.accent)]}
           />
@@ -207,9 +223,9 @@ export function Slider({
         <ComposeHost style={{ flex: 1 }}>
           <ComposeSlider
             value={value}
-            min={min}
-            max={max}
-            steps={grid.even ? Math.max(0, grid.last - 1) : 0}
+            min={grid.min}
+            max={grid.max}
+            steps={grid.stops ? grid.last - 1 : 0}
             onValueChange={nativeChange}
             colors={{
               thumbColor: colors.accent,
@@ -311,11 +327,13 @@ export function sliderGrid(min: number, max: number, step: number) {
     const lo = Number.isFinite(min) ? min : 0;
     const hi = Number.isFinite(max) && max > lo ? max : lo + 1;
     return {
+      valid: false,
       min: lo,
       max: hi,
       step: hi - lo,
       last: 1,
       even: true,
+      stops: false,
       at: (i: number) => (i <= 0 ? lo : hi),
     };
   }
@@ -329,9 +347,18 @@ export function sliderGrid(min: number, max: number, step: number) {
         'supported: the native thumb can rest between values.',
     );
   }
+  // Native stops need at least three values: Compose reads zero steps between the ends as a
+  // continuous track, so a two-value slider would rest between them.
+  const stops = even && last >= 2;
+  if (even && !stops) {
+    warnOnce(
+      `Slider: ${min}–${max} by ${step} has only two values; a slider needs at least three. ` +
+        'Use a Switch or a Segmented control.',
+    );
+  }
   // Drop float noise such as 0.30000000000000004 from decimal steps.
   const at = (i: number) => (i >= last ? max : Number((min + i * step).toFixed(10)));
-  return { min, max, step, last, even, at };
+  return { valid: true, min, max, step, last, even, stops, at };
 }
 
 /** Every value a slider can take, in order (`sliderGrid` without the arithmetic). */
@@ -370,6 +397,7 @@ export function stepSlider(
 
 const styles = StyleSheet.create({
   slider: { flex: 1, height: 44, justifyContent: 'center' },
+  disabledTrack: { height: 4, borderRadius: 2, opacity: 0.6 },
   // The web's control: a 1 pt outline round 36 pt pills, 4 pt apart, 44 pt in all. The outline
   // sits inside the 44 pt so each choice's pressable can fill the full height.
   segments: {
