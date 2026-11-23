@@ -81,7 +81,7 @@ export function AdminScreen() {
       {settings.data && <SwitchesSection settings={settings.data} />}
       <Section title="Server">
         <Row
-          label="Limits, storage and versions"
+          label="Server details"
           icon={adminIcons.server}
           iconTint="#64748b"
           value={usedPercent === null ? null : `${usedPercent}% disk used`}

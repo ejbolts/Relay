@@ -85,8 +85,9 @@ function AccountDetails({ account }: { account: AdminUser }) {
   }
 
   const replace = (updated: AdminUser) =>
-    client.setQueryData<AdminUser[]>(adminKeys.users, (current) =>
-      replaceAccount(current, updated) ?? undefined,
+    client.setQueryData<AdminUser[]>(
+      adminKeys.users,
+      (current) => replaceAccount(current, updated) ?? undefined,
     );
 
   function confirmReset() {
@@ -195,7 +196,6 @@ function AccountDetails({ account }: { account: AdminUser }) {
     <SettingsPage>
       <Stack.Screen options={{ title: account.display_name }} />
       <View style={{ gap: 6 }}>
-        <Text style={[type.title, { color: colors.text }]}>{account.display_name}</Text>
         <Text style={[type.callout, { color: colors.muted }]}>@{account.username}</Text>
         <AccountTags account={account} isSelf={isSelf} />
       </View>
