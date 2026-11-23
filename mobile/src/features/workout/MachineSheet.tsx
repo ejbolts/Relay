@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { machineLastUsedLabel } from '../../../../frontend/src/machineHistory';
-import { pinnedAfterMerge } from '../../../../frontend/src/machinePhotoMerge';
+import { mergedAwayIds, pinnedAfterMerge } from '../../../../frontend/src/machinePhotoMerge';
 import { cleanMachineSettings } from '../../../../frontend/src/setMachines';
 import type { Exercise, MachinePhotoUsage, MachineSetting } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
@@ -50,12 +50,19 @@ export function MachineSheet({
   target,
   onChoose,
   onSettings,
+  onMerged,
   onClose,
 }: {
   target: MachineTarget | null;
   /** `chosen` marks machines the person picked rather than ones restored automatically. */
   onChoose: (machinePhotoIds: string[], photos: MachinePhotoUsage[]) => void;
   onSettings: (settings: MachineSetting[]) => void;
+  /**
+   * Duplicates were merged into `mergedId`: every id in `awayIds` now means it. Given, it moves
+   * the pins and set assignments together, so a logged set keeps its machine; otherwise the pins
+   * alone move through `onChoose`.
+   */
+  onMerged?: (mergedId: string, awayIds: string[], photos: MachinePhotoUsage[]) => void;
   onClose: () => void;
 }) {
   return (
@@ -66,6 +73,7 @@ export function MachineSheet({
           target={target}
           onChoose={onChoose}
           onSettings={onSettings}
+          onMerged={onMerged}
         />
       )}
     </Sheet>
@@ -76,10 +84,17 @@ function MachineChoices({
   target,
   onChoose,
   onSettings,
+  onMerged,
 }: {
   target: MachineTarget;
   onChoose: (machinePhotoIds: string[], photos: MachinePhotoUsage[]) => void;
   onSettings: (settings: MachineSetting[]) => void;
+  /**
+   * Duplicates were merged into `mergedId`: every id in `awayIds` now means it. Given, it moves
+   * the pins and set assignments together, so a logged set keeps its machine; otherwise the pins
+   * alone move through `onChoose`.
+   */
+  onMerged?: (mergedId: string, awayIds: string[], photos: MachinePhotoUsage[]) => void;
 }) {
   const { colors, type } = useTheme();
   const client = useQueryClient();
@@ -185,8 +200,12 @@ function MachineChoices({
           const sources = new Set(sourceIds);
           const list = [merged, ...photos.filter((photo) => !sources.has(photo.id))];
           setPhotos(list);
-          const next = pinnedAfterMerge(pinned, merged.id, sourceIds);
-          if (next.join(',') !== pinned.join(',')) onChoose(next, list);
+          const away = mergedAwayIds(photos, sourceIds);
+          if (onMerged) onMerged(merged.id, away, list);
+          else {
+            const next = pinnedAfterMerge(pinned, merged.id, away);
+            if (next.join(',') !== pinned.join(',')) onChoose(next, list);
+          }
           setMerging(false);
           showToast('Machines merged');
         }}

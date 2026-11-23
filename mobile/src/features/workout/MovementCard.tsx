@@ -36,7 +36,11 @@ import type {
   WorkoutDraftMovement,
   WorkoutDraftSet,
 } from '../../../../frontend/src/workoutMovements';
-import { previousSetRests, restToAdd } from '../../../../frontend/src/workoutRestHistory';
+import {
+  previousSetRests,
+  restRowShown,
+  restToAdd,
+} from '../../../../frontend/src/workoutRestHistory';
 import { hasRecordedPerformance } from '../../../../frontend/src/workoutSets';
 import { supersetGroupName } from '../../../../frontend/src/workoutSupersets';
 import { useTrainingPreferences } from '../../data/queries';
@@ -295,13 +299,7 @@ export const MovementCard = memo(function MovementCard({
       )}
       {movement.sets.map((item, index) => {
         const number = index + 1;
-        // The web's rest rule: a rest shows once its set is logged, or straight away on a set
-        // that isn't a suggestion from last time, unless "+" slotted the set in.
-        const restShown =
-          !cardio &&
-          showRestTimes &&
-          (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
-          (item.rest_seconds ?? 0) > 0;
+        const restShown = restRowShown(item, cardio, showRestTimes);
         // Between two sets; after the last set, Add set does the same job.
         const onInsert =
           insertSet && index < movement.sets.length - 1

@@ -115,6 +115,7 @@ import {
   onWorkoutReminderOpened,
   remindAboutRestAlerts,
   syncInactiveReminder,
+  takeLaunchReminder,
 } from './workoutReminders';
 import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
 import {
@@ -601,18 +602,32 @@ const WorkoutEngine = memo(function WorkoutEngine({
   useEffect(() => () => void syncRestAlert(NO_REST, null), []);
 
   // "Still working out?" follows the live workout's last activity; tapping it opens the logger.
+  // It is cancelled when the workout is finished or discarded (no logger) and on sign-out.
   const lastActiveAt = logger?.lastActiveAt ?? null;
+  const liveStartedAt = logger?.startedAt ?? null;
   useEffect(() => {
-    void syncInactiveReminder(lastActiveAt);
-  }, [lastActiveAt]);
+    void syncInactiveReminder(lastActiveAt, liveStartedAt);
+  }, [lastActiveAt, liveStartedAt]);
   useEffect(() => () => void syncInactiveReminder(null), []);
-  useEffect(
-    () =>
-      onWorkoutReminderOpened(() => {
-        if (loggerRef.current) router.push('/workout');
-      }),
+  const openFromReminder = useCallback(
+    (startedAt: number | null) => {
+      const live = loggerRef.current;
+      if (live && (startedAt === null || startedAt === live.startedAt)) router.push('/workout');
+    },
     [router],
   );
+  useEffect(() => onWorkoutReminderOpened(openFromReminder), [openFromReminder]);
+  // A tap that cold-launched Relay came before the listener: take it once the workout is back.
+  useEffect(() => {
+    if (liveStartedAt === null) return;
+    let active = true;
+    void takeLaunchReminder().then((startedAt) => {
+      if (active && startedAt !== undefined) openFromReminder(startedAt);
+    });
+    return () => {
+      active = false;
+    };
+  }, [liveStartedAt, openFromReminder]);
 
   // Finished workouts send until the server confirms them, retrying when the connection or the
   // app comes back.

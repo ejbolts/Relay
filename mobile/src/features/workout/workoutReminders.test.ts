@@ -10,6 +10,7 @@ import {
   resetWorkoutRemindersForTests,
   REST_ALERTS_ASKED_KEY,
   syncInactiveReminder,
+  takeLaunchReminder,
 } from './workoutReminders';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
@@ -21,6 +22,8 @@ jest.mock('expo-notifications', () => ({
   cancelScheduledNotificationAsync: jest.fn(async () => undefined),
   dismissNotificationAsync: jest.fn(async () => undefined),
   addNotificationResponseReceivedListener: jest.fn(() => ({ remove: jest.fn() })),
+  getLastNotificationResponseAsync: jest.fn(async () => null),
+  clearLastNotificationResponseAsync: jest.fn(async () => undefined),
   SchedulableTriggerInputTypes: { DATE: 'date' },
 }));
 
@@ -91,17 +94,20 @@ describe('the rest alert reminder', () => {
 describe('the inactive workout reminder', () => {
   it('follows the last activity, and is cancelled when the workout ends', async () => {
     permission(true);
-    await syncInactiveReminder(now);
+    await syncInactiveReminder(now, now - 600_000);
     expect(Notifications.scheduleNotificationAsync).toHaveBeenLastCalledWith(
       expect.objectContaining({
         identifier: 'relay-workout-inactive',
-        content: expect.objectContaining({ title: 'Still working out?' }),
+        content: expect.objectContaining({
+          title: 'Still working out?',
+          data: { kind: 'workout', startedAt: now - 600_000 },
+        }),
         trigger: { type: 'date', date: now + INACTIVE_REMINDER_MS },
       }),
     );
-    await syncInactiveReminder(now);
+    await syncInactiveReminder(now, now - 600_000);
     expect(Notifications.scheduleNotificationAsync).toHaveBeenCalledTimes(1);
-    await syncInactiveReminder(now + 60_000);
+    await syncInactiveReminder(now + 60_000, now - 600_000);
     expect(Notifications.scheduleNotificationAsync).toHaveBeenLastCalledWith(
       expect.objectContaining({
         trigger: { type: 'date', date: now + 60_000 + INACTIVE_REMINDER_MS },
@@ -118,5 +124,27 @@ describe('the inactive workout reminder', () => {
     await syncInactiveReminder(now);
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
     expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('a reminder that launched Relay', () => {
+  const response = (data: Record<string, unknown>) =>
+    ({ notification: { request: { content: { data } } } }) as never;
+
+  it('is taken once, with the workout it is about, and cleared', async () => {
+    jest
+      .mocked(Notifications.getLastNotificationResponseAsync)
+      .mockResolvedValue(response({ kind: 'workout', startedAt: 42 }));
+    expect(await takeLaunchReminder()).toBe(42);
+    expect(Notifications.clearLastNotificationResponseAsync).toHaveBeenCalled();
+    expect(await takeLaunchReminder()).toBeUndefined();
+  });
+
+  it('ignores other notifications', async () => {
+    jest
+      .mocked(Notifications.getLastNotificationResponseAsync)
+      .mockResolvedValue(response({ kind: 'rest' }));
+    expect(await takeLaunchReminder()).toBeUndefined();
+    expect(Notifications.clearLastNotificationResponseAsync).not.toHaveBeenCalled();
   });
 });
