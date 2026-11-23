@@ -525,9 +525,10 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
             style={[type.body, styles.notes, { color: colors.text, borderColor: colors.line }]}
           />
         </View>
-        {state.movements.map((movement) => (
+        {state.movements.map((movement, index) => (
           <MovementCard
             key={movement.key}
+            number={index + 1}
             movement={movement}
             supersetNames={supersetNames(movement.supersetKey)}
             history={history}

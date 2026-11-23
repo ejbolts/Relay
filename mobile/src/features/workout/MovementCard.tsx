@@ -1,6 +1,5 @@
-import * as Haptics from 'expo-haptics';
 import { Fragment, memo, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
+import { Alert, Image, Pressable, StyleSheet, Text, View, type TextInput } from 'react-native';
 import ReanimatedSwipeable from 'react-native-gesture-handler/ReanimatedSwipeable';
 import {
   historyOnMachine,
@@ -10,6 +9,8 @@ import {
   recentExerciseHistory,
 } from '../../../../frontend/src/exerciseHistory';
 import { matchingLastSessionSet } from '../../../../frontend/src/lastSessionSet';
+import { timeSince } from '../../../../frontend/src/machineHistory';
+import { bodyweightContext } from '../../../../frontend/src/relativeStrength';
 import { progressionHint, progressionTarget } from '../../../../frontend/src/repProgression';
 import { unusualSetEntryWarning } from '../../../../frontend/src/setEntryConfirmation';
 import {
@@ -19,15 +20,13 @@ import {
   setNumberLabels,
   type SetKind,
 } from '../../../../frontend/src/setFieldValues';
-import { setLabel } from '../../../../frontend/src/trainingSummary';
 import type {
   ExerciseHistoryBaseline,
   TrackedSet,
   TrackedWorkout,
 } from '../../../../frontend/src/types';
-import { formatSeconds } from '../../../../frontend/src/utils';
+import { formatSeconds, localDate } from '../../../../frontend/src/utils';
 import {
-  formatWeightNumber,
   weightInputKg,
   weightInputValue,
   type WeightUnit,
@@ -43,12 +42,16 @@ import {
 } from '../../../../frontend/src/workoutRestHistory';
 import { hasRecordedPerformance } from '../../../../frontend/src/workoutSets';
 import { supersetGroupName } from '../../../../frontend/src/workoutSupersets';
+import { useAuthorisedImage } from '../../data/authorisedImage';
 import { useTrainingPreferences } from '../../data/queries';
-import { Icon } from '../../ui/Icon';
+import { cardSurface } from '../../ui/components';
+import { haptics } from '../../ui/haptics';
+import { Icon, type IconPair } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { promptText } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
+import { ExerciseIcon } from '../social/ExerciseIcon';
 import { restTimesPreference } from '../settings/devicePreferences';
 import { CardioSetImport } from './CardioSetImport';
 import { lastUsedMachines, useMachinePhotos } from './loggerQueries';
@@ -75,10 +78,15 @@ export interface MovementActions {
 
 const NO_BADGES: ReadonlyMap<string, string[]> = new Map();
 const MACHINE_EQUIPMENT = /machine|cable|smith/i;
+/** The web's vertical ⋮ beside each exercise. */
+const MORE_VERTICAL: IconPair = { sf: 'ellipsis', md: 'more-vert' };
 
 /** One exercise of the live workout: its target, sets and actions. */
 export const MovementCard = memo(function MovementCard({
+  number: order,
   movement,
+  lastDone = null,
+  bodyweight = null,
   supersetNames,
   history,
   olderLatest = null,
@@ -89,7 +97,13 @@ export const MovementCard = memo(function MovementCard({
   skipHighRepWarning,
   actions,
 }: {
+  /** Its place in the workout, on the picture's badge. */
+  number: number;
   movement: WorkoutDraftMovement;
+  /** The day the exercise was last done, for "Last done yesterday". */
+  lastDone?: string | null;
+  /** The bodyweight the workout is logged at, for the heaviest set's "1.03× BW". */
+  bodyweight?: number | null;
   /** The names in this exercise's superset, in order, when it is in one. */
   supersetNames: string[] | null;
   history: TrackedWorkout[];
@@ -170,33 +184,56 @@ export const MovementCard = memo(function MovementCard({
       : null;
   const labels = setNumberLabels(movement.sets);
   const name = movement.exercise.name;
+  // The bodyweight ratio is said once per exercise, on its heaviest logged set, as on the web.
+  const ratioSetKey = cardio
+    ? null
+    : (movement.sets.reduce<WorkoutDraftSet | null>(
+        (best, item) =>
+          item.completed && (best === null || (item.weight_kg ?? 0) > (best.weight_kg ?? 0))
+            ? item
+            : best,
+        null,
+      )?.key ?? null);
+  const pinnedPhoto = machines?.find((photo) => photo.id === pinnedMachine) ?? null;
 
   return (
     <View
       accessibilityLabel={name}
       style={[
+        cardSurface(colors),
         styles.card,
-        {
-          backgroundColor: colors.surface,
-          borderColor: movement.isComplete ? colors.good : colors.line,
-          borderRadius: radius.card,
-          padding: space.lg,
-        },
+        { padding: space.lg },
+        movement.isComplete && { borderColor: `${colors.good}8C` },
       ]}
     >
+      {supersetNames && (
+        <View style={styles.badgeRow}>
+          <Icon name={{ sf: 'link', md: 'link' }} size={12} color={colors.accentText} />
+          <Text style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}>
+            {supersetGroupName(supersetNames.length)}
+          </Text>
+        </View>
+      )}
       <View style={styles.header}>
+        <View>
+          <ExerciseIcon exercise={movement.exercise} size={44} />
+          <View
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={[styles.order, { backgroundColor: colors.accent, borderColor: colors.surface }]}
+          >
+            <Text style={[styles.orderText, { color: colors.onAccent }]}>{order}</Text>
+          </View>
+        </View>
         <View style={{ flex: 1, gap: 2 }}>
-          {supersetNames && (
-            <View style={styles.badgeRow}>
-              <Icon name={{ sf: 'link', md: 'link' }} size={12} color={colors.accentText} />
-              <Text style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}>
-                {supersetGroupName(supersetNames.length)}
-              </Text>
-            </View>
-          )}
-          <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
+          <Text accessibilityRole="header" style={[styles.name, { color: colors.accentText }]}>
             {name}
           </Text>
+          {!cardio && !!lastDone && (
+            <Text style={[type.footnote, { color: colors.secondary }]}>
+              Last done {timeSince(lastDone, localDate())}
+            </Text>
+          )}
           {!!movement.swappedFrom && (
             <Text style={[type.footnote, { color: colors.muted }]}>
               Swapped from {movement.swappedFrom}
@@ -215,32 +252,34 @@ export const MovementCard = memo(function MovementCard({
             movement.isComplete ? `Mark ${name} as not finished` : `Finish ${name}`
           }
           accessibilityState={{ selected: movement.isComplete }}
-          hitSlop={6}
           onPress={() => {
-            void Haptics.selectionAsync();
+            haptics.selection();
             actions.completeExercise(movement.key, !movement.isComplete);
           }}
-          style={[
-            styles.roundButton,
-            {
-              backgroundColor: movement.isComplete ? colors.good : colors.surface2,
-            },
+          style={({ pressed }) => [
+            styles.squareButton,
+            movement.isComplete
+              ? { backgroundColor: colors.good, borderColor: colors.good }
+              : { backgroundColor: colors.surface, borderColor: colors.lineStrong },
+            pressed && styles.pressed,
           ]}
         >
           <Icon
             name="check"
-            size={16}
-            color={movement.isComplete ? colors.onAccent : colors.muted}
+            size={18}
+            color={movement.isComplete ? colors.onAccent : colors.secondary}
           />
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Actions for ${name}`}
-          hitSlop={6}
-          onPress={() => actions.openActions(movement.key)}
-          style={[styles.roundButton, { backgroundColor: colors.surface2 }]}
+          onPress={() => {
+            haptics.press();
+            actions.openActions(movement.key);
+          }}
+          style={({ pressed }) => [styles.moreButton, pressed && styles.pressed]}
         >
-          <Icon name="more" size={18} color={colors.secondary} />
+          <Icon name={MORE_VERTICAL} size={20} color={colors.accentText} />
         </Pressable>
       </View>
 
@@ -255,42 +294,41 @@ export const MovementCard = memo(function MovementCard({
           onPress={() => actions.openMachines(movement.key)}
           style={({ pressed }) => [
             styles.machine,
-            { backgroundColor: colors.surface2, borderRadius: radius.md },
-            pressed && { opacity: 0.7 },
+            { backgroundColor: colors.surface2, borderRadius: radius.lg },
+            pressed && styles.pressed,
           ]}
         >
-          <Icon
-            name={{ sf: 'wrench.adjustable', md: 'build' }}
-            size={14}
-            color={colors.secondary}
-          />
-          <Text
-            style={[type.footnote, { color: colors.text, fontWeight: '600', flexShrink: 1 }]}
-            numberOfLines={1}
-          >
-            {pinnedMachine
-              ? `${machineNames.get(pinnedMachine) ?? 'Machine'}${movement.machinePhotoIds.length > 1 ? ` +${movement.machinePhotoIds.length - 1}` : ''}`
-              : 'Choose machine'}
-          </Text>
-          {!!movement.machineSettings?.length && (
-            <Text style={[type.footnote, { color: colors.muted, flexShrink: 1 }]} numberOfLines={1}>
-              {movement.machineSettings
-                .map((setting) => `${setting.name} ${setting.value}`)
-                .join(' · ')}
+          <MachineThumb url={pinnedPhoto?.thumbnail_url ?? null} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text
+              style={[type.callout, { color: colors.text, fontWeight: '600' }]}
+              numberOfLines={1}
+            >
+              {pinnedMachine
+                ? `${machineNames.get(pinnedMachine) ?? 'Machine'}${movement.machinePhotoIds.length > 1 ? ` +${movement.machinePhotoIds.length - 1}` : ''}`
+                : 'Choose machine'}
             </Text>
-          )}
+            {!!movement.machineSettings?.length && (
+              <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
+                {movement.machineSettings
+                  .map((setting) => `${setting.name} ${setting.value}`)
+                  .join(' · ')}
+              </Text>
+            )}
+          </View>
+          <Icon name="chevronDown" size={18} color={colors.secondary} />
         </Pressable>
       )}
 
-      <View style={styles.columns}>
-        <Text style={[type.caption, styles.setColumn, { color: colors.muted }]}>Set</Text>
-        <Text style={[type.caption, styles.previousColumn, { color: colors.muted }]}>Previous</Text>
-        <Text style={[type.caption, styles.valueColumn, { color: colors.muted }]}>
-          {cardio ? 'Min' : weightUnit}
+      <View style={[styles.columns, { borderColor: colors.line }]}>
+        <Text style={[styles.head, styles.setColumn, { color: colors.muted }]}>Set</Text>
+        <Text style={[styles.head, styles.valueColumn, { color: colors.muted }]}>
+          {cardio ? 'Min' : `Weight (${weightUnit})`}
         </Text>
-        <Text style={[type.caption, styles.valueColumn, { color: colors.muted }]}>
+        <Text style={[styles.head, styles.valueColumn, { color: colors.muted }]}>
           {cardio ? 'Km' : 'Reps'}
         </Text>
+        <Text style={[styles.head, styles.rpeColumn, { color: colors.muted }]}>RPE</Text>
         <View style={styles.checkColumn} />
       </View>
 
@@ -327,6 +365,11 @@ export const MovementCard = memo(function MovementCard({
               label={labels[index]}
               previous={matchingLastSessionSet(movement.sets, index, lastSession)}
               records={prBadges.get(item.key) ?? null}
+              ratio={
+                item.key === ratioSetKey && (item.bodyweight_kg ?? bodyweight) != null
+                  ? bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)
+                  : null
+              }
               machines={movement.machinePhotoIds.length > 1 ? movement.machinePhotoIds : null}
               machineNames={machineNames}
               weightUnit={weightUnit}
@@ -369,33 +412,35 @@ export const MovementCard = memo(function MovementCard({
         accessibilityRole="button"
         accessibilityLabel={`Add set to ${name}`}
         onPress={() => {
-          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          haptics.tap();
           actions.addSet(movement.key);
         }}
         style={({ pressed }) => [
           styles.addSet,
-          { backgroundColor: colors.surface2, borderRadius: radius.md },
-          pressed && { opacity: 0.7 },
+          { backgroundColor: colors.accentSoft, borderRadius: radius.md },
+          pressed && styles.pressed,
         ]}
       >
-        <Icon name="plus" size={14} color={colors.accentText} />
-        <Text style={[type.callout, { color: colors.accentText, fontWeight: '600' }]}>Add set</Text>
+        <Icon name="plus" size={16} color={colors.accentText} />
+        <Text style={[type.button, { color: colors.accentText }]}>Add set</Text>
       </Pressable>
     </View>
   );
 });
 
-function previousLabel(previous: TrackedSet | undefined, cardio: boolean, unit: WeightUnit) {
-  if (!previous) return '–';
-  if (cardio) {
-    const parts = [
-      previous.duration_seconds != null ? formatSeconds(previous.duration_seconds) : null,
-      previous.distance_km != null ? `${Number(previous.distance_km.toFixed(2))} km` : null,
-    ].filter(Boolean);
-    return parts.join(' · ') || '–';
-  }
-  if (!previous.weight_kg && previous.reps !== null) return setLabel(previous, unit);
-  return `${formatWeightNumber(previous.weight_kg ?? 0, unit)} × ${previous.reps ?? '–'}`;
+/** The pinned machine's photo at the start of the machine strip, as on the web. */
+function MachineThumb({ url }: { url: string | null }) {
+  const { colors, radius } = useTheme();
+  const image = useAuthorisedImage(url);
+  return (
+    <View style={[styles.thumb, { backgroundColor: colors.surface3, borderRadius: radius.sm }]}>
+      {image ? (
+        <Image source={{ uri: image }} style={styles.thumbImage} />
+      ) : (
+        <Icon name={{ sf: 'wrench.adjustable', md: 'build' }} size={16} color={colors.secondary} />
+      )}
+    </View>
+  );
 }
 
 const minutesFormat = (seconds: number | null) =>
@@ -412,6 +457,7 @@ function SetRow({
   label,
   previous,
   records,
+  ratio,
   machines,
   machineNames,
   weightUnit,
@@ -425,6 +471,8 @@ function SetRow({
   previous: TrackedSet | undefined;
   /** The records this set beat, once it is logged. */
   records: string[] | null;
+  /** "1.03× BW · at 82.5 kg BW", on the exercise's heaviest logged set. */
+  ratio: string | null;
   /** With several machines pinned, the ones each set chooses between. */
   machines: string[] | null;
   machineNames: ReadonlyMap<string, string>;
@@ -456,7 +504,7 @@ function SetRow({
     }
     if (!hasRecordedPerformance(movement.exercise.kind, item)) {
       // Nothing to log yet: go to the field it needs instead of ticking it.
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+      haptics.warning();
       (cardio ? firstField : secondField).current?.focus();
       return;
     }
@@ -515,6 +563,20 @@ function SetRow({
       onSubmit: (notes) => update({ notes: notes.trim() ? notes : null }),
     });
 
+  const rpeItems: MenuItem[] = [
+    { label: 'No RPE', checked: item.rpe === null, onPress: () => update({ rpe: null }) },
+    ...RPE_OPTIONS.map((rpe) => ({
+      label: String(rpe),
+      checked: item.rpe === rpe,
+      onPress: () => update({ rpe }),
+    })),
+  ];
+  // Last time's RPE shows faintly in an unlogged set's RPE, as on the web.
+  const rpeText = item.rpe !== null ? String(item.rpe) : lastRpe !== null ? String(lastRpe) : '–';
+  const rpeInk = item.rpe !== null ? colors.text : colors.muted;
+  // Last time's numbers stand in faintly for an empty field, as the web's ghost values.
+  const ghost = !item.completed ? previous : undefined;
+
   // The set pill's menu, built each render so it always reflects the set as it is now.
   const setMenu: MenuItem[] = [
     ...(cardio
@@ -543,14 +605,7 @@ function SetRow({
           : lastRpe !== null
             ? `RPE · ${lastRpe} last time`
             : 'RPE',
-      items: [
-        { label: 'No RPE', checked: item.rpe === null, onPress: () => update({ rpe: null }) },
-        ...RPE_OPTIONS.map((rpe) => ({
-          label: String(rpe),
-          checked: item.rpe === rpe,
-          onPress: () => update({ rpe }),
-        })),
-      ],
+      items: rpeItems,
     },
     { label: item.notes ? 'Edit note' : 'Add note', onPress: editNote },
     ...(machines
@@ -633,18 +688,13 @@ function SetRow({
               {label}
             </Text>
           </MenuButton>
-          <Text
-            numberOfLines={1}
-            style={[type.footnote, type.number, styles.previousColumn, { color: colors.muted }]}
-          >
-            {previousLabel(previous, cardio, weightUnit)}
-          </Text>
           {cardio ? (
             <>
               <View style={styles.valueColumn}>
                 <NumberField
                   ref={firstField}
                   label={`Duration minutes for set ${number}`}
+                  placeholder={minutesFormat(ghost?.duration_seconds ?? null)}
                   value={item.duration_seconds}
                   format={minutesFormat}
                   parse={minutesParse}
@@ -657,6 +707,7 @@ function SetRow({
                 <NumberField
                   ref={secondField}
                   label={`Distance kilometres for set ${number}`}
+                  placeholder={formatPlain(ghost?.distance_km ?? null)}
                   value={item.distance_km}
                   format={formatPlain}
                   parse={parseDecimal}
@@ -672,6 +723,7 @@ function SetRow({
                 <NumberField
                   ref={firstField}
                   label={`Weight ${weightUnit === 'lb' ? 'pounds' : 'kilograms'} for set ${number}`}
+                  placeholder={weightFormat(ghost?.weight_kg ?? null)}
                   value={item.weight_kg}
                   format={weightFormat}
                   parse={weightParse}
@@ -685,6 +737,7 @@ function SetRow({
                 <NumberField
                   ref={secondField}
                   label={`Repetitions for set ${number}`}
+                  placeholder={formatPlain(ghost?.reps ?? null)}
                   keyboardType="number-pad"
                   value={item.reps}
                   format={formatPlain}
@@ -696,6 +749,23 @@ function SetRow({
               </View>
             </>
           )}
+          <MenuButton
+            accessibilityLabel={
+              item.rpe !== null ? `RPE ${item.rpe} for set ${number}` : `RPE for set ${number}`
+            }
+            title={`RPE · set ${number}`}
+            items={rpeItems}
+            trigger={{ text: rpeText, color: rpeInk }}
+            width={44}
+            height={38}
+            fill={rowColor}
+            cornerRadius={radius.sm}
+            style={[styles.rpeColumn, styles.rpe]}
+          >
+            <Text style={[type.callout, type.number, { color: rpeInk, fontWeight: '600' }]}>
+              {rpeText}
+            </Text>
+          </MenuButton>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
@@ -703,23 +773,31 @@ function SetRow({
             }
             accessibilityState={{ checked: item.completed }}
             hitSlop={4}
-            onPress={complete}
-            style={[
+            onPress={() => {
+              haptics.selection();
+              complete();
+            }}
+            style={({ pressed }) => [
               styles.checkColumn,
               styles.check,
-              {
-                borderRadius: radius.sm,
-                backgroundColor: item.completed ? colors.good : colors.surface2,
-              },
+              item.completed
+                ? { backgroundColor: colors.good, borderColor: colors.good }
+                : { backgroundColor: colors.surface, borderColor: colors.lineStrong },
+              pressed && styles.pressed,
             ]}
           >
-            <Icon name="check" size={18} color={item.completed ? colors.onAccent : colors.muted} />
+            <Icon
+              name="check"
+              size={18}
+              color={item.completed ? colors.onAccent : colors.secondary}
+            />
           </Pressable>
         </View>
         <SetDetails
           item={item}
           number={number}
           records={records}
+          ratio={ratio}
           machine={
             machines
               ? item.machine_photo_id
@@ -761,21 +839,26 @@ function SetDetails({
   item,
   number,
   records,
+  ratio,
   machine,
   onEditNote,
 }: {
   item: WorkoutDraftSet;
   number: number;
   records: string[] | null;
+  ratio: string | null;
   /** The set's machine when several are pinned; null for a logged set that needs one. */
   machine?: string | null;
   onEditNote: () => void;
 }) {
   const { colors, type, radius } = useTheme();
   const note = item.notes?.trim();
-  if (!records && item.rpe === null && !note && machine === undefined) return null;
+  if (!records && !ratio && !note && machine === undefined) return null;
   return (
     <View style={styles.details}>
+      {!!ratio && (
+        <Text style={[type.footnote, type.number, { color: colors.secondary }]}>{ratio}</Text>
+      )}
       {records && (
         <View
           accessible
@@ -798,16 +881,8 @@ function SetDetails({
           {machine ?? 'Choose a machine from the set menu'}
         </Text>
       )}
-      {(item.rpe !== null || !!note) && (
+      {!!note && (
         <View style={styles.detailLine}>
-          {item.rpe !== null && (
-            <Text
-              accessibilityLabel={`RPE ${item.rpe} for set ${number}`}
-              style={[type.footnote, type.number, { color: colors.secondary, fontWeight: '600' }]}
-            >
-              RPE {item.rpe}
-            </Text>
-          )}
           {!!note && (
             <Pressable
               accessibilityRole="button"
@@ -932,40 +1007,75 @@ function CardioExtras({
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: StyleSheet.hairlineWidth, gap: 6 },
+  card: { gap: 6 },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    gap: 8,
+    gap: 10,
     marginBottom: 6,
   },
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  roundButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
+  order: {
+    position: 'absolute',
+    right: -5,
+    bottom: -5,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    paddingHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  orderText: { fontSize: 11, fontWeight: '800' },
+  // The web's exercise name: accent, 17 pt, bold, a link to its history.
+  name: { fontSize: 17, lineHeight: 22, fontWeight: '700', letterSpacing: -0.3 },
+  squareButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreButton: {
+    width: 32,
+    height: 44,
+    marginRight: -6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: { opacity: 0.7 },
   columns: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 4,
+    paddingTop: 6,
+    paddingBottom: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  head: { fontSize: 11, fontWeight: '600', letterSpacing: 0.4, textTransform: 'uppercase' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 4,
-    paddingVertical: 3,
+    paddingVertical: 5,
   },
   setColumn: { width: 34, textAlign: 'center' },
   setBadge: { height: 36, alignItems: 'center', justifyContent: 'center' },
-  previousColumn: { flex: 1.3, minWidth: 64 },
   valueColumn: { flex: 1, textAlign: 'center' },
-  checkColumn: { width: 40 },
-  check: { height: 40, alignItems: 'center', justifyContent: 'center' },
+  rpeColumn: { width: 44, textAlign: 'center' },
+  rpe: { height: 38, alignItems: 'center', justifyContent: 'center' },
+  checkColumn: { width: 44 },
+  check: {
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   deleteAction: {
     width: 72,
     marginLeft: 6,
@@ -974,7 +1084,7 @@ const styles = StyleSheet.create({
   },
   addSet: {
     marginTop: 6,
-    minHeight: 40,
+    minHeight: 44,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -982,13 +1092,23 @@ const styles = StyleSheet.create({
   },
   details: { paddingLeft: 44, paddingRight: 4, paddingBottom: 4, gap: 4 },
   machine: {
+    minHeight: 52,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 10,
+    gap: 10,
+    paddingLeft: 8,
+    paddingRight: 12,
     paddingVertical: 8,
     marginBottom: 4,
   },
+  thumb: {
+    width: 36,
+    height: 36,
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  thumbImage: { width: 36, height: 36 },
   record: {
     flexDirection: 'row',
     alignItems: 'center',

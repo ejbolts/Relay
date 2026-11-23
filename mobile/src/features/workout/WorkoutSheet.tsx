@@ -1,16 +1,7 @@
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import {
-  Alert,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineAliases } from '../../../../frontend/src/exerciseHistory';
 import { exerciseLastDoneDates } from '../../../../frontend/src/exerciseLastDone';
@@ -38,6 +29,8 @@ import { newId } from '../../data/deviceStorage';
 import { useDashboard, useTrainingPreferences } from '../../data/queries';
 import { Button } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
+import { TextField } from '../../ui/controls';
+import { haptics } from '../../ui/haptics';
 import { MenuButton } from '../../ui/MenuButton';
 import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
@@ -46,7 +39,6 @@ import { restTimerPreference } from '../settings/devicePreferences';
 import { useBodyMeasurements } from '../training/trainingQueries';
 import { FinishedSummary } from './FinishedSummary';
 import { ExercisePicker } from './ExercisePicker';
-import { loggerIcons } from './icons';
 import { useTrainingBlocks } from './loggerQueries';
 import {
   addExercises,
@@ -159,7 +151,11 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const paused = state.pause.pausedAt !== null;
   const { ticked } = setCounts(state);
   const restShown = !!(logger.rest.timer || logger.rest.done);
-  const top = Platform.OS === 'ios' ? 6 : insets.top + 8;
+  const restRunning = !!logger.rest.timer;
+  // Hide tucks the running rest into a notch; the next rest shows in full again.
+  const [restHiddenFor, setRestHiddenFor] = useState<string | null>(null);
+  const restHidden = !!logger.rest.timer && restHiddenFor === logger.rest.timer.id;
+  const top = Platform.OS === 'ios' ? 0 : insets.top;
 
   const recentIds = useMemo(() => {
     const seen = new Set<string>();
@@ -172,6 +168,8 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     [state.movements],
   );
   const prBadges = useLivePrBadges(logger, state);
+  const measurements = useBodyMeasurements().data;
+  const bodyweight = bodyweightOn(measurements ?? [], state.workoutDate);
   const lastDone = useMemo(
     () =>
       exerciseLastDoneDates(
@@ -429,23 +427,23 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     );
   }
 
-  function openMenu() {
+  function chooseType() {
     const current = selectedType(state, types);
+    showMenu(
+      'Workout type',
+      types
+        .filter((item) => !item.archived)
+        .map((item) => ({
+          label: item.id === current.id ? `${item.name} ✓` : item.name,
+          onPress: () => logger.chooseType(item),
+        })),
+    );
+  }
+
+  function openMenu() {
     showMenu(identity.name, [
       { label: 'Rename workout', onPress: rename },
-      {
-        label: 'Workout type',
-        onPress: () =>
-          showMenu(
-            'Workout type',
-            types
-              .filter((item) => !item.archived)
-              .map((item) => ({
-                label: item.id === current.id ? `${item.name} ✓` : item.name,
-                onPress: () => logger.chooseType(item),
-              })),
-          ),
-      },
+      { label: 'Workout type', onPress: chooseType },
       {
         label: paused ? 'Resume workout' : 'Pause workout',
         onPress: logger.togglePause,
@@ -504,115 +502,134 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
 
   return (
     <>
-      <View style={[styles.header, { paddingTop: top, borderColor: colors.line }]}>
-        {/* The page sheet drags down to minimise on iOS; the grabber says so. Android minimises
-            with Back or the chevron instead. */}
-        {Platform.OS === 'ios' && (
-          <View
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            style={[styles.grabber, { backgroundColor: colors.lineStrong }]}
-          />
-        )}
+      <View
+        style={[
+          styles.header,
+          { paddingTop: top, borderColor: colors.line, backgroundColor: colors.surface },
+        ]}
+      >
+        {/* The grabber minimises, as on the web; on iOS the page sheet also drags down. */}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Minimise workout"
+          onPress={() => router.back()}
+          style={styles.grab}
+        >
+          <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
+        </Pressable>
         <View style={styles.headerRow}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Minimise workout"
-            hitSlop={8}
-            onPress={() => router.back()}
-            style={[styles.iconButton, { backgroundColor: colors.surface2 }]}
+            accessibilityLabel={`${identity.name}, ${paused ? `${elapsed}, paused` : `live ${elapsed}`}, ${ticked} ${ticked === 1 ? 'set' : 'sets'}`}
+            accessibilityHint="Renames the workout"
+            onPress={rename}
+            style={styles.titleBlock}
           >
-            <Icon name="chevronDown" size={18} color={colors.secondary} />
+            <Text
+              accessibilityRole="header"
+              style={[styles.title, { color: colors.text }]}
+              numberOfLines={1}
+            >
+              {identity.name}
+            </Text>
+            <View style={styles.meta}>
+              <View
+                style={[styles.liveDot, { backgroundColor: paused ? colors.muted : colors.good }]}
+              />
+              <Text
+                style={[
+                  styles.metaText,
+                  type.number,
+                  { color: paused ? colors.muted : colors.good },
+                ]}
+              >
+                {paused ? elapsed : `Live ${elapsed}`}
+              </Text>
+              {paused && <Text style={[styles.metaText, { color: colors.muted }]}>· Paused</Text>}
+              <Text style={[styles.metaText, type.number, { color: colors.muted }]}>
+                · {ticked} {ticked === 1 ? 'set' : 'sets'}
+              </Text>
+            </View>
           </Pressable>
-          <View style={{ flex: 1 }} />
           {restTimerOn && (
             <MenuButton
               accessibilityLabel="Rest timer"
               title="Start a rest"
               items={restMenuItems({ current: null, onPick: logger.startRest })}
-              trigger={{ sf: 'timer', color: colors.secondary, size: 16 }}
-              width={36}
-              height={36}
-              fill={colors.surface2}
-              style={styles.iconButton}
+              trigger={{ sf: 'timer', color: colors.accentText, size: 18 }}
+              width={44}
+              height={44}
+              fill={restRunning ? colors.accentSoft : colors.surface2}
+              cornerRadius={radius.md}
+              style={[
+                styles.square,
+                {
+                  backgroundColor: restRunning ? colors.accentSoft : colors.surface2,
+                  borderColor: restRunning ? `${colors.accent}8C` : colors.lineStrong,
+                },
+              ]}
             >
-              <Icon name="timer" size={18} color={colors.secondary} />
+              <Icon name="timer" size={20} color={colors.accentText} />
             </MenuButton>
           )}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={paused ? 'Resume workout' : 'Pause workout'}
-            hitSlop={6}
+            accessibilityLabel="Workout options"
             onPress={() => {
-              void Haptics.selectionAsync();
-              logger.togglePause();
+              haptics.press();
+              openMenu();
             }}
-            style={[
-              styles.iconButton,
-              { backgroundColor: paused ? colors.accent : colors.surface2 },
+            style={({ pressed }) => [
+              styles.square,
+              { backgroundColor: colors.surface2, borderColor: colors.lineStrong },
+              pressed && styles.pressed,
             ]}
           >
-            <Icon
-              name={paused ? 'play' : 'pause'}
-              size={16}
-              color={paused ? colors.onAccent : colors.secondary}
-            />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Workout options"
-            hitSlop={6}
-            onPress={openMenu}
-            style={[styles.iconButton, { backgroundColor: colors.surface2 }]}
-          >
-            <Icon name="more" size={18} color={colors.secondary} />
+            <Icon name="more" size={20} color={colors.accentText} />
           </Pressable>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Finish workout"
-            onPress={finish}
+            hitSlop={4}
+            onPress={() => {
+              haptics.tap();
+              finish();
+            }}
             style={({ pressed }) => [
               styles.finish,
-              { backgroundColor: colors.accent, borderRadius: radius.pill },
-              pressed && { opacity: 0.8 },
+              {
+                backgroundColor: colors.surface2,
+                borderColor: `${colors.good}8C`,
+                borderRadius: radius.sm,
+              },
+              pressed && styles.pressed,
             ]}
           >
-            <Text style={[type.callout, { color: colors.onAccent, fontWeight: '700' }]}>
-              Finish
-            </Text>
+            <Text style={[type.button, { color: colors.good }]}>Finish</Text>
           </Pressable>
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityHint="Renames the workout"
-          onPress={rename}
-        >
-          <Text
-            accessibilityRole="header"
-            style={[type.title, { color: colors.text }]}
-            numberOfLines={2}
-          >
-            {identity.name}
-          </Text>
-        </Pressable>
-        <Text style={[type.callout, type.number, { color: colors.secondary }]}>
-          {paused ? `Paused · ${elapsed}` : elapsed} · {ticked} {ticked === 1 ? 'set' : 'sets'}
-        </Text>
       </View>
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={{
-          padding: space.lg,
-          gap: space.md,
-          paddingBottom: insets.bottom + (restShown ? 120 : 40),
+          padding: space.gutter,
+          gap: space.stack,
+          paddingBottom: insets.bottom + (restShown || shelf ? 140 : 40),
         }}
         keyboardShouldPersistTaps="handled"
         keyboardDismissMode="interactive"
         automaticallyAdjustKeyboardInsets
       >
-        {state.movements.map((movement) => (
+        <WorkoutDetails
+          typeName={selectedType(state, types).name}
+          onChooseType={chooseType}
+          notes={state.notes}
+          onChangeNotes={(notes) => change((latest) => ({ ...latest, notes }))}
+        />
+        {state.movements.map((movement, index) => (
           <MovementCard
             key={movement.key}
+            number={index + 1}
             movement={movement}
             supersetNames={supersetNames(movement.supersetKey)}
             history={logger.history}
@@ -620,6 +637,8 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
               olderHistoryFor(logger.context, state.workoutDate)?.get(movement.exercise.id)
                 ?.latest ?? null
             }
+            lastDone={lastDone.get(movement.exercise.id) ?? null}
+            bodyweight={bodyweight}
             prBadges={prBadges.get(movement.key)}
             excludedWorkoutId={state.resumingWorkoutId ?? undefined}
             workoutDate={state.workoutDate}
@@ -631,31 +650,36 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         <Button
           label="Add exercise"
           icon="plus"
-          variant={state.movements.length ? 'secondary' : 'primary'}
+          variant="tonal"
+          block
           onPress={() => setPicker({ swapping: null })}
         />
-        <WorkoutNotes
-          notes={state.notes}
-          onChange={(notes) => change((latest) => ({ ...latest, notes }))}
-        />
       </ScrollView>
-      <RestBar
-        rest={logger.rest}
-        state={state}
-        weightUnit={logger.weightUnit}
-        bottom={insets.bottom + 12}
-        onAdjust={logger.adjustRest}
-        onSkip={logger.skipRest}
-        onDismissDone={logger.dismissRestDone}
-      />
-      {shelf && (
-        <WeeklySetsShelf
-          update={shelf}
-          goal={preferences?.weekly_muscle_set_goal ?? 10}
-          goals={preferences?.weekly_muscle_set_goals}
-          bottom={insets.bottom + (restShown ? 96 : 12)}
-          onDismiss={closeShelf}
-        />
+      {(restShown || shelf) && (
+        <View pointerEvents="box-none" style={[styles.dock, { bottom: insets.bottom + 12 }]}>
+          {shelf && !restHidden && (
+            <WeeklySetsShelf
+              update={shelf}
+              goal={preferences?.weekly_muscle_set_goal ?? 10}
+              goals={preferences?.weekly_muscle_set_goals}
+              joined={restShown}
+              onDismiss={closeShelf}
+            />
+          )}
+          <RestBar
+            rest={logger.rest}
+            state={state}
+            weightUnit={logger.weightUnit}
+            hidden={restHidden}
+            joined={!!shelf && !restHidden}
+            onTogglePause={logger.togglePause}
+            onAdjust={logger.adjustRest}
+            onSkip={logger.skipRest}
+            onHide={() => setRestHiddenFor(logger.rest.timer?.id ?? null)}
+            onShow={() => setRestHiddenFor(null)}
+            onDismissDone={logger.dismissRestDone}
+          />
+        </View>
       )}
       <MachineSheet
         target={
@@ -789,8 +813,23 @@ function useLivePrBadges(logger: LoggerApi, state: LoggerState): DraftPrBadges {
   return badges;
 }
 
-function WorkoutNotes({ notes, onChange }: { notes: string; onChange: (notes: string) => void }) {
+/**
+ * The web's "Workout details" disclosure at the top of the live workout: its type and notes,
+ * folded away until wanted (open while there are notes).
+ */
+function WorkoutDetails({
+  typeName,
+  onChooseType,
+  notes,
+  onChangeNotes,
+}: {
+  typeName: string;
+  onChooseType: () => void;
+  notes: string;
+  onChangeNotes: (notes: string) => void;
+}) {
   const { colors, type, radius } = useTheme();
+  const [open, setOpen] = useState(() => !!notes.trim());
   const [text, setText] = useState(notes);
   const latest = useRef(notes);
   useEffect(() => {
@@ -801,28 +840,62 @@ function WorkoutNotes({ notes, onChange }: { notes: string; onChange: (notes: st
   return (
     <View
       style={[
-        styles.notes,
-        {
-          backgroundColor: colors.surface,
-          borderRadius: radius.card,
-          borderColor: colors.line,
-        },
+        styles.details,
+        { backgroundColor: colors.surface, borderColor: colors.line, borderRadius: radius.lg },
       ]}
     >
-      <Icon name={loggerIcons.note} size={16} color={colors.muted} />
-      <TextInput
-        value={text}
-        onChangeText={(next) => {
-          setText(next);
-          latest.current = next;
-          onChange(next);
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={() => {
+          haptics.selection();
+          setOpen((value) => !value);
         }}
-        placeholder="Workout notes…"
-        placeholderTextColor={colors.muted}
-        accessibilityLabel="Workout notes"
-        multiline
-        style={[type.body, { flex: 1, color: colors.text, minHeight: 44, paddingTop: 0 }]}
-      />
+        style={styles.detailsSummary}
+      >
+        <Text style={[type.footnote, { flex: 1, color: colors.secondary }]}>Workout details</Text>
+        <Icon name={open ? 'chevronUp' : 'chevronDown'} size={16} color={colors.secondary} />
+      </Pressable>
+      {open && (
+        <View style={styles.detailsBody}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Workout type: ${typeName}`}
+            onPress={onChooseType}
+            style={({ pressed }) => [
+              styles.typeRow,
+              {
+                backgroundColor: colors.surface2,
+                borderColor: colors.lineStrong,
+                borderRadius: radius.md,
+              },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
+              Workout type
+            </Text>
+            <Text
+              style={[type.callout, { flex: 1, color: colors.text, textAlign: 'right' }]}
+              numberOfLines={1}
+            >
+              {typeName}
+            </Text>
+            <Icon name="chevronDown" size={16} color={colors.muted} />
+          </Pressable>
+          <TextField
+            value={text}
+            onChangeText={(next) => {
+              setText(next);
+              latest.current = next;
+              onChangeNotes(next);
+            }}
+            placeholder="Workout notes…"
+            accessibilityLabel="Workout notes"
+            multiline
+          />
+        </View>
+      )}
     </View>
   );
 }
@@ -837,36 +910,53 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   header: {
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingBottom: 12,
-    gap: 4,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 6,
-  },
-  grabber: { alignSelf: 'center', width: 36, height: 5, borderRadius: 3, marginBottom: 8 },
-  iconButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  grab: { alignSelf: 'center', width: 88, height: 22, alignItems: 'center', paddingTop: 8 },
+  grabber: { width: 36, height: 5, borderRadius: 3 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  titleBlock: { flex: 1, minWidth: 0, gap: 3 },
+  // The web's live title: 17 pt, extra bold, one line.
+  title: { fontSize: 17, lineHeight: 22, fontWeight: '800', letterSpacing: -0.4 },
+  meta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  metaText: { fontSize: 13, fontWeight: '600' },
+  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  square: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    borderWidth: 1,
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
   finish: {
     height: 36,
-    paddingHorizontal: 18,
+    paddingHorizontal: 14,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  notes: {
+  pressed: { opacity: 0.7 },
+  dock: { position: 'absolute', left: 12, right: 12 },
+  details: { borderWidth: 1, overflow: 'hidden' },
+  detailsSummary: {
+    minHeight: 44,
     flexDirection: 'row',
-    gap: 10,
-    padding: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  detailsBody: { gap: 10, paddingHorizontal: 14, paddingBottom: 14 },
+  typeRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
   },
 });
