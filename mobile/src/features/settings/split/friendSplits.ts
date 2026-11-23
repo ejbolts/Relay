@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { Routine } from '../../../../../frontend/src/types';
-import { request, serverOrigin } from '../../../data/api';
-import { sessionToken } from '../../../data/session';
+import { ApiError, request, serverOrigin } from '../../../data/api';
+import { forgetSessionTokenIf, sessionToken } from '../../../data/session';
 import { queryKeys } from '../../../data/queries';
 import { isToastAccountCurrent, toastAccount } from '../../../ui/Toast';
 import { refreshSplits, settingsKeys } from '../settingsData';
@@ -32,14 +32,25 @@ export async function copyFriendSplit(
   routineId: string,
 ): Promise<FriendSplitCopy> {
   const account = toastAccount();
-  const token = await sessionToken(serverOrigin());
+  const origin = serverOrigin();
+  const token = await sessionToken(origin);
   // A switch (or sign-out) while the token was read: never send with another session's token.
   if (!token || !isToastAccountCurrent(account)) return { kind: 'stale' };
-  const routine = await request<Routine>(
-    `/api/routines/profile/${encodeURIComponent(ownerId)}/${encodeURIComponent(routineId)}/copy`,
-    { method: 'POST' },
-    token,
-  );
+  let routine: Routine;
+  try {
+    routine = await request<Routine>(
+      `/api/routines/profile/${encodeURIComponent(ownerId)}/${encodeURIComponent(routineId)}/copy`,
+      { method: 'POST' },
+      token,
+    );
+  } catch (error) {
+    // The session ended on the server (signed out everywhere, password changed or expired). The
+    // request layer forgets a refused token only for implicit requests, so forget this one here:
+    // only while it is still the saved one, so a later account's token survives.
+    if (error instanceof ApiError && error.status === 401)
+      await forgetSessionTokenIf(origin, token);
+    throw error;
+  }
   if (!isToastAccountCurrent(account)) return { kind: 'stale' };
   // The library shows the copy at once, and its editor can open on it before the refresh lands.
   client.setQueryData<Routine[]>(settingsKeys.routines, (current) =>
