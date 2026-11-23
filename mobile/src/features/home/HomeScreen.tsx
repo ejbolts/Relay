@@ -11,6 +11,7 @@ import { Button } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { LaunchNotices } from '../review';
 import { bodyKeys } from '../body/bodyQueries';
+import { settingsKeys } from '../settings/settingsData';
 import { trainingKeys } from '../training/trainingQueries';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { HomeGuides } from '../guides/HomeGuides';
@@ -37,6 +38,8 @@ const HOME_QUERIES = [
   ['social', 'feed'],
   ['social', 'choices'],
   ['social', 'friends'],
+  // Active only while a split with a routine keeps it warm (below).
+  settingsKeys.routines,
 ];
 
 /**
@@ -115,7 +118,7 @@ export function HomeScreen() {
         )}
       </HomePage>
       <DaySheet day={day} onClose={() => setDay(null)} onAdd={createOn} />
-      {split?.enabled && <PlannedDayPrefetch />}
+      {split?.enabled && !!split.routine_id && <PlannedDayPrefetch />}
       <PlannedDaySheet date={plannedDate} onClose={() => setPlannedDate(null)} />
       {/* B3: What's new once per release, or last week's review at the start of a week. */}
       <LaunchNotices />
