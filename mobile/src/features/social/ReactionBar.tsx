@@ -1,16 +1,19 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useMutation, useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { nextReaction, reactionSummary, REACTIONS } from '../../../../frontend/src/friendFeedData';
+import { pendingReactionLabel } from '../../../../frontend/src/pendingReactionQueue';
 import type { WorkoutReactionKind, WorkoutReactions } from '../../../../frontend/src/types';
+import { useUser } from '../../session/SessionProvider';
 import { errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 import { Avatar } from './Avatar';
 import { socialIcons } from './icons';
-import { socialApi } from './socialApi';
+import { queueReaction, usePendingReaction } from './pendingReactions';
+import { connectionFailed, socialApi } from './socialApi';
 import { showReactions, useReactionPeople } from './socialQueries';
 
 /** Emojis shown beside a reaction total, so a long workout name keeps its room. */
@@ -18,7 +21,8 @@ const SUMMARY_EMOJIS = 2;
 
 /**
  * A workout's reactions and comments: React (or your reaction), the total, which lists who
- * reacted, and Comments. Your own workout shows its total without a React button.
+ * reacted, and Comments. Your own workout shows its total without a React button. A reaction
+ * chosen offline waits on the phone and sends once Relay can be reached, as on the web.
  */
 export function ReactionBar({
   workoutId,
@@ -27,6 +31,9 @@ export function ReactionBar({
   ownWorkout = false,
   onOpenComments,
   onOpenPerson,
+  focus,
+  onFocusDone,
+  children,
 }: {
   workoutId: string;
   /** "Alex’s Push day", for screen readers. */
@@ -36,23 +43,49 @@ export function ReactionBar({
   /** Leave out where the comments are already on screen. */
   onOpenComments?: () => void;
   onOpenPerson: (person: { id: string; display_name: string }) => void;
+  /** Opens who reacted with this person highlighted, for a notification about their reaction. */
+  focus?: { personId?: string } | null;
+  /** Closing the reactions `focus` opened. */
+  onFocusDone?: () => void;
+  /** More buttons for the row, such as Add photo on your own workout. */
+  children?: ReactNode;
 }) {
   const { colors, type, radius } = useTheme();
   const client = useQueryClient();
+  const account = useUser().id;
   const [picking, setPicking] = useState(false);
   const [people, setPeople] = useState(false);
   const summary = reactionSummary(reactions.counts);
-  const selected = ownWorkout ? undefined : REACTIONS.find((item) => item.kind === reactions.yours);
   const comments = reactions.comment_count ?? 0;
+  // The reaction endpoints leave out the comment count, which hasn't changed.
+  const show = (updated: WorkoutReactions) =>
+    showReactions(client, workoutId, { comment_count: comments, ...updated });
+  const pending = usePendingReaction(account, workoutId, show);
+  const waiting = !ownWorkout && pending !== undefined;
+  const pendingChoice = waiting ? REACTIONS.find((item) => item.kind === pending) : undefined;
+  const selected = ownWorkout ? undefined : REACTIONS.find((item) => item.kind === reactions.yours);
   const reactionCount = `${summary.total} ${summary.total === 1 ? 'reaction' : 'reactions'}`;
   const react = useMutation({
-    mutationFn: (chosen: WorkoutReactionKind) => {
+    mutationFn: async (chosen: WorkoutReactionKind) => {
       const next = nextReaction(reactions.yours, chosen);
-      return next ? socialApi.react(workoutId, next) : socialApi.removeReaction(workoutId);
+      const wait = () => {
+        queueReaction(account, workoutId, next);
+        return null;
+      };
+      if (!onlineManager.isOnline()) return wait();
+      try {
+        return next
+          ? await socialApi.react(workoutId, next)
+          : await socialApi.removeReaction(workoutId);
+      } catch (reason) {
+        if (connectionFailed(reason)) return wait();
+        throw reason;
+      }
     },
+    // Offline, the choice still goes to the queue rather than waiting for a connection.
+    networkMode: 'always',
     onSuccess: (updated) => {
-      // The reaction endpoints leave out the comment count, which hasn't changed.
-      showReactions(client, workoutId, { comment_count: comments, ...updated });
+      if (updated) show(updated);
       setPicking(false);
     },
     onError: () => void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error),
@@ -65,11 +98,14 @@ export function ReactionBar({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              selected
-                ? `Your reaction to ${subject}: ${selected.label}. Change reaction`
-                : `React to ${subject}`
+              waiting
+                ? pendingReactionLabel(subject, pending)
+                : selected
+                  ? `Your reaction to ${subject}: ${selected.label}. Change reaction`
+                  : `React to ${subject}`
             }
-            accessibilityState={{ expanded: picking }}
+            accessibilityState={{ expanded: picking, disabled: waiting }}
+            disabled={waiting}
             hitSlop={4}
             onPress={() => {
               void Haptics.selectionAsync();
@@ -77,15 +113,23 @@ export function ReactionBar({
             }}
             style={({ pressed }) => [
               pill,
-              selected && { backgroundColor: colors.accentSoft },
+              (waiting ? pendingChoice : selected) && { backgroundColor: colors.accentSoft },
+              waiting && styles.waiting,
               pressed && { opacity: 0.6 },
             ]}
           >
-            {selected ? (
+            {waiting ? (
+              pendingChoice ? (
+                <Text style={styles.emoji}>{pendingChoice.emoji}</Text>
+              ) : (
+                <Icon name={socialIcons.react} size={18} color={colors.secondary} />
+              )
+            ) : selected ? (
               <Text style={styles.emoji}>{selected.emoji}</Text>
             ) : (
               <Icon name={socialIcons.react} size={18} color={colors.secondary} />
             )}
+            {waiting && <Icon name={socialIcons.waiting} size={13} color={colors.muted} />}
           </Pressable>
         )}
         {summary.total > 0 && (
@@ -120,6 +164,7 @@ export function ReactionBar({
             )}
           </Pressable>
         )}
+        {children}
       </View>
       {picking && (
         <View
@@ -157,12 +202,17 @@ export function ReactionBar({
           {errorMessage(react.error)}
         </Text>
       )}
-      {people && (
+      {(people || !!focus) && (
         <ReactionPeopleSheet
           workoutId={workoutId}
-          onClose={() => setPeople(false)}
+          highlightPersonId={people ? undefined : focus?.personId}
+          onClose={() => {
+            setPeople(false);
+            onFocusDone?.();
+          }}
           onOpenPerson={(person) => {
             setPeople(false);
+            onFocusDone?.();
             onOpenPerson(person);
           }}
         />
@@ -171,17 +221,19 @@ export function ReactionBar({
   );
 }
 
-/** Who reacted to a workout, and with what. */
-function ReactionPeopleSheet({
+/** Who reacted to a workout, and with what; a notification's person is highlighted. */
+export function ReactionPeopleSheet({
   workoutId,
+  highlightPersonId,
   onClose,
   onOpenPerson,
 }: {
   workoutId: string;
+  highlightPersonId?: string;
   onClose: () => void;
   onOpenPerson: (person: { id: string; display_name: string }) => void;
 }) {
-  const { colors, type } = useTheme();
+  const { colors, type, radius } = useTheme();
   const query = useReactionPeople(workoutId);
   const people = query.data?.pages.flatMap((page) => page.items) ?? [];
   return (
@@ -200,7 +252,14 @@ function ReactionPeopleSheet({
               accessibilityRole="button"
               accessibilityLabel={`Open ${person.display_name}'s profile`}
               onPress={() => onOpenPerson(person)}
-              style={({ pressed }) => [styles.person, pressed && { opacity: 0.6 }]}
+              style={({ pressed }) => [
+                styles.person,
+                person.id === highlightPersonId && {
+                  backgroundColor: colors.accentSoft,
+                  borderRadius: radius.lg,
+                },
+                pressed && { opacity: 0.6 },
+              ]}
             >
               <Avatar person={person} size={36} />
               <Text style={[type.body, { color: colors.text, flex: 1 }]} numberOfLines={1}>
@@ -258,6 +317,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  person: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
+  person: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+  },
+  waiting: { opacity: 0.7 },
   more: { alignItems: 'center', paddingVertical: 12 },
 });

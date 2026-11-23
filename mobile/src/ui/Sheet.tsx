@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useReduceMotion } from '../features/settings/devicePreferences';
 import { Icon } from './Icon';
 import { useTheme } from './theme';
 
@@ -22,6 +23,7 @@ export function Sheet({
   children: ReactNode;
 }) {
   const { colors, type } = useTheme();
+  const reduced = useReduceMotion();
   const insets = useSafeAreaInsets();
   const ios = Platform.OS === 'ios';
   const header = (
@@ -60,7 +62,7 @@ export function Sheet({
     <Modal
       visible={visible}
       onRequestClose={onClose}
-      animationType={ios ? 'slide' : 'fade'}
+      animationType={reduced ? 'none' : ios ? 'slide' : 'fade'}
       presentationStyle={ios ? 'pageSheet' : 'overFullScreen'}
       transparent={!ios}
       statusBarTranslucent={!ios}

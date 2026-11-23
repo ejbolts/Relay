@@ -3,20 +3,24 @@ import type {
   FriendConnections,
   FriendFeed,
   FriendStatus,
+  NotificationReadReference,
   SharedProfile,
   SharedProfileSummary,
   SharedWorkoutKind,
   SharedWorkoutPage,
   SharingChoices,
+  SharingNotifications,
   SharingSettings,
   SuggestedProfilePage,
   Timeline,
   WorkoutComment,
+  WorkoutPhoto,
   WorkoutReactionKind,
   WorkoutReactionPage,
   WorkoutReactions,
 } from '../../../../frontend/src/types';
 import { ApiError, apiGet, apiSend } from '../../data/api';
+import { uploadFile } from '../../data/uploadFile';
 
 // The sharing endpoints the web's `api.sharing` uses, for Social and profiles.
 
@@ -94,7 +98,23 @@ export const socialApi = {
       reaction ? 'PUT' : 'DELETE',
       reaction ? { reaction } : undefined,
     ),
+  notifications: (signal?: AbortSignal) =>
+    apiGet<SharingNotifications>('/api/sharing/notifications', signal),
+  markNotificationsRead: (items: NotificationReadReference[]) =>
+    apiSend<void>('/api/sharing/notifications/read', 'POST', { items }),
+  /** Adds a photo picked on the phone to your own saved workout. */
+  addWorkoutPhoto: (workoutId: string, file: { uri: string; name: string; type: string }) =>
+    uploadFile<WorkoutPhoto>(`/api/workouts/${id(workoutId)}/photos`, 'POST', file, {
+      failure: 'Relay could not add this photo.',
+    }),
+  removeWorkoutPhoto: (photoId: string) =>
+    apiSend<void>(`/api/workout-photos/${id(photoId)}`, 'DELETE'),
 };
+
+/** A request that never reached the server fails with a plain error; an answer is an ApiError. */
+export function connectionFailed(error: unknown) {
+  return !(error instanceof ApiError);
+}
 
 /** The server refuses Social to a private profile until it is shared. */
 export function sharingRequired(error: unknown) {

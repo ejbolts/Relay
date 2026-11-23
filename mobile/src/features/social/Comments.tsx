@@ -27,6 +27,7 @@ import type {
 } from '../../../../frontend/src/types';
 import { errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
+import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 import { Avatar } from './Avatar';
 import { socialIcons } from './icons';
@@ -119,11 +120,14 @@ export function CommentList({
   thread,
   onOpenPerson,
   onCompose,
+  highlightId,
 }: {
   thread: CommentThread;
   onOpenPerson: (person: Person) => void;
   /** After Reply or Edit, to focus the composer. */
   onCompose: () => void;
+  /** A comment opened from a notification. */
+  highlightId?: string;
 }) {
   const { colors, type } = useTheme();
   const [picker, setPicker] = useState<string | null>(null);
@@ -144,6 +148,7 @@ export function CommentList({
       key={item.id}
       item={item}
       reply={reply}
+      highlighted={item.id === highlightId}
       picking={picker === item.id}
       busy={thread.busy}
       onTogglePicker={() => setPicker(picker === item.id ? null : item.id)}
@@ -195,6 +200,7 @@ export function CommentList({
 function CommentRow({
   item,
   reply,
+  highlighted,
   picking,
   busy,
   onTogglePicker,
@@ -206,6 +212,7 @@ function CommentRow({
 }: {
   item: WorkoutComment;
   reply: boolean;
+  highlighted: boolean;
   picking: boolean;
   busy: boolean;
   onTogglePicker: () => void;
@@ -239,7 +246,11 @@ function CommentRow({
       </Pressable>
       <View style={{ flex: 1, gap: 6 }}>
         <View
-          style={[styles.bubble, { backgroundColor: colors.surface2, borderRadius: radius.lg }]}
+          style={[
+            styles.bubble,
+            { backgroundColor: colors.surface2, borderRadius: radius.lg },
+            highlighted && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
+          ]}
         >
           <Text style={[type.footnote, { color: colors.text }]}>
             <Text style={{ fontWeight: '700' }} onPress={() => onOpenPerson(item.author)}>
@@ -317,6 +328,38 @@ function CommentRow({
         )}
       </View>
     </View>
+  );
+}
+
+/**
+ * A workout's comments on their own, titled with its name, for a notification about a workout
+ * that is no longer in the loaded feed, as the web shows it.
+ */
+export function CommentsSheet({
+  workoutId,
+  title,
+  highlightId,
+  onClose,
+  onOpenPerson,
+}: {
+  workoutId: string;
+  title: string;
+  highlightId?: string;
+  onClose: () => void;
+  onOpenPerson: (person: Person) => void;
+}) {
+  const thread = useCommentThread(workoutId, null);
+  const composer = useRef<ComponentRef<typeof TextInput>>(null);
+  return (
+    <Sheet visible onClose={onClose} title={title}>
+      <CommentList
+        thread={thread}
+        highlightId={highlightId}
+        onOpenPerson={onOpenPerson}
+        onCompose={() => composer.current?.focus()}
+      />
+      <CommentComposer thread={thread} ref={composer} />
+    </Sheet>
   );
 }
 
@@ -406,7 +449,14 @@ export function CommentComposer({
 
 const styles = StyleSheet.create({
   comment: { flexDirection: 'row', gap: 8 },
-  bubble: { paddingHorizontal: 12, paddingVertical: 8, gap: 2, alignSelf: 'flex-start' },
+  bubble: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    gap: 2,
+    alignSelf: 'flex-start',
+    borderWidth: 1,
+    borderColor: 'transparent',
+  },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' },
   chip: { paddingHorizontal: 8, paddingVertical: 3 },
   picker: {

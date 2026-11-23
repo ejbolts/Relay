@@ -30,6 +30,7 @@ import { useSocialNavigation } from './navigation';
 import { ReactionBar } from './ReactionBar';
 import { socialHeader } from './screenOptions';
 import { useSharedProfile, useSharedWorkout } from './socialQueries';
+import { WorkoutPhotoActions } from './WorkoutPhotoActions';
 import { WorkoutPhotos } from './WorkoutPhotos';
 
 /**
@@ -41,11 +42,14 @@ export function SharedWorkoutScreen({
   memberId,
   date,
   showComments = false,
+  highlightCommentId,
 }: {
   workoutId: string;
   memberId: string;
   date: string;
   showComments?: boolean;
+  /** A comment opened from a notification. */
+  highlightCommentId?: string;
 }) {
   const { colors, space, type } = useTheme();
   const insets = useSafeAreaInsets();
@@ -124,7 +128,21 @@ export function SharedWorkoutScreen({
             </Text>
           )}
         </View>
-        <WorkoutPhotos photos={workout.photos ?? []} subject={subject} inset={space.lg * 2} full />
+        {own ? (
+          <WorkoutPhotoActions
+            workoutId={workout.id}
+            photos={workout.photos ?? []}
+            subject={subject}
+            inset={space.lg * 2}
+          />
+        ) : (
+          <WorkoutPhotos
+            photos={workout.photos ?? []}
+            subject={subject}
+            inset={space.lg * 2}
+            full
+          />
+        )}
         <ReactionBar
           workoutId={workout.id}
           subject={subject}
@@ -156,6 +174,7 @@ export function SharedWorkoutScreen({
           </Text>
           <CommentList
             thread={thread}
+            highlightId={highlightCommentId}
             onOpenPerson={nav.openProfile}
             onCompose={() => composer.current?.focus()}
           />

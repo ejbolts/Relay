@@ -1,5 +1,5 @@
 import * as Haptics from 'expo-haptics';
-import type { ReactNode } from 'react';
+import type { ComponentRef, ReactNode, Ref } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -26,6 +26,7 @@ export function Screen({
   actions,
   refreshing,
   onRefresh,
+  scrollRef,
   children,
 }: {
   title: string;
@@ -33,6 +34,8 @@ export function Screen({
   actions?: ReactNode;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** For a screen that scrolls to something itself, such as Social revealing a workout. */
+  scrollRef?: Ref<ComponentRef<typeof ScrollView>>;
   children: ReactNode;
 }) {
   const { colors, space, type } = useTheme();
@@ -41,6 +44,7 @@ export function Screen({
   const top = Platform.OS === 'ios' ? 0 : insets.top;
   const page = (
     <ScrollView
+      ref={scrollRef}
       style={{ flex: 1, backgroundColor: colors.page }}
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{

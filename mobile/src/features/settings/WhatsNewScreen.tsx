@@ -1,9 +1,12 @@
 import { useState } from 'react';
 import { Image, Linking, StyleSheet, Text, View } from 'react-native';
+import releaseHistory from '../../../../frontend/release-history.json';
 import {
   announcedRelease,
+  compareVersions,
   formatReleaseDate,
   formatReleaseVersion,
+  parseReleaseHistory,
   releaseChangeParts,
   type Release,
   type ReleaseImage,
@@ -12,7 +15,7 @@ import { apiOrigin } from '../../data/api';
 import { Button, Card, errorMessage, ErrorState, Loading } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { useServerRelease } from './settingsData';
-import { SettingsPage } from './SettingsList';
+import { Row, Section, SettingsPage } from './SettingsList';
 
 /** The release notes of the Relay the server runs, as the web's What's new shows them. */
 export function WhatsNewScreen() {
@@ -33,6 +36,39 @@ export function WhatsNewScreen() {
 }
 
 function ReleaseNotes({ release }: { release: Release }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const history =
+    parseReleaseHistory(
+      releaseHistory.filter(({ version }) => compareVersions(version, release.version) < 0),
+      release.version,
+    ) ?? [];
+  return (
+    <SettingsPage>
+      <ReleaseDetails release={release} />
+      {history.length > 0 && (
+        <Section title="Earlier versions">
+          {history.map((item) => (
+            <View key={item.version}>
+              <Row
+                label={formatReleaseVersion(item.version)}
+                value={item.title}
+                accessibilityLabel={`${formatReleaseVersion(item.version)}, ${item.title}${expanded === item.version ? ', expanded' : ''}`}
+                onPress={() => setExpanded(expanded === item.version ? null : item.version)}
+              />
+              {expanded === item.version && (
+                <View style={{ padding: 14, gap: 14 }}>
+                  <ReleaseDetails release={item} />
+                </View>
+              )}
+            </View>
+          ))}
+        </Section>
+      )}
+    </SettingsPage>
+  );
+}
+
+function ReleaseDetails({ release }: { release: Release }) {
   const { colors, type } = useTheme();
   const media = release.highlights?.length
     ? release.highlights.map((highlight) => ({
@@ -55,7 +91,7 @@ function ReleaseNotes({ release }: { release: Release }) {
           ]
         : [];
   return (
-    <SettingsPage>
+    <>
       <View style={{ gap: 4 }}>
         <Text style={[type.eyebrow, { color: colors.accentText }]}>
           VERSION {formatReleaseVersion(release.version)}
@@ -102,7 +138,7 @@ function ReleaseNotes({ release }: { release: Release }) {
         variant="secondary"
         onPress={() => void Linking.openURL(release.url)}
       />
-    </SettingsPage>
+    </>
   );
 }
 

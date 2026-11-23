@@ -228,6 +228,23 @@ beforeEach(() => {
     '/api/sharing': { visibility: 'followers', pending_requests: 2 },
     '/api/sharing/feed': { items: [], friends: 0, with_sessions: 0 },
     '/api/home-layout': defaultHomeLayout(),
+    '/api/sharing/notifications': {
+      requests: [
+        { id: 'r1', display_name: 'Jordan Lee', profile_photo_url: null, since: '2026-11-20' },
+        { id: 'r2', display_name: 'Sam Patel', profile_photo_url: null, since: '2026-11-19' },
+      ],
+      accepted: [
+        {
+          id: 'a1',
+          display_name: 'Alex Morgan',
+          profile_photo_url: null,
+          since: '2026-11-18',
+          is_read: false,
+        },
+      ],
+      reactions: [],
+      comments: [],
+    },
   };
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     const key = Object.keys(responses).find((prefix) => path.split('?')[0] === prefix);
@@ -295,12 +312,12 @@ test('Up next shows the split day and its exercises, and starts it', async () =>
   expect(workout.start).toHaveBeenLastCalledWith({ kind: 'empty' });
 });
 
-test('the header opens your profile, badged with friend requests, and Settings', async () => {
+test('the header has the notifications bell, your profile and Settings', async () => {
   await open();
-  const profile = await screen.findByRole('button', {
-    name: 'Profile: Preview, 2 friend requests',
-  });
-  expect(within(profile).getByText('2')).toBeVisible();
+  // The bell counts waiting friend requests and unread notices, as on the web.
+  const bell = await screen.findByRole('button', { name: 'Notifications, 3 unread' });
+  expect(within(bell).getByText('3')).toBeVisible();
+  const profile = screen.getByRole('button', { name: 'Profile: Preview' });
   await fireEvent.press(profile);
   expect(mockRouter.push).toHaveBeenLastCalledWith({
     pathname: '/social/profile/[id]',

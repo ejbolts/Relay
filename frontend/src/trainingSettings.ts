@@ -62,3 +62,16 @@ export function autoSaveChoices(minutes: number | null): number[] {
   }
   return choices;
 }
+
+export function freshStartDateError(date: string, today: string, starts: readonly string[]) {
+  if (!date || date > today) {
+    return 'Choose a date that is not in the future.';
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return 'Enter a valid date as YYYY-MM-DD.';
+  const parsed = new Date(`${date}T12:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) {
+    return 'Enter a valid date as YYYY-MM-DD.';
+  }
+  if (starts.includes(date)) return 'A fresh start already begins on that date.';
+  return null;
+}

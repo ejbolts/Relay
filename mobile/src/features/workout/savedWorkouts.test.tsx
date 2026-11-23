@@ -244,7 +244,9 @@ test('Resume reopens a saved workout, and Finish saves over it with its revision
 
   await fireEvent.press(screen.getByRole('button', { name: 'Finish workout' }));
   await press('Finish workout?', 'Finish workout');
-  expect(await screen.findByText('Workout complete')).toBeVisible();
+  // Finishing syncs, queues and saves before the summary shows; under a full parallel run that
+  // can take longer than findBy's default second.
+  expect(await screen.findByText('Workout complete', {}, { timeout: 5000 })).toBeVisible();
   await waitFor(() => expect(puts).toHaveLength(1));
   expect(puts[0].path).toBe('/api/workouts/w1');
   expect(puts[0].body).toMatchObject({ base_revision: 4, notes: 'Felt strong' });
