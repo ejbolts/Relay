@@ -192,6 +192,51 @@ export function buttonColors(colors: Palette, variant: ButtonVariant) {
   }[variant];
 }
 
+// Style keys that place a button among its neighbours. The rest (fill, border, radius, padding)
+// change how it looks.
+const LAYOUT_KEYS = new Set([
+  'margin',
+  'marginTop',
+  'marginBottom',
+  'marginLeft',
+  'marginRight',
+  'marginHorizontal',
+  'marginVertical',
+  'marginStart',
+  'marginEnd',
+  'flex',
+  'flexGrow',
+  'flexShrink',
+  'flexBasis',
+  'alignSelf',
+  'position',
+  'top',
+  'right',
+  'bottom',
+  'left',
+  'start',
+  'end',
+  'zIndex',
+  'width',
+  'minWidth',
+  'maxWidth',
+  'transform',
+]);
+
+/**
+ * Splits a button's `style` for a button drawn inside a larger touch area: placement goes on the
+ * touch area, looks (fill, border, radius, padding, height) on the visible face, so a caller's
+ * colours and shape still show and its margins still place the whole button.
+ */
+export function splitStyle(style: StyleProp<ViewStyle>): { box: ViewStyle; face: ViewStyle } {
+  const box: Record<string, unknown> = {};
+  const face: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(StyleSheet.flatten(style) ?? {})) {
+    (LAYOUT_KEYS.has(key) ? box : face)[key] = value;
+  }
+  return { box: box as ViewStyle, face: face as ViewStyle };
+}
+
 const hexOnly = (colour: string) => (colour.startsWith('#') ? colour.slice(0, 7) : colour);
 
 const SIZES = {
@@ -242,6 +287,7 @@ export function Button({
   const metrics = SIZES[size];
   const inactive = !!disabled || !!loading;
   const compact = size === 'small' && !link;
+  const split = splitStyle(style);
   const start = (align ?? (link ? 'start' : 'center')) === 'start';
   const look = (pressed: boolean): StyleProp<ViewStyle> => [
     styles.button,
@@ -280,11 +326,13 @@ export function Button({
       }}
       style={({ pressed }) =>
         compact
-          ? [styles.touchArea, block && styles.block, style]
+          ? [styles.touchArea, block && styles.block, split.box]
           : [look(pressed), block && styles.block, style]
       }
     >
-      {({ pressed }) => (compact ? <View style={look(pressed)}>{content}</View> : content)}
+      {({ pressed }) =>
+        compact ? <View style={[look(pressed), split.face]}>{content}</View> : content
+      }
     </Pressable>
   );
 }
@@ -321,6 +369,7 @@ export function IconButton({
   const ink = accent ? colors.onAccent : on ? colors.accentText : colors.secondary;
   // The web's outline is --p-line; light mode needs the stronger line to read on the page.
   const outline = scheme === 'light' ? colors.lineStrong : colors.line;
+  const split = splitStyle(style);
   return (
     <Pressable
       accessibilityRole="button"
@@ -331,7 +380,7 @@ export function IconButton({
         haptics.tap();
         onPress();
       }}
-      style={[styles.iconTouch, style]}
+      style={[styles.iconTouch, split.box]}
     >
       {({ pressed }) => (
         <View
@@ -341,6 +390,7 @@ export function IconButton({
               backgroundColor: accent ? colors.accent : colors.surface,
               borderColor: accent ? 'transparent' : on ? colors.accent : outline,
             },
+            split.face,
             pressed && { opacity: 0.7 },
             disabled && { opacity: 0.45 },
           ]}
@@ -348,7 +398,11 @@ export function IconButton({
           {children ?? (icon && <Icon name={icon} size={18} color={ink} />)}
           {!!badge && (
             <View
-              style={[styles.badge, { backgroundColor: colors.danger, borderColor: colors.page }]}
+              // White on the darker danger fill reads at over 5:1 in every theme.
+              style={[
+                styles.badge,
+                { backgroundColor: colors.dangerFill, borderColor: colors.page },
+              ]}
             >
               <Text style={styles.badgeText}>{badge}</Text>
             </View>
@@ -448,7 +502,7 @@ const styles = StyleSheet.create({
   },
   link: { minHeight: 32, paddingHorizontal: 4, borderWidth: 0 },
   start: { justifyContent: 'flex-start' },
-  touchArea: { minHeight: 44, justifyContent: 'center' },
+  touchArea: { minHeight: 44, minWidth: 44, justifyContent: 'center' },
   block: { alignSelf: 'stretch' },
   iconTouch: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   iconButton: {
