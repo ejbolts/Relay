@@ -201,16 +201,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 4,
+    paddingLeft: 0,
+    paddingRight: 4,
     minHeight: 44,
   },
   insertRow: { minHeight: 44 },
-  lead: { width: 34, alignItems: 'center' },
-  // Wider than its 34 pt column; the rule beside it takes no touches, so nothing overlaps.
+  // A full 44 pt slot for the "+" inside the row (which starts at the card's edge, so the "+"
+  // stays centred under the set numbers); nothing reaches outside the swipe container.
+  lead: { width: 44, alignItems: 'center' },
   insertTouch: {
     width: 44,
     height: 44,
-    marginHorizontal: -5,
     alignItems: 'center',
     justifyContent: 'center',
   },

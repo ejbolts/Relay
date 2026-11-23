@@ -68,3 +68,17 @@ export function heaviestLoggedSetKey(
       best = item;
   return best?.key ?? null;
 }
+
+/**
+ * The bodyweight a saved workout was logged at, as it was opened for editing: its first set that
+ * recorded one. An editor keeps this for the whole edit, so removing a set never changes the
+ * other rows' ratio or what new sets are stamped with.
+ */
+export function savedWorkoutBodyweight(
+  workout: { movements: readonly { sets: readonly { bodyweight_kg?: number | null }[] }[] } | null,
+): number | null {
+  return (
+    workout?.movements.flatMap((movement) => movement.sets).find((set) => set.bodyweight_kg != null)
+      ?.bodyweight_kg ?? null
+  );
+}

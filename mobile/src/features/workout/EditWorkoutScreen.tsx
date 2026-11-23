@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineAliases } from '../../../../frontend/src/exerciseHistory';
-import { bodyweightOn, sharedBodyweight } from '../../../../frontend/src/relativeStrength';
+import { bodyweightOn, savedWorkoutBodyweight } from '../../../../frontend/src/relativeStrength';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
 import type { Exercise, TrackedWorkout, WorkoutInput } from '../../../../frontend/src/types';
 import {
@@ -238,18 +238,12 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
     () => new Set(state.movements.map((movement) => movement.exercise.id)),
     [state.movements],
   );
-  // The bodyweight the workout was logged at: the one its sets share, or the day's weigh-in for
-  // older rows saved without one, as the web's editor finds it.
+  // The bodyweight the workout was logged at, taken from it as opened (as the web's editor does),
+  // so removing a set mid-edit changes nothing; the day's weigh-in only for workouts saved
+  // without one. A set's own snapshot always wins over this.
+  const [openedBodyweight] = useState(() => savedWorkoutBodyweight(workout));
   const measurements = useBodyMeasurements().data;
-  const bodyweight = bodyweightOn(
-    measurements ?? [],
-    state.workoutDate,
-    sharedBodyweight(
-      state.movements.flatMap((movement) =>
-        movement.sets.map((item) => ({ bodyweight_kg: item.bodyweight_kg ?? null })),
-      ),
-    ),
-  );
+  const bodyweight = bodyweightOn(measurements ?? [], state.workoutDate, openedBodyweight);
   const bodyweightRef = useRef(bodyweight);
   useEffect(() => {
     bodyweightRef.current = bodyweight;

@@ -84,7 +84,7 @@ import {
   useWorkoutTypes,
 } from '../../data/queries';
 import { useOptionalSession } from '../../session/SessionProvider';
-import { isToastAccountCurrent, showToast, toastAccount, ToastHost } from '../../ui/Toast';
+import { isToastAccountCurrent, showToast, toastAccountFor, ToastHost } from '../../ui/Toast';
 import { restTimerPreference } from '../settings/devicePreferences';
 import { refreshFriendPresence, socialKeys, updateFriendPresence } from '../social/socialQueries';
 import { FinishedQueueSender, type QueueStatus } from './finishedQueueSender';
@@ -642,8 +642,10 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const finishedSessionRef = useRef<string | null>(null);
   const reviewRef = useRef<(key: string) => void>(() => undefined);
   useEffect(() => {
-    // The queue belongs to this account; its late toasts never show for another session.
-    const account = toastAccount();
+    // The queue belongs to this signed-in session; its late toasts never show for another one.
+    // Taken from the engine's own user, as the toast hosts may not have caught up with a sign-in
+    // that has only just happened.
+    const account = toastAccountFor(user.id);
     const sender = new FinishedQueueSender({
       storage: deviceStorage,
       userId: user.id,
@@ -1339,34 +1341,37 @@ const WorkoutEngine = memo(function WorkoutEngine({
     senderRef.current?.forget(key);
   }, []);
 
-  const keepMine = useCallback((key: string) => {
-    const item = readFinishedWorkouts(deviceStorage).find(
-      (entry) => finishedWorkoutKey(entry) === key,
-    );
-    const workoutId = item?.pendingSave.workoutId;
-    if (!item || !workoutId) return;
-    const account = toastAccount();
-    apiGet<TrackedWorkout>(`/api/workouts/${encodeURIComponent(workoutId)}`)
-      .then((latest) => {
-        // Signed out or switched account meanwhile: this phone no longer holds that save.
-        if (!isToastAccountCurrent(account)) return;
-        if (!addFinishedWorkout(rebasedFinishedWorkout(item, latest.revision), deviceStorage))
-          throw new Error('Could not store the workout on the phone. Free some storage.');
-        senderRef.current?.forget(key);
-        senderRef.current?.wake();
-      })
-      .catch((reason) =>
-        showToast(
-          reason instanceof ApiError && reason.status === 404
-            ? 'This workout was deleted on another device.'
-            : reason instanceof Error
-              ? reason.message
-              : 'Could not check the latest version. Try again.',
-          undefined,
-          { account },
-        ),
+  const keepMine = useCallback(
+    (key: string) => {
+      const item = readFinishedWorkouts(deviceStorage).find(
+        (entry) => finishedWorkoutKey(entry) === key,
       );
-  }, []);
+      const workoutId = item?.pendingSave.workoutId;
+      if (!item || !workoutId) return;
+      const account = toastAccountFor(user.id);
+      apiGet<TrackedWorkout>(`/api/workouts/${encodeURIComponent(workoutId)}`)
+        .then((latest) => {
+          // Signed out or switched account meanwhile: this phone no longer holds that save.
+          if (!isToastAccountCurrent(account)) return;
+          if (!addFinishedWorkout(rebasedFinishedWorkout(item, latest.revision), deviceStorage))
+            throw new Error('Could not store the workout on the phone. Free some storage.');
+          senderRef.current?.forget(key);
+          senderRef.current?.wake();
+        })
+        .catch((reason) =>
+          showToast(
+            reason instanceof ApiError && reason.status === 404
+              ? 'This workout was deleted on another device.'
+              : reason instanceof Error
+                ? reason.message
+                : 'Could not check the latest version. Try again.',
+            undefined,
+            { account },
+          ),
+        );
+    },
+    [user.id],
+  );
 
   const resume = useCallback(
     (workout: TrackedWorkout) => {
