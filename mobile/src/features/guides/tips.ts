@@ -2,6 +2,7 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import {
   parseTips,
+  tipShown,
   tipStorageKey,
   withTipReminders,
   type TipId,
@@ -92,6 +93,10 @@ function makeActions(account: string) {
         write(account, { ...state, homeDone: [...(state.homeDone ?? []), id] });
     },
     enable: (enabled: boolean) => write(account, { ...read(account), enabled }),
+    /** A contextual tip appeared (the logger's): counted towards its showings and the daily tip. */
+    shown: (id: TipId, now: number) => write(account, tipShown(read(account), id, now)),
+    /** Any other change worked out by the shared rules, such as counting a tip's event. */
+    update: (change: (state: TipState) => TipState) => write(account, change(read(account))),
   };
 }
 

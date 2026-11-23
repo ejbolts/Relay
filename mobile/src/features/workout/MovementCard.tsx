@@ -62,6 +62,7 @@ import { promptText } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
 import { ExerciseIcon } from '../../ui/ExerciseIcon';
+import { LoggerTipSlot } from '../guides/LoggerTips';
 import { restTimesPreference } from '../settings/devicePreferences';
 import { CardioSetImport } from './CardioSetImport';
 import { lastUsedMachines, useMachinePhotos } from './loggerQueries';
@@ -75,7 +76,8 @@ export interface MovementActions {
   addSet: (movementKey: string) => void;
   /** Adds a set at `position`, the "+" between sets. Without it the card offers no "+". */
   insertSet?: (movementKey: string, position: number) => void;
-  deleteSet: (movementKey: string, setKey: string) => void;
+  /** `via` says a swipe deleted it, rather than the set menu. */
+  deleteSet: (movementKey: string, setKey: string, via?: 'swipe') => void;
   moveSet: (movementKey: string, from: number, to: number) => void;
   setKind: (movementKey: string, setKey: string, kind: SetKind) => void;
   completeExercise: (movementKey: string, isComplete: boolean) => void;
@@ -108,6 +110,7 @@ export const MovementCard = memo(function MovementCard({
   workoutDate,
   weightUnit,
   skipHighRepWarning,
+  machineTip = false,
   actions,
 }: {
   /** Its place in the workout, on the picture's badge. */
@@ -129,6 +132,8 @@ export const MovementCard = memo(function MovementCard({
   workoutDate: string;
   weightUnit: WeightUnit;
   skipHighRepWarning: boolean;
+  /** The machine photo tip applies: a machine or cable exercise logged a few times without one. */
+  machineTip?: boolean;
   actions: MovementActions;
 }) {
   const { colors, type, radius, space } = useTheme();
@@ -333,40 +338,42 @@ export const MovementCard = memo(function MovementCard({
       </View>
 
       {expanded && machineRow && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            pinnedMachine
-              ? `Machine: ${machineNames.get(pinnedMachine) ?? 'pinned'}`
-              : `Choose a machine for ${name}`
-          }
-          onPress={() => actions.openMachines(movement.key)}
-          style={({ pressed }) => [
-            styles.machine,
-            { backgroundColor: colors.surface2, borderRadius: radius.lg },
-            pressed && styles.pressed,
-          ]}
-        >
-          <MachineThumb url={pinnedPhoto?.thumbnail_url ?? null} />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text
-              style={[type.callout, { color: colors.text, fontWeight: '600' }]}
-              numberOfLines={1}
-            >
-              {pinnedMachine
-                ? `${machineNames.get(pinnedMachine) ?? 'Machine'}${movement.machinePhotoIds.length > 1 ? ` +${movement.machinePhotoIds.length - 1}` : ''}`
-                : 'Choose machine'}
-            </Text>
-            {!!movement.machineSettings?.length && (
-              <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
-                {movement.machineSettings
-                  .map((setting) => `${setting.name} ${setting.value}`)
-                  .join(' · ')}
+        <LoggerTipSlot id="machine" eligible={machineTip && movement.machinePhotoIds.length === 0}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={
+              pinnedMachine
+                ? `Machine: ${machineNames.get(pinnedMachine) ?? 'pinned'}`
+                : `Choose a machine for ${name}`
+            }
+            onPress={() => actions.openMachines(movement.key)}
+            style={({ pressed }) => [
+              styles.machine,
+              { backgroundColor: colors.surface2, borderRadius: radius.lg },
+              pressed && styles.pressed,
+            ]}
+          >
+            <MachineThumb url={pinnedPhoto?.thumbnail_url ?? null} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text
+                style={[type.callout, { color: colors.text, fontWeight: '600' }]}
+                numberOfLines={1}
+              >
+                {pinnedMachine
+                  ? `${machineNames.get(pinnedMachine) ?? 'Machine'}${movement.machinePhotoIds.length > 1 ? ` +${movement.machinePhotoIds.length - 1}` : ''}`
+                  : 'Choose machine'}
               </Text>
-            )}
-          </View>
-          <Icon name="chevronDown" size={18} color={colors.secondary} />
-        </Pressable>
+              {!!movement.machineSettings?.length && (
+                <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
+                  {movement.machineSettings
+                    .map((setting) => `${setting.name} ${setting.value}`)
+                    .join(' · ')}
+                </Text>
+              )}
+            </View>
+            <Icon name="chevronDown" size={18} color={colors.secondary} />
+          </Pressable>
+        </LoggerTipSlot>
       )}
 
       {expanded && (
@@ -777,7 +784,7 @@ function SetRow({
             accessibilityLabel={`Delete set ${number}`}
             onPress={() => {
               swipeable.current?.close();
-              actions.deleteSet(movement.key, item.key);
+              actions.deleteSet(movement.key, item.key, 'swipe');
             }}
             style={[
               styles.deleteAction,

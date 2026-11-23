@@ -52,6 +52,7 @@ jest.mock('../../ui/prompts', () => ({
 jest.mock('../../ui/Toast', () => ({
   showToast: jest.fn(),
   ToastHost: () => null,
+  toastShowing: () => false,
   toastAccount: () => 'u1',
   toastAccountFor: () => 'u1',
   isToastAccountCurrent: () => true,

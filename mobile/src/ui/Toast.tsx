@@ -116,8 +116,15 @@ interface Host {
   show: (toast: Toast) => void;
   /** A longer time for a toast that is still showing (Android's accessibility timeout). */
   extend: (id: number, ms: number) => void;
+  /** A toast is on screen. */
+  showing: () => boolean;
 }
 const hosts: Host[] = [];
+
+/** A toast is on screen somewhere, so the logger's tips wait for it, as the web's do. */
+export function toastShowing() {
+  return hosts.some((host) => host.showing());
+}
 let nextId = 0;
 
 const VISIBLE_MS = 3200;
@@ -235,6 +242,7 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
         current.current = longer;
         setToast(longer);
       },
+      showing: () => current.current !== null,
     };
     hosts.push(host);
     return () => {

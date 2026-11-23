@@ -15,7 +15,7 @@ import { machineAliases } from '../../../../frontend/src/exerciseHistory';
 import { exerciseLastDoneDates } from '../../../../frontend/src/exerciseLastDone';
 import { liveMuscleSets, type MuscleSetsWeek } from '../../../../frontend/src/liveMuscleSets';
 import { bodyweightOn } from '../../../../frontend/src/relativeStrength';
-import type { SetKind } from '../../../../frontend/src/setFieldValues';
+import { setKindOf, type SetKind } from '../../../../frontend/src/setFieldValues';
 import type { Exercise } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import {
@@ -44,6 +44,7 @@ import { MenuButton } from '../../ui/MenuButton';
 import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
+import { LoggerTipsProvider, useLoggerTips } from '../guides/LoggerTips';
 import { restTimerPreference, useReduceMotion } from '../settings/devicePreferences';
 import { useBodyMeasurements } from '../training/trainingQueries';
 import { FinishedSummary } from './FinishedSummary';
@@ -100,7 +101,12 @@ export function WorkoutSheet() {
   useEffect(() => () => closeFinished?.(), [closeFinished]);
 
   let content = <NoWorkout onClose={() => router.back()} />;
-  if (logger?.state) content = <LiveLogger logger={logger} state={logger.state} />;
+  if (logger?.state)
+    content = (
+      <LoggerTipsProvider>
+        <LiveLogger logger={logger} state={logger.state} />
+      </LoggerTipsProvider>
+    );
   else if (logger?.finished)
     content = <FinishedView logger={logger} onDone={() => router.back()} />;
   return (
@@ -157,6 +163,14 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const [swapping, setSwapping] = useState<string | null>(null);
   const [machinesFor, setMachinesFor] = useState<string | null>(null);
   const { change, types, context, getState, updateSet: applySetUpdate } = logger;
+  // The web's tip pop-ups beside logger controls, fed by the same events.
+  const loggerTips = useLoggerTips();
+  const savedWorkouts = useMemo(
+    () => logger.history.filter((workout) => !workout.is_sample),
+    [logger.history],
+  );
+  /** An exercise removed a moment ago, which choosing another may have been replacing. */
+  const recentRemoval = useRef<number | null>(null);
   const identity = workoutIdentity(state, types);
   const elapsed = useElapsed(state.startedAt, state.pause, state.previousDurationMinutes);
   // The clock correction opens on the clock as it reads then (this session's training time).
@@ -241,13 +255,14 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     (movementKey: string, replacement: Exercise) => {
       const before = getState();
       if (!before) return;
+      loggerTips.learn('swap');
       change((current) => swapExercise(current, movementKey, replacement, context));
       showToast(`Swapped to ${replacement.name}`, {
         label: 'Undo',
         run: () => change((current) => ({ ...current, movements: before.movements })),
       });
     },
-    [change, context, getState],
+    [change, context, getState, loggerTips],
   );
 
   const removeExercise = useCallback(
@@ -256,6 +271,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       const movement = before?.movements.find((item) => item.key === movementKey);
       if (!before || !movement) return;
       const remove = () => {
+        recentRemoval.current = Date.now();
         change((current) => removeMovement(current, movementKey));
         showToast(`${movement.exercise.name} removed`, {
           label: 'Undo',
@@ -277,6 +293,26 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       ]);
     },
     [change, getState],
+  );
+
+  // Removing an exercise and choosing another soon after is what Swap exercise does in one go.
+  const exercisesAdded = (count: number) => {
+    const removedAt = recentRemoval.current;
+    recentRemoval.current = null;
+    if (
+      removedAt !== null &&
+      Date.now() - removedAt < 120_000 &&
+      count &&
+      savedWorkouts.length >= 5
+    )
+      loggerTips.event('replace-exercise', 'swap');
+  };
+  const openMachines = useCallback(
+    (movementKey: string) => {
+      loggerTips.learn('machine');
+      setMachinesFor(movementKey);
+    },
+    [loggerTips],
   );
 
   const openActions = useCallback(
@@ -306,7 +342,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         { label: 'Swap exercise', onPress: () => setSwapping(movementKey) },
         ...(movement.exercise.kind === 'cardio'
           ? []
-          : [{ label: 'Machines', onPress: () => setMachinesFor(movementKey) }]),
+          : [{ label: 'Machines', onPress: () => openMachines(movementKey) }]),
       ];
       if (index > 0)
         options.push({
@@ -346,7 +382,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       });
       showMenu(movement.exercise.name, options);
     },
-    [change, getState, removeExercise],
+    [change, getState, removeExercise, openMachines],
   );
 
   // Folding a card from its bottom edge brings its header back into view, as on the web.
@@ -373,6 +409,15 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       updateSet: (movementKey, setKey, update) => {
         const current = getState();
         const movement = current?.movements.find((item) => item.key === movementKey);
+        const before = movement?.sets.find((item) => item.key === setKey);
+        if (before && update.completed === true && !before.completed) {
+          loggerTips.setLogged();
+          if (
+            movement?.exercise.kind !== 'cardio' &&
+            setKindOf({ ...before, ...update }) === 'warmup'
+          )
+            loggerTips.event('warmup-logged', 'setType');
+        }
         const next = current
           ? shelfAfterSetUpdate(
               movement,
@@ -390,10 +435,13 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       },
       addSet: logger.addSet,
       insertSet: logger.addSet,
-      deleteSet: (movementKey, setKey) => {
+      deleteSet: (movementKey, setKey, via) => {
         const movement = getState()?.movements.find((item) => item.key === movementKey);
         const index = movement?.sets.findIndex((item) => item.key === setKey) ?? -1;
         if (!movement || index < 0) return;
+        // A swipe is the quick way; deleting from the menu a few times suggests it.
+        if (via === 'swipe') loggerTips.learn('swipe');
+        else if (movement.sets.length > 1) loggerTips.event('menu-delete', 'swipe', 3);
         if (movement.sets.length === 1) {
           showToast('An exercise needs at least one set. Remove the exercise instead.');
           return;
@@ -406,10 +454,17 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           run: () => change((latest) => restoreSet(latest, movementKey, removed, index)),
         });
       },
-      moveSet: (movementKey, from, to) =>
-        change((latest) => moveSet(latest, movementKey, from, to)),
-      setKind: (movementKey, setKey, kind: SetKind) =>
-        change((latest) => setSetKind(latest, movementKey, setKey, kind)),
+      moveSet: (movementKey, from, to) => {
+        loggerTips.learn('reorder');
+        change((latest) => moveSet(latest, movementKey, from, to));
+      },
+      setKind: (movementKey, setKey, kind: SetKind) => {
+        const set = getState()
+          ?.movements.find((item) => item.key === movementKey)
+          ?.sets.find((item) => item.key === setKey);
+        if (set && setKindOf(set) === 'warmup' && kind !== 'warmup') loggerTips.learn('setType');
+        change((latest) => setSetKind(latest, movementKey, setKey, kind));
+      },
       completeExercise: (movementKey, isComplete) => {
         const current = getState();
         const movement = current?.movements.find((item) => item.key === movementKey);
@@ -428,7 +483,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       },
       openActions,
       skipHighRepWarning: () => change((latest) => ({ ...latest, skipHighRepWarning: true })),
-      openMachines: setMachinesFor,
+      openMachines,
       restoreMachines: (movementKey, machinePhotoIds) =>
         change((latest) =>
           latest.movements.find((item) => item.key === movementKey)?.machinePhotosInitialized
@@ -442,7 +497,17 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
               ),
         ),
     }),
-    [applySetUpdate, logger.addSet, change, getState, openActions, context, revealMovement],
+    [
+      applySetUpdate,
+      logger.addSet,
+      change,
+      getState,
+      openActions,
+      openMachines,
+      context,
+      revealMovement,
+      loggerTips,
+    ],
   );
 
   function rename() {
@@ -540,6 +605,30 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     }
     run();
   }
+
+  // Tips wait while anything is over the logger, and nudges sit above the bottom docks.
+  const tipsReady = !picker && !swapping && !machinesFor && !timeEditor.open;
+  const tipsBottom = insets.bottom + (restShown || shelf ? 150 : 28);
+  const { configure: configureTips } = loggerTips;
+  useEffect(() => {
+    configureTips({
+      ready: tipsReady,
+      resting: restRunning,
+      workoutCount: savedWorkouts.length,
+      bottom: tipsBottom,
+    });
+  }, [configureTips, tipsReady, restRunning, savedWorkouts.length, tipsBottom]);
+  // The machine photo tip, for a machine or cable exercise logged a few times without one.
+  const machineTipFor = (exercise: Exercise) =>
+    /machine|cable/i.test(exercise.equipment ?? '') &&
+    savedWorkouts.filter((workout) =>
+      workout.movements.some((item) => item.exercise.id === exercise.id),
+    ).length >= 3 &&
+    !savedWorkouts.some((workout) =>
+      workout.movements.some(
+        (item) => item.exercise.id === exercise.id && item.machine_photos.length > 0,
+      ),
+    );
 
   const supersetNames = (groupKey: string | null) =>
     groupKey
@@ -714,6 +803,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
               workoutDate={state.workoutDate}
               weightUnit={logger.weightUnit}
               skipHighRepWarning={state.skipHighRepWarning}
+              machineTip={machineTipFor(movement.exercise)}
               actions={actions}
             />
           </View>
@@ -831,11 +921,15 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           const target = picker?.swapping;
           if (target) {
             if (selected[0]) swap(target, selected[0]);
-          } else change((latest) => addExercises(latest, selected, context, machineChoices));
+          } else {
+            exercisesAdded(selected.length);
+            change((latest) => addExercises(latest, selected, context, machineChoices));
+          }
         }}
-        onCreateSuperset={(selected, machineChoices) =>
-          change((latest) => addExercises(latest, selected, context, machineChoices, newId()))
-        }
+        onCreateSuperset={(selected, machineChoices) => {
+          exercisesAdded(selected.length);
+          change((latest) => addExercises(latest, selected, context, machineChoices, newId()));
+        }}
         onCreate={logger.createExercise}
         onClose={() => setPicker(null)}
       />

@@ -3,6 +3,8 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { useEffect, type ReactNode } from 'react';
 import { Alert, Platform } from 'react-native';
 import { readActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
+import { freshTips, parseTips, tipStorageKey } from '../../../../frontend/src/tipsState';
+import { resetTipsForTests } from '../guides/tips';
 import { apiSend, currentUser } from '../../data/api';
 import type { TrackedWorkout, WorkoutInput } from '../../../../frontend/src/types';
 import { deviceStorage } from '../../data/deviceStorage';
@@ -59,6 +61,7 @@ jest.mock('../../ui/prompts', () => ({
 jest.mock('../../ui/Toast', () => ({
   showToast: jest.fn(),
   ToastHost: () => null,
+  toastShowing: () => false,
   toastAccount: () => 'u1',
   toastAccountFor: () => 'u1',
   isToastAccountCurrent: () => true,
@@ -71,8 +74,12 @@ jest.mock('../../data/api', () => ({
   apiSend: jest.fn(),
   apiGet: jest.fn(async () => []),
 }));
+/** Whether last week's push day counts as a saved workout (it is sample data otherwise). */
+const mockSavedHistory = { value: false };
 jest.mock('../../data/queries', () => {
   const fixtures = jest.requireActual<typeof import('./testFixtures')>('./testFixtures');
+  const sample = [fixtures.lastPush];
+  const saved = [{ ...fixtures.lastPush, is_sample: false }];
   return {
     ...jest.requireActual<typeof import('../../data/queries')>('../../data/queries'),
     useDashboard: () => ({
@@ -81,7 +88,7 @@ jest.mock('../../data/queries', () => {
         history: { first_workout_date: '2025-01-04' },
       },
     }),
-    useWorkoutHistory: () => ({ data: [fixtures.lastPush] }),
+    useWorkoutHistory: () => ({ data: mockSavedHistory.value ? saved : sample }),
     useWorkoutTypes: () => ({
       data: fixtures.types,
       isPlaceholderData: false,
@@ -103,6 +110,8 @@ let client: QueryClient;
 beforeEach(() => {
   jest.clearAllMocks();
   memoryKv.clear();
+  resetTipsForTests();
+  mockSavedHistory.value = false;
   jest.replaceProperty(Platform, 'OS', 'android');
   jest.mocked(currentUser).mockResolvedValue(user);
   jest.mocked(useUpNext).mockReturnValue({
@@ -377,5 +386,68 @@ describe('dragging to reorder sets', () => {
     await fireEvent.press(screen.getAllByLabelText(/^Set 2 type: /)[0]);
     await act(async () => option(menuCall('Set 2'), 'Delete set').onPress());
     expect(dragOf(0).enabled).toBe(false);
+  });
+});
+
+const storedTips = () => parseTips(deviceStorage.getItem(tipStorageKey('u1')));
+const TIP_WAIT = { timeout: 8000 };
+const pause = (ms: number) => act(() => new Promise<void>((done) => setTimeout(done, ms)));
+
+async function logWarmup() {
+  await fireEvent.press(screen.getAllByLabelText(/^Set 1 type: /)[0]);
+  await act(async () => option(menuCall('Set 1'), 'Warm-up').onPress());
+  await fireEvent.press(screen.getAllByRole('button', { name: 'Complete set 1' })[0]);
+}
+
+describe('tips beside the logger', () => {
+  test('logging a warm-up shows the set type tip, and Dismiss puts it away everywhere', async () => {
+    await openLogger();
+    await logWarmup();
+    // A priority tip, so it shows even before the account has saved a workout.
+    expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
+    expect(screen.getByLabelText('Quick tip')).toBeVisible();
+    expect(storedTips().shows?.setType).toBe(1);
+    await fireEvent.press(screen.getByRole('button', { name: 'Dismiss tip' }));
+    expect(screen.queryByText('Warm-up or working set?')).toBeNull();
+    expect(storedTips().seen.setType).toBe('dismissed');
+  }, 30000);
+
+  test('Show tips off keeps the logger quiet', async () => {
+    deviceStorage.setItem(tipStorageKey('u1'), JSON.stringify({ ...freshTips(), enabled: false }));
+    await openLogger();
+    await logWarmup();
+    await pause(3000);
+    expect(screen.queryByText('Warm-up or working set?')).toBeNull();
+    expect(storedTips().shows?.setType).toBeUndefined();
+  }, 30000);
+
+  test('changing a warm-up to a working set learns the set type tip', async () => {
+    await openLogger();
+    await fireEvent.press(screen.getAllByLabelText(/^Set 1 type: /)[0]);
+    await act(async () => option(menuCall('Set 1'), 'Warm-up').onPress());
+    await fireEvent.press(screen.getAllByLabelText(/^Set 1 type: /)[0]);
+    await act(async () => option(menuCall('Set 1'), 'Working set').onPress());
+    expect(storedTips().seen.setType).toBe('learned');
+  });
+
+  test('deleting sets from the menu suggests swiping, after a logged set', async () => {
+    mockSavedHistory.value = true;
+    await openLogger();
+    for (let i = 0; i < 3; i++)
+      await fireEvent.press(screen.getByRole('button', { name: 'Add set to Bench Press' }));
+    for (let i = 0; i < 3; i++) {
+      await fireEvent.press(screen.getAllByLabelText(/^Set 3 type: /)[0]);
+      await act(async () => option(menuCall('Set 3'), 'Delete set').onPress());
+    }
+    expect(storedTips().counts['menu-delete']).toBe(3);
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Complete set 1' })[0]);
+    expect(await screen.findByText('One less tap', {}, TIP_WAIT)).toBeVisible();
+  }, 30000);
+
+  test('moving a set and swapping an exercise learn their tips', async () => {
+    await openLogger();
+    await fireEvent.press(screen.getAllByLabelText(/^Set 1 type: /)[0]);
+    await act(async () => option(menuCall('Set 1'), 'Move down').onPress());
+    expect(storedTips().seen.reorder).toBe('learned');
   });
 });
