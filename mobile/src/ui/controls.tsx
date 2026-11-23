@@ -173,17 +173,33 @@ export function Slider({
     onChange(snapped);
   };
   // One grid of reachable values (from `min` in steps, then `max` itself) for the native track
-  // and for screen readers. When the steps divide the range evenly the native controls show
-  // them as stops; otherwise they move freely and land on the grid here, so `max` stays
-  // reachable even after a shorter last step.
-  const even = sliderValues(min, max, step).length - 1 === (max - min) / step;
+  // and for screen readers. Supported: a range the step divides into at least three values,
+  // which gets native stops. Not supported (each warns once in development): an uneven range or
+  // only two values, where the track moves freely and lands on the grid, so after a release that
+  // snaps back to the same value the native thumb can rest off it.
+  const grid = sliderGrid(min, max, step);
   const nativeChange = (next: number) => change(snapToStep(next, min, max, step));
+  // Bounds or a step that make no slider: a disabled track, never raw values passed to native.
+  if (!grid.valid)
+    return (
+      <View
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={accessibilityLabel}
+        accessibilityState={{ disabled: true }}
+        style={[styles.slider, style]}
+      >
+        <View style={[styles.disabledTrack, { backgroundColor: colors.surface3 }]} />
+      </View>
+    );
   return (
     <View
       accessible
       accessibilityRole="adjustable"
       accessibilityLabel={accessibilityLabel}
-      accessibilityValue={valueText ? { text: valueText } : { min, max, now: value }}
+      accessibilityValue={
+        valueText ? { text: valueText } : { min: grid.min, max: grid.max, now: value }
+      }
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={(event) =>
         change(
@@ -196,9 +212,9 @@ export function Slider({
         <Host colorScheme={scheme} style={{ flex: 1 }}>
           <SwiftSlider
             value={value}
-            min={min}
-            max={max}
-            step={even ? step : undefined}
+            min={grid.min}
+            max={grid.max}
+            step={grid.stops ? grid.step : undefined}
             onValueChange={nativeChange}
             modifiers={[tint(colors.accent)]}
           />
@@ -207,9 +223,9 @@ export function Slider({
         <ComposeHost style={{ flex: 1 }}>
           <ComposeSlider
             value={value}
-            min={min}
-            max={max}
-            steps={even ? Math.max(0, Math.round((max - min) / step) - 1) : 0}
+            min={grid.min}
+            max={grid.max}
+            steps={grid.stops ? grid.last - 1 : 0}
             onValueChange={nativeChange}
             colors={{
               thumbColor: colors.accent,
@@ -291,25 +307,79 @@ export function TextField({
   );
 }
 
-/**
- * Every value a slider can take: `min`, then each `step` above it, then `max` itself when the
- * steps don't land on it exactly.
- */
-export function sliderValues(min: number, max: number, step: number): number[] {
-  const values: number[] = [];
-  // Drop float noise such as 0.30000000000000004 from decimal steps.
-  for (let i = 0; ; i += 1) {
-    const value = Number((min + i * step).toFixed(10));
-    if (value >= max - step * 1e-9) break;
-    values.push(value);
-  }
-  values.push(max);
-  return values;
+const warned = new Set<string>();
+function warnOnce(message: string) {
+  if (!__DEV__ || warned.has(message)) return;
+  warned.add(message);
+  console.warn(message);
 }
 
-/** The nearest value on the slider's grid (`sliderValues`). */
+/**
+ * A slider's reachable values without listing them: `min`, each `step` above it, then `max`
+ * itself. Invalid input (a step that isn't positive and finite, or bounds out of order) becomes
+ * one step across the whole range, with a warning in development.
+ */
+export function sliderGrid(min: number, max: number, step: number) {
+  const valid =
+    Number.isFinite(min) && Number.isFinite(max) && Number.isFinite(step) && step > 0 && max > min;
+  if (!valid) {
+    warnOnce(`Slider: invalid range ${min}–${max} with step ${step}.`);
+    const lo = Number.isFinite(min) ? min : 0;
+    const hi = Number.isFinite(max) && max > lo ? max : lo + 1;
+    return {
+      valid: false,
+      min: lo,
+      max: hi,
+      step: hi - lo,
+      last: 1,
+      even: true,
+      stops: false,
+      at: (i: number) => (i <= 0 ? lo : hi),
+    };
+  }
+  const quotient = (max - min) / step;
+  // Tolerant, so decimal steps such as 0.1 over 0.3 still count as even.
+  const even = Math.abs(quotient - Math.round(quotient)) < 1e-9 * Math.max(1, quotient);
+  const last = even ? Math.round(quotient) : Math.ceil(quotient);
+  if (!even) {
+    warnOnce(
+      `Slider: ${min}–${max} isn't a whole number of ${step} steps. Uneven ranges aren't ` +
+        'supported: the native thumb can rest between values.',
+    );
+  }
+  // Native stops need at least three values: Compose reads zero steps between the ends as a
+  // continuous track, so a two-value slider would rest between them.
+  const stops = even && last >= 2;
+  if (even && !stops) {
+    warnOnce(
+      `Slider: ${min}–${max} by ${step} has only two values; a slider needs at least three. ` +
+        'Use a Switch or a Segmented control.',
+    );
+  }
+  // Drop float noise such as 0.30000000000000004 from decimal steps.
+  const at = (i: number) => (i >= last ? max : Number((min + i * step).toFixed(10)));
+  return { valid: true, min, max, step, last, even, stops, at };
+}
+
+/** Every value a slider can take, in order (`sliderGrid` without the arithmetic). */
+export function sliderValues(min: number, max: number, step: number): number[] {
+  const grid = sliderGrid(min, max, step);
+  return Array.from({ length: grid.last + 1 }, (_, i) => grid.at(i));
+}
+
+/** The index and value on the grid nearest `value`. */
+function nearestOnGrid(grid: ReturnType<typeof sliderGrid>, value: number) {
+  const clamped = Math.min(grid.max, Math.max(grid.min, value));
+  const below = Math.min(grid.last, Math.max(0, Math.floor((clamped - grid.min) / grid.step)));
+  const above = Math.min(grid.last, below + 1);
+  const index =
+    Math.abs(grid.at(above) - clamped) < Math.abs(grid.at(below) - clamped) ? above : below;
+  return { index, value: grid.at(index) };
+}
+
+/** The nearest value on the slider's grid. */
 export function snapToStep(value: number, min: number, max: number, step: number) {
-  return nearest(sliderValues(min, max, step), value).value;
+  return nearestOnGrid(sliderGrid(min, max, step), value).value;
 }
 
 /** The next value up (`1`) or down (`-1`) the grid from `value`, as a screen reader's swipe. */
@@ -320,21 +390,14 @@ export function stepSlider(
   step: number,
   direction: 1 | -1,
 ) {
-  const values = sliderValues(min, max, step);
-  const { index } = nearest(values, value);
-  return values[Math.min(values.length - 1, Math.max(0, index + direction))];
-}
-
-function nearest(values: number[], value: number) {
-  let index = 0;
-  values.forEach((candidate, i) => {
-    if (Math.abs(candidate - value) < Math.abs(values[index] - value)) index = i;
-  });
-  return { index, value: values[index] };
+  const grid = sliderGrid(min, max, step);
+  const { index } = nearestOnGrid(grid, value);
+  return grid.at(Math.min(grid.last, Math.max(0, index + direction)));
 }
 
 const styles = StyleSheet.create({
   slider: { flex: 1, height: 44, justifyContent: 'center' },
+  disabledTrack: { height: 4, borderRadius: 2, opacity: 0.6 },
   // The web's control: a 1 pt outline round 36 pt pills, 4 pt apart, 44 pt in all. The outline
   // sits inside the 44 pt so each choice's pressable can fill the full height.
   segments: {

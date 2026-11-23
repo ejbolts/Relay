@@ -46,7 +46,8 @@ import { useWeightUnit } from '../../data/queries';
 import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
-import { showToast } from '../../ui/Toast';
+import { pendingActions, usePendingActions } from '../../ui/pendingActions';
+import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { Segmented } from '../training/parts';
 import { workoutColor } from '../training/useTrainingContext';
@@ -61,6 +62,7 @@ import { SharingLocked, SmallButton } from './parts';
 import { notFound, sharingRequired, socialApi } from './socialApi';
 import {
   refreshSocial,
+  socialKeys,
   sharedWorkoutList,
   useSharedProfile,
   useSharedWorkouts,
@@ -135,21 +137,35 @@ function useInvite(profileId: string, invite: boolean, profile: SharedProfile | 
     // The invite is used up: going back and forth must not send it again.
     router.setParams({ invite: undefined });
     if (!inviteSendsRequest(profile)) return;
+    // The account sending the request: a result that arrives after a switch to another account
+    // says nothing there and offers no Undo.
+    const account = toastAccount();
     const notify = (result: Omit<InviteResult, 'serial'>) => {
       const message = inviteMessage({ ...result, serial: Date.now() });
-      if (result.kind !== 'sent') return showToast(message);
-      showToast(message, {
-        label: 'Undo',
-        run: () =>
-          void socialApi
-            .removeFriend(profileId)
-            .catch(() => showToast(inviteMessage({ ...result, kind: 'undo-failed', serial: 0 })))
-            .finally(() => void refreshSocial(client)),
-      });
+      if (result.kind !== 'sent') return showToast(message, undefined, { account });
+      showToast(
+        message,
+        {
+          label: 'Undo',
+          run: () =>
+            void socialApi
+              .removeFriend(profileId)
+              .catch(() =>
+                showToast(inviteMessage({ ...result, kind: 'undo-failed', serial: 0 }), undefined, {
+                  account,
+                }),
+              )
+              .finally(() => {
+                if (isToastAccountCurrent(account)) void refreshSocial(client);
+              }),
+        },
+        { account },
+      );
     };
     void socialApi
       .addFriend(profileId)
       .then(async (answer) => {
+        if (!isToastAccountCurrent(account)) return;
         await refreshSocial(client);
         const updated = client.getQueryData<SharedProfile>(['social', 'profile', profileId]);
         notify({
@@ -309,7 +325,8 @@ function StatRow({ stats }: { stats: { label: string; value: string }[] }) {
 function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlocked: () => void }) {
   const { colors, radius, type } = useTheme();
   const client = useQueryClient();
-  const [removing, setRemoving] = useState(false);
+  // Shared across mounts: reopening the profile while the Undo still shows keeps it removed.
+  const removing = usePendingActions('friend').includes(profile.id);
   const change = useMutation({
     mutationFn: async (action: 'add' | 'accept' | 'remove'): Promise<FriendStatus> => {
       if (action === 'add') return (await socialApi.addFriend(profile.id)).status;
@@ -328,22 +345,43 @@ function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlock
   });
 
   function remove() {
-    setRemoving(true);
     const id = profile.id;
-    showToast(`Removed ${profile.display_name}`, {
-      label: 'Undo',
-      run: () => setRemoving(false),
-      // Sent once the Undo is gone (timed out, dismissed or replaced), as on the web, so the
-      // friend is never removed while Undo is still on screen.
-      onDismiss: () =>
-        void socialApi
-          .removeFriend(id)
-          .then(() => refreshSocial(client))
-          .catch(() => {
-            setRemoving(false);
-            showToast('Could not remove this friend. You are still friends.');
-          }),
-    });
+    const account = toastAccount();
+    // Already waiting on an Undo (from this screen or an earlier visit): don't remove twice.
+    const token = pendingActions.add('friend', id, account);
+    if (!token) return;
+    const done = () => pendingActions.remove(token);
+    showToast(
+      `Removed ${profile.display_name}`,
+      {
+        label: 'Undo',
+        run: done,
+        // Sent once the Undo is gone (timed out, dismissed, replaced or the app left), as on the
+        // web, so the friend is never removed while Undo is still on screen.
+        onDismiss: () =>
+          void socialApi.removeFriend(id).then(
+            () => {
+              // A session that has ended keeps nothing of this; its cache is already gone.
+              if (isToastAccountCurrent(account)) {
+                // Removed for certain: the cached profile says so before the pending mark goes,
+                // so a refresh that fails can't bring back Remove friend.
+                client.setQueryData<SharedProfile>(socialKeys.profile(id), (cached) =>
+                  cached ? { ...cached, friend_status: 'none' } : cached,
+                );
+              }
+              done();
+              if (isToastAccountCurrent(account)) void refreshSocial(client);
+            },
+            () => {
+              done();
+              showToast('Could not remove this friend. You are still friends.', undefined, {
+                account,
+              });
+            },
+          ),
+      },
+      { account },
+    );
   }
 
   function confirmBlock() {

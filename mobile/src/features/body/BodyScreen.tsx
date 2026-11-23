@@ -16,7 +16,8 @@ import { AccountHeaderActions } from '../../ui/AccountHeaderActions';
 import { Button, Card, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
-import { showToast } from '../../ui/Toast';
+import { pendingActions, usePendingActions } from '../../ui/pendingActions';
+import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { NotificationsBell, socialRoutes } from '../social';
 import { BodyHistory } from './BodyHistory';
@@ -46,29 +47,46 @@ const MAINTAIN_GOAL: GoalRequest = { goal: null, kind: 'maintain' };
  */
 function useGoalRemoval() {
   const client = useQueryClient();
-  const [pendingIds, setPendingIds] = useState<readonly string[]>([]);
-  const settle = useCallback(
-    (id: string) => setPendingIds((ids) => ids.filter((pending) => pending !== id)),
-    [],
-  );
+  // Shared across mounts, so a Body opened again while the Undo shows still hides the goal.
+  const pendingIds = usePendingActions('goal');
   const start = useCallback(
     (goal: BodyWeightGoal) => {
-      setPendingIds((ids) => [...ids, goal.id]);
-      showToast('Goal removed', {
-        label: 'Undo',
-        run: () => settle(goal.id),
-        onDismiss: () =>
-          void bodyGoalApi.remove(goal.id).then(
-            () =>
-              client.invalidateQueries({ queryKey: bodyKeys.goals }).then(() => settle(goal.id)),
-            () => {
-              settle(goal.id);
-              showToast('Could not remove this goal. It has been restored.');
-            },
-          ),
-      });
+      const account = toastAccount();
+      const token = pendingActions.add('goal', goal.id, account);
+      if (!token) return;
+      const done = () => pendingActions.remove(token);
+      showToast(
+        'Goal removed',
+        {
+          label: 'Undo',
+          run: done,
+          onDismiss: () =>
+            void bodyGoalApi.remove(goal.id).then(
+              () => {
+                // A session that has ended keeps nothing of this; its cache is already gone.
+                if (isToastAccountCurrent(account)) {
+                  // Deleted for certain: drop it from the cache before the pending mark goes, so
+                  // a refresh that fails can't show it again.
+                  client.setQueryData<BodyWeightGoal[]>(bodyKeys.goals, (cached) =>
+                    cached?.filter((entry) => entry.id !== goal.id),
+                  );
+                }
+                done();
+                if (isToastAccountCurrent(account))
+                  void client.invalidateQueries({ queryKey: bodyKeys.goals });
+              },
+              () => {
+                done();
+                showToast('Could not remove this goal. It has been restored.', undefined, {
+                  account,
+                });
+              },
+            ),
+        },
+        { account },
+      );
     },
-    [client, settle],
+    [client],
   );
   return { pendingIds, start };
 }
@@ -110,26 +128,36 @@ export function BodyScreen() {
 
   /** Deletes a check-in at once; Undo saves it back as it was. */
   function deleteCheckIn(measurement: BodyMeasurement) {
+    // The account deleting it: if the session changes before the delete answers, the result is
+    // not shown and its Undo never saves into another account.
+    const account = toastAccount();
     bodyCheckInApi.deleteBodyMeasurement(measurement.id).then(
       () => {
+        if (!isToastAccountCurrent(account)) return;
         void refreshBodyMeasurements(client);
-        showToast('Check-in deleted', {
-          label: 'Undo',
-          run: () =>
-            void bodyCheckInApi
-              .saveBodyMeasurement({
-                measurement_date: measurement.measurement_date,
-                weight_kg: measurement.weight_kg,
-                body_fat_pct: measurement.body_fat_pct,
-                notes: measurement.notes,
-              })
-              .then(
-                () => refreshBodyMeasurements(client),
-                (reason) => showToast(errorMessage(reason)),
-              ),
-        });
+        showToast(
+          'Check-in deleted',
+          {
+            label: 'Undo',
+            run: () =>
+              void bodyCheckInApi
+                .saveBodyMeasurement({
+                  measurement_date: measurement.measurement_date,
+                  weight_kg: measurement.weight_kg,
+                  body_fat_pct: measurement.body_fat_pct,
+                  notes: measurement.notes,
+                })
+                .then(
+                  () => {
+                    if (isToastAccountCurrent(account)) void refreshBodyMeasurements(client);
+                  },
+                  (reason) => showToast(errorMessage(reason), undefined, { account }),
+                ),
+          },
+          { account },
+        );
       },
-      (reason) => showToast(errorMessage(reason)),
+      (reason) => showToast(errorMessage(reason), undefined, { account }),
     );
   }
 

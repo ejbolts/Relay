@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import {
   AccessibilityInfo,
   Animated,
+  AppState,
   Platform,
   Pressable,
   StyleSheet,
@@ -11,6 +12,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReduceMotion } from '../features/settings/devicePreferences';
 import * as sessionModule from '../session/SessionProvider';
+import { sessionEpoch } from '../session/sessionEpoch';
 import { Icon } from './Icon';
 import { useTheme } from './theme';
 
@@ -22,8 +24,13 @@ import { useTheme } from './theme';
 // is touched or focused, and stays until dismissed while a screen reader is on. When it ends
 // without the action (it times out, is dismissed or a newer toast replaces it), its `onDismiss`
 // runs once, so a caller that defers its work (deleting a goal) commits then, never while Undo is
-// still on screen. A toast belongs to the account it was shown under: when the session changes it
-// disappears without running either callback, and its action never runs under another account.
+// still on screen; leaving the app settles it too, so the system ending the app in the background
+// can't lose it. A toast belongs to an account: by default the one it was shown under, or, for
+// work that ends in a toast after a request, `toastAccount()` taken when the work started
+// (`showToast(message, action, { account })`). When the session changes, a toast for another
+// account disappears (or never appears) without running either callback, and its action never
+// runs under another account. `isToastAccountCurrent(account)` tells late callbacks whether to
+// write at all.
 
 export interface ToastAction {
   label: string;
@@ -41,6 +48,59 @@ interface Toast {
   action?: ToastAction;
   /** How long it shows, before any pause. */
   ms: number;
+  /** The account it belongs to, when the caller captured it before starting its work. */
+  account?: string;
+}
+
+export interface ToastOptions {
+  /**
+   * The account the toast belongs to, from `toastAccount()` taken when the work that ends in
+   * this toast started. If the session has changed by the time the toast is shown, it is
+   * dropped without running anything, so a late result never offers its Undo to another
+   * account.
+   */
+  account?: string;
+}
+
+// The session every toast host is showing toasts for: the signed-in account (or the signed-out
+// state) and the session number SessionProvider moves on every sign-in and sign-out. The number
+// tells a new session of the same account (A, signed out, A again) from the old one. Kept here so
+// async work can capture it when it starts and check it when it ends.
+let currentUser = 'none';
+let lastAccount = accountKey(currentUser);
+
+function accountKey(user: string) {
+  return `${user}#${sessionEpoch()}`;
+}
+
+/** The current session, to capture before starting work that may end in a toast. */
+export function toastAccount() {
+  return accountKey(currentUser);
+}
+
+/**
+ * Whether `account` (from `toastAccount()`) is still the session; check before late writes. The
+ * session number is read live, so this is false as soon as a session ends, before any screen
+ * has re-rendered.
+ */
+export function isToastAccountCurrent(account: string) {
+  return account === toastAccount();
+}
+
+/** Called by the hosts when the session changes. */
+function setToastAccount(user: string) {
+  currentUser = user;
+  const account = toastAccount();
+  if (account === lastAccount) return;
+  lastAccount = account;
+  accountListeners.forEach((listener) => listener(account));
+}
+const accountListeners = new Set<(account: string) => void>();
+
+/** Hears session changes (for stores scoped to an account, such as pending removals). */
+export function onToastAccountChange(listener: (account: string) => void) {
+  accountListeners.add(listener);
+  return () => void accountListeners.delete(listener);
 }
 
 interface Host {
@@ -60,12 +120,15 @@ export function toastAnnouncement(message: string, action?: ToastAction) {
   return action ? `${message}. ${action.label} available.` : message;
 }
 
-export function showToast(message: string, action?: ToastAction) {
+export function showToast(message: string, action?: ToastAction, options: ToastOptions = {}) {
+  // Work from another session has nothing to say here, and nothing to undo.
+  if (options.account !== undefined && !isToastAccountCurrent(options.account)) return;
   const toast: Toast = {
     id: ++nextId,
     message,
     action,
     ms: action ? ACTION_VISIBLE_MS : VISIBLE_MS,
+    account: options.account,
   };
   const host = hosts.at(-1);
   if (!host) {
@@ -95,8 +158,8 @@ const useSessionStatus: () => SessionStatus | undefined =
     ? () => sessionModule.useOptionalSession()?.status
     : () => undefined;
 
-/** The session a toast belongs to: the signed-in account, or the signed-out state. */
-function useAccountKey() {
+/** Who the session is: the signed-in account, or the signed-out state. */
+function useSessionUser() {
   const status = useSessionStatus();
   if (!status) return 'none';
   return status.kind === 'signed-in' ? `user:${status.user.id}` : status.kind;
@@ -111,7 +174,9 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
   const insets = useSafeAreaInsets();
   const { colors, type, radius, scheme } = useTheme();
   const reduced = useReduceMotion();
-  const account = useAccountKey();
+  const user = useSessionUser();
+  // The session number moves with every sign-in and sign-out, which always re-render the hosts.
+  const account = accountKey(user);
   const [shown] = useState(() => new Animated.Value(0));
   // The web's timer bar along the bottom edge, shrinking until the toast clears.
   const [left] = useState(() => new Animated.Value(1));
@@ -124,14 +189,19 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
   const id = toast?.id;
   const held = (hold.id === id && (hold.pressed || hold.focused)) || (reader && !!toast?.action);
 
-  /** Ends the showing toast. Without its action, `onDismiss` runs (once); `drop` runs neither. */
-  const end = (how: 'dismissed' | 'acted' | 'dropped') => {
+  /**
+   * Ends toast `toastId` if it is still the one showing: a late timer or a tap on a toast that
+   * has just been replaced must not finish its replacement. Without its action, `onDismiss`
+   * runs (once); `dropped` runs neither. Nothing runs for another account.
+   */
+  const end = (toastId: number, how: 'dismissed' | 'acted' | 'dropped') => {
     const ending = current.current;
+    if (!ending || ending.id !== toastId) return;
     current.current = null;
     setToast(null);
-    if (!ending) return;
+    if (ending.account !== accountRef.current) return;
     if (how === 'dismissed') ending.action?.onDismiss?.();
-    if (how === 'acted' && ending.account === accountRef.current) ending.action?.run();
+    if (how === 'acted') ending.action?.run();
   };
   const endRef = useRef(end);
 
@@ -143,11 +213,11 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
     const host: Host = {
       show: (next) => {
         const replaced = current.current;
-        const stamped = { ...next, account: accountRef.current };
+        const stamped = { ...next, account: next.account ?? accountRef.current };
         current.current = stamped;
         setToast(stamped);
         // A newer toast ends the one it replaces, as dismissing it would.
-        replaced?.action?.onDismiss?.();
+        if (replaced?.account === accountRef.current) replaced.action?.onDismiss?.();
       },
       extend: (toastId, ms) => {
         const showing = current.current;
@@ -161,15 +231,28 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
     return () => {
       hosts.splice(hosts.indexOf(host), 1);
       // A screen's own host going away settles what it was showing.
-      endRef.current('dismissed');
+      if (current.current) endRef.current(current.current.id, 'dismissed');
     };
   }, []);
 
   // A different account (or signing out) drops the toast without running anything.
   useEffect(() => {
     accountRef.current = account;
-    if (current.current && current.current.account !== account) endRef.current('dropped');
-  }, [account]);
+    setToastAccount(user);
+    const showing = current.current;
+    if (showing && showing.account !== account) endRef.current(showing.id, 'dropped');
+  }, [account, user]);
+
+  // Leaving the app settles an action toast, so work the person saw happen (a removal) is sent
+  // while the app can still send it, rather than lost if the system ends the app in the
+  // background.
+  useEffect(() => {
+    const subscription = AppState.addEventListener?.('change', (state) => {
+      const showing = current.current;
+      if (state === 'background' && showing) endRef.current(showing.id, 'dismissed');
+    });
+    return () => subscription?.remove();
+  }, []);
 
   useEffect(() => {
     let live = true;
@@ -210,7 +293,7 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
     const started = Date.now();
     const bar = Animated.timing(left, { toValue: 0, duration: remaining, useNativeDriver: false });
     if (!reduced) bar.start();
-    const timer = setTimeout(() => endRef.current('dismissed'), remaining);
+    const timer = setTimeout(() => endRef.current(toast.id, 'dismissed'), remaining);
     return () => {
       bar.stop();
       clearTimeout(timer);
@@ -263,7 +346,7 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
           accessibilityRole="button"
           accessibilityLabel={`${toast.message}. Dismiss`}
           {...holdHandlers}
-          onPress={() => end('dismissed')}
+          onPress={() => end(toast.id, 'dismissed')}
           style={styles.message}
         >
           <Text
@@ -283,7 +366,7 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
             accessibilityRole="button"
             hitSlop={8}
             {...holdHandlers}
-            onPress={() => end('acted')}
+            onPress={() => end(toast.id, 'acted')}
             style={styles.action}
           >
             <Text style={[type.callout, { color: colors.accentText, fontWeight: '700' }]}>
