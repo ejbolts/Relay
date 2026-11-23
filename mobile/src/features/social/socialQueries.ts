@@ -7,6 +7,7 @@ import {
   type QueryClient,
 } from '@tanstack/react-query';
 import { useIsFocused } from 'expo-router';
+import type { FriendPresenceEvent } from '../../../../frontend/src/presenceProtocol';
 import { SHARED_WORKOUT_PAGE_SIZE } from '../../../../frontend/src/sharedProfileDisplay';
 import type {
   CommentPage,
@@ -44,9 +45,39 @@ export const socialKeys = {
 /** The feed's page size, as the web's. */
 const TIMELINE_PAGE = 10;
 
+export function updateFriendPresence(client: QueryClient, event: FriendPresenceEvent) {
+  const { user_id: id, presence } = event;
+  client.setQueryData<FriendConnections>(
+    socialKeys.friends,
+    (current) =>
+      current && {
+        ...current,
+        friends: current.friends.map((friend) =>
+          friend.id === id ? { ...friend, presence } : friend,
+        ),
+      },
+  );
+  client.setQueriesData<FriendFeed>(
+    { queryKey: ['social', 'feed'] },
+    (current) =>
+      current && {
+        ...current,
+        items: current.items.map((item) =>
+          item.friend.id === id ? { ...item, friend: { ...item.friend, presence } } : item,
+        ),
+      },
+  );
+}
+
+/** Recover any presence changes missed while the socket was closed. */
+export function refreshFriendPresence(client: QueryClient) {
+  void client.invalidateQueries({ queryKey: socialKeys.friends });
+  void client.invalidateQueries({ queryKey: ['social', 'feed'] });
+}
+
 /**
  * Friends, requests, sent requests and blocks. Refreshed every 30 seconds while the screen is in
- * front, as the web does, and whenever the app comes back to the foreground.
+ * front, and whenever the app comes back to the foreground. The socket patches presence directly.
  */
 export function useFriendConnections() {
   const focused = useIsFocused();

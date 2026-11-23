@@ -1,5 +1,9 @@
 /* Admin console: accounts first, as compact rows that open to their details and actions. */
 
+.admin-version-stats > div {
+  align-content: start;
+}
+
 .admin-accounts > header {
   align-items: center;
   gap: 0.6rem;

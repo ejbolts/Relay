@@ -159,7 +159,16 @@ describe('AdminScreenView', () => {
       status: {
         ...serverStatus,
         client_versions: [
-          { version: '1.3.0', users: 2, sessions: 3, last_seen_at: new Date().toISOString() },
+          {
+            version: '1.3.0',
+            users: 2,
+            sessions: 3,
+            last_seen_at: new Date().toISOString(),
+            native_clients: [
+              { client: 'android/0.1.0', sessions: 1 },
+              { client: 'ios/0.2.0', sessions: 2 },
+            ],
+          },
           { version: null, users: 1, sessions: 1, last_seen_at: recent },
         ],
         minimum_write_version: null,
@@ -168,6 +177,8 @@ describe('AdminScreenView', () => {
 
     expect(markup).toContain('App versions in use');
     expect(markup).toContain('Version 1.3.0</dt><dd>2 accounts · 3 devices · Just now');
+    expect(markup).toContain('Android 0.1.0 · 1 device');
+    expect(markup).toContain('iOS 0.2.0 · 2 devices');
     expect(markup).toContain('Not reported</dt><dd>1 account · 1 device · 2 h ago');
     expect(markup).toContain('Oldest version that can save</dt><dd>Any');
     expect(view({ status: { ...serverStatus, minimum_write_version: '1.3.0' } })).toContain(

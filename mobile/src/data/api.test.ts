@@ -1,5 +1,14 @@
 type Api = typeof import('./api');
 
+jest.mock('expo-constants', () => ({
+  expoConfig: {
+    version: jest.requireActual('../../app.json').expo.version,
+    extra: {
+      relayCompatibilityVersion: jest.requireActual('../../../frontend/release.json').version,
+    },
+  },
+}));
+
 const mockKeychain = new Map<string, string>();
 jest.mock('expo-secure-store', () => ({
   getItemAsync: async (key: string) => mockKeychain.get(key) ?? null,
@@ -64,6 +73,12 @@ test('sends the saved token on every read and write, and never cookies', async (
   fetchMock.mock.calls.forEach(([, init], call) => {
     expect(init?.credentials).toBe('omit');
     expect(headers(call).Authorization).toBe('Bearer sample-token');
+    expect(headers(call)['X-Relay-Version']).toBe(
+      jest.requireActual('../../../frontend/release.json').version,
+    );
+    expect(headers(call)['X-Relay-Client']).toBe(
+      `${jest.requireActual('react-native').Platform.OS}/${jest.requireActual('../../app.json').expo.version}`,
+    );
   });
   expect(fetchMock.mock.calls[1][1]).toMatchObject({
     method: 'POST',

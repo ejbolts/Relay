@@ -275,7 +275,7 @@ function ClientVersionsPanel({ status, now }: { status: ServerStatus; now: numbe
           <h2 id="admin-versions-title">App versions in use</h2>
         </div>
       </header>
-      <dl className="admin-stats">
+      <dl className="admin-stats admin-version-stats">
         {versions.map((usage) => (
           <div key={usage.version ?? 'unreported'}>
             <dt>{usage.version ? `Version ${usage.version}` : 'Not reported'}</dt>
@@ -283,6 +283,16 @@ function ClientVersionsPanel({ status, now }: { status: ServerStatus; now: numbe
               {plural(usage.users, 'account')} · {plural(usage.sessions, 'device')} ·{' '}
               {formatLastActive(usage.last_seen_at, new Date(now))}
             </dd>
+            {usage.native_clients?.map(({ client, sessions }) => {
+              const [platform, version] = client.split('/');
+              const label =
+                platform === 'ios' ? 'iOS' : platform === 'android' ? 'Android' : platform;
+              return (
+                <dd key={client}>
+                  {label} {version} · {plural(sessions, 'device')}
+                </dd>
+              );
+            })}
           </div>
         ))}
         {versions.length === 0 && (

@@ -29,7 +29,6 @@ class PathSelectionTests(unittest.TestCase):
             "frontend/src/App.tsx",
             "frontend/package-lock.json",
             "frontend/vite.config.ts",
-            "frontend/release.json",
             "frontend/public/icon.png",
         ):
             with self.subTest(path=path):
@@ -91,7 +90,10 @@ class PathSelectionTests(unittest.TestCase):
 
     def test_frontend_files_the_mobile_app_imports_run_the_mobile_checks(self):
         shared = mobile_shared_files()
-        self.assertTrue({"frontend/src/types.ts", "frontend/src/upNextSession.ts"} <= shared)
+        self.assertTrue(
+            {"frontend/release.json", "frontend/src/types.ts", "frontend/src/upNextSession.ts"}
+            <= shared
+        )
         for path in shared:
             with self.subTest(path=path):
                 self.assertTrue(select_paths([path]).mobile)
