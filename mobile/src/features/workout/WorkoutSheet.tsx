@@ -740,6 +740,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         addedIds={addedIds}
         category={identity.category}
         chooseMachines
+        lastDone={lastDone}
         onAdd={(selected, machineChoices) => {
           const target = picker?.swapping;
           if (target) {
