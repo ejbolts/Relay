@@ -44,7 +44,10 @@ const mockUser = {
   created_at: '2026-11-01T00:00:00Z',
 } as unknown as User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
-jest.mock('../../data/queries', () => ({ useWeightUnit: () => 'kg' }));
+jest.mock('../../data/queries', () => ({
+  ...jest.requireActual('../../data/queries'),
+  useWeightUnit: () => 'kg',
+}));
 // The native control has no test renderer; this stand-in has a tab per segment.
 jest.mock('@react-native-segmented-control/segmented-control', () => {
   const { createElement } = jest.requireActual<typeof import('react')>('react');

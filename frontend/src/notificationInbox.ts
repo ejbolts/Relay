@@ -226,3 +226,11 @@ export const ADMIN_REQUEST_TEXT = {
   'password-reset': ' asked for a password reset',
   'username-reminder': ' asked for their username',
 } as const;
+
+/** Opens the web's admin console at an account, as a password reset alert's link does. */
+export const ADMIN_ACCOUNT_PARAM = 'admin-account';
+
+/** The admin console's address for an account waiting for a reset or its username. */
+export function adminAccountPath(userId: string): string {
+  return `/?${ADMIN_ACCOUNT_PARAM}=${encodeURIComponent(userId)}#admin`;
+}
