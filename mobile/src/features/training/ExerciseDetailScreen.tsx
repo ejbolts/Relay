@@ -37,6 +37,7 @@ import { useScopedExerciseProgress, useWeightMapping } from '../exercises/exerci
 import { MachineFilter } from '../exercises/MachineFilter';
 import { MergeNudge } from '../exercises/MergeNudge';
 import { exerciseRoutes } from '../exercises/routes';
+import { socialKeys } from '../social/socialQueries';
 import { exerciseInfoKeys } from './exerciseInfoQueries';
 import { ExerciseMuscleHelpButton, ExerciseMuscleHelpSheet } from './ExerciseMuscleHelp';
 import { trainingIcons } from './icons';
@@ -161,6 +162,7 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
         }}
       />
       <ScrollView
+        testID="exercise-detail-scroll"
         style={{ flex: 1, backgroundColor: colors.page }}
         contentInsetAdjustmentBehavior="automatic"
         contentContainerStyle={{
@@ -178,6 +180,8 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                 client.invalidateQueries({
                   queryKey: exerciseInfoKeys.liftLeaderboard(exerciseId),
                 }),
+                // Sharing may have changed on another device; it decides whether Friends shows.
+                client.invalidateQueries({ queryKey: socialKeys.choices }),
               ]).finally(() => setRefreshing(false));
             }}
           />

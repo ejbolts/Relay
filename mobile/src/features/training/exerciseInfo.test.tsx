@@ -206,6 +206,7 @@ beforeEach(() => {
     },
     '/api/sharing/lifts/bench': { entries: [samRanking, yourRanking] },
     '/api/sharing/lifts/squat': { entries: [samRanking] },
+    '/api/sharing': { visibility: 'friends', pending_requests: 0 },
   };
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     if (!(path in responses)) throw new Error(`Unexpected request ${path}`);
@@ -423,6 +424,37 @@ describe('muscle set credits (?) dialog', () => {
 });
 
 describe("friends' lift ranking", () => {
+  test('revalidates a stale cached Private choice and shows the ranking once sharing is on', async () => {
+    // Settings cached Private earlier; sharing was then turned on from another device.
+    client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    client.setQueryData(
+      socialKeys.choices,
+      { visibility: 'private', pending_requests: 0 },
+      { updatedAt: 0 },
+    );
+    await render(withProviders(<LiftLeaderboardCard exerciseId="bench" />));
+
+    expect(await screen.findByLabelText('Friends')).toBeVisible();
+    expect(screen.getByText('Sam Chen')).toBeVisible();
+    expect(apiGet).toHaveBeenCalledWith('/api/sharing', expect.anything());
+    expect(apiGet).toHaveBeenCalledWith('/api/sharing/lifts/bench', expect.anything());
+  });
+
+  test('pull-to-refresh on exercise detail refreshes sharing choices', async () => {
+    await open(<ExerciseDetailScreen exerciseId="bench" />);
+    await screen.findByLabelText('Friends');
+    const sharingCalls = () =>
+      jest.mocked(apiGet).mock.calls.filter(([path]) => path === '/api/sharing').length;
+    const before = sharingCalls();
+
+    await act(async () => {
+      // RefreshControl is not a host element in Jest; call the ScrollView's refresh handler.
+      const scroll = screen.getByTestId('exercise-detail-scroll');
+      scroll.props.refreshControl.props.onRefresh();
+    });
+    await waitFor(() => expect(sharingCalls()).toBe(before + 1));
+  });
+
   test('ranks you among friends on exercise detail and opens a friend profile', async () => {
     await open(<ExerciseDetailScreen exerciseId="bench" />);
     const card = await screen.findByLabelText('Friends');
@@ -497,7 +529,7 @@ describe("friends' lift ranking", () => {
       client.setQueryData(socialKeys.choices, { visibility: 'private' });
       syncLiftLeaderboardsForSharing(client, 'private');
     });
-    expect(screen.queryByLabelText('Friends')).toBeNull();
+    await waitFor(() => expect(screen.queryByLabelText('Friends')).toBeNull());
     expect(client.getQueryData(exerciseInfoKeys.liftLeaderboard('bench'))).toBeUndefined();
   });
 });

@@ -361,6 +361,7 @@ function ExerciseMuscleHelpContent({
               <Text style={[type.eyebrow, { color: colors.accentText }]}>MUSCLE SET CREDITS</Text>
               <Text
                 ref={inlineTitleRef}
+                accessible
                 accessibilityRole="header"
                 style={[type.title, { color: colors.text }]}
               >

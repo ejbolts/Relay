@@ -1,9 +1,10 @@
-import { onlineManager, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { onlineManager, useQuery, type QueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
-import type { Exercise, LiftRanking, SharingSettings } from '../../../../frontend/src/types';
+import type { Exercise, LiftRanking } from '../../../../frontend/src/types';
 import { apiGet, apiSend } from '../../data/api';
 import { queryKeys, refreshTraining } from '../../data/queries';
 import { isToastAccountCurrent, toastAccount } from '../../ui/Toast';
+import { socialApi } from '../social/socialApi';
 import { socialKeys } from '../social/socialQueries';
 
 /**
@@ -29,20 +30,17 @@ export function useIsOnline(): boolean {
 }
 
 /**
- * Reads cached sharing choices without firing a network request, returning true once the account
- * is known to be Private so stale rankings disappear immediately.
+ * Whether the account's saved sharing is Private. Observes the same sharing-choices query as
+ * Settings (with its normal revalidation while online), so a value changed on another device
+ * refreshes instead of hiding the ranking for good.
  */
-export function useSharingPrivate(): boolean {
-  const client = useQueryClient();
-  return useSyncExternalStore(
-    (listener) =>
-      client.getQueryCache().subscribe((event) => {
-        const key = event.query.queryKey;
-        if (key[0] === socialKeys.choices[0] && key[1] === socialKeys.choices[1]) listener();
-      }),
-    () => client.getQueryData<SharingSettings>(socialKeys.choices)?.visibility === 'private',
-    () => false,
-  );
+export function useSharingPrivate(online: boolean): boolean {
+  const choices = useQuery({
+    queryKey: socialKeys.choices,
+    queryFn: ({ signal }) => socialApi.choices(signal),
+    enabled: online,
+  });
+  return choices.data?.visibility === 'private';
 }
 
 /** Removes cached leaderboards when sharing turns Private, or invalidates them otherwise. */

@@ -26,7 +26,7 @@ export function LiftLeaderboardCard({ exerciseId }: { exerciseId: string }) {
   const unit = useWeightUnit();
   const router = useRouter();
   const online = useIsOnline();
-  const sharingPrivate = useSharingPrivate();
+  const sharingPrivate = useSharingPrivate(online);
   const query = useLiftLeaderboard(exerciseId, online && !sharingPrivate);
   const entries = query.data;
 
