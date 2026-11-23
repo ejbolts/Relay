@@ -5,7 +5,7 @@ import { COLOUR_THEMES } from '../../../frontend/src/appearanceChoices';
 import { AccountHeaderActions } from './AccountHeaderActions';
 import { Button, IconButton, splitStyle } from './components';
 import { Segmented, Slider, sliderValues, snapToStep, stepSlider } from './controls';
-import { DateField } from './DateField';
+import { DateField, TimeField } from './DateField';
 import { SheetFrame } from './navigation';
 import { palettes, themedPalette } from './theme';
 import { ToastHost, showToast, toastAnnouncement } from './Toast';
@@ -20,14 +20,32 @@ jest.mock('expo-haptics', () => ({
 }));
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), back: jest.fn() } }));
 // Material's dialogs need the native module; here they only need to be found in the tree.
+// Material's dialogs and slider need the native module. These stand-ins confirm a dialog with a
+// fixed answer and keep the slider's props, so tests can drive what Compose would send.
+const mockCompose: { slider?: { steps?: number; onValueChange: (value: number) => void } } = {};
 jest.mock('@expo/ui/jetpack-compose', () => {
   const { createElement } = jest.requireActual<typeof import('react')>('react');
-  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+  const { Pressable, View } = jest.requireActual<typeof import('react-native')>('react-native');
+  const dialog =
+    (testID: string, answer: () => Date) => (props: { onDateSelected: (date: Date) => void }) =>
+      createElement(Pressable, {
+        testID,
+        accessibilityRole: 'button',
+        accessibilityLabel: `Confirm ${testID}`,
+        onPress: () => props.onDateSelected(answer()),
+      });
   return {
     Host: ({ children }: { children: React.ReactNode }) => children,
-    DatePickerDialog: () => createElement(View, { testID: 'date-dialog' }),
-    TimePickerDialog: () => createElement(View, { testID: 'time-dialog' }),
-    Slider: () => null,
+    DatePickerDialog: dialog('date-dialog', () => new Date('2026-11-21T00:00:00Z')),
+    TimePickerDialog: dialog('time-dialog', () => {
+      const time = new Date();
+      time.setHours(7, 30, 0, 0);
+      return time;
+    }),
+    Slider: (props: { steps?: number; onValueChange: (value: number) => void }) => {
+      mockCompose.slider = props;
+      return createElement(View, { testID: 'compose-slider' });
+    },
   };
 });
 
@@ -333,4 +351,117 @@ it('closes the Android date dialog and ignores it once the field is disabled', a
   await rerender(field(false));
   expect(screen.queryByTestId('date-dialog')).toBeNull();
   expect(onChange).not.toHaveBeenCalled();
+});
+
+describe('rendered faces', () => {
+  it('draws a small button and an icon button with the caller’s looks on the visible face', async () => {
+    await wrap(
+      <>
+        <Button
+          label="Retry"
+          size="small"
+          onPress={jest.fn()}
+          style={{ backgroundColor: 'red', borderRadius: 0, marginTop: 4 }}
+        />
+        <IconButton
+          icon="bell"
+          accessibilityLabel="Bell"
+          onPress={jest.fn()}
+          style={{ backgroundColor: 'red', borderRadius: 0, marginTop: 4 }}
+        />
+      </>,
+    );
+    for (const name of ['Retry', 'Bell']) {
+      const box = screen.getByRole('button', { name });
+      expect(StyleSheet.flatten(box.props.style)).toMatchObject({ marginTop: 4 });
+      const face = box.children[0];
+      if (typeof face === 'string') throw new Error('The button has no face view');
+      expect(StyleSheet.flatten(face.props.style)).toMatchObject({
+        backgroundColor: 'red',
+        borderRadius: 0,
+      });
+    }
+  });
+});
+
+describe('Android date and time dialogs', () => {
+  it('send the chosen date and time', async () => {
+    Platform.OS = 'android';
+    const onDate = jest.fn();
+    const onTime = jest.fn();
+    await wrap(
+      <>
+        <DateField label="Date" value="2026-11-20" onChange={onDate} />
+        <TimeField label="Time" value="06:00" onChange={onTime} />
+      </>,
+    );
+    await fireEvent.press(screen.getByRole('button', { name: /^Date,/ }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Confirm date-dialog' }));
+    expect(onDate).toHaveBeenCalledWith('2026-11-21');
+    expect(screen.queryByTestId('date-dialog')).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: /^Time,/ }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Confirm time-dialog' }));
+    expect(onTime).toHaveBeenCalledWith('07:30');
+  });
+
+  it('closes the time dialog and sends nothing once the field is disabled', async () => {
+    Platform.OS = 'android';
+    const onTime = jest.fn();
+    const field = (disabled: boolean) => (
+      <SafeAreaProvider>
+        <TimeField label="Time" value="06:00" onChange={onTime} disabled={disabled} />
+      </SafeAreaProvider>
+    );
+    const { rerender } = await wrap(field(false));
+    await fireEvent.press(screen.getByRole('button', { name: /^Time,/ }));
+    expect(screen.getByTestId('time-dialog')).toBeOnTheScreen();
+    await rerender(field(true));
+    expect(screen.queryByTestId('time-dialog')).toBeNull();
+    await rerender(field(false));
+    expect(screen.queryByTestId('time-dialog')).toBeNull();
+    expect(onTime).not.toHaveBeenCalled();
+  });
+});
+
+describe('Android slider adapter', () => {
+  it('gives Compose native stops on an even range and lands its values on the grid', async () => {
+    Platform.OS = 'android';
+    const onChange = jest.fn();
+    await wrap(
+      <Slider
+        accessibilityLabel="Factor"
+        value={5}
+        min={5}
+        max={25}
+        step={10}
+        onChange={onChange}
+      />,
+    );
+    expect(mockCompose.slider?.steps).toBe(1);
+    await act(async () => mockCompose.slider?.onValueChange(13.2));
+    expect(onChange).toHaveBeenLastCalledWith(15);
+  });
+
+  it('warns about an uneven range, moves freely and still reaches the maximum', async () => {
+    Platform.OS = 'android';
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const onChange = jest.fn();
+    await wrap(
+      <Slider accessibilityLabel="Reps" value={5} min={5} max={28} step={10} onChange={onChange} />,
+    );
+    expect(mockCompose.slider?.steps).toBe(0);
+    await act(async () => mockCompose.slider?.onValueChange(27.6));
+    expect(onChange).toHaveBeenLastCalledWith(28);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("isn't a whole number"));
+    warn.mockRestore();
+  });
+
+  it('survives an invalid step without building a grid', () => {
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => undefined);
+    expect(snapToStep(7, 0, 10, 0)).toBe(10);
+    expect(stepSlider(0, 0, 10, Number.NaN, 1)).toBe(10);
+    expect(snapToStep(0.3, 0, 1, 0.1)).toBe(0.3);
+    expect(stepSlider(1e9, 0, 1e12, 1e-6, -1)).toBeCloseTo(1e9 - 1e-6, 3);
+    warn.mockRestore();
+  });
 });
