@@ -20,7 +20,7 @@ import { homeKeys, useHomeLayout } from './homeData';
 import { HomeHeaderActions } from './HomeHeaderActions';
 import { HomePage } from './HomePage';
 import { appDrawsSection, HomeSections } from './homeSections';
-import { PlannedDaySheet } from './PlannedDaySheet';
+import { PlannedDayPrefetch, PlannedDaySheet } from './PlannedDaySheet';
 
 // Everything Home shows, refreshed together by pull to refresh.
 const HOME_QUERIES = [
@@ -115,6 +115,7 @@ export function HomeScreen() {
         )}
       </HomePage>
       <DaySheet day={day} onClose={() => setDay(null)} onAdd={createOn} />
+      {split?.enabled && <PlannedDayPrefetch />}
       <PlannedDaySheet date={plannedDate} onClose={() => setPlannedDate(null)} />
       {/* B3: What's new once per release, or last week's review at the start of a week. */}
       <LaunchNotices />

@@ -205,3 +205,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
 });
+
+/**
+ * Loads the routines with Home while a split is on, so a planned day's sheet opens with its
+ * exercises instead of a spinner that then grows.
+ */
+export function PlannedDayPrefetch() {
+  useRoutines();
+  return null;
+}
