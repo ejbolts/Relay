@@ -39,6 +39,12 @@ jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   Stack: { Screen: () => null },
 }));
+// Home's header buttons have their own tests; Training only has to show them.
+jest.mock('../home/HomeHeaderActions', () => {
+  const { createElement } = jest.requireActual<typeof import('react')>('react');
+  const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
+  return { HomeHeaderActions: () => createElement(Text, null, 'Header actions') };
+});
 jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: () => mockWorkout }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
@@ -154,6 +160,7 @@ test('Sessions shows the log by week, and a card opens to its sets and repeats t
   await open(<TrainingTabScreen />);
   expect(await screen.findByText('5 workouts logged')).toBeVisible();
   expect(screen.getByRole('header', { name: 'Training' })).toBeVisible();
+  expect(screen.getByText('Header actions')).toBeVisible();
   expect(screen.getByRole('tab', { name: 'Sessions', selected: true })).toBeVisible();
 
   expect(await screen.findByText('This week')).toBeVisible();

@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
@@ -28,6 +27,7 @@ import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { FieldLabel, HeaderTextButton } from '../blocks/parts';
 import { updateExercise } from './exerciseQueries';
+import { haptics } from '../../ui/haptics';
 
 /**
  * Edits a custom exercise's name, equipment and target muscles; its workouts, records and
@@ -89,7 +89,7 @@ function EditForm({ exercise, exercises }: { exercise: Exercise; exercises: Exer
     setError(null);
     try {
       await updateExercise(client, exercise.id, changes);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       showToast('Exercise updated');
       router.back();
     } catch (reason) {

@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -40,6 +39,7 @@ import {
 import { BlockColorField } from './BlockColorField';
 import { nativeBlockColor } from './BlockScopeChip';
 import { ChoiceTiles, FieldLabel, HeaderTextButton } from './parts';
+import { haptics } from '../../ui/haptics';
 
 /** Starts a training block, or edits or removes a saved one, as the web's block form. */
 export function BlockFormScreen({ blockId }: { blockId?: string }) {
@@ -97,7 +97,7 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
         if (selection) selectBlock(selection);
         showToast('Training block started');
       }
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       router.back();
     });
 

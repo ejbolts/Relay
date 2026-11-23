@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { memo } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
@@ -8,6 +7,7 @@ import { workoutTypeColor } from '../../../../frontend/src/dayColors';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { ringSegments, type CalendarDay, type CalendarMonthView } from './calendarModel';
+import { haptics } from '../../ui/haptics';
 
 const BOX = 38;
 const RADIUS = 11;
@@ -94,7 +94,7 @@ const DayCell = memo(function DayCell({
           : `${prettyDate(day.date)}${day.scheduledNote ? `, ${day.scheduledNote}` : ''}`
       }
       onPress={() => {
-        void Haptics.selectionAsync();
+        haptics.selection();
         onPress(day);
       }}
       style={styles.cell}
@@ -238,7 +238,7 @@ function MonthButton({
       disabled={!enabled}
       hitSlop={6}
       onPress={() => {
-        void Haptics.selectionAsync();
+        haptics.selection();
         onPress();
       }}
       style={({ pressed }) => [
@@ -279,7 +279,7 @@ export function CalendarLegend({
             accessibilityLabel={item.name}
             accessibilityState={{ checked: shown }}
             onPress={() => {
-              void Haptics.selectionAsync();
+              haptics.selection();
               onToggle(item.id);
             }}
             style={({ pressed }) => [styles.legendItem, pressed && { opacity: 0.6 }]}

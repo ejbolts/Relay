@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -32,6 +31,7 @@ import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { trainingIcons } from './icons';
 import { Badge } from './parts';
+import { haptics } from '../../ui/haptics';
 
 /** "Sat 21 Nov · 1h 2min · 8 sets", with the year when it isn't this year's. */
 export function workoutMeta(workout: TrackedWorkout, showYear: boolean) {
@@ -88,7 +88,7 @@ export function WorkoutCard({
         accessibilityLabel={`${name}, ${workoutMeta(workout, showYear)}`}
         accessibilityState={{ expanded: open }}
         onPress={() => {
-          void Haptics.selectionAsync();
+          haptics.selection();
           onToggle();
         }}
         style={({ pressed }) => [styles.summary, pressed && { opacity: 0.7 }]}

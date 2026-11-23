@@ -1,54 +1,11 @@
-import SegmentedControl, {
-  type SegmentedControlProps,
-} from '@react-native-segmented-control/segmented-control';
-import * as Haptics from 'expo-haptics';
-import type { ComponentType, ReactNode } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import type { ReactNode } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { haptics } from '../../ui/haptics';
 
-// The package's class typings predate React 19's JSX types; the component itself is fine.
-const NativeSegmentedControl = SegmentedControl as unknown as ComponentType<SegmentedControlProps>;
-
-/** A native segmented control in Pulse's colours. */
-export function Segmented({
-  values,
-  selectedIndex,
-  onChange,
-  accessibilityLabel,
-  style,
-}: {
-  values: readonly string[];
-  selectedIndex: number;
-  onChange: (index: number) => void;
-  accessibilityLabel: string;
-  style?: StyleProp<ViewStyle>;
-}) {
-  const { scheme, colors } = useTheme();
-  return (
-    <NativeSegmentedControl
-      accessibilityLabel={accessibilityLabel}
-      values={[...values]}
-      selectedIndex={selectedIndex}
-      appearance={scheme}
-      fontStyle={{ color: colors.secondary, fontSize: 13 }}
-      activeFontStyle={{ color: colors.text, fontSize: 13, fontWeight: '600' }}
-      onChange={(event) => {
-        void Haptics.selectionAsync();
-        onChange(event.nativeEvent.selectedSegmentIndex);
-      }}
-      style={[{ height: 34 }, style]}
-    />
-  );
-}
+/** Training's segmented control is the shared native one. */
+export { Segmented } from '../../ui/controls';
 
 /** A toggle pill, as the web's filter chips. */
 export function Chip({
@@ -73,7 +30,7 @@ export function Chip({
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ selected }}
       onPress={() => {
-        void Haptics.selectionAsync();
+        haptics.selection();
         onPress();
       }}
       style={({ pressed }) => [

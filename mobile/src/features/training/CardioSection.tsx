@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -38,6 +37,7 @@ import { CardioShareSheet } from '../cardio/CardioShareSheet';
 import { trainingIcons } from './icons';
 import { Chip, Divider, MoreButton, Note, Segmented } from './parts';
 import { useCardioOverview } from './trainingQueries';
+import { haptics } from '../../ui/haptics';
 
 const shortDay = (value: string) =>
   new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
@@ -142,7 +142,7 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
               accessibilityLabel={`Week of ${shortDay(week.start)}: ${amount === null ? 'not logged' : `${formatCardioAmount(amount)} ${metric.unit}`}`}
               accessibilityState={{ selected: active }}
               onPress={() => {
-                void Haptics.selectionAsync();
+                haptics.selection();
                 setSelectedStart(week.start);
               }}
               style={styles.barColumn}
@@ -316,7 +316,7 @@ function CardioRow({
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`${session.activity_type}, ${prettyDate(session.session_date)}, ${session.duration_minutes} minutes`}
         onPress={() => {
-          void Haptics.selectionAsync();
+          haptics.selection();
           onToggle();
         }}
         style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}

@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
@@ -56,6 +55,7 @@ import { HeaderTextButton } from '../blocks/parts';
 import { ProgressChart, type ChartPoint } from '../training/ProgressChart';
 import { useScopedExerciseProgress, useWeightMapping, saveWeightMapping } from './exerciseQueries';
 import { FactorSlider } from './FactorSlider';
+import { haptics } from '../../ui/haptics';
 
 const HELP = [
   'All machines shows every session in the reference machine’s weights. Each pair shows what your weight on a machine equals on the reference. Drag the slider, or change either weight, and watch the preview.',
@@ -167,7 +167,7 @@ function MachineWeightsEditor({
     setSaveError(null);
     try {
       await saveWeightMapping(client, exerciseId, parsed.mapping);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       showToast('Machine weights saved');
       router.back();
     } catch (reason) {
