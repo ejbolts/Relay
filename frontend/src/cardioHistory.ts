@@ -72,3 +72,32 @@ export function cardioSessionPerformance(session: CardioSession): string {
       .join(' · ') || 'Performance metrics not logged'
   );
 }
+
+/** How many history sessions each workout holds. */
+export function cardioSessionsPerWorkout(
+  sessions: Pick<CardioSession, 'source_workout_id'>[],
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const session of sessions)
+    if (session.source_workout_id)
+      counts.set(session.source_workout_id, (counts.get(session.source_workout_id) ?? 0) + 1);
+  return counts;
+}
+
+export type CardioDeletion = { kind: 'workout' | 'cardio'; id: string };
+
+/**
+ * What deleting a history session removes. A session logged on its own is saved as a
+ * cardio-only workout, so deleting it deletes that workout; one inside a strength workout, or
+ * sharing its workout with another session, is removed in that workout instead (null).
+ */
+export function cardioDeletion(
+  session: Pick<CardioSession, 'id' | 'source_workout_id' | 'workout_context'>,
+  sessionsPerWorkout: Map<string, number>,
+): CardioDeletion | null {
+  const linked = session.source_workout_id;
+  if (!linked) return { kind: 'cardio', id: session.id };
+  return cardioWorkoutContext(session) === 'pure_cardio' && sessionsPerWorkout.get(linked) === 1
+    ? { kind: 'workout', id: linked }
+    : null;
+}

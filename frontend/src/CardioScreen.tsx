@@ -9,7 +9,13 @@ import type {
   Exercise,
   PersonalRecord,
 } from './types';
-import { cardioMetricFields, emptyCardioSession, hasCardioMetrics } from './cardioForm';
+import {
+  cardioExerciseFor,
+  cardioMetricFields,
+  cardioSessionPayload,
+  emptyCardioSession,
+  hasCardioMetrics,
+} from './cardioForm';
 import { cardioSessionUpdateFromScan } from './cardioScreenshot';
 import { savedCardioRecordsToast } from './cardioRecords';
 import { InlineConfirmButton } from './InlineConfirmButton';
@@ -20,9 +26,11 @@ import {
   CARDIO_HISTORY_WEEKS_PER_PAGE,
   cardioSessionContextLabel,
   cardioSessionEnergy,
+  cardioDeletion,
   cardioSessionPerformance,
-  cardioWorkoutContext,
+  cardioSessionsPerWorkout,
   filterCardioHistory,
+  type CardioDeletion,
   type CardioHistoryFilter,
 } from './cardioHistory';
 import { CardioMetricsEditor } from './CardioMetricsEditor';
@@ -118,14 +126,7 @@ export function CardioScreen({
     currentHistoryPage * CARDIO_HISTORY_WEEKS_PER_PAGE,
   );
   // Sessions per workout: deleting a session deletes its workout only when that is all it holds.
-  const sessionsPerWorkout = new Map<string, number>();
-  for (const session of overview?.sessions ?? []) {
-    if (session.source_workout_id)
-      sessionsPerWorkout.set(
-        session.source_workout_id,
-        (sessionsPerWorkout.get(session.source_workout_id) ?? 0) + 1,
-      );
-  }
+  const sessionsPerWorkout = cardioSessionsPerWorkout(overview?.sessions ?? []);
 
   useEffect(() => {
     setHistoryPage((page) => Math.min(page, historyPageCount));
@@ -159,12 +160,7 @@ export function CardioScreen({
         setError('Choose a cardio exercise.');
         return;
       }
-      const payload = {
-        ...draft,
-        intensity: null,
-        zone: null,
-        qualifies_zone2: false,
-      };
+      const payload = cardioSessionPayload(draft);
       setSaving(true);
       if (editingId) {
         await api.updateCardio(editingId, payload);
@@ -211,11 +207,11 @@ export function CardioScreen({
       setSaving(false);
     }
   }
-  async function remove(session: CardioSession) {
+  async function remove(deletion: CardioDeletion) {
     try {
       // A session logged on its own is saved as a cardio-only workout; deleting it deletes that.
-      if (session.source_workout_id) await api.deleteWorkout(session.source_workout_id);
-      else await api.deleteCardio(session.id);
+      if (deletion.kind === 'workout') await api.deleteWorkout(deletion.id);
+      else await api.deleteCardio(deletion.id);
       await onDataChange();
       await load();
     } catch (reason) {
@@ -456,12 +452,9 @@ export function CardioScreen({
               </span>
             </h3>
             {group.sessions.map((session, index) => {
-              const workoutContext = cardioWorkoutContext(session);
               const linked = session.source_workout_id;
               // A session inside a strength workout, or sharing one, is removed in that workout.
-              const deletable =
-                !linked ||
-                (workoutContext === 'pure_cardio' && sessionsPerWorkout.get(linked) === 1);
+              const deletion = cardioDeletion(session, sessionsPerWorkout);
               return (
                 <details
                   className={`cardio-history-row${index > 0 && group.sessions[index - 1].session_date !== session.session_date ? ' cardio-history-new-day' : ''}`}
@@ -522,20 +515,18 @@ export function CardioScreen({
                         setEditingId(session.id);
                         setDraft({
                           ...session,
-                          exercise_id:
-                            cardioExercises.find((item) => item.name === session.activity_type)
-                              ?.id ?? null,
+                          exercise_id: cardioExerciseFor(session.activity_type, cardioExercises),
                         });
                       }}
                     >
                       Edit
                     </button>
-                    {deletable && (
+                    {deletion && (
                       <InlineConfirmButton
                         className="pulse-button danger-soft small"
                         label="Delete"
                         confirmLabel="Delete session"
-                        onConfirm={() => remove(session)}
+                        onConfirm={() => remove(deletion)}
                       />
                     )}
                   </div>

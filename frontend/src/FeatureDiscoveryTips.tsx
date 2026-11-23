@@ -1,6 +1,6 @@
 ﻿import { useEffect, type ReactNode } from 'react';
 import { TipSlot, useTips } from './Tips';
-import { maintenanceRange } from './bodyMeasurementHistory';
+import { usedMaintenanceRange } from './bodyMeasurementHistory';
 import type { BodyWeightGoal, WeightMapping } from './types';
 
 export function MachineWeightTip({
@@ -43,7 +43,7 @@ export function BodyWeightTip({
   onSetGoal: () => void;
 }) {
   const { learn } = useTips();
-  const usedMaintenance = goals.some((goal) => maintenanceRange(goal) !== null);
+  const usedMaintenance = usedMaintenanceRange(goals);
   useEffect(() => {
     if (ready && usedMaintenance) learn('maintenance');
   }, [ready, usedMaintenance, learn]);
