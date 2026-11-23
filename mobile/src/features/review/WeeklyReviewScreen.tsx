@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -36,6 +35,7 @@ import { useUser } from '../../session/SessionProvider';
 import { Button, Card } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { haptics } from '../../ui/haptics';
 import { blockRoutes } from '../blocks/routes';
 import { useTrainingBlocks } from '../blocks/blockQueries';
 import { useBodyGoals } from '../body/bodyQueries';
@@ -71,7 +71,7 @@ export function WeeklyReviewScreen() {
     open();
   };
   const step = (by: number) => {
-    void Haptics.selectionAsync();
+    haptics.selection();
     setWeeksAgo(weeksAgo + by);
   };
 

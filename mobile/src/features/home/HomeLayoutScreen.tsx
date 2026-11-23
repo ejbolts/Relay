@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { Stack, usePreventRemove, useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
 import {
@@ -30,6 +29,7 @@ import { Icon, type IconName, type IconPair } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
+import { haptics } from '../../ui/haptics';
 import { CARD_SETTINGS, CardSettingsForm } from './CardSettings';
 import { useHomeLayout, useSaveHomeLayout } from './homeData';
 import { homeIcons } from './homeIcons';
@@ -94,7 +94,7 @@ function Editor({ saved }: { saved: HomeLayout }) {
   }, [done, router]);
 
   function change(next: HomeLayout) {
-    void Haptics.selectionAsync();
+    haptics.selection();
     setError(null);
     setDraft(next);
   }
@@ -104,7 +104,7 @@ function Editor({ saved }: { saved: HomeLayout }) {
     setError(null);
     try {
       await save.mutateAsync(draft);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       showToast('Home layout saved');
       setDone(true);
     } catch {

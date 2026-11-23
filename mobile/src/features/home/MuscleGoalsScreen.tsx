@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +11,7 @@ import { useExercises, useTrainingPreferences } from '../../data/queries';
 import { ErrorState, errorMessage, Loading } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
+import { haptics } from '../../ui/haptics';
 import { useSaveMuscleGoal } from './homeData';
 
 /**
@@ -79,7 +79,7 @@ function GoalList({
     try {
       await save.mutateAsync({ muscle, goal });
       clearDraft(muscle);
-      void Haptics.selectionAsync();
+      haptics.selection();
       showToast(muscleGoalSavedMessage(muscle, goal));
     } catch (reason) {
       setError(muscle, errorMessage(reason));

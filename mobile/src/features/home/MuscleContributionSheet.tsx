@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -19,6 +18,7 @@ import { Button, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
+import { haptics } from '../../ui/haptics';
 import { useSaveMuscleGoal } from './homeData';
 import { HomeSheet, useCloseThen } from './HomeSheet';
 import { Meter } from './Sparks';
@@ -107,7 +107,7 @@ function MuscleWeek({
     setError(null);
     try {
       await save.mutateAsync({ muscle: muscle.muscle_group, goal: value });
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       setEditing(false);
       showToast(muscleGoalSavedMessage(muscle.muscle_group, value));
     } catch (reason) {
@@ -116,7 +116,7 @@ function MuscleWeek({
   }
 
   const step = (by: number) => {
-    void Haptics.selectionAsync();
+    haptics.selection();
     setDraft(stepMuscleSetGoal(draft, goal, by));
     setError(null);
   };
