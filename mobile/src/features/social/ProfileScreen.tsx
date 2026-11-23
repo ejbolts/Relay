@@ -29,11 +29,16 @@ import {
   type InviteResult,
   type SharedHistoryTab,
 } from '../../../../frontend/src/sharedProfileDisplay';
-import { dayMonth, recordCountsByWorkout } from '../../../../frontend/src/trainingSummary';
+import {
+  dayMonth,
+  recordCountsByWorkout,
+  workoutDisplayName,
+} from '../../../../frontend/src/trainingSummary';
 import type {
   FriendStatus,
   SharedConsistency,
   SharedProfile,
+  WorkoutReactions,
 } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { formatWeight } from '../../../../frontend/src/weightUnits';
@@ -48,6 +53,7 @@ import { workoutColor } from '../training/useTrainingContext';
 import { WorkoutCard, WorkoutDetails } from '../training/WorkoutCard';
 import { Avatar } from './Avatar';
 import { PhotoViewer } from './PhotoViewer';
+import { ReactionBar } from './ReactionBar';
 import { FriendQrSheet } from './FriendQrSheet';
 import { socialIcons } from './icons';
 import { useSocialNavigation } from './navigation';
@@ -640,16 +646,23 @@ function GoalsCard({ profile }: { profile: SharedProfile }) {
   );
 }
 
-/** The shared history, in the web's tabs when the member logs cardio, opening like Training's. */
+/** A workout nobody has reacted to or commented on. */
+const NO_REACTIONS: WorkoutReactions = { counts: [], yours: null, comment_count: 0 };
+
+/**
+ * The shared history, in the web's tabs when the member logs cardio, opening like Training's.
+ * Each workout has its reactions and comments under its summary, as in the feed.
+ */
 function ProfileWorkouts({ profile }: { profile: SharedProfile }) {
   const { colors, type } = useTheme();
+  const nav = useSocialNavigation();
   const unit = useWeightUnit();
   const [tab, setTab] = useState<SharedHistoryTab>('all');
   const [openId, setOpenId] = useState<string | null>(null);
   const cardioTab = !!profile.cardio_sessions;
   const kind = cardioTab ? SHARED_HISTORY_KIND[tab] : undefined;
   const query = useSharedWorkouts(profile.id, { kind, enabled: profile.can_view });
-  const { workouts, records } = sharedWorkoutList(query.data);
+  const { workouts, records, reactions } = sharedWorkoutList(query.data);
   const recordCounts = recordCountsByWorkout(records);
   const types = profile.consistency?.workout_types ?? [];
   const thisYear = new Date().getFullYear().toString();
@@ -700,6 +713,23 @@ function ProfileWorkouts({ profile }: { profile: SharedProfile }) {
                   unit={unit}
                 />
               </WorkoutCard>
+              <View style={{ paddingBottom: 10 }}>
+                <ReactionBar
+                  workoutId={workout.id}
+                  subject={`${profile.is_you ? 'Your' : `${profile.display_name}’s`} ${workoutDisplayName(workout)}`}
+                  reactions={reactions[workout.id] ?? NO_REACTIONS}
+                  ownWorkout={profile.is_you}
+                  onOpenComments={() =>
+                    nav.openWorkout({
+                      id: workout.id,
+                      memberId: profile.id,
+                      date: workout.workout_date,
+                      comments: true,
+                    })
+                  }
+                  onOpenPerson={nav.openProfile}
+                />
+              </View>
             </View>
           ))}
         </View>
