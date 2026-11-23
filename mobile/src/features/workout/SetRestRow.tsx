@@ -19,19 +19,21 @@ function InsertButton({ beforeSet, onInsert }: { beforeSet: number; onInsert: ()
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      // A 26 pt circle with a 44 pt touch target, as the web's outlined "+".
-      hitSlop={9}
       onPress={() => {
         haptics.tap();
         onInsert();
       }}
-      style={({ pressed }) => [
-        styles.insert,
-        { backgroundColor: colors.surface, borderColor: `${colors.accent}8C` },
-        pressed && { opacity: 0.6 },
-      ]}
+      // A 26 pt circle, as the web's outlined "+", in a 44 pt touch area of its own.
+      style={({ pressed }) => [styles.insertTouch, pressed && { opacity: 0.6 }]}
     >
-      <Icon name="plus" size={14} color={colors.accentText} />
+      <View
+        style={[
+          styles.insert,
+          { backgroundColor: colors.surface, borderColor: `${colors.accent}8C` },
+        ]}
+      >
+        <Icon name="plus" size={14} color={colors.accentText} />
+      </View>
     </Pressable>
   );
 }
@@ -111,6 +113,7 @@ export function SetRestRow({
           trigger={{ text: `${text} ↕`, color }}
           width={76}
           height={32}
+          touch={{ height: 44 }}
           fill={ghost ? colors.surface : colors.surface2}
           cornerRadius={16}
           style={[
@@ -176,6 +179,7 @@ export function SetInsertRow({
             trigger={{ text: '+ REST', color: colors.muted }}
             width={76}
             height={30}
+            touch={{ height: 44 }}
             fill={colors.surface}
             cornerRadius={15}
             style={[styles.pill, styles.addRest, { borderColor: colors.lineStrong }]}
@@ -198,10 +202,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 4,
-    minHeight: 40,
+    minHeight: 44,
   },
-  insertRow: { minHeight: 34 },
+  insertRow: { minHeight: 44 },
   lead: { width: 34, alignItems: 'center' },
+  // Wider than its 34 pt column; the rule beside it takes no touches, so nothing overlaps.
+  insertTouch: {
+    width: 44,
+    height: 44,
+    marginHorizontal: -5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   insert: {
     width: 26,
     height: 26,

@@ -927,7 +927,14 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  grab: { alignSelf: 'center', width: 88, height: 22, alignItems: 'center', paddingTop: 8 },
+  // A 44 pt tall touch area around the grabber.
+  grab: {
+    alignSelf: 'center',
+    width: 120,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   grabber: { width: 36, height: 5, borderRadius: 3 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   titleBlock: { flex: 1, minWidth: 0, gap: 3 },

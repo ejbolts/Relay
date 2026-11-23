@@ -755,6 +755,7 @@ function SetRow({
               trigger={{ text: rpeText, color: rpeInk }}
               width={44}
               height={38}
+              touch={{ height: 44 }}
               fill={rowColor}
               cornerRadius={radius.sm}
               style={[styles.rpeColumn, styles.rpe]}
@@ -1037,9 +1038,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   moreButton: {
-    width: 32,
+    width: 44,
     height: 44,
-    marginRight: -6,
+    marginLeft: -6,
+    marginRight: -12,
     alignItems: 'center',
     justifyContent: 'center',
   },
