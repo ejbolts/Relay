@@ -1,4 +1,4 @@
-import { useIsFocused } from 'expo-router';
+import { useIsFocused, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState, type ComponentRef, type RefObject } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -6,10 +6,18 @@ import type { FriendActivity, TimelineItem } from '../../../../frontend/src/type
 import { localDate } from '../../../../frontend/src/utils';
 import { workoutFocusStep } from '../../../../frontend/src/workoutFocusRequest';
 import { useUser } from '../../session/SessionProvider';
-import { Button, Card, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
-import { Icon } from '../../ui/Icon';
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  errorMessage,
+  IconButton,
+  Loading,
+  Screen,
+} from '../../ui/components';
+import { Segmented } from '../../ui/controls';
+import { haptics } from '../../ui/haptics';
 import { useTheme } from '../../ui/theme';
-import { Segmented } from '../training/parts';
 import { Avatar } from './Avatar';
 import { CommentsSheet } from './Comments';
 import { FeedCard } from './FeedCard';
@@ -19,7 +27,7 @@ import { BlockedGroup, FriendsSection } from './FriendsSection';
 import { socialIcons } from './icons';
 import { useSocialNavigation } from './navigation';
 import { NotificationsBell } from './NotificationsBell';
-import { EmptyLine, SharingLocked } from './parts';
+import { SharingLocked } from './parts';
 import { usePrefetchFriendProfiles } from './profilePrefetch';
 import { ReactionPeopleSheet } from './ReactionBar';
 import { sharingRequired } from './socialApi';
@@ -38,11 +46,12 @@ type Section = 'feed' | 'friends';
 
 /**
  * Social, as the web's: the Feed of your and your friends' workouts, and Friends, with requests,
- * search, suggestions and blocks. The notifications bell, your QR code and your profile sit in
- * the header. A workout opened from a notification is revealed in the feed.
+ * search, suggestions and blocks. The notifications bell, your profile and Settings sit in the
+ * header, matching every other tab. A workout opened from a notification is revealed in the feed.
  */
 export function SocialScreen() {
-  const { colors } = useTheme();
+  const { colors, radius } = useTheme();
+  const router = useRouter();
   const user = useUser();
   const nav = useSocialNavigation();
   const focused = useIsFocused();
@@ -95,38 +104,62 @@ export function SocialScreen() {
             <NotificationsBell />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="QR code"
-              hitSlop={6}
-              onPress={() => setQrOpen(true)}
+              accessibilityLabel="Open your profile"
+              hitSlop={4}
+              onPress={() => {
+                haptics.tap();
+                nav.openProfile(user);
+              }}
               style={({ pressed }) => [
-                styles.round,
-                { backgroundColor: colors.surface2 },
-                pressed && { opacity: 0.6 },
+                styles.headerButton,
+                {
+                  borderRadius: radius.md,
+                  backgroundColor: colors.surface,
+                  borderColor: colors.lineStrong,
+                },
+                pressed && { opacity: 0.7 },
               ]}
             >
-              <Icon name={socialIcons.qr} size={18} color={colors.text} />
+              <Avatar person={user} size={26} />
             </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open your profile"
-              hitSlop={6}
-              onPress={() => nav.openProfile(user)}
-              style={({ pressed }) => pressed && { opacity: 0.6 }}
-            >
-              <Avatar person={user} size={36} />
-            </Pressable>
+            <IconButton
+              icon="settings"
+              accessibilityLabel="Settings"
+              onPress={() => router.push('/settings')}
+              style={{ borderColor: colors.lineStrong }}
+            />
           </View>
         }
       >
-        <Segmented
-          accessibilityLabel="Social sections"
-          values={[
-            'Feed',
-            requests > 0 ? `Friends (${requests > 9 ? '9+' : requests})` : 'Friends',
-          ]}
-          selectedIndex={section === 'feed' ? 0 : 1}
-          onChange={(index) => setSection(index === 0 ? 'feed' : 'friends')}
-        />
+        <View style={styles.segmentWrap}>
+          <View
+            style={[styles.segmentTrack, { borderColor: colors.line, borderRadius: radius.sm }]}
+          >
+            <Segmented
+              accessibilityLabel={
+                requests > 0
+                  ? `Social sections, ${requests} friend ${requests === 1 ? 'request' : 'requests'}`
+                  : 'Social sections'
+              }
+              values={['Feed', 'Friends']}
+              selectedIndex={section === 'feed' ? 0 : 1}
+              onChange={(index) => setSection(index === 0 ? 'feed' : 'friends')}
+            />
+          </View>
+          {requests > 0 && (
+            <View
+              pointerEvents="none"
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={[
+                styles.requestBadge,
+                { backgroundColor: colors.danger, borderColor: colors.page },
+              ]}
+            >
+              <Text style={styles.requestBadgeText}>{requests > 9 ? '9+' : requests}</Text>
+            </View>
+          )}
+        </View>
         {locked ? (
           <>
             <SharingLocked onChooseSharing={nav.openSharing} />
@@ -148,7 +181,7 @@ export function SocialScreen() {
             onCardLayout={reveal.onCardLayout}
           />
         ) : connections ? (
-          <FriendsSection connections={connections} />
+          <FriendsSection connections={connections} onOpenQr={() => setQrOpen(true)} />
         ) : friends.error ? (
           <ErrorState
             message={errorMessage(friends.error)}
@@ -304,6 +337,7 @@ function Feed({
 }) {
   const { colors, type } = useTheme();
   const nav = useSocialNavigation();
+  const [pickingId, setPickingId] = useState<string | null>(null);
   const today = localDate();
   if (!items) {
     return pending ? (
@@ -316,23 +350,38 @@ function Feed({
     <>
       <FriendsRail friends={friends ?? []} today={today} onOpenFriend={nav.openProfile} />
       {items.length === 0 ? (
-        <Card>
-          <EmptyLine>
-            {friends && friends.length > 0
+        <EmptyState
+          icon={socialIcons.people}
+          title={friends && friends.length > 0 ? 'No workouts yet' : 'No friends yet'}
+          message={
+            friends && friends.length > 0
               ? 'No workouts here yet. Sessions you and your friends log appear in this feed.'
-              : 'Add friends to see their workouts and photos here.'}
-          </EmptyLine>
-          {friends?.length === 0 && (
-            <Button label="Find friends" icon="search" onPress={onFindFriends} />
-          )}
-        </Card>
+              : 'Add friends to see their workouts and photos here.'
+          }
+          action={
+            friends?.length === 0
+              ? { label: 'Find friends', icon: 'search', onPress: onFindFriends }
+              : undefined
+          }
+        />
       ) : (
         items.map((item) => (
           <View
             key={item.workout.id}
+            style={pickingId === item.workout.id ? { zIndex: 10 } : undefined}
             onLayout={(event) => onCardLayout(item.workout.id, event.nativeEvent.layout.y)}
           >
-            <FeedCard item={item} today={today} />
+            <FeedCard
+              item={item}
+              today={today}
+              picking={pickingId === item.workout.id}
+              dimmed={pickingId !== null && pickingId !== item.workout.id}
+              onPickingChange={(open) =>
+                setPickingId((current) =>
+                  open ? item.workout.id : current === item.workout.id ? null : current,
+                )
+              }
+            />
           </View>
         ))
       )}
@@ -345,7 +394,7 @@ function Feed({
         <Button
           label={loadingMore ? 'Loading…' : 'Show older workouts'}
           variant="secondary"
-          disabled={loadingMore}
+          loading={loadingMore}
           onPress={onLoadMore}
         />
       )}
@@ -354,12 +403,27 @@ function Feed({
 }
 
 const styles = StyleSheet.create({
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  round: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  headerButton: {
+    width: 40,
+    height: 40,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  segmentWrap: { position: 'relative' },
+  segmentTrack: { borderWidth: 1, overflow: 'hidden' },
+  requestBadge: {
+    position: 'absolute',
+    top: -6,
+    right: 6,
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    paddingHorizontal: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  requestBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
 });
