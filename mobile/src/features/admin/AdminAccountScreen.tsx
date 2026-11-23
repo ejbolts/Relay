@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import * as Clipboard from 'expo-clipboard';
-import { Stack, useLocalSearchParams, usePreventRemove } from 'expo-router';
+import { Stack, useLocalSearchParams, usePreventRemove, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import {
@@ -12,7 +12,6 @@ import {
   replaceAccount,
   userDisabledNotice,
   userSexNotice,
-  usernameChangedNotice,
 } from '../../../../frontend/src/adminAccounts';
 import {
   formatBytes,
@@ -29,11 +28,11 @@ import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { useNow } from '../../ui/useNow';
 import { ChoiceRow, Row, Section, SettingsPage } from '../settings/SettingsList';
-import { useAccountGuard } from './accountGuard';
+import { useAccountGuard, type AccountCheck } from './accountGuard';
 import { AccountTags } from './AccountTags';
 import { adminApi, adminKeys, patchAccount, useAdminActivity, useAdminUsers } from './adminData';
 import { adminIcons } from './icons';
-import { UsernameSheet } from './UsernameSheet';
+import { adminRoutes } from './routes';
 
 const NOT_SET = 'none';
 
@@ -63,6 +62,7 @@ export function AdminAccountScreen() {
 function AccountDetails({ account }: { account: AdminUser }) {
   const me = useUser();
   const client = useQueryClient();
+  const router = useRouter();
   const { colors, type } = useTheme();
   const now = useNow(60_000);
   const guard = useAccountGuard();
@@ -70,14 +70,18 @@ function AccountDetails({ account }: { account: AdminUser }) {
   // Set synchronously, so a second tap in the same frame can't start a second request.
   const working = useRef(false);
   const [resetting, setResetting] = useState(false);
-  const [renaming, setRenaming] = useState(false);
+  // The reset confirmation is open: its answer may still be on its way to the screen.
+  const [confirmingReset, setConfirmingReset] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Shown once while this screen is open, then discarded.
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null);
 
   // The temporary password exists only here: leaving while the reset is on its way, or before
   // it has been dismissed, would lose its only copy. Leaving waits for the reset, then asks.
-  usePreventRemove(resetting || temporaryPassword !== null, ({ repeat }) => {
+  usePreventRemove(confirmingReset || resetting || temporaryPassword !== null, ({ repeat }) => {
+    // Back can reach the screen before the confirmation's answer does (Android delivers them
+    // separately), so leaving waits from the moment the confirmation opens.
+    if (confirmingReset) return;
     if (resetting) {
       showToast('Wait for the password reset to finish.');
       return;
@@ -105,17 +109,20 @@ function AccountDetails({ account }: { account: AdminUser }) {
   const resetAt = account.password_reset_requested_at ?? null;
   const usernameAt = account.username_reminder_requested_at ?? null;
 
-  /** Runs one action at a time; `current` is false once this account has signed out. */
-  async function run(action: (current: () => boolean) => Promise<void>) {
+  /**
+   * Runs one action at a time. Its cache writes need `check.sameSession()`; toasts and this
+   * screen's state need `check.open()`.
+   */
+  async function run(action: (check: AccountCheck) => Promise<void>) {
     if (working.current) return;
     working.current = true;
     setBusy(true);
     setError(null);
-    const current = guard();
+    const check = guard();
     try {
-      await action(current);
+      await action(check);
     } catch (reason) {
-      if (current()) setError(errorMessage(reason));
+      if (check.open()) setError(errorMessage(reason));
     } finally {
       working.current = false;
       setBusy(false);
@@ -129,29 +136,35 @@ function AccountDetails({ account }: { account: AdminUser }) {
     );
 
   function confirmReset() {
+    setConfirmingReset(true);
     Alert.alert(
       `Reset ${account.display_name}’s password?`,
       'Signs them out everywhere. They choose a new password at next sign-in.',
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: 'Cancel', style: 'cancel', onPress: () => setConfirmingReset(false) },
         {
           text: 'Reset and sign out',
           style: 'destructive',
           onPress: () => void reset(),
         },
       ],
+      { cancelable: true, onDismiss: () => setConfirmingReset(false) },
     );
   }
 
   async function reset() {
-    if (resetsInFlight.has(account.id)) return;
+    if (resetsInFlight.has(account.id)) {
+      setConfirmingReset(false);
+      return;
+    }
     resetsInFlight.add(account.id);
     setResetting(true);
+    setConfirmingReset(false);
     try {
-      await run(async (current) => {
+      await run(async (check) => {
         setTemporaryPassword(null);
         const { temporary_password } = await adminApi.resetPassword(account.id);
-        if (!current()) return;
+        if (!check.sameSession()) return;
         patchAccount(client, account.id, afterPasswordReset);
         setTemporaryPassword(temporary_password);
       });
@@ -163,11 +176,11 @@ function AccountDetails({ account }: { account: AdminUser }) {
 
   function changeDisabled(next: boolean) {
     const apply = () =>
-      void run(async (current) => {
+      void run(async (check) => {
         const updated = await adminApi.setDisabled(account.id, next);
-        if (!current()) return;
+        if (!check.sameSession()) return;
         replace(updated);
-        showToast(userDisabledNotice(updated, next));
+        if (check.open()) showToast(userDisabledNotice(updated, next));
       });
     if (!next) {
       apply();
@@ -185,43 +198,25 @@ function AccountDetails({ account }: { account: AdminUser }) {
 
   function changeSex(choice: SexChoice) {
     const sex = choice === NOT_SET ? null : choice;
-    void run(async (current) => {
+    void run(async (check) => {
       const updated = await adminApi.setSex(account.id, sex);
-      if (!current()) return;
+      if (!check.sameSession()) return;
       replace(updated);
-      showToast(userSexNotice(updated, sex));
+      if (check.open()) showToast(userSexNotice(updated, sex));
     });
   }
 
-  /** Saves from the username editor, which shows a rejection beside its field. */
-  async function saveUsername(username: string) {
-    if (working.current) return;
-    working.current = true;
-    setBusy(true);
-    const current = guard();
-    try {
-      const updated = await adminApi.setUsername(account.id, username);
-      if (!current()) return;
-      replace(updated);
-      setRenaming(false);
-      showToast(usernameChangedNotice(updated));
-    } finally {
-      working.current = false;
-      setBusy(false);
-    }
-  }
-
   function dismissRequests() {
-    void run(async (current) => {
+    void run(async (check) => {
       // The tags clear; the account keeps its place in the list until the next refresh.
       if (account.password_reset_requested_at) {
         await adminApi.dismissPasswordReset(account.id);
-        if (!current()) return;
+        if (!check.sameSession()) return;
         patchAccount(client, account.id, (row) => ({ ...row, password_reset_requested_at: null }));
       }
       if (account.username_reminder_requested_at) {
         await adminApi.dismissUsernameReminder(account.id);
-        if (!current()) return;
+        if (!check.sameSession()) return;
         patchAccount(client, account.id, (row) => ({
           ...row,
           username_reminder_requested_at: null,
@@ -322,7 +317,7 @@ function AccountDetails({ account }: { account: AdminUser }) {
         <Row
           label="Change username"
           disabled={busy}
-          onPress={() => setRenaming(true)}
+          onPress={() => router.push(adminRoutes.username(account.id))}
           chevron={false}
         />
         {(resetAt || usernameAt) && (
@@ -343,12 +338,6 @@ function AccountDetails({ account }: { account: AdminUser }) {
           />
         )}
       </Section>
-      <UsernameSheet
-        account={account}
-        visible={renaming}
-        onClose={() => setRenaming(false)}
-        onSave={saveUsername}
-      />
     </SettingsPage>
   );
 }

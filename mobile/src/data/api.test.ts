@@ -267,3 +267,17 @@ test('allows plain HTTP only on loopback during development', async () => {
 test('has no origin when account mode is not configured', () => {
   expect(loadApi(undefined).apiOrigin).toBeUndefined();
 });
+
+// Sol re-check of #469: a refusal of a previous account's token mustn't sign out the next one.
+test("keeps the next account's session when an old request is refused after it signs in", async () => {
+  const api = signedIn();
+  let answer!: (response: Response) => void;
+  fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+  const late = api.apiGet('/api/auth/me');
+  await settle();
+  // Another account signs in while the first account's request is still on its way.
+  mockKeychain.set('relay.session', saved('https://relay.test', 'next-token'));
+  answer(reply(401, { error: { message: 'Sign in to continue.' } }));
+  await expect(late).rejects.toMatchObject({ status: 401 });
+  expect(JSON.parse(mockKeychain.get('relay.session')!).token).toBe('next-token');
+});

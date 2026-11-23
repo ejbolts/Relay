@@ -8,4 +8,5 @@ export const adminRoutes = {
   console: '/admin' as Href,
   server: '/admin/server' as Href,
   account: (userId: string) => `/admin/account/${encodeURIComponent(userId)}` as Href,
+  username: (userId: string) => `/admin/username/${encodeURIComponent(userId)}` as Href,
 };

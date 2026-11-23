@@ -3,16 +3,21 @@ import { onToastAccountChange, toastAccount } from './Toast';
 
 // Removals waiting for their Undo toast to end (a goal, a friend), kept outside any one screen so
 // a screen opened again while the toast still shows hides the item too and can't remove it twice.
-// Each entry belongs to the account that made it: a session change forgets the others, since
-// their toasts are dropped without running anything.
+//
+// Each entry belongs to the session that made it (`toastAccount()`: the account and its session
+// number), and a session change forgets the others, since their toasts are dropped without
+// running anything. Each entry also has its own token, and only that token clears it, so a late
+// completion of an older removal can never clear a newer removal of the same item.
 
 interface Entry {
   kind: string;
   id: string;
   account: string;
+  token: string;
 }
 
 let entries: readonly Entry[] = [];
+let nextToken = 0;
 const listeners = new Set<() => void>();
 
 function set(next: readonly Entry[]) {
@@ -25,23 +30,28 @@ onToastAccountChange((account) => {
   if (kept.length !== entries.length) set(kept);
 });
 
-const same = (a: Entry, b: Omit<Entry, 'account'> & { account?: string }) =>
-  a.kind === b.kind && a.id === b.id && a.account === (b.account ?? toastAccount());
+/** Proof of one pending removal: pass it back to `pendingActions.remove`. */
+export type PendingToken = string;
 
 export const pendingActions = {
   /**
-   * Marks `id` as waiting, for `account` (the current session by default). Returns false if it
-   * already is: the caller must not start the same removal twice.
+   * Marks `id` as waiting in `account`'s session (the current one by default) and returns the
+   * token that clears it, or `null` if that item is already waiting: the caller must not start
+   * the same removal twice.
    */
-  add(kind: string, id: string, account = toastAccount()): boolean {
-    if (entries.some((entry) => same(entry, { kind, id, account }))) return false;
-    set([...entries, { kind, id, account }]);
-    return true;
+  add(kind: string, id: string, account = toastAccount()): PendingToken | null {
+    if (
+      entries.some((entry) => entry.kind === kind && entry.id === id && entry.account === account)
+    )
+      return null;
+    const token = `${account}/${kind}/${id}/${++nextToken}`;
+    set([...entries, { kind, id, account, token }]);
+    return token;
   },
-  /** The removal finished, failed or was undone. */
-  remove(kind: string, id: string, account = toastAccount()) {
-    if (!entries.some((entry) => same(entry, { kind, id, account }))) return;
-    set(entries.filter((entry) => !same(entry, { kind, id, account })));
+  /** The removal with this token finished, failed or was undone. Other tokens are untouched. */
+  remove(token: PendingToken) {
+    if (!entries.some((entry) => entry.token === token)) return;
+    set(entries.filter((entry) => entry.token !== token));
   },
   /** For tests. */
   clear() {

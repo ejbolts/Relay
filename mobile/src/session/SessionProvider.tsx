@@ -18,6 +18,7 @@ import {
   signOut as requestSignOut,
 } from '../data/api';
 import { forgetSessionToken } from '../data/session';
+import { nextSessionEpoch } from './sessionEpoch';
 import { forgetCachedUser, offlineUser, publicUser, rememberUser } from './cachedUser';
 
 type Status =
@@ -73,6 +74,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const endSession = useCallback(() => {
     generation.current += 1;
+    nextSessionEpoch();
     signedIn.current = false;
     forgetCachedUser();
     setStatus({ kind: 'signed-out' });
@@ -163,6 +165,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async (username: string, password: string) => {
       const user = publicUser(await requestSignIn(username, password));
       generation.current += 1;
+      nextSessionEpoch();
       client.clear();
       rememberUser(user);
       setStatus({ kind: 'signed-in', user });
