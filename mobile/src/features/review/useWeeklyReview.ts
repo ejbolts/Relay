@@ -34,7 +34,7 @@ export function useWeeklyReview() {
   const records = usePersonalRecords().data;
   const measurements = useBodyMeasurements().data;
   const preferences = useTrainingPreferences().data;
-  const notices = useAppNotices();
+  const notices = useAppNotices(user.id);
   useNoticeMemory();
   const dashboardWeekStart = dashboard?.weekly_sets?.week_start ?? null;
   const input = useMemo(

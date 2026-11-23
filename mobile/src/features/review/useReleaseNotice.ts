@@ -1,7 +1,8 @@
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
-import { releaseNoticeState } from '../../../../frontend/src/appNoticeRules';
+import { recordableRelease, releaseNoticeState } from '../../../../frontend/src/appNoticeRules';
 import { announcedRelease } from '../../../../frontend/src/releaseMetadata';
+import { clientVersionHeaders } from '../../data/api';
 import { useUser } from '../../session/SessionProvider';
 import { useServerRelease } from '../settings/settingsData';
 import { recordAppNotices, useAppNotices } from './appNotices';
@@ -13,10 +14,17 @@ import {
   useNoticeMemory,
 } from './noticeMemory';
 
-/** Closing What's new: this phone and the account's other devices don't open it again. */
+/**
+ * Closing What's new: this phone and the account's other devices don't open it again. The phone
+ * remembers the server's release it showed; the account records no release newer than this app,
+ * which is all the server accepts from it, so a device already on a newer release can still
+ * announce that one.
+ */
 export function dismissRelease(client: QueryClient, userId: string, version: string) {
   rememberRelease(userId, version);
-  recordAppNotices(client, { release_seen: version });
+  recordAppNotices(client, userId, {
+    release_seen: recordableRelease(version, clientVersionHeaders()['X-Relay-Version']),
+  });
 }
 
 /**
@@ -28,7 +36,7 @@ export function useReleaseNotice() {
   const user = useUser();
   const client = useQueryClient();
   const server = useServerRelease();
-  const notices = useAppNotices();
+  const notices = useAppNotices(user.id);
   useNoticeMemory();
   const release = server.data ? announcedRelease(server.data) : null;
   const version = release?.version ?? null;

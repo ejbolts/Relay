@@ -39,6 +39,41 @@ export function withAppNotices(
   };
 }
 
+/**
+ * The later of each notice, as the server merges them: a marker only moves forward, so an older
+ * answer arriving late can't bring a notice back.
+ */
+export function newerAppNotices(
+  current: Partial<AppNotices> | null | undefined,
+  next: Partial<AppNotices> | null | undefined,
+): AppNotices {
+  const release = [current?.release_seen, next?.release_seen].filter(
+    (value): value is string => !!value,
+  );
+  const week = [current?.weekly_review_seen, next?.weekly_review_seen].filter(
+    (value): value is string => !!value,
+  );
+  return {
+    release_seen: release.reduce<string | null>(
+      (latest, value) => (latest && releaseAtLeast(latest, value) ? latest : value),
+      null,
+    ),
+    weekly_review_seen: week.reduce<string | null>(
+      (latest, value) => (latest && latest >= value ? latest : value),
+      null,
+    ),
+  };
+}
+
+/**
+ * The release to record as seen. The server refuses a release newer than the app that sends it,
+ * so an app showing a newer server's notes records its own release instead; the device still
+ * remembers the release it showed.
+ */
+export function recordableRelease(shown: string, appVersion: string | null | undefined): string {
+  return appVersion && !releaseAtLeast(appVersion, shown) ? appVersion : shown;
+}
+
 /** The key a device remembers a dismissed What's new under. */
 export function releaseSeenKey(userId: string, version: string): string {
   return `gym-logger-release-seen:${encodeURIComponent(userId)}:${version}`;

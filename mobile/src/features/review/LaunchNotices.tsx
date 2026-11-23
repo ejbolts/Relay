@@ -42,7 +42,7 @@ export function LaunchNotices() {
     } else if (reviewDue) {
       openLaunchPrompt(user.id, 'weekly-review');
       markWeeklyReviewShown(user.id, currentStart);
-      recordAppNotices(client, { weekly_review_seen: currentStart });
+      recordAppNotices(client, user.id, { weekly_review_seen: currentStart });
       router.push(reviewRoutes.weeklyReview);
     }
   }, [focused, user.id, tour, release.automatic, reviewDue, currentStart, client, router]);
