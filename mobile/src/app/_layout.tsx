@@ -6,6 +6,8 @@ import { Appearance, Platform } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createQueryClient } from '../data/queryClient';
+// W3 (Home): header options for Home's pushed screens.
+import { homeScreenOptions } from '../features/home/routes';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { useDeferredFriendInvite } from '../session/friendInvite';
@@ -90,6 +92,9 @@ function Navigation() {
             <Stack.Screen name="social/sharing" />
             {/* Editing a saved workout from Training's session screen. */}
             <Stack.Screen name="edit-workout/[id]" />
+            {/* W3 (Home): per-muscle weekly goals and the Home layout editor, with headers. */}
+            <Stack.Screen name="muscle-goals" options={homeScreenOptions(colors, 'Muscle goals')} />
+            <Stack.Screen name="home-layout" options={homeScreenOptions(colors, 'Edit Home')} />
             {/* Training Cardio: standalone logging, metrics and zone preferences. */}
             <Stack.Screen name="cardio/log" />
             <Stack.Screen name="cardio/metrics/[id]" />

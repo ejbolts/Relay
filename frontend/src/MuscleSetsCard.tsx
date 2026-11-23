@@ -1,5 +1,14 @@
 import { useId, useState, type CSSProperties, type FormEvent } from 'react';
 import { Icon } from './Icon';
+import {
+  contributionDetail,
+  MUSCLE_SET_GOAL_ERROR,
+  MUSCLE_SET_GOAL_MAX,
+  MUSCLE_SET_GOAL_MIN,
+  muscleGoalSavedMessage,
+  stepMuscleSetGoal,
+  validMuscleSetGoal,
+} from './muscleGoalEditing';
 import { muscleSetGoal, type MuscleSetGoals } from './muscleSetGoals';
 import {
   muscleSetsView,
@@ -253,16 +262,14 @@ function MuscleContributionSheet({
   }
 
   function step(by: number) {
-    const value = Number(draft);
-    const base = Number.isInteger(value) && value >= 1 ? value : goal;
-    setDraft(String(Math.min(1000, Math.max(1, base + by))));
+    setDraft(stepMuscleSetGoal(draft, goal, by));
     setGoalError(null);
   }
 
   async function saveGoal(value: number | null) {
     if (!onChangeGoal || savingGoal) return;
-    if (value !== null && (!Number.isInteger(value) || value < 1 || value > 1000)) {
-      setGoalError('Enter a whole number of sets from 1 to 1,000.');
+    if (value !== null && !validMuscleSetGoal(value)) {
+      setGoalError(MUSCLE_SET_GOAL_ERROR);
       return;
     }
     setSavingGoal(true);
@@ -270,11 +277,7 @@ function MuscleContributionSheet({
     try {
       await onChangeGoal(value);
       setEditing(false);
-      toast.show(
-        value === null
-          ? `${muscle.muscle_group} uses the default goal`
-          : `${muscle.muscle_group} goal set to ${value} sets`,
-      );
+      toast.show(muscleGoalSavedMessage(muscle.muscle_group, value));
     } catch (reason) {
       setGoalError(
         reason instanceof Error ? reason.message : 'Could not save the goal. Try again.',
@@ -366,7 +369,7 @@ function MuscleContributionSheet({
                 <button
                   type="button"
                   aria-label="One set fewer"
-                  disabled={savingGoal || Number(draft) <= 1}
+                  disabled={savingGoal || Number(draft) <= MUSCLE_SET_GOAL_MIN}
                   onClick={() => step(-1)}
                 >
                   <Icon name="minus" />
@@ -389,7 +392,7 @@ function MuscleContributionSheet({
                 <button
                   type="button"
                   aria-label="One set more"
-                  disabled={savingGoal || Number(draft) >= 1000}
+                  disabled={savingGoal || Number(draft) >= MUSCLE_SET_GOAL_MAX}
                   onClick={() => step(1)}
                 >
                   <Icon name="plus" />
@@ -429,12 +432,7 @@ function MuscleContributionSheet({
                     <span>
                       {contribution.workout_name} · {shortDate(contribution.workout_date)}
                     </span>
-                    <small>
-                      {contribution.working_sets} working{' '}
-                      {contribution.working_sets === 1 ? 'set' : 'sets'} ×{' '}
-                      {credits(contribution.credit_per_set)} ·{' '}
-                      {contribution.credit_per_set >= 1 ? 'Direct' : 'Assistance'}
-                    </small>
+                    <small>{contributionDetail(contribution)}</small>
                   </span>
                   <span className="muscle-contribution-value">
                     <b>{credits(contribution.set_credits)}</b>

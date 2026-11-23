@@ -4,6 +4,7 @@ import {
   weeklyBodyweightAverages,
   type WeeklyTotals,
 } from './trainingSummary';
+import type { BodyCheckInMode } from './homeLayout';
 import type { BodyMeasurement, CardioGoalWeek, DashboardData } from './types';
 import { formatWeight, weightFromKg, weightToKg, type WeightUnit } from './weightUnits';
 
@@ -181,4 +182,47 @@ export function checkInSavedMessage(kind: 'weight' | 'fat' | 'combined'): string
     : kind === 'fat'
       ? 'Body fat saved'
       : 'Body weight saved';
+}
+
+/** Home's check-in reads the older two-button Combined mode as the one-button card. */
+export function homeCheckInMode(mode: BodyCheckInMode): BodyCheckInMode {
+  return mode === 'combined' ? 'combined-single' : mode;
+}
+
+/**
+ * How the check-in card behaves in its mode. Body fat is stored on a weigh-in, so until today's
+ * weight is in, Body fat only asks for both.
+ */
+export function bodyCheckInView({
+  mode: configured,
+  todayBodyweight,
+  todayBodyFat,
+  canSaveBodyFat = true,
+}: {
+  mode: BodyCheckInMode;
+  todayBodyweight: number | null;
+  todayBodyFat: number | null;
+  canSaveBodyFat?: boolean;
+}) {
+  const mode: BodyCheckInMode =
+    configured === 'fat' && canSaveBodyFat && todayBodyweight === null
+      ? 'combined-single'
+      : configured;
+  const singleButton = mode === 'combined-single' && canSaveBodyFat;
+  const fatOnly = mode === 'fat' && canSaveBodyFat;
+  return {
+    mode,
+    singleButton,
+    combined: mode === 'combined' || singleButton,
+    headerSave: singleButton || mode !== 'combined',
+    fatOnly,
+    showWeight: mode !== 'fat' || !canSaveBodyFat,
+    showFat: canSaveBodyFat && mode !== 'weight',
+    hasToday: fatOnly
+      ? todayBodyFat !== null
+      : singleButton
+        ? todayBodyweight !== null && todayBodyFat !== null
+        : todayBodyweight !== null,
+    saveKind: fatOnly ? 'body fat' : singleButton ? 'check-in' : 'weight',
+  } as const;
 }

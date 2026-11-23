@@ -2,20 +2,20 @@ import { useEffect, useId, useMemo, useState, type CSSProperties } from 'react';
 import { api, ApiError } from './api';
 import { cardioDistanceGroups } from './cardioTrend';
 import {
+  bodyGoalChip,
   bodyGoalProgress,
+  distancePeriodName,
   distancePeriodStart,
   freshnessLabel,
   freshnessLevel,
+  goalDaysLeftLabel,
   ordinal,
   spotlightSummary,
+  weekBoard,
   weekStandings,
   type MuscleFreshness,
 } from './homeInsights';
-import type {
-  CardioDistancePeriod,
-  CardioDistanceSettings,
-  ExerciseSpotlightSettings,
-} from './homeLayout';
+import type { CardioDistanceSettings, ExerciseSpotlightSettings } from './homeLayout';
 import { PresenceAvatar } from './PresenceAvatar';
 import { presenceStatus } from './presence';
 import { ProfileAvatar } from './ProfileAvatar';
@@ -62,14 +62,6 @@ function useRead<T>(load: () => Promise<T>, revision: unknown, enabled = true): 
 const listGoals = () => api.listBodyWeightGoals();
 const loadCardio = () => api.cardioOverview().then((overview) => overview.sessions);
 
-function daysLeftLabel(days: number, ended: boolean): string {
-  if (ended) return 'Target date passed';
-  if (days === 0) return 'Due today';
-  if (days === 1) return '1 day left';
-  if (days < 14) return `${days} days left`;
-  return `${Math.round(days / 7)} weeks left`;
-}
-
 export function BodyGoalCard({
   measurements,
   today,
@@ -89,24 +81,7 @@ export function BodyGoalCard({
   const latest = measurements[0] ?? null;
   const progress = goal && latest ? bodyGoalProgress(goal, latest.weight_kg, today) : null;
   const weight = (kg: number, decimals = 1) => formatWeightNumber(kg, weightUnit, decimals);
-  const chip = !progress
-    ? null
-    : progress.kind === 'maintain'
-      ? {
-          text:
-            progress.status === 'in'
-              ? 'In range'
-              : progress.status === 'above'
-                ? 'Above range'
-                : 'Below range',
-          tone: progress.status === 'in' ? 'good' : 'warn',
-        }
-      : progress.ahead_kg === 0 || progress.ahead_kg === null
-        ? { text: 'On track', tone: 'good' }
-        : {
-            text: `${weight(Math.abs(progress.ahead_kg))} ${weightUnit} ${progress.ahead_kg > 0 ? 'ahead' : 'behind'}`,
-            tone: progress.ahead_kg > 0 ? 'good' : 'warn',
-          };
+  const chip = bodyGoalChip(progress, weightUnit);
 
   return (
     <section className="pulse-card insight-card body-goal-card" aria-labelledby={titleId}>
@@ -170,7 +145,7 @@ export function BodyGoalCard({
             </p>
           )}
           <p className="insight-foot">
-            {daysLeftLabel(progress.days_left, today > goal.target_date)}
+            {goalDaysLeftLabel(progress.days_left, today > goal.target_date)}
           </p>
         </>
       )}
@@ -381,7 +356,7 @@ export function CardioDistanceCard({
     sessions.kind === 'ready'
       ? cardioDistanceGroups(sessions.value, start, today).filter((group) => group.distance > 0)
       : [];
-  const period = periodName(settings.period, today);
+  const period = distancePeriodName(settings.period, today);
   const longest = Math.max(...groups.map((group) => group.distance), 0.1);
   return (
     <section className="pulse-card insight-card distance-card" aria-labelledby={titleId}>
@@ -429,11 +404,6 @@ export function CardioDistanceCard({
       )}
     </section>
   );
-}
-
-function periodName(period: CardioDistancePeriod, today: string): string {
-  if (period === 'week') return 'This week';
-  return new Intl.DateTimeFormat('en-GB', { month: 'long' }).format(new Date(`${today}T12:00:00`));
 }
 
 export function CardioDistanceSettingsForm({
@@ -525,19 +495,7 @@ export function FriendsWeekCard({
     [friends, you.display_name, you.profile_photo_url, workouts, today, weekStartDay],
   );
   const locked = friends.kind === 'ready' && friends.value.locked;
-  const rank = (days: number) => 1 + rows.filter((row) => row.days > days).length;
-  const me = rows.find((row) => row.is_you);
-  const leader = rows[0];
-  const runnerUp = rows.find((row) => !row.is_you);
-  const summary = !me
-    ? ''
-    : leader && !leader.is_you
-      ? `${leader.days - me.days} ${leader.days - me.days === 1 ? 'day' : 'days'} behind ${leader.display_name}`
-      : runnerUp && runnerUp.days === me.days
-        ? `Level with ${runnerUp.display_name}`
-        : runnerUp
-          ? `${me.days - runnerUp.days} ${me.days - runnerUp.days === 1 ? 'day' : 'days'} ahead`
-          : '';
+  const { rank, yourRank, summary } = weekBoard(rows);
 
   return (
     <section className="pulse-card insight-card friends-week-card" aria-labelledby={titleId}>
@@ -564,7 +522,7 @@ export function FriendsWeekCard({
           <p className="week-board-summary insight-compact-only">
             <span className="insight-label">Your rank</span>
             <strong className="insight-value num">
-              {ordinal(rank(me?.days ?? 0))}
+              {ordinal(yourRank)}
               <small> of {rows.length}</small>
             </strong>
             {summary && <span className="insight-foot">{summary}</span>}

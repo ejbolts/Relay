@@ -1,6 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { Alert, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { prettyDate } from '../../../../frontend/src/appShared';
+import {
+  DEFAULT_HOME_SECTION_SETTINGS,
+  defaultHomeLayout,
+  OPTIONAL_HOME_SECTIONS,
+  type HomeLayout,
+} from '../../../../frontend/src/homeLayout';
 import {
   addDays,
   daysBetween,
@@ -199,7 +207,13 @@ const checkIn = (id: string, days: number, weight_kg: number, body_fat_pct: numb
 const measurements = [checkIn('b1', 1, 84.6, 18.4), checkIn('b2', 30, 86.1, 19)];
 
 let responses: Record<string, unknown>;
-const workout = { live: null, start: jest.fn(), open: jest.fn(), openStartMenu: jest.fn() };
+const workout = {
+  live: null,
+  start: jest.fn(),
+  open: jest.fn(),
+  openStartMenu: jest.fn(),
+  discard: jest.fn(),
+};
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -213,6 +227,7 @@ beforeEach(() => {
     '/api/body-measurements': measurements,
     '/api/sharing': { visibility: 'followers', pending_requests: 2 },
     '/api/sharing/feed': { items: [], friends: 0, with_sessions: 0 },
+    '/api/home-layout': defaultHomeLayout(),
     '/api/sharing/notifications': {
       requests: [
         { id: 'r1', display_name: 'Jordan Lee', profile_photo_url: null, since: '2026-11-20' },
@@ -535,4 +550,331 @@ test('the check-in asks for a weight before saving', async () => {
   await fireEvent.press(within(card).getByRole('button', { name: 'Log check-in' }));
   expect(within(card).getByText('Enter a bodyweight above 0 and up to 500 kg.')).toBeVisible();
   expect(apiSend).not.toHaveBeenCalled();
+});
+
+// Saved layouts, card settings and the optional cards.
+
+function savedLayout(change: Partial<HomeLayout> = {}): HomeLayout {
+  return { ...defaultHomeLayout(), ...change };
+}
+
+/** The sheets' next steps run at once on Android; iOS waits for the sheet to leave. */
+const onAndroid = () => jest.replaceProperty(Platform, 'OS', 'android');
+
+/** Presses the given button of the last native alert. */
+function answerAlert(label: string) {
+  const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)?.[2] ?? [];
+  const button = buttons.find((item) => item.text === label);
+  if (!button?.onPress) throw new Error(`No ${label} button`);
+  button.onPress();
+}
+
+test("a saved layout orders and hides Home's cards and applies their settings", async () => {
+  responses['/api/home-layout'] = savedLayout({
+    order: [
+      'records',
+      'workouts',
+      'next-workout',
+      'zone2',
+      'consistency',
+      'weekly-review' as never,
+    ],
+    hidden: ['consistency'],
+    settings: {
+      ...DEFAULT_HOME_SECTION_SETTINGS,
+      workouts: { weeks: 4 },
+      zone2: { zone: null, style: 'list' },
+    },
+  });
+  await open();
+  // Records leads, then Workouts, then Up next; Consistency is hidden and the rest follow.
+  await waitFor(() => expect(screen.queryByText('Last 12 weeks')).toBeNull());
+  const order = screen
+    .getAllByText(/^(Recent records|Upper body day|Workouts)$/)
+    .map((node) => node.props.children);
+  expect(order).toEqual(['Recent records', 'Workouts', 'Upper body day']);
+  expect(screen.getByRole('button', { name: /^Workouts: 0, 4-wk avg/ })).toBeVisible();
+  // The List design draws no progress bars.
+  expect(screen.getByText('60 / 150 min', { exact: false })).toBeVisible();
+  expect(screen.queryByRole('progressbar', { name: 'Zone 2 minutes this week' })).toBeNull();
+});
+
+test('a layout with every card hidden says how to bring them back', async () => {
+  responses['/api/home-layout'] = savedLayout({ hidden: [...defaultHomeLayout().order] });
+  await renderHome();
+  expect(
+    await screen.findByText('Your Home Screen is clear. Use the edit button to add sections.'),
+  ).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Edit Home layout' })).toBeEnabled(),
+  );
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit Home layout' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/home-layout');
+});
+
+test('the optional cards show once added to Home', async () => {
+  responses['/api/home-layout'] = savedLayout({
+    order: [...OPTIONAL_HOME_SECTIONS],
+    hidden: [],
+  });
+  responses['/api/dashboard'] = dashboard({
+    weekly_sets: {
+      ...dashboard().weekly_sets,
+      muscle_groups: [
+        {
+          muscle_group: 'Glutes',
+          raw_sets: 3,
+          effective_sets: 3,
+          contributions: [
+            {
+              workout_id: 'w2',
+              workout_name: 'Lower B',
+              workout_date: addDays(today, -4),
+              movement_id: 'm9',
+              exercise_id: 'hip',
+              exercise_name: 'Hip Thrust',
+              working_sets: 3,
+              credit_per_set: 1,
+              set_credits: 3,
+            },
+          ],
+        },
+      ],
+    } as DashboardData['weekly_sets'],
+  });
+  responses['/api/body-weight-goals'] = [
+    {
+      id: 'g1',
+      created_at: '',
+      start_date: addDays(today, -30),
+      target_date: addDays(today, 70),
+      start_weight_kg: 88,
+      target_weight_kg: 80,
+      active: true,
+    },
+  ];
+  responses['/api/progress'] = [
+    {
+      exercise_id: 'bench',
+      session_count: 6,
+      last_date: addDays(today, -7),
+      latest_estimated_1rm: 100,
+      change_kg: 2.5,
+      change_percent: 2.5,
+      trend: [
+        { date: addDays(today, -14), estimated_1rm: 97.5 },
+        { date: addDays(today, -7), estimated_1rm: 100 },
+      ],
+    },
+  ];
+  responses['/api/exercises'] = [];
+  responses['/api/cardio'] = {
+    sessions: [
+      { id: 'c1', session_date: today, activity_type: 'Running', distance_km: 5.2 },
+      { id: 'c2', session_date: today, activity_type: 'Cycling', distance_km: 21 },
+    ],
+  };
+  responses['/api/sharing/friends'] = {
+    friends: [
+      {
+        id: 'f1',
+        display_name: 'Sam',
+        username: 'sam',
+        profile_photo_url: null,
+        training_dates: [today],
+        recent_workout_count: 9,
+        latest: null,
+      },
+    ],
+    requests: [],
+    sent: [],
+    blocked: [],
+  };
+  await renderHome();
+  expect(await screen.findByText('Body goal')).toBeVisible();
+  expect(await screen.findByText('Est. 1RM')).toBeVisible();
+  expect(screen.getByText('+2.5 kg')).toBeVisible();
+  expect(screen.getByLabelText('Glutes, 4 days')).toBeVisible();
+  expect(await screen.findByLabelText('Cycling: 21 km, 1 session')).toBeVisible();
+  expect(await screen.findByText('Friends this week')).toBeVisible();
+  expect(await screen.findByLabelText('1. Sam, 1 day')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: '1. Sam, 1 day' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith({
+    pathname: '/social/profile/[id]',
+    params: { id: 'f1' },
+  });
+});
+
+test("today's planned split day opens its plan and starts it", async () => {
+  onAndroid();
+  responses['/api/dashboard'] = dashboard({ heatmap: [] });
+  await open();
+  await fireEvent.press(screen.getByRole('button', { name: `${prettyDate(today)}, no workouts` }));
+  expect(await screen.findByText('Today')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Start Upper body' }));
+  expect(workout.start).toHaveBeenLastCalledWith({
+    kind: 'template',
+    template: expect.objectContaining({
+      exercises: expect.arrayContaining([
+        expect.objectContaining({ exercise: expect.objectContaining({ id: 'bench' }) }),
+      ]),
+    }),
+    name: 'Upper body workout',
+    category: 'upper',
+    type: expect.objectContaining({ id: 'upper' }),
+  });
+});
+
+test('a day with nothing planned asks before starting a workout dated that day', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  responses['/api/dashboard'] = dashboard({ heatmap: [], training_split: null });
+  await renderHome();
+  await fireEvent.press(
+    await screen.findByRole('button', { name: `${prettyDate(today)}, no workouts` }),
+  );
+  expect(alert).toHaveBeenLastCalledWith(
+    'Create a new workout?',
+    `Start a workout for ${prettyDate(today)}?`,
+    expect.any(Array),
+  );
+  answerAlert('Create workout');
+  expect(workout.start).toHaveBeenLastCalledWith({ kind: 'empty' }, { date: today });
+});
+
+test("a logged day's sheet opens, edits and adds workouts, replacing a live one", async () => {
+  onAndroid();
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  await open();
+  const tile = () => screen.getAllByRole('button', { name: /^View 1 workout for/ })[0];
+  await fireEvent.press(tile());
+  await fireEvent.press(await screen.findByRole('button', { name: 'Open Lower B' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith({
+    pathname: '/training/session/[id]',
+    params: { id: 'w2' },
+  });
+  await fireEvent.press(tile());
+  await fireEvent.press(await screen.findByRole('button', { name: 'Edit Lower B' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith({
+    pathname: '/edit-workout/[id]',
+    params: { id: 'w2' },
+  });
+
+  // With a workout in progress (started on another day), Add asks to replace it.
+  jest.mocked(useWorkout).mockReturnValue({
+    ...workout,
+    live: { name: 'Push day', startedAt: Date.now() - 30 * 86_400_000 },
+  } as unknown as ReturnType<typeof useWorkout>);
+  await fireEvent.press(tile());
+  await fireEvent.press(await screen.findByRole('button', { name: 'Add another workout' }));
+  expect(alert).toHaveBeenLastCalledWith(
+    'Cancel your current workout?',
+    `Creating a workout for ${prettyDate(monday)} will discard your current unsaved workout.`,
+    expect.any(Array),
+  );
+  answerAlert('Cancel & create new');
+  expect(workout.discard).toHaveBeenCalled();
+  expect(workout.start).toHaveBeenLastCalledWith({ kind: 'empty' }, { date: monday });
+});
+
+test('a muscle opens its contributions, and its goal can be changed there', async () => {
+  onAndroid();
+  responses['/api/dashboard'] = dashboard({
+    weekly_sets: {
+      ...dashboard().weekly_sets,
+      muscle_groups: [
+        {
+          muscle_group: 'Glutes',
+          raw_sets: 3,
+          effective_sets: 3,
+          contributions: [
+            {
+              workout_id: 'w2',
+              workout_name: 'Lower B',
+              workout_date: monday,
+              movement_id: 'm9',
+              exercise_id: 'hip',
+              exercise_name: 'Hip Thrust',
+              working_sets: 3,
+              credit_per_set: 1,
+              set_credits: 3,
+            },
+          ],
+        },
+      ],
+    } as DashboardData['weekly_sets'],
+  });
+  jest
+    .mocked(apiSend)
+    .mockImplementation(async (path: string, _method: string, body?: unknown) =>
+      path === '/api/training-preferences' ? body : split,
+    );
+  await open();
+  await fireEvent.press(screen.getByRole('button', { name: /^Glutes: 3 of 10 sets/ }));
+  expect(await screen.findByText('Hip Thrust')).toBeVisible();
+  expect(screen.getByText('3 working sets × 1 · Direct')).toBeVisible();
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit goal for Glutes' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'One set more' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/training-preferences', 'PUT', {
+      ...preferences,
+      weekly_muscle_set_goals: { Glutes: 11 },
+    }),
+  );
+  expect(await screen.findByText('Glutes goal set to 11 sets')).toBeOnTheScreen();
+
+  await fireEvent.press(
+    screen.getByRole('button', {
+      name: `View Hip Thrust in Lower B, ${shortDate(monday)}`,
+    }),
+  );
+  expect(mockRouter.push).toHaveBeenLastCalledWith({
+    pathname: '/training/session/[id]',
+    params: { id: 'w2' },
+  });
+});
+
+test('Sets per muscle opens the muscle goals; Recent records opens Progress', async () => {
+  await open();
+  await fireEvent.press(screen.getByRole('button', { name: 'Muscle goals' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/muscle-goals');
+  await fireEvent.press(screen.getByRole('button', { name: 'Progress' }));
+  expect(mockRouter.navigate).toHaveBeenLastCalledWith({
+    pathname: '/training',
+    params: { section: 'exercises', request: expect.any(String) },
+  });
+  await fireEvent.press(screen.getByRole('button', { name: /^Barbell Bench Press, Weight PR/ }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith({
+    pathname: '/training/exercise/[id]',
+    params: { id: 'bench' },
+  });
+});
+
+test('the check-in follows its saved mode: Weight only saves just the weight', async () => {
+  responses['/api/home-layout'] = savedLayout({
+    settings: { ...DEFAULT_HOME_SECTION_SETTINGS, check_in: { mode: 'weight' } },
+  });
+  jest
+    .mocked(apiSend)
+    .mockImplementation(async (path: string, method: string, body?: unknown) =>
+      path === '/api/body-measurements' && method === 'POST'
+        ? { ...checkIn('today', 0, 0, null), ...(body as object) }
+        : split,
+    );
+  await open();
+  const card = screen.getByLabelText('Body weight check-in');
+  await waitFor(() =>
+    expect(within(card).queryByRole('button', { name: 'Decrease body fat by 0.1%' })).toBeNull(),
+  );
+  await fireEvent.press(within(card).getByRole('button', { name: 'Log weight' }));
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/body-measurements', 'POST', {
+      measurement_date: today,
+      weight_kg: 84.6,
+      body_fat_pct: null,
+      notes: null,
+    }),
+  );
+  expect(await screen.findByText('Body weight saved')).toBeOnTheScreen();
 });
