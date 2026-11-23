@@ -22,12 +22,19 @@ import {
   validateAuthForm,
   type AuthFieldErrors,
 } from '../../../frontend/src/authRules';
+import {
+  PASSWORD_RESET_REQUEST,
+  USERNAME_REMINDER_REQUEST,
+  type AccountHelpRequest,
+} from '../../../frontend/src/accountHelpRequests';
 import { ApiError, apiOrigin } from '../data/api';
+import { queueAppTour } from '../features/guides/tourProgress';
 import { Button, Card, errorMessage, ErrorState, Loading } from '../ui/components';
 import { ProfilePhoto } from '../ui/ProfilePhoto';
 import { Sheet } from '../ui/Sheet';
 import { showToast, ToastHost } from '../ui/Toast';
 import { useTheme } from '../ui/theme';
+import { AccountHelpSheet } from './AccountHelpSheet';
 import { registerAccount, useRegistrationConfig } from './registration';
 import { useSession } from './SessionProvider';
 
@@ -45,6 +52,7 @@ export function SignInScreen() {
   const [needsInviteCode, setNeedsInviteCode] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [sampleOpen, setSampleOpen] = useState(false);
+  const [help, setHelp] = useState<AccountHelpRequest | null>(null);
   const config = useRegistrationConfig(status.kind === 'signed-out');
   const inviteRequired = needsInviteCode || !!config.data?.invite_code_required;
   const passwordInput = useRef<ComponentRef<typeof TextInput>>(null);
@@ -74,7 +82,9 @@ export function SignInScreen() {
     try {
       if (creating) {
         const fields = registrationFields(values);
-        await registerAccount(fields);
+        const created = await registerAccount(fields);
+        // A new account takes the quick tour on its first Home, as on the web.
+        queueAppTour(created.id);
         try {
           await signIn(fields.username, password);
         } catch {
@@ -162,14 +172,21 @@ export function SignInScreen() {
                   )}
                 </>
               )}
-              <View style={creating ? styles.fieldLabel : undefined}>
+              <View style={creating ? styles.fieldLabel : styles.signInLabel}>
                 <Text style={label}>Username</Text>
-                {creating && (
+                {creating ? (
                   <Button
                     label="?"
                     accessibilityLabel="About username"
                     variant="link"
                     onPress={() => Alert.alert('Username', SIGNUP_USERNAME_HELP)}
+                  />
+                ) : (
+                  <Button
+                    label="Forgot username?"
+                    variant="link"
+                    disabled={busy}
+                    onPress={() => setHelp(USERNAME_REMINDER_REQUEST)}
                   />
                 )}
               </View>
@@ -191,7 +208,17 @@ export function SignInScreen() {
                   {fieldErrors.username}
                 </Text>
               )}
-              <Text style={label}>Password</Text>
+              <View style={creating ? undefined : styles.signInLabel}>
+                <Text style={label}>Password</Text>
+                {!creating && (
+                  <Button
+                    label="Forgot password?"
+                    variant="link"
+                    disabled={busy}
+                    onPress={() => setHelp(PASSWORD_RESET_REQUEST)}
+                  />
+                )}
+              </View>
               <TextInput
                 ref={passwordInput}
                 style={input}
@@ -281,6 +308,14 @@ export function SignInScreen() {
           </Card>
         </Sheet>
       )}
+      {!creating && (
+        <AccountHelpSheet
+          help={help}
+          // A reset is for the username typed so far; a reminder starts empty.
+          initialValue={help === PASSWORD_RESET_REQUEST ? username : ''}
+          onClose={() => setHelp(null)}
+        />
+      )}
       <ToastHost />
     </SafeAreaView>
   );
@@ -292,5 +327,6 @@ const styles = StyleSheet.create({
   logo: { width: 35, height: 35, borderRadius: 9 },
   input: { minHeight: 50, paddingHorizontal: 14, borderWidth: 1, fontSize: 18 },
   fieldLabel: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  signInLabel: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sample: { flexDirection: 'row', alignItems: 'center', gap: 12 },
 });

@@ -14,6 +14,7 @@ import { useTheme } from '../../ui/theme';
 import { bodyKeys } from '../body/bodyQueries';
 import { trainingKeys } from '../training/trainingQueries';
 import { useWorkout } from '../workout/WorkoutProvider';
+import { HomeGuides } from '../guides/HomeGuides';
 import { DaySheet } from './DaySheet';
 import { homeKeys, useHomeLayout } from './homeData';
 import { HomeHeaderActions } from './HomeHeaderActions';
@@ -123,6 +124,8 @@ export function HomeScreen() {
             >
               <Icon name="edit" size={18} color={colors.text} />
             </Pressable>
+            {/* B4 (guides): the tips bulb, the quick tour and the "Still working out?" alert. */}
+            <HomeGuides />
             <HomeHeaderActions />
           </View>
         }
