@@ -1,19 +1,9 @@
 import type { CSSProperties } from 'react';
-import { trackedCardioGoals } from './cardioZones';
+import { cardioGoalStatus, trackedCardioGoals } from './cardioZones';
 import { Meter } from './PulseCharts';
 import type { CardioGoalCardSettings } from './homeLayout';
 import type { CardioGoalWeek } from './types';
 import './cardioZones.css';
-
-function status(goals: CardioGoalWeek[], daysLeft: number | null) {
-  if (!goals.length) return 'Set a weekly goal in Cardio';
-  if (goals.every((goal) => goal.complete))
-    return goals.length === 1 ? 'Weekly goal reached' : 'All goals reached';
-  if (goals.length > 1)
-    return `${goals.filter((goal) => goal.complete).length} of ${goals.length} goals reached`;
-  const days = daysLeft === null ? '' : ` · ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`;
-  return `${goals[0].remaining_minutes} min to go${days}`;
-}
 
 /** A fluid ring fills its cell; its viewBox keeps the stroke proportional. */
 function Ring({
@@ -145,7 +135,7 @@ export function CardioGoalCard({
           </span>
         ))
       )}
-      <p>{status(tracked, daysLeft)}</p>
+      <p>{cardioGoalStatus(tracked, daysLeft)}</p>
     </button>
   );
 }

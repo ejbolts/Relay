@@ -139,3 +139,15 @@ export function nearestChartPointIndex(
   const ratio = Math.min(1, Math.max(0, (chartX - chartStart) / (chartEnd - chartStart)));
   return Math.round(ratio * (pointCount - 1));
 }
+
+const WEEK_MS = 7 * 86_400_000;
+
+/** The average weight of the check-ins in the seven days up to and including `date`. */
+export function trailingWeekAverageKg(measurements: WeightedMeasurement[], date: string): number {
+  const end = new Date(`${date}T12:00:00`).getTime();
+  const window = measurements.filter((candidate) => {
+    const time = new Date(`${candidate.measurement_date}T12:00:00`).getTime();
+    return time <= end && time > end - WEEK_MS;
+  });
+  return window.reduce((total, candidate) => total + candidate.weight_kg, 0) / window.length;
+}

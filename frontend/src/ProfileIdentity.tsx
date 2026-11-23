@@ -10,6 +10,7 @@ import {
 } from 'react';
 import { api, ApiError } from './api';
 import { authErrorMessage } from './authForm';
+import { PROFILE_PHOTO_ERRORS, profileNameError } from './authRules';
 import { FriendInviteButton } from './FriendQrCode';
 import { Icon } from './Icon';
 import { optimisePhoto } from './photoOptimise';
@@ -23,13 +24,6 @@ import { formatMemberSince, SEX_LABELS } from './profileDisplay';
 import { SexMark } from './SexMark';
 import type { Sex, User } from './types';
 import { SettingsNavigationContext } from './settingsNavigation';
-
-const PHOTO_ERRORS = new Set([
-  'invalid_photo',
-  'unsupported_photo_type',
-  'photo_too_large',
-  'photo_dimensions_too_large',
-]);
 
 /** Identity is read-only until Edit profile; photo and text drafts share Save and Cancel. */
 export function ProfileIdentity({
@@ -172,8 +166,9 @@ export function ProfileIdentity({
     event?.preventDefault();
     if (saving || !dirty) return;
     setError(null);
-    if (!displayName.trim()) {
-      setError('Enter a name to show in the app.');
+    const nameError = profileNameError(displayName);
+    if (nameError) {
+      setError(nameError);
       return;
     }
     // A sex cannot be changed later, so saving one is confirmed first.
@@ -204,7 +199,7 @@ export function ProfileIdentity({
       if (!photo && !removePhoto) toast.show('Profile saved.');
     } catch (reason) {
       const message =
-        reason instanceof ApiError && PHOTO_ERRORS.has(reason.code)
+        reason instanceof ApiError && PROFILE_PHOTO_ERRORS.has(reason.code)
           ? reason.message
           : authErrorMessage(reason);
       setError(`${detailsSaved ? 'Your details were saved. ' : ''}${message}`);

@@ -15,20 +15,37 @@ import { Icon } from './Icon';
 import { Toast } from './Toast';
 import { PopupDialog } from './PopupDialog';
 import { RoutineMovementList } from './RoutineMovementList';
-import { CARDIO_ROW, SplitVolumeChart } from './SplitVolumeChart';
-import { dayCardioMinutes, daySetCredits, exerciseMuscles, formatVolume } from './splitTargets';
+import { SplitVolumeChart } from './SplitVolumeChart';
+import {
+  canAddSplitDay,
+  hasSplitTemplate,
+  legacySplitRoutine,
+  moveSplitDay,
+  routineFromTemplate,
+  routineSaveError,
+  scheduledSplit,
+  shareSplitError,
+  splitDayContribution as dayContribution,
+  splitDayCount as dayCount,
+  splitDayName,
+  splitDaySummary as daySummary,
+  splitDayTotal,
+  splitFailure as failure,
+  splitsActiveFirst,
+  splitTemplateName,
+  splitTypeNameError,
+  withSplitDayType,
+} from './splitEditing';
+import { exerciseMuscles } from './splitTargets';
 import { useTrainingPreferences } from './trainingPreferencesContext';
 import { useWorkoutTypes } from './workoutTypesContext';
 import { exitGuide, finishGuide, updateGuide, useActiveGuide } from './setupGuides';
 import { formatWeight } from './weightUnits';
+import { NEW_WORKOUT_TYPE_COLOR } from './workoutTypes';
 import { localDate } from './utils';
 import { SPLIT_TEMPLATES } from './trainingSplit';
 import type { Exercise, Routine, RoutineDay, TrainingSplit } from './types';
 import './routines.css';
-
-const failure = (reason: unknown) =>
-  reason instanceof Error ? reason.message : 'Could not save the split. Try again.';
-const dayCount = (days: RoutineDay[]) => `${days.length} ${days.length === 1 ? 'day' : 'days'}`;
 
 function RoutinePattern({ days }: { days: RoutineDay[] }) {
   return (
@@ -63,16 +80,7 @@ function RoutineCycle({ routine }: { routine: Routine }) {
       </div>
       <ol className="routine-cycle">
         {routine.days.map((day, index) => {
-          const sets = day.movements
-            .filter(({ exercise }) => exercise.kind !== 'cardio')
-            .reduce((total, movement) => total + movement.sets.length, 0);
-          const minutes = Math.round(dayCardioMinutes(day));
-          const total = [
-            sets && `${sets} ${sets === 1 ? 'set' : 'sets'}`,
-            minutes && `${minutes} min`,
-          ]
-            .filter(Boolean)
-            .join(' · ');
+          const total = splitDayTotal(day);
           return (
             <li
               key={index}
@@ -83,9 +91,7 @@ function RoutineCycle({ routine }: { routine: Routine }) {
             >
               <div className="routine-cycle-day">
                 <span className="routine-cycle-number">{index + 1}</span>
-                <strong>
-                  {day.workout_type?.name ?? (day.workout_type_id ? 'Removed type' : 'Rest')}
-                </strong>
+                <strong>{splitDayName(day)}</strong>
                 {total && <span className="routine-cycle-total">{total}</span>}
               </div>
               {day.movements.length ? (
@@ -254,48 +260,16 @@ export function RoutinePanel({
       setEditing(saved);
     });
   }
-  const legacy: Routine | null =
-    embedded && trainingSplit && !trainingSplit.routine_id
-      ? {
-          id: 'current-split',
-          name: trainingSplit.name,
-          shared: false,
-          days: trainingSplit.steps.map((step) => ({
-            workout_type_id: step.workout_type_id,
-            workout_type: types.types.find((t) => t.id === step.workout_type_id) ?? null,
-            movements: [],
-          })),
-        }
-      : null;
+  const legacy = embedded ? legacySplitRoutine(trainingSplit, types.types) : null;
   const items = [...(legacy ? [legacy] : []), ...(routines ?? [])];
-  // The active plan leads; stable ordering keeps the rest of the library in place.
-  const displayed = [...items].sort(
-    (a, b) => Number(b.id === activeId) - Number(a.id === activeId),
-  );
+  const displayed = splitsActiveFirst(items, activeId);
   const hasTemplate = (preset: (typeof SPLIT_TEMPLATES)[number]) =>
-    (routines ?? []).some(
-      (routine) =>
-        routine.days.length === preset.types.length &&
-        routine.days.every((day, index) => day.workout_type_id === preset.types[index]),
-    );
+    hasSplitTemplate(routines, preset);
   function template(id: string) {
     const existing = SPLIT_TEMPLATES.find((t) => t.id === id);
     if (existing && hasTemplate(existing)) return;
-    const preset = SPLIT_TEMPLATES.find((t) => t.id === id) ?? {
-      name: 'My split',
-      types: [types.types.find((t) => !t.archived)?.id ?? 'upper'],
-    };
     setError(null);
-    setEditing({
-      id: '',
-      name: preset.name === 'FBEOD' ? 'Full body / Rest' : preset.name,
-      shared: false,
-      days: preset.types.map((typeId) => ({
-        workout_type_id: typeId,
-        workout_type: types.types.find((t) => t.id === typeId) ?? null,
-        movements: [],
-      })),
-    });
+    setEditing(routineFromTemplate(id, types.types));
   }
   const showView = !own && copied.length > 0 && onOpenSplits;
   return (
@@ -498,7 +472,7 @@ export function RoutinePanel({
                 onClick={() => template(preset.id)}
               >
                 <span>
-                  <strong>{preset.id === 'fbeod' ? 'Full body / Rest' : preset.name}</strong>
+                  <strong>{splitTemplateName(preset)}</strong>
                   <Icon name={hasTemplate(preset) ? 'check' : 'plus'} />
                 </span>
                 <span className="split-template-pattern" aria-hidden="true">
@@ -543,16 +517,8 @@ export function RoutinePanel({
               disabled={busy}
               onClick={() =>
                 void run(async () => {
-                  if (
-                    !options.shared &&
-                    options.days.some(
-                      (day) => day.workout_type_id !== null && !day.movements.length,
-                    )
-                  ) {
-                    throw new Error(
-                      'Add an exercise to each workout day in Edit split, then try again.',
-                    );
-                  }
+                  const shareError = shareSplitError(options);
+                  if (shareError) throw new Error(shareError);
                   const saved = await api.routines.save({ ...options, shared: !options.shared });
                   setRoutines((items) =>
                     items!.map((item) => (item.id === saved.id ? saved : item)),
@@ -626,13 +592,7 @@ export function RoutinePanel({
                   saved,
                   ...(items ?? []).filter((item) => item.id !== saved.id),
                 ]);
-              if (schedule)
-                onUsed?.({
-                  name: saved.name,
-                  routine_id: saved.id,
-                  ...schedule,
-                  steps: saved.days.map((day) => ({ workout_type_id: day.workout_type_id })),
-                });
+              if (schedule) onUsed?.(scheduledSplit(saved, schedule));
               focusCard.current = saved.id;
               setEditing(null);
               setExpandedId(saved.id);
@@ -839,32 +799,6 @@ function pageGuideStep(
   };
 }
 
-function daySummary(day: RoutineDay) {
-  if (!day.workout_type_id) return 'Rest';
-  if (!day.movements.length) return 'No exercises';
-  const sets = day.movements
-    .filter(({ exercise }) => exercise.kind !== 'cardio')
-    .reduce((total, movement) => total + movement.sets.length, 0);
-  const minutes = Math.round(dayCardioMinutes(day));
-  const parts = [
-    `${day.movements.length} ${day.movements.length === 1 ? 'exercise' : 'exercises'}`,
-  ];
-  if (sets) parts.push(`${sets} ${sets === 1 ? 'set' : 'sets'}`);
-  if (minutes) parts.push(`${minutes} min`);
-  return parts.join(' · ');
-}
-
-/** What one session of a day adds to the selected chart row, such as "+3 sets". */
-function dayContribution(day: RoutineDay, selected: string | null) {
-  if (!selected || !day.workout_type_id) return null;
-  if (selected === CARDIO_ROW) {
-    const minutes = Math.round(dayCardioMinutes(day));
-    return minutes ? `${minutes} min` : null;
-  }
-  const sets = daySetCredits(day).get(selected);
-  return sets ? `+${formatVolume(sets)} ${sets === 1 ? 'set' : 'sets'}` : null;
-}
-
 function RoutineEditor({
   routine,
   schedule,
@@ -960,12 +894,8 @@ function RoutineEditor({
       days: current.days.map((item, i) => (i === index ? next : item)),
     }));
   }
-  function move(index: number, direction: number) {
-    setValue((current) => {
-      const days = [...current.days];
-      [days[index], days[index + direction]] = [days[index + direction], days[index]];
-      return { ...current, days };
-    });
+  function move(index: number, direction: -1 | 1) {
+    setValue((current) => ({ ...current, days: moveSplitDay(current.days, index, direction) }));
     setOpenDay(index + direction);
   }
   function addDay(next: RoutineDay) {
@@ -975,37 +905,9 @@ function RoutineEditor({
   function submit(event: FormEvent) {
     event.preventDefault();
     if (busy || addingType || types.loading || types.error) return;
-    if (!value.name.trim()) {
-      setValidation('Enter a split name.');
-      return;
-    }
-    const workoutDays = value.days.filter((item) => item.workout_type_id !== null);
-    if (!workoutDays.length) {
-      setValidation('Include at least one workout day.');
-      return;
-    }
-    if (value.shared && workoutDays.some((item) => item.movements.length === 0)) {
-      setValidation('Add exercises to every workout day before sharing.');
-      return;
-    }
-    if (
-      value.days.some((item) =>
-        item.movements.some((m) => m.sets.some((set) => (set.weight_kg ?? 0) > 10000)),
-      )
-    ) {
-      setValidation('Starting weights must be no more than 10,000 kg.');
-      return;
-    }
-    setValidation(null);
-    if (
-      value.days.some(
-        (item) =>
-          item.workout_type_id && types.types.find((t) => t.id === item.workout_type_id)?.archived,
-      )
-    ) {
-      setValidation('Choose an active workout type for every workout day.');
-      return;
-    }
+    const invalid = routineSaveError(value, types.types);
+    setValidation(invalid);
+    if (invalid) return;
     onSave(
       value,
       schedule
@@ -1132,9 +1034,7 @@ function RoutineEditor({
                     <span className="routine-day-bar" aria-hidden="true" />
                     <span className="routine-day-title">
                       <strong>
-                        Day {di + 1} ·{' '}
-                        {item.workout_type?.name ??
-                          (item.workout_type_id ? 'Removed type' : 'Rest')}
+                        Day {di + 1} · {splitDayName(item)}
                       </strong>
                       <small>{daySummary(item)}</small>
                     </span>
@@ -1157,12 +1057,7 @@ function RoutineEditor({
                             onChange={(event) => {
                               const type =
                                 types.types.find((t) => t.id === event.target.value) ?? null;
-                              day(di, {
-                                ...item,
-                                workout_type_id: type?.id ?? null,
-                                workout_type: type,
-                                movements: type ? item.movements : [],
-                              });
+                              day(di, withSplitDayType(item, type));
                             }}
                           >
                             <option value="">Rest</option>
@@ -1227,7 +1122,7 @@ function RoutineEditor({
             <button
               type="button"
               className="pulse-button tonal small routine-add"
-              disabled={value.days.length >= 28 || types.loading}
+              disabled={!canAddSplitDay(value.days) || types.loading}
               onClick={() => {
                 const type = types.types.find((t) => !t.archived);
                 if (type) addDay({ workout_type_id: type.id, workout_type: type, movements: [] });
@@ -1239,7 +1134,7 @@ function RoutineEditor({
             <button
               type="button"
               className="pulse-button tonal small routine-add"
-              disabled={value.days.length >= 28}
+              disabled={!canAddSplitDay(value.days)}
               onClick={() => addDay({ workout_type_id: null, workout_type: null, movements: [] })}
             >
               <Icon name="plus" />
@@ -1268,12 +1163,9 @@ function RoutineEditor({
                 disabled={addingType || !typeName.trim()}
                 onClick={() =>
                   void (async () => {
-                    if (
-                      types.types.some(
-                        (t) => t.name.toLocaleLowerCase() === typeName.trim().toLocaleLowerCase(),
-                      )
-                    ) {
-                      setValidation('That workout type already exists, including removed types.');
+                    const taken = splitTypeNameError(typeName, types.types);
+                    if (taken) {
+                      setValidation(taken);
                       return;
                     }
                     setAddingType(true);
@@ -1281,10 +1173,10 @@ function RoutineEditor({
                     try {
                       const created = await api.createWorkoutType({
                         name: typeName.trim(),
-                        color: '#a855f7',
+                        color: NEW_WORKOUT_TYPE_COLOR,
                       });
                       types.applySaved([...types.types, created]);
-                      if (value.days.length < 28)
+                      if (canAddSplitDay(value.days))
                         addDay({
                           workout_type_id: created.id,
                           workout_type: created,
