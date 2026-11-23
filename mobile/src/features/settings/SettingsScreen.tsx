@@ -37,7 +37,7 @@ import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
-import { restTimerPreference, restTimesPreference } from './devicePreferences';
+import { restTimerPreference } from './devicePreferences';
 import { settingsIcons } from './icons';
 import {
   useAutoSave,
@@ -82,7 +82,6 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
   // While a change is on its way, show it rather than the saved value.
   const shown = (save.isPending && save.variables) || preferences;
   const restTimer = restTimerPreference.use();
-  const restTimes = restTimesPreference.use();
 
   function change(next: TrainingPreferences, confirmation = 'Training preferences saved.') {
     setTrainingError(null);
@@ -135,6 +134,12 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
           onInvalid={() => setTrainingError(WEEKLY_GOAL_ERROR)}
         />
         <Row
+          label="Muscle goals"
+          icon={settingsIcons.goal}
+          iconTint="#16a34a"
+          onPress={() => router.push('/muscle-goals')}
+        />
+        <Row
           label="Workout types"
           icon={settingsIcons.types}
           iconTint="#3b82f6"
@@ -153,6 +158,12 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
           iconTint="#0e8996"
           onPress={() => router.push('/settings/bodyweight')}
         />
+        <Row
+          label="Heart-rate zones"
+          icon={settingsIcons.heartRate}
+          iconTint="#e11d48"
+          onPress={() => router.push('/cardio/zones')}
+        />
       </Section>
       <Section title="Between sets">
         <SwitchRow
@@ -162,7 +173,7 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
           value={restTimer}
           onChange={restTimerPreference.set}
         />
-        <SwitchRow label="Show rest times" value={restTimes} onChange={restTimesPreference.set} />
+        {/* Show rest times returns once the logger draws rest times between sets (PARITY.md). */}
         <ChoiceRow
           label="Default rest"
           disabled={save.isPending}

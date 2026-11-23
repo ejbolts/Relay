@@ -5,6 +5,7 @@ import { spotlightOptions } from '../../../../frontend/src/homeInsights';
 import {
   activityCardSettings,
   homeSectionSettings,
+  TRAINING_BLOCK_CARD_STYLES,
   updateHomeSectionSettings,
   type BodyCheckInMode,
   type CardioGoalCardStyle,
@@ -26,6 +27,7 @@ import { useActivityWeeks } from './StatCards';
 /** The sections with display options, and the settings each one keeps. */
 export const CARD_SETTINGS: Partial<Record<HomeSectionId, keyof HomeSectionSettings>> = {
   'combined-check-in': 'check_in',
+  'training-block': 'training_block',
   workouts: 'workouts',
   'cardio-sessions': 'cardio_sessions',
   zone2: 'zone2',
@@ -61,6 +63,21 @@ export function CardSettingsForm({
               mode === option.id || (mode === 'combined' && option.id === 'combined-single'),
             onSelect: () =>
               onChange(updateHomeSectionSettings(layout, 'check_in', { mode: option.id })),
+          }))}
+        />
+      );
+    }
+    case 'training-block': {
+      const { style } = homeSectionSettings(layout, 'training_block');
+      return (
+        <Choices
+          title="Design"
+          options={TRAINING_BLOCK_CARD_STYLES.map((option) => ({
+            key: option.id,
+            label: option.label,
+            selected: style === option.id,
+            onSelect: () =>
+              onChange(updateHomeSectionSettings(layout, 'training_block', { style: option.id })),
           }))}
         />
       );

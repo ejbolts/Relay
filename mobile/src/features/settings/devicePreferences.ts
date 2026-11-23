@@ -40,6 +40,9 @@ function preference<T>(
   };
   return {
     use: () => useSyncExternalStore(subscribe, read),
+    /** The current value, for code outside React such as the logger's rest rules. */
+    get: read,
+    subscribe,
     set: (value: T) => {
       current = { value };
       try {

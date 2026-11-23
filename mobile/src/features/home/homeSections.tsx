@@ -8,6 +8,7 @@ import {
   type HomeSectionId,
 } from '../../../../frontend/src/homeLayout';
 import type { HeatmapDay } from '../../../../frontend/src/types';
+import { HomeTrainingBlockCard } from '../blocks';
 import { FriendsActivityCard } from '../social';
 import { CheckInCard } from './CheckInCard';
 import { ConsistencyCard } from './ConsistencyCard';
@@ -44,8 +45,9 @@ export interface HomeCardContext {
 export const HOME_CARDS: Record<HomeSectionId, ((context: HomeCardContext) => ReactNode) | null> = {
   'next-workout': () => <UpNextCard />,
   profile: () => <ProfileCard />,
-  // The training block card comes from Training's blocks stream; the coordinator places it here.
-  'training-block': null,
+  'training-block': ({ layout }) => (
+    <HomeTrainingBlockCard style={homeSectionSettings(layout, 'training_block').style} />
+  ),
   workouts: ({ layout }) => <WorkoutsStat settings={activityCardSettings(layout, 'workouts')} />,
   'cardio-sessions': ({ layout }) => (
     <CardioSessionsStat settings={activityCardSettings(layout, 'cardio_sessions')} />

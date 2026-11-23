@@ -228,6 +228,7 @@ beforeEach(() => {
     '/api/sharing': { visibility: 'followers', pending_requests: 2 },
     '/api/sharing/feed': { items: [], friends: 0, with_sessions: 0 },
     '/api/home-layout': defaultHomeLayout(),
+    '/api/training-blocks': { blocks: [] },
     '/api/sharing/notifications': {
       requests: [
         { id: 'r1', display_name: 'Jordan Lee', profile_photo_url: null, since: '2026-11-20' },
@@ -338,6 +339,24 @@ test('Edit split opens the split screen', async () => {
   await open();
   await fireEvent.press(screen.getByRole('button', { name: 'Edit split' }));
   expect(mockRouter.push).toHaveBeenLastCalledWith('/split');
+});
+
+test('a running training block shows its card on Home and opens the blocks', async () => {
+  responses['/api/training-blocks'] = {
+    blocks: [
+      {
+        id: 'b1',
+        name: 'Strength block',
+        start_date: addDays(today, -7),
+        end_date: null,
+        planned_end_date: addDays(today, 48),
+      },
+    ],
+  };
+  await open();
+  const card = await screen.findByRole('button', { name: /^Strength block, Week 2/ });
+  await fireEvent.press(card);
+  expect(mockRouter.push).toHaveBeenCalled();
 });
 
 test('Recent Friends Activity follows Recent records', async () => {

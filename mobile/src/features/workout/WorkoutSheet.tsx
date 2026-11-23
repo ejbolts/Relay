@@ -42,6 +42,7 @@ import { MenuButton } from '../../ui/MenuButton';
 import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
+import { restTimerPreference } from '../settings/devicePreferences';
 import { useBodyMeasurements } from '../training/trainingQueries';
 import { FinishedSummary } from './FinishedSummary';
 import { ExercisePicker } from './ExercisePicker';
@@ -141,6 +142,8 @@ function NoWorkout({ onClose }: { onClose: () => void }) {
 }
 
 function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }) {
+  // Settings › Rest timer off hides the header's rest button, as on the web.
+  const restTimerOn = restTimerPreference.use();
   const router = useRouter();
   const { discard } = useWorkout();
   const insets = useSafeAreaInsets();
@@ -520,18 +523,20 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
             <Icon name="chevronDown" size={18} color={colors.secondary} />
           </Pressable>
           <View style={{ flex: 1 }} />
-          <MenuButton
-            accessibilityLabel="Rest timer"
-            title="Start a rest"
-            items={restMenuItems({ current: null, onPick: logger.startRest })}
-            trigger={{ sf: 'timer', color: colors.secondary, size: 16 }}
-            width={36}
-            height={36}
-            fill={colors.surface2}
-            style={styles.iconButton}
-          >
-            <Icon name="timer" size={18} color={colors.secondary} />
-          </MenuButton>
+          {restTimerOn && (
+            <MenuButton
+              accessibilityLabel="Rest timer"
+              title="Start a rest"
+              items={restMenuItems({ current: null, onPick: logger.startRest })}
+              trigger={{ sf: 'timer', color: colors.secondary, size: 16 }}
+              width={36}
+              height={36}
+              fill={colors.surface2}
+              style={styles.iconButton}
+            >
+              <Icon name="timer" size={18} color={colors.secondary} />
+            </MenuButton>
+          )}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={paused ? 'Resume workout' : 'Pause workout'}

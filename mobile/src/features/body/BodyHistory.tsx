@@ -12,6 +12,7 @@ import {
   type BodyHistoryPeriod,
   type BodyHistoryWeightChange,
 } from '../../../../frontend/src/bodyMeasurementHistory';
+import { bodyHistoryPeriodLabel } from '../../../../frontend/src/bodyTrend';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
 import { formatWeight, weightFromKg, type WeightUnit } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
@@ -20,15 +21,12 @@ import { Icon } from '../../ui/Icon';
 import { MenuButton } from '../../ui/MenuButton';
 import { showMenu } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
+import { bodyTrendPreference } from '../settings/devicePreferences';
 import { Segmented } from '../training/parts';
 import { bodyIcons } from './bodyIcons';
 
 type HistoryView = 'daily' | BodyHistoryPeriod;
-const VIEWS: { view: HistoryView; label: string }[] = [
-  { view: 'daily', label: 'Daily' },
-  { view: 'week', label: 'Avg Week' },
-  { view: 'month', label: 'Avg Monthly' },
-];
+const VIEWS: HistoryView[] = ['daily', 'week', 'month'];
 
 const dayMonth = (date: string) =>
   new Date(`${date}T12:00:00`).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -57,6 +55,10 @@ export function BodyHistory({
 }) {
   const { colors, type } = useTheme();
   const unit = useWeightUnit();
+  // Settings › Bodyweight chart: weekly and monthly rows average or take the median, as on the web.
+  const { statistic } = bodyTrendPreference.use();
+  const viewLabel = (item: HistoryView) =>
+    item === 'daily' ? 'Daily' : bodyHistoryPeriodLabel(item, statistic);
   const [view, setView] = useState<HistoryView>('daily');
   const [rows, setRows] = useState(HISTORY_PAGE_SIZE);
   const daily = bodyHistoryWithWeightChanges(
@@ -68,7 +70,7 @@ export function BodyHistory({
   );
   // A week or month is judged by the goal in force on its last day.
   const summaries = bodyHistoryWithWeightChanges(
-    view === 'daily' ? [] : summarizeBodyHistory(measurements, view, 'average'),
+    view === 'daily' ? [] : summarizeBodyHistory(measurements, view, statistic),
     goals,
     (summary) => summary.end_date,
   );
@@ -91,10 +93,10 @@ export function BodyHistory({
     <>
       <Segmented
         accessibilityLabel="Bodyweight records"
-        values={VIEWS.map((item) => item.label)}
-        selectedIndex={VIEWS.findIndex((item) => item.view === view)}
+        values={VIEWS.map(viewLabel)}
+        selectedIndex={VIEWS.indexOf(view)}
         onChange={(index) => {
-          setView(VIEWS[index].view);
+          setView(VIEWS[index]);
           setRows(HISTORY_PAGE_SIZE);
         }}
       />

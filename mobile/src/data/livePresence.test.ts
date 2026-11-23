@@ -46,6 +46,7 @@ const listeners = () => ({
   onOpen: jest.fn(),
   onActiveWorkout: jest.fn(),
   onFriendPresence: jest.fn(),
+  onNotifications: jest.fn(),
   onSignedOut: jest.fn(),
 });
 let changeAppState: (state: AppStateStatus) => void;
@@ -98,6 +99,8 @@ test('uses bearer auth, sends foreground state and relays server updates', async
   socket.onmessage?.({ data: 'invalid JSON' });
   expect(callbacks.onActiveWorkout).toHaveBeenCalledTimes(1);
   expect(callbacks.onFriendPresence).toHaveBeenCalledWith(presence);
+  socket.onmessage?.({ data: '{"type":"notifications"}' });
+  expect(callbacks.onNotifications).toHaveBeenCalledTimes(1);
 
   changeAppState('background');
   expect(socket.close).toHaveBeenCalledWith(1000);

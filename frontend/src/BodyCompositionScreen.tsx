@@ -31,6 +31,7 @@ import type { BodyGoalKind, BodyHistoryPeriod } from './bodyMeasurementHistory';
 import { BodyHistoryGoalDivider, BodyHistoryWeightChange } from './BodyHistoryWeightChange';
 import { useGoalRemoval } from './useGoalRemoval';
 import { Toast } from './Toast';
+import { bodyHistoryPeriodLabel } from './bodyTrend';
 import { DEFAULT_BODY_TREND_PREFERENCE, type BodyTrendPreference } from './bodyTrendPreference';
 import { PopupDialog } from './PopupDialog';
 import { useSlidingIndicator } from './motionHooks';
@@ -550,8 +551,8 @@ export function BodyCompositionScreen({
         {(
           [
             ['daily', 'Daily'],
-            ['week', `${trendStatistic === 'average' ? 'Avg' : 'Median'} Week`],
-            ['month', `${trendStatistic === 'average' ? 'Avg' : 'Median'} Monthly`],
+            ['week', bodyHistoryPeriodLabel('week', trendStatistic)],
+            ['month', bodyHistoryPeriodLabel('month', trendStatistic)],
           ] as const
         ).map(([view, label]) => (
           <button
