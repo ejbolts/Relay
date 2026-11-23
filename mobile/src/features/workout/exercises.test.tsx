@@ -30,6 +30,7 @@ import {
   startedAt,
   types,
 } from './testFixtures';
+import { takeLaunchReminder, syncInactiveReminder } from './workoutReminders';
 import { useWorkout, WorkoutProvider } from './WorkoutProvider';
 import { WorkoutSheet } from './WorkoutSheet';
 
@@ -54,6 +55,12 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
 jest.mock('./restAlerts', () => ({
   askForRestAlerts: jest.fn(async () => undefined),
   syncRestAlert: jest.fn(async () => undefined),
+}));
+jest.mock('./workoutReminders', () => ({
+  remindAboutRestAlerts: jest.fn(async () => undefined),
+  syncInactiveReminder: jest.fn(async () => undefined),
+  takeLaunchReminder: jest.fn(async () => undefined),
+  onWorkoutReminderOpened: jest.fn(() => () => undefined),
 }));
 jest.mock('../../ui/prompts', () => ({
   promptText: jest.fn(),
@@ -99,6 +106,7 @@ jest.mock('../../data/queries', () => {
   };
 });
 
+let liveWorkout: ReturnType<typeof useWorkout> | null = null;
 const user = { id: 'u1', username: 'preview' } as Awaited<ReturnType<typeof currentUser>>;
 let client: QueryClient;
 
@@ -123,6 +131,7 @@ async function openLogger() {
     const workout = useWorkout();
     useEffect(() => {
       captured.start = workout.start;
+      liveWorkout = workout;
     });
     return null;
   }
@@ -538,4 +547,35 @@ test('merging machines keeps a logged set on its machine, with a third machine s
   expect(merged.movements[0].machinePhotoIds).toEqual(['b', 'c']);
   expect(merged.movements[0].sets[0]).toMatchObject({ completed: true, machine_photo_id: 'b' });
   expect(mergeMachines(logged, 'x', ['y'])).toBe(logged);
+});
+
+describe('the Still working out? reminder', () => {
+  it('opens the logger when it launched the app for this workout', async () => {
+    jest.mocked(takeLaunchReminder).mockResolvedValue(null);
+    await openLogger();
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledTimes(2));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/workout');
+  });
+
+  it("ignores a launch from another workout's reminder", async () => {
+    jest.mocked(takeLaunchReminder).mockResolvedValue(1);
+    await openLogger();
+    await waitFor(() => expect(takeLaunchReminder).toHaveBeenCalled());
+    await act(async () => undefined);
+    expect(mockRouter.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('follows the live workout and is cancelled when it is discarded', async () => {
+    await openLogger();
+    expect(jest.mocked(syncInactiveReminder).mock.calls.at(-1)?.[0]).toEqual(expect.any(Number));
+    await act(async () => liveWorkout!.discard());
+    expect(syncInactiveReminder).toHaveBeenLastCalledWith(null, null);
+  });
+
+  it('is cancelled on sign-out, when the workout engine goes', async () => {
+    await openLogger();
+    jest.mocked(syncInactiveReminder).mockClear();
+    await act(async () => screen.unmount());
+    expect(syncInactiveReminder).toHaveBeenLastCalledWith(null);
+  });
 });
