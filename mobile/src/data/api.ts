@@ -181,10 +181,27 @@ export async function signIn(username: string, password: string) {
   return user;
 }
 
-/** Signs out on this phone at once, even offline; the server session ends now or next launch. */
+/**
+ * Signs out on this phone at once, even offline: the server session ends now or once the app can
+ * reach it. Only if the sign-out can't be saved on the phone must the server end it first.
+ */
 export async function signOut() {
   const origin = serverOrigin();
-  if (await startSignOut(origin)) await endPendingSignOut(origin);
+  const { token, journaled } = await startSignOut(origin);
+  if (!token) return;
+  if (journaled) {
+    await endPendingSignOut(origin);
+    return;
+  }
+  // The sign-out couldn't be saved, so the server must end the session now; until it does, this
+  // phone stays signed in rather than lose the only way to end it.
+  try {
+    await request<void>('/api/auth/logout-session', { method: 'POST' }, token);
+  } catch (error) {
+    if (!(error instanceof ApiError && error.status === 401))
+      throw new Error("Couldn't sign out. Check your connection, then try again.");
+  }
+  await forgetSessionTokenIf(origin, token);
 }
 
 /** A signed-in GET, for queries. */

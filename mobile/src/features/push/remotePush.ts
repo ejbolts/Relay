@@ -272,8 +272,15 @@ async function registerFor(ctx: Ctx, projectId: string): Promise<Registration | 
       platform: Platform.OS,
       local_alerts: LOCAL_ALERTS,
     });
-    // Turned off or signed out while the request was out: the turn-off stays queued.
-    if (!isCurrent(current) || !phoneAlertsPreferred()) return null;
+    // Signed out while the request was out: the sign-out removes the token on the server.
+    if (!isCurrent(current)) return null;
+    // Turned off while the request was out: the token just registered (perhaps a new one) is
+    // removed too, after the turn-off's own removal.
+    if (!phoneAlertsPreferred()) {
+      if (!pendingDeletes().some((item) => item.token === token))
+        setPendingDeletes([...pendingDeletes(), { token, userId: current.userId }]);
+      return null;
+    }
     const saved = { token, userId: current.userId };
     writeJson(REGISTRATION_KEY, saved);
     setPendingDeletes(
@@ -339,6 +346,20 @@ async function syncFor(ctx: Ctx, force: boolean) {
     if (isCurrent(ctx) && phoneAlertsPreferred())
       setStatus({ kind: registration() ? 'enabled' : 'available' });
   }
+}
+
+/**
+ * Sends turn-offs the server hasn't confirmed, on their own: never behind a token lookup or a
+ * registration that is still waiting. Run on reconnect and on return to the app.
+ */
+export function flushTurnOffs(): Promise<void> {
+  const ctx = ctxNow();
+  if (!ctx || !pendingDeletes().some((item) => item.userId === ctx.userId))
+    return Promise.resolve();
+  return inTurnFor(ctx, flushDeletes).then(
+    () => undefined,
+    () => undefined,
+  );
 }
 
 /** Turns Phone alerts on from Settings: asks for permission and registers this phone. */

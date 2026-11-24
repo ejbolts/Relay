@@ -6,6 +6,7 @@ import { AppState } from 'react-native';
 import { setUpHandler } from '../workout/restAlerts';
 import {
   flushLocalReminderReport,
+  flushTurnOffs,
   remoteAlertRoute,
   retryLocalReminderReport,
   setRemotePushAccount,
@@ -31,12 +32,14 @@ export function RemotePushSync({ userId }: { userId: string }) {
         return;
       }
       if (state !== 'active') return;
+      void flushTurnOffs();
       void syncRemotePush();
       retryLocalReminderReport();
     });
     // Back online: registers, sends turn-offs and reports that couldn't go out offline.
     const net = onlineManager.subscribe((online) => {
       if (!online) return;
+      void flushTurnOffs();
       void syncRemotePush();
       retryLocalReminderReport();
     });

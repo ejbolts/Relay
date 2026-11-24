@@ -3,12 +3,13 @@ import * as SecureStore from 'expo-secure-store';
 // The session token lives in the device's keychain or keystore, never in plain storage. Each is
 // saved with the server it belongs to, so pointing the app at another server starts signed out.
 const SESSION = 'relay.session';
-// Sign-outs the server has not confirmed yet, one per session. The token is already gone from
-// SESSION, so the app is signed out; these copies only let the app end each session on the
-// server too, so its alerts stop. Each is kept under its own key (values have a size limit), with
-// a small index of their ids. Earlier versions kept them all under LEGACY_PENDING.
-const PENDING_INDEX = 'relay.pending-sign-outs';
-const pendingEntry = (id: string) => `relay.pending-sign-out.${id}`;
+// Sign-outs the server has not confirmed yet, one per session: a journal of numbered slots. The
+// token is already gone from SESSION, so the app is signed out; these copies only let the app end
+// each session on the server too, so its alerts stop. SecureStore can't list its keys, so the
+// slots have fixed names that the app reads in turn: there is no index that could fail or be left
+// behind. Earlier versions kept them all under LEGACY_PENDING.
+const JOURNAL_SLOTS = 32;
+const journalSlot = (slot: number) => `relay.sign-out-journal.${slot}`;
 const LEGACY_PENDING = 'relay.pending-sign-out';
 
 type Saved = { origin: string; token: string };
@@ -55,100 +56,99 @@ export const forgetSessionTokenIf = (origin: string, token: string) =>
 const isSaved = (item: unknown): item is Saved =>
   typeof (item as Saved | null)?.origin === 'string' && !!(item as Saved).token;
 
-/** The pending ids. Throws when the store can't be read, so nothing is overwritten. */
-async function readIndex(): Promise<string[]> {
-  const raw = await SecureStore.getItemAsync(PENDING_INDEX);
-  try {
-    const ids = JSON.parse(raw ?? '[]') as unknown;
-    return Array.isArray(ids) ? ids.filter((id): id is string => typeof id === 'string') : [];
-  } catch {
-    return [];
+type Slot = { slot: number; item: Saved | null } | { slot: number; unreadable: true };
+
+/** Every journal slot: what it holds, null when empty, or unreadable for now. */
+async function readJournal(): Promise<Slot[]> {
+  const slots: Slot[] = [];
+  for (let slot = 0; slot < JOURNAL_SLOTS; slot += 1) {
+    let raw: string | null;
+    try {
+      raw = await SecureStore.getItemAsync(journalSlot(slot));
+    } catch {
+      slots.push({ slot, unreadable: true });
+      continue;
+    }
+    let item: unknown = null;
+    try {
+      item = JSON.parse(raw ?? 'null');
+    } catch {
+      // Corrupt: nothing can be sent for it, so the slot counts as free.
+    }
+    slots.push({ slot, item: isSaved(item) ? item : null });
   }
+  return slots;
 }
 
-const writeIndex = (ids: string[]) =>
-  ids.length
-    ? SecureStore.setItemAsync(PENDING_INDEX, JSON.stringify(ids))
-    : SecureStore.deleteItemAsync(PENDING_INDEX);
+/**
+ * Saves a sign-out in a free slot, never over one that holds (or might hold) another. True once
+ * it is saved: from then on the app can always find it.
+ */
+async function journal(item: Saved, slots: Slot[]): Promise<boolean> {
+  if (slots.some((entry) => 'item' in entry && entry.item?.token === item.token)) return true;
+  for (const entry of slots) {
+    if (!('item' in entry) || entry.item) continue;
+    try {
+      await SecureStore.setItemAsync(journalSlot(entry.slot), JSON.stringify(item));
+      return true;
+    } catch {
+      // Try the next free slot.
+    }
+  }
+  return false;
+}
 
-const newId = () => `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
-
-/** Moves sign-outs an earlier version saved under one key into their own keys. */
-async function withLegacy(ids: string[]): Promise<string[]> {
-  const raw = await SecureStore.getItemAsync(LEGACY_PENDING);
-  if (!raw) return ids;
+/** Moves sign-outs an earlier version saved under one key into the journal. */
+async function withLegacy(slots: Slot[]): Promise<Slot[]> {
+  let raw: string | null;
+  try {
+    raw = await SecureStore.getItemAsync(LEGACY_PENDING);
+  } catch {
+    return slots; // Left where it is until it can be read.
+  }
+  if (!raw) return slots;
   let saved: unknown = null;
   try {
     saved = JSON.parse(raw);
   } catch {
     // Unreadable: there is nothing to keep.
   }
-  const items = (Array.isArray(saved) ? saved : [saved]).filter(isSaved);
-  const next = [...ids];
-  for (const item of items) {
-    const id = newId();
-    await SecureStore.setItemAsync(pendingEntry(id), JSON.stringify(item));
-    next.push(id);
-  }
-  await writeIndex(next);
-  await SecureStore.deleteItemAsync(LEGACY_PENDING);
-  return next;
+  let moved = true;
+  for (const item of (Array.isArray(saved) ? saved : [saved]).filter(isSaved))
+    moved = (await journal(item, slots)) && moved;
+  // Removed only once every sign-out in it is safe in the journal.
+  if (moved) await SecureStore.deleteItemAsync(LEGACY_PENDING).catch(() => undefined);
+  return moved ? readJournal() : slots;
 }
 
-/** Signs out on this device at once, keeping the token to end its server session later. */
+/**
+ * Signs out on this device, keeping the token to end its server session later. The token is only
+ * removed once its sign-out is saved where the app will find it; when it can't be saved, it is
+ * kept and `journaled` is false, so the caller ends the session on the server first.
+ */
 export const startSignOut = (origin: string) =>
   inTurn(async () => {
     const token = await read(SESSION, origin);
-    if (token) {
-      try {
-        const ids = await withLegacy(await readIndex());
-        const id = newId();
-        // The entry first: an index never names an entry that wasn't saved.
-        await SecureStore.setItemAsync(pendingEntry(id), JSON.stringify({ origin, token }));
-        await writeIndex([...ids, id]);
-      } catch {
-        // The store couldn't be read: saved sign-outs are left as they are.
-      }
+    if (!token) {
+      await SecureStore.deleteItemAsync(SESSION);
+      return { token: null, journaled: true };
     }
-    await SecureStore.deleteItemAsync(SESSION);
-    return token;
+    const journaled = await journal({ origin, token }, await withLegacy(await readJournal()));
+    if (journaled) await SecureStore.deleteItemAsync(SESSION);
+    return { token, journaled };
   });
 
 /** The sessions on `origin` signed out here that the server has not ended yet, oldest first. */
 export const pendingSignOuts = (origin: string) =>
   inTurn(async () => {
-    const found: { id: string; token: string }[] = [];
-    let ids: string[];
-    try {
-      ids = await withLegacy(await readIndex());
-    } catch {
-      return found;
-    }
-    const missing: string[] = [];
-    for (const id of ids) {
-      let raw: string | null;
-      try {
-        raw = await SecureStore.getItemAsync(pendingEntry(id));
-      } catch {
-        continue; // Unreadable for now: kept for the next try.
-      }
-      let item: unknown = null;
-      try {
-        item = JSON.parse(raw ?? 'null');
-      } catch {
-        // Corrupt: nothing can be sent for it.
-      }
-      if (!isSaved(item)) missing.push(id);
-      else if (item.origin === origin) found.push({ id, token: item.token });
-    }
-    if (missing.length) await writeIndex(ids.filter((id) => !missing.includes(id)));
-    return found;
+    const slots = await withLegacy(await readJournal());
+    return slots.flatMap((entry) =>
+      'item' in entry && entry.item?.origin === origin
+        ? [{ id: String(entry.slot), token: entry.item.token }]
+        : [],
+    );
   });
 
 /** The server has ended this session, or it had already ended. */
 export const finishSignOut = (id: string) =>
-  inTurn(async () => {
-    const ids = await readIndex();
-    await SecureStore.deleteItemAsync(pendingEntry(id));
-    await writeIndex(ids.filter((item) => item !== id));
-  });
+  inTurn(() => SecureStore.deleteItemAsync(journalSlot(Number(id))));

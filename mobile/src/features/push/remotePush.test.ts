@@ -12,6 +12,7 @@ import {
   disableRemotePush,
   enableRemotePush,
   flushLocalReminderReport,
+  flushTurnOffs,
   LOCAL_ALERTS,
   remoteAlertRoute,
   remotePushAvailability,
@@ -317,6 +318,44 @@ describe('registration', () => {
     await syncRemotePush(true);
     expect(calls('DELETE')).toEqual([]);
     expect(remotePushStatus()).toEqual({ kind: 'enabled' });
+  });
+
+  test('a new token registered while alerts were being turned off is removed too', async () => {
+    await syncRemotePush(true);
+    sent.mockClear();
+    const ROTATED = 'ExponentPushToken[rotated]';
+    lookup.mockResolvedValueOnce({ type: 'expo', data: ROTATED } as never);
+    let release: () => void = () => undefined;
+    sent.mockImplementationOnce(
+      () => new Promise<undefined>((done) => (release = () => done(undefined))),
+    );
+    const refresh = syncRemotePush(true);
+    await jest.advanceTimersByTimeAsync(0);
+    expect(calls('POST')[0][2]).toMatchObject({ token: ROTATED });
+    const off = disableRemotePush();
+    release();
+    await refresh;
+    await off;
+    expect(calls('DELETE').map(([, , body]) => body)).toEqual([
+      { token: TOKEN },
+      { token: ROTATED },
+    ]);
+    expect(turnOffWaiting()).toBe(false);
+    expect(remotePushStatus()).toEqual({ kind: 'available' });
+  });
+
+  test('a reconnect sends a waiting turn-off even while a token lookup is stuck', async () => {
+    await syncRemotePush(true);
+    lookup.mockImplementationOnce(() => new Promise(() => undefined) as never);
+    void syncRemotePush(true); // Stuck looking the token up.
+    await jest.advanceTimersByTimeAsync(0);
+    sent.mockRejectedValueOnce(new Error('Could not reach Relay.'));
+    await expect(disableRemotePush()).rejects.toThrow(TURN_OFF_WAITING);
+    sent.mockClear();
+    // Back online: the same stuck refresh is still pending, but the turn-off goes out.
+    await flushTurnOffs();
+    expect(calls('DELETE')).toEqual([[TOKENS, 'DELETE', { token: TOKEN }, 'bearer-alice']]);
+    expect(turnOffWaiting()).toBe(false);
   });
 
   test('a turn-off is kept when the server refuses it for now', async () => {
