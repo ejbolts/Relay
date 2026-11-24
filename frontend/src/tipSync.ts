@@ -321,7 +321,9 @@ export function createTipSync({
   /** The pending timer is a sync asked for now (sign-in, return or a hold ending), not a pause. */
   let soon = false;
   let running = false;
-  let again = false;
+  /** While a request was out: a sync was asked for now, or a change waits for its pause. */
+  let askedMeanwhile = false;
+  let changedMeanwhile = false;
   let dirty = false;
   let stopped = false;
   let unsupported = false;
@@ -346,6 +348,12 @@ export function createTipSync({
   }
 
   function syncSoon() {
+    // Asked for while a request is out: it runs as soon as that request's reply is in, even
+    // when the reply is a refusal, since the account may be back by now.
+    if (running) {
+      askedMeanwhile = true;
+      return;
+    }
     if (timer !== undefined && soon && due <= now()) return;
     arm(now(), true);
   }
@@ -353,7 +361,8 @@ export function createTipSync({
   async function run() {
     if (stopped || unsupported) return;
     if (running) {
-      again = true;
+      if (soon) askedMeanwhile = true;
+      else changedMeanwhile = true;
       return;
     }
     // Read the tips before the hold: a tab that shows a nudge places its hold before saving the
@@ -401,9 +410,13 @@ export function createTipSync({
       if (error instanceof TipSyncBusy) retries += 1;
     } finally {
       running = false;
-      const pause = again && !refused ? now() + TIP_SYNC_DEBOUNCE_MS : undefined;
-      again = false;
-      if (retryAt !== undefined && (pause === undefined || retryAt <= pause)) arm(retryAt, true);
+      const asked = askedMeanwhile;
+      // A refusal cancels the save a change was waiting to make; it stays on this device.
+      const pause = changedMeanwhile && !refused ? now() + TIP_SYNC_DEBOUNCE_MS : undefined;
+      askedMeanwhile = changedMeanwhile = false;
+      if (asked) arm(now(), true);
+      else if (retryAt !== undefined && (pause === undefined || retryAt <= pause))
+        arm(retryAt, true);
       else if (pause !== undefined) arm(pause, false);
     }
   }
@@ -421,6 +434,11 @@ export function createTipSync({
       if (refused) return;
       // A sync already asked for will carry this change.
       if (timer !== undefined && soon) return;
+      // While a request is out, the pause starts once its reply is in (and a refusal cancels it).
+      if (running) {
+        changedMeanwhile = true;
+        return;
+      }
       arm(now() + TIP_SYNC_DEBOUNCE_MS, false);
     },
     /** Sign-in: fetch and merge now. */

@@ -386,6 +386,62 @@ describe('createTipSync', () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(send).toHaveBeenCalledTimes(5);
   });
+
+  it('runs a sync asked for during a refused request once its reply is in', async () => {
+    let refuse: (value: unknown) => void = () => {};
+    send.mockImplementationOnce(() => new Promise((resolve) => (refuse = resolve)));
+    const sync = make();
+    local = { ...local, seen: { swap: 'dismissed' } };
+    sync.changed();
+    await vi.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS);
+    expect(send).toHaveBeenCalledTimes(1);
+    // The account signs in again elsewhere and this tab comes back, while the old request is out.
+    sync.refresh();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(send).toHaveBeenCalledTimes(1);
+    refuse(TIP_SYNC_REFUSED);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(server.seen).toEqual({ swap: 'dismissed' });
+  });
+
+  it('cancels a save a change was waiting for when its request is refused', async () => {
+    let refuse: (value: unknown) => void = () => {};
+    send.mockImplementationOnce(() => new Promise((resolve) => (refuse = resolve)));
+    const sync = make();
+    sync.syncNow();
+    await vi.advanceTimersByTimeAsync(0);
+    // A change while the request is out, then the refusal.
+    local = { ...local, seen: { swap: 'dismissed' } };
+    sync.changed();
+    await vi.advanceTimersByTimeAsync(1000);
+    refuse(TIP_SYNC_REFUSED);
+    await vi.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS * 3);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(local.seen).toEqual({ swap: 'dismissed' });
+  });
+
+  it('saves a change made during an accepted request once the pause after it ends', async () => {
+    let release: (value: unknown) => void = () => {};
+    send.mockImplementationOnce(
+      (state) =>
+        new Promise((resolve) => {
+          server = mergeTipStates(server, state);
+          release = resolve;
+        }),
+    );
+    const sync = make();
+    sync.syncNow();
+    await vi.advanceTimersByTimeAsync(0);
+    local = { ...local, seen: { swap: 'dismissed' } };
+    sync.changed();
+    release(server);
+    await vi.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS - 1);
+    expect(send).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(server.seen).toEqual({ swap: 'dismissed' });
+  });
 });
 
 describe('tipsAfterReply', () => {

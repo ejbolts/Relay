@@ -811,4 +811,27 @@ describe('tips that follow the account', () => {
     expect((server.shows as Record<string, number>).reorder).toBeUndefined();
     expect(server.lastShown).toBe(0);
   });
+
+  it('closes a nudge when this tab’s own sync adopts a restore that dismissed it', async () => {
+    let reply: (value: Record<string, unknown>) => void = () => {};
+    vi.mocked(api.saveTipState).mockImplementationOnce(
+      () => new Promise((resolve) => (reply = resolve)),
+    );
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' }, syncGeneration: 'g1' });
+    await render();
+    // The nudge opens while the sign-in sync is still out.
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // Its reply is from a restore in which the tip was dismissed.
+    await act(async () =>
+      reply({ seen: { plates: 'learned', reorder: 'dismissed' }, generation: 'g2' }),
+    );
+    await advance(0);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice')).toMatchObject({
+      seen: { reorder: 'dismissed' },
+      syncGeneration: 'g2',
+    });
+  });
 });

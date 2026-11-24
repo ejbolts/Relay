@@ -45,7 +45,7 @@ import {
   saveTips,
   sendTips,
 } from './tipsStorage';
-import { createTipSync, sameTips, tipSyncHoldUntil, type TipSync } from './tipSync';
+import { createTipSync, tipSyncHoldUntil, type TipSync } from './tipSync';
 import './tips.css';
 
 type Environment = TipEnvironment;
@@ -248,9 +248,13 @@ export function TipsProvider({
           // Another tab may have saved since this one last heard: replies merge into that.
           read: () => loadSavedTips(account) ?? stateRef.current,
           write: (next) => {
+            const previous = stateRef.current;
             stateRef.current = next;
             setState(next);
             saveTips(account, next);
+            // A reply (such as an adopted restore that dismisses the showing tip) is reconciled
+            // with the showing tip like another tab's change.
+            reconcileActive(previous, next);
           },
           // The server refuses the tips if this browser is now signed in to another account.
           send: (tips, generation) => sendTips(account, tips, generation),
@@ -266,24 +270,24 @@ export function TipsProvider({
       const next = withTipReminders(loadTips(account), Date.now());
       stateRef.current = next;
       setState(next);
-      if (activeRef.current) {
-        // Another tab (or a sync reply) left the showing tip as it is: a nudge whose showing is
-        // still ours, or any tip when only sync bookkeeping changed. It stays up, and a nudge
-        // keeps its rollback.
-        const currentNudge = activeNudge.current;
-        const unaffected = currentNudge
-          ? showingStillOurs(next, currentNudge)
-          : sameTips(
-              { ...previous, syncGeneration: undefined },
-              { ...next, syncGeneration: undefined },
-            );
-        if (unaffected) return;
-        if (currentNudge) {
-          interrupt(Date.now());
-          return;
-        }
-      }
-      api.close();
+      reconcileActive(previous, next);
+    };
+    /**
+     * Another tab or a sync reply changed the tips while one shows. It stays up when the change
+     * leaves it as it is: a nudge whose showing is still ours (keeping its rollback), or another
+     * tip whose status is unchanged while tips stay on. Otherwise a nudge goes through the guarded
+     * rollback, which leaves newer state alone, and any other tip closes.
+     */
+    const reconcileActive = (previous: TipState, next: TipState) => {
+      const id = activeRef.current;
+      if (!id) return;
+      const currentNudge = activeNudge.current;
+      const unaffected = currentNudge
+        ? showingStillOurs(next, currentNudge)
+        : next.enabled && next.seen[id] === previous.seen[id];
+      if (unaffected) return;
+      if (currentNudge) interrupt(Date.now());
+      else api.close();
     };
     /** The stored tips still hold this nudge's showing and nothing newer has replaced it. */
     const showingStillOurs = (stored: TipState, currentNudge: ShownNudge) =>
