@@ -156,74 +156,94 @@ function placeEmbedPhase(project) {
   app.buildPhases.splice(resources < 0 ? app.buildPhases.length : resources + 1, 0, phase);
 }
 
+/** The extension target, when an earlier prebuild (without --clean) already added it. */
+function existingTarget(project) {
+  // The xcode library stores the name it is given quoted.
+  return project.pbxTargetByName(TARGET) || project.pbxTargetByName(quote(TARGET)) || null;
+}
+
 /** Adds the extension target, builds its Swift, and embeds it in the app. */
+function addTarget(project, bundleIdentifier) {
+  // The Expo template has neither section, which addTarget's dependency step needs.
+  const objects = project.hash.project.objects;
+  objects.PBXTargetDependency = objects.PBXTargetDependency || {};
+  objects.PBXContainerItemProxy = objects.PBXContainerItemProxy || {};
+
+  // The extension's folder in Xcode's navigator, beside the app's.
+  const group = project.addPbxGroup([...SWIFT_FILES, 'Info.plist'], TARGET, TARGET);
+  project.addToPbxGroup(group.uuid, project.getFirstProject().firstProject.mainGroup);
+
+  // addTarget also embeds the .appex in the app (a "Copy Files" phase to PlugIns) and makes the
+  // app depend on it, so it builds first.
+  const target = project.addTarget(TARGET, 'app_extension', TARGET, bundleIdentifier);
+  project.addBuildPhase(SWIFT_FILES, 'PBXSourcesBuildPhase', 'Sources', target.uuid);
+  project.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', target.uuid);
+  // SwiftUI, WidgetKit and ActivityKit link automatically from their Swift imports.
+  project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', target.uuid);
+  placeEmbedPhase(project);
+  // The xcode library leaves unset file types as `undefined`, which it would write out as the
+  // literal word and Xcode would read as a file type.
+  const ours = new Set([...SWIFT_FILES, 'Info.plist', `${TARGET}.appex`].map(quote));
+  const references = project.pbxFileReferenceSection();
+  for (const key of Object.keys(references)) {
+    const reference = references[key];
+    if (typeof reference !== 'object' || !ours.has(quote(unquote(reference.path)))) continue;
+    for (const field of Object.keys(reference))
+      if (reference[field] === undefined || reference[field] === 'undefined')
+        delete reference[field];
+  }
+  return target.pbxNativeTarget;
+}
+
+/**
+ * Sets the extension's build settings, on every prebuild: a repeat without --clean may follow a
+ * change to the app's bundle identifier (a development variant, say), and the extension's must
+ * keep its prefix.
+ */
+function applySettings(project, target, bundleIdentifier) {
+  const settings = {
+    APPLICATION_EXTENSION_API_ONLY: 'YES',
+    CLANG_ENABLE_MODULES: 'YES',
+    CODE_SIGN_STYLE: 'Automatic',
+    GENERATE_INFOPLIST_FILE: 'NO',
+    INFOPLIST_FILE: quote(`${TARGET}/Info.plist`),
+    IPHONEOS_DEPLOYMENT_TARGET: DEPLOYMENT_TARGET,
+    PRODUCT_BUNDLE_IDENTIFIER: quote(bundleIdentifier),
+    SWIFT_VERSION: '5.0',
+    TARGETED_DEVICE_FAMILY: quote('1,2'),
+  };
+  // The app's team, when it is set in the project (EAS sets it on every target it signs).
+  const team = IOSConfig.XcodeUtils.getBuildConfigurationsForListId(
+    project,
+    project.getFirstTarget().firstTarget.buildConfigurationList,
+  )
+    .map(([, item]) => item.buildSettings.DEVELOPMENT_TEAM)
+    .find(Boolean);
+  if (team) settings.DEVELOPMENT_TEAM = team;
+
+  const configurations = IOSConfig.XcodeUtils.getBuildConfigurationsForListId(
+    project,
+    target.buildConfigurationList,
+  );
+  for (const [, item] of configurations) {
+    Object.assign(item.buildSettings, settings);
+    if (item.name === 'Debug') {
+      item.buildSettings.SWIFT_ACTIVE_COMPILATION_CONDITIONS = 'DEBUG';
+      item.buildSettings.SWIFT_OPTIMIZATION_LEVEL = quote('-Onone');
+    }
+  }
+}
+
+/** Adds the extension target once, and brings its settings up to date on every run. */
+function applyWidgetTarget(project, bundleIdentifier) {
+  const target = existingTarget(project) || addTarget(project, bundleIdentifier);
+  applySettings(project, target, bundleIdentifier);
+  return project;
+}
+
 function withWidgetTarget(config, bundleIdentifier) {
   return withXcodeProject(config, (config) => {
-    const project = config.modResults;
-    // Prebuild without --clean runs again over the same project.
-    // The xcode library stores the name it is given quoted.
-    if (project.pbxTargetByName(TARGET) || project.pbxTargetByName(quote(TARGET))) return config;
-
-    // The Expo template has neither section, which addTarget's dependency step needs.
-    const objects = project.hash.project.objects;
-    objects.PBXTargetDependency = objects.PBXTargetDependency || {};
-    objects.PBXContainerItemProxy = objects.PBXContainerItemProxy || {};
-
-    // The extension's folder in Xcode's navigator, beside the app's.
-    const group = project.addPbxGroup([...SWIFT_FILES, 'Info.plist'], TARGET, TARGET);
-    project.addToPbxGroup(group.uuid, project.getFirstProject().firstProject.mainGroup);
-
-    // addTarget also embeds the .appex in the app (a "Copy Files" phase to PlugIns) and makes the
-    // app depend on it, so it builds first.
-    const target = project.addTarget(TARGET, 'app_extension', TARGET, bundleIdentifier);
-    project.addBuildPhase(SWIFT_FILES, 'PBXSourcesBuildPhase', 'Sources', target.uuid);
-    project.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', target.uuid);
-    // SwiftUI, WidgetKit and ActivityKit link automatically from their Swift imports.
-    project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', target.uuid);
-    placeEmbedPhase(project);
-    // The xcode library leaves unset file types as `undefined`, which it would write out as the
-    // literal word and Xcode would read as a file type.
-    const ours = new Set([...SWIFT_FILES, 'Info.plist', `${TARGET}.appex`].map(quote));
-    const references = project.pbxFileReferenceSection();
-    for (const key of Object.keys(references)) {
-      const reference = references[key];
-      if (typeof reference !== 'object' || !ours.has(quote(unquote(reference.path)))) continue;
-      for (const field of Object.keys(reference))
-        if (reference[field] === undefined || reference[field] === 'undefined')
-          delete reference[field];
-    }
-
-    const settings = {
-      APPLICATION_EXTENSION_API_ONLY: 'YES',
-      CLANG_ENABLE_MODULES: 'YES',
-      CODE_SIGN_STYLE: 'Automatic',
-      GENERATE_INFOPLIST_FILE: 'NO',
-      INFOPLIST_FILE: quote(`${TARGET}/Info.plist`),
-      IPHONEOS_DEPLOYMENT_TARGET: DEPLOYMENT_TARGET,
-      PRODUCT_BUNDLE_IDENTIFIER: quote(bundleIdentifier),
-      SWIFT_VERSION: '5.0',
-      TARGETED_DEVICE_FAMILY: quote('1,2'),
-    };
-    // The app's team, when it is set in the project (EAS sets it on every target it signs).
-    const team = IOSConfig.XcodeUtils.getBuildConfigurationsForListId(
-      project,
-      project.getFirstTarget().firstTarget.buildConfigurationList,
-    )
-      .map(([, item]) => item.buildSettings.DEVELOPMENT_TEAM)
-      .find(Boolean);
-    if (team) settings.DEVELOPMENT_TEAM = team;
-
-    const configurations = IOSConfig.XcodeUtils.getBuildConfigurationsForListId(
-      project,
-      target.pbxNativeTarget.buildConfigurationList,
-    );
-    for (const [, item] of configurations) {
-      Object.assign(item.buildSettings, settings);
-      if (item.name === 'Debug') {
-        item.buildSettings.SWIFT_ACTIVE_COMPILATION_CONDITIONS = 'DEBUG';
-        item.buildSettings.SWIFT_OPTIMIZATION_LEVEL = quote('-Onone');
-      }
-    }
+    applyWidgetTarget(config.modResults, bundleIdentifier);
     return config;
   });
 }
@@ -257,3 +277,4 @@ module.exports = withRelayLiveActivity;
 module.exports.TARGET = TARGET;
 module.exports.widgetBundleId = widgetBundleId;
 module.exports.widgetInfoPlist = widgetInfoPlist;
+module.exports.applyWidgetTarget = applyWidgetTarget;
