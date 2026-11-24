@@ -40,6 +40,7 @@ from .client_versions import ClientVersion, ClientVersionGateMiddleware, normali
 from .config import Settings, get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import api_error
+from .expo_delivery import expo_dispatcher
 from .expo_push import expo_push_router
 from .feedback import admin_feedback_router, feedback_router
 from .frontend import FrontendFiles
@@ -192,6 +193,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await workout_reminders.stop()
             await rest_timer_notifications.stop()
+            expo_dispatcher.cancel_timers()
             await processor.stop()
 
     # The interactive docs describe every endpoint, so a public server keeps them off by default.

@@ -228,6 +228,15 @@ def backfill_completed_video_links(
     return linked
 
 
+# What the phone shows for each video alert, without the workout's name: a phone can still show
+# an alert that reaches it after its account signed out there.
+NATIVE_VIDEO_BODIES = {
+    "Workout video ready": "Your workout video is ready on YouTube.",
+    "Workout video needs attention": "YouTube could not finish processing a workout video.",
+    "Relay needs YouTube permission": "Reconnect YouTube to finish checking a workout video.",
+}
+
+
 class SessionProcessor:
     """A deliberately small persistent-state, in-process queue for one home PC."""
 
@@ -495,6 +504,9 @@ class SessionProcessor:
                     title=notification[0],
                     body=notification[1],
                     user_id=owner_id,
+                    # The app opens Videos; the phone shows no workout name.
+                    data={"screen": "videos"},
+                    native_body=NATIVE_VIDEO_BODIES.get(notification[0]),
                 )
 
     def _trim_window(self, source_duration_ms: int | None) -> tuple[float, float] | None:

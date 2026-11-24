@@ -12,9 +12,10 @@ import pytest
 from conftest import TEST_PASSWORD
 from sqlalchemy import func, select
 
-from app import notifications
+from app import expo_delivery, notifications
 from app.config import Settings
 from app.database import SessionLocal
+from app.expo_delivery import ExpoAlert, expo_dispatcher
 from app.models import ActiveWorkoutSync, ExpoPushToken, PushSubscription, UserSession
 from app.push_security import MAX_EXPO_PUSH_TOKENS
 
@@ -25,6 +26,24 @@ PHONE = "ExponentPushToken[alice-phone-0001]"
 TABLET = "ExponentPushToken[alice-tablet-0002]"
 BOB_PHONE = "ExponentPushToken[bob-phone-00003]"
 WEB = "https://web.push.apple.com/alice-browser"
+# The real senders, kept before the autouse fixture replaces them.
+POST_EXPO = expo_delivery.post_expo
+FETCH_RECEIPTS = expo_delivery.fetch_receipts
+
+
+@pytest.fixture(autouse=True)
+def dispatcher(monkeypatch):
+    """Native alerts run at once in these tests, and never reach Expo for real."""
+    expo_dispatcher.reset()
+    monkeypatch.setattr(expo_dispatcher, "inline", True)
+
+    def refuse(*_args, **_kwargs):
+        raise AssertionError("A test tried to call Expo's push service for real.")
+
+    monkeypatch.setattr(expo_delivery, "post_expo", refuse)
+    monkeypatch.setattr(expo_delivery, "fetch_receipts", refuse)
+    yield expo_dispatcher
+    expo_dispatcher.reset()
 
 
 @pytest.fixture
@@ -36,10 +55,11 @@ def expo(monkeypatch):
     def post(messages, settings):
         calls.extend(messages)
         return [
-            replies.get(message["to"], {"status": "ok", "id": "ticket"}) for message in messages
+            replies.get(message["to"], {"status": "ok", "id": f"ticket-{message['to']}"})
+            for message in messages
         ]
 
-    monkeypatch.setattr(notifications, "_post_expo", post)
+    monkeypatch.setattr(expo_delivery, "post_expo", post)
     return calls, replies
 
 
@@ -292,16 +312,46 @@ def test_still_working_out_skips_a_phone_that_scheduled_it_itself(client, expo, 
     assert calls[0]["ttl"] == 1800
 
 
-def test_a_covered_phone_alone_counts_as_alerted_so_the_reminder_is_not_retried(client, expo):
+def test_a_reminder_retried_for_its_browsers_reaches_the_app_once(client, expo):
+    register(client)
+    start_workout(client)
+    reminders = client.app.state.workout_reminders
+    reminders.deliver_inactive()
+    reminders.deliver_inactive()  # No browser got it, so it is retried as before.
+    calls, _ = expo
+    assert to(calls) == [PHONE]
+    with SessionLocal() as db:
+        assert db.get(ActiveWorkoutSync, client.user["id"]).reminder_delivered is False
+
+
+def test_a_covered_phone_never_hides_a_failed_browser_alert(client, expo, monkeypatch):
+    import pywebpush
+    from pywebpush import WebPushException
+
+    attempts: list[str] = []
+
+    def fail_once(subscription_info, **_):
+        attempts.append(subscription_info["endpoint"])
+        if len(attempts) == 1:
+            raise WebPushException("temporarily unavailable")
+
+    monkeypatch.setattr(pywebpush, "webpush", fail_once)
+    with SessionLocal() as db:
+        db.add(PushSubscription(user_id=client.user["id"], endpoint=WEB, p256dh="k", auth="a"))
+        db.commit()
     register(client)
     started = start_workout(client)
     due = server_due_ms(client.user["id"])
     client.put(
-        LOCAL_REMINDER, json={"token": PHONE, "workout_started_at": str(started), "due_at_ms": due}
+        LOCAL_REMINDER,
+        json={"token": PHONE, "workout_started_at": str(started), "due_at_ms": due},
     )
     reminders = client.app.state.workout_reminders
     reminders.deliver_inactive()
+    with SessionLocal() as db:
+        assert db.get(ActiveWorkoutSync, client.user["id"]).reminder_delivered is False
     reminders.deliver_inactive()
+    assert attempts == [WEB, WEB]
     calls, _ = expo
     assert calls == []
     with SessionLocal() as db:
@@ -313,6 +363,8 @@ def test_a_covered_phone_alone_counts_as_alerted_so_the_reminder_is_not_retried(
     [
         # Started on the web: the phone has no reminder of its own for this workout.
         lambda started, due: None,
+        # The phone's own alarm is hours later (such as a wrong clock): not the same alert.
+        lambda started, due: {"workout_started_at": str(started), "due_at_ms": due + 4 * 3_600_000},
         # The phone's reminder is for another workout.
         lambda started, due: {"workout_started_at": str(started - 1), "due_at_ms": due},
         # The phone missed later activity, so its own reminder was for an earlier idle spell.
@@ -360,19 +412,19 @@ def test_expo_requests_carry_the_optional_access_token_and_never_follow_redirect
         seen.update(url=url, **kwargs)
         return Reply()
 
-    monkeypatch.setattr(notifications.requests, "post", post)
+    monkeypatch.setattr(expo_delivery.requests, "post", post)
     monkeypatch.setenv("EXPO_ACCESS_TOKEN", "expo-test-value")
     settings = Settings()
     assert settings.expo_access_token == "expo-test-value"
-    tickets = notifications._post_expo([{"to": PHONE}], settings)
+    tickets = POST_EXPO([{"to": PHONE}], settings)
     assert tickets == [{"status": "ok", "id": "1"}]
     assert seen["url"] == "https://exp.host/--/api/v2/push/send"
     assert seen["headers"]["Authorization"] == "Bearer expo-test-value"
-    assert seen["allow_redirects"] is False and seen["timeout"] == 10
+    assert seen["allow_redirects"] is False and seen["timeout"] == (3.05, 10)
 
     seen.clear()
     monkeypatch.delenv("EXPO_ACCESS_TOKEN")
-    notifications._post_expo([{"to": PHONE}], Settings())
+    POST_EXPO([{"to": PHONE}], Settings())
     assert "Authorization" not in seen["headers"]
 
 
@@ -382,7 +434,7 @@ def test_a_failed_expo_request_still_lets_browsers_be_alerted(client, monkeypatc
     def fail(messages, settings):
         raise RequestsConnectionError("offline")
 
-    monkeypatch.setattr(notifications, "_post_expo", fail)
+    monkeypatch.setattr(expo_delivery, "post_expo", fail)
     with SessionLocal() as db:
         db.add(PushSubscription(user_id=client.user["id"], endpoint=WEB, p256dh="k", auth="a"))
         db.commit()
@@ -390,3 +442,205 @@ def test_a_failed_expo_request_still_lets_browsers_be_alerted(client, monkeypatc
     assert client.post("/api/notifications/push/test").status_code == 204
     assert web == [WEB]
     assert [row.token for row in tokens()] == [PHONE]  # A failed request removes nothing.
+
+
+def test_a_failed_expo_request_is_retried_once(client, monkeypatch, dispatcher):
+    from requests import ConnectionError as RequestsConnectionError
+
+    attempts: list[list[dict]] = []
+
+    def flaky(messages, settings):
+        attempts.append(messages)
+        if len(attempts) == 1:
+            raise RequestsConnectionError("offline")
+        return [{"status": "ok", "id": "t"}]
+
+    monkeypatch.setattr(expo_delivery, "post_expo", flaky)
+    register(client)
+    client.post("/api/notifications/push/test")
+    assert len(attempts) == 1
+    dispatcher.run_later_now()
+    assert len(attempts) == 2
+    dispatcher.run_later_now()
+    assert len(attempts) == 2
+
+
+def test_a_token_that_moved_mid_request_is_not_pruned_for_its_new_owner(
+    client, other_client, monkeypatch
+):
+    register(client)
+
+    def moved_then_unregistered(messages, settings):
+        # Bob signs in on the same phone while Expo answers for Alice.
+        register(other_client, PHONE)
+        return [{"status": "error", "details": {"error": "DeviceNotRegistered"}}]
+
+    monkeypatch.setattr(expo_delivery, "post_expo", moved_then_unregistered)
+    client.post("/api/notifications/push/test")
+    [row] = tokens()
+    assert row.user_id == other_client.user["id"]
+
+
+def test_an_ended_sign_in_is_pruned_only_while_the_token_is_still_its_own(client, other_client):
+    register(client)
+    [row] = tokens()
+    stale = expo_delivery.Registration(row.id, row.user_id, row.session_id, row.token, "ios")
+    register(other_client, PHONE)
+    expo_delivery.prune(SessionLocal, [stale])
+    assert [item.user_id for item in tokens()] == [other_client.user["id"]]
+
+
+def test_receipts_prune_unregistered_tokens_and_surface_credential_errors(
+    client, expo, monkeypatch, dispatcher, caplog
+):
+    register(client)
+    register(client, TABLET)
+    asked: list[list[str]] = []
+
+    def receipts(ids, settings):
+        asked.append(ids)
+        return {
+            f"ticket-{PHONE}": {"status": "error", "details": {"error": "DeviceNotRegistered"}},
+            f"ticket-{TABLET}": {"status": "error", "details": {"error": "InvalidCredentials"}},
+        }
+
+    monkeypatch.setattr(expo_delivery, "fetch_receipts", receipts)
+    client.post("/api/notifications/push/test")
+    assert asked == []  # Receipts are read later, never in the sending path.
+    with caplog.at_level("ERROR", logger="app.expo_delivery"):
+        dispatcher.run_later_now()
+    assert sorted(asked[0]) == sorted([f"ticket-{PHONE}", f"ticket-{TABLET}"])
+    assert [row.token for row in tokens()] == [TABLET]
+    assert "InvalidCredentials" in caplog.text
+
+
+def test_a_slow_expo_request_never_delays_browsers_or_other_accounts(monkeypatch, dispatcher):
+    import time as clock
+
+    import pywebpush
+    from conftest import make_user
+
+    monkeypatch.setattr(dispatcher, "inline", False)
+    web: list[str] = []
+    monkeypatch.setattr(
+        pywebpush,
+        "webpush",
+        lambda subscription_info, **_: web.append(subscription_info["endpoint"]),
+    )
+    sent: list[str] = []
+
+    def slow(messages, settings):
+        clock.sleep(1)
+        sent.extend(message["to"] for message in messages)
+        return [{"status": "ok"} for _ in messages]
+
+    monkeypatch.setattr(expo_delivery, "post_expo", slow)
+    users = [make_user(f"slow{index}") for index in range(3)]
+    with SessionLocal() as db:
+        for index, user_id in enumerate(users):
+            session = UserSession(
+                user_id=user_id,
+                token_hash=f"hash-{index}",
+                expires_at=datetime.now(UTC) + timedelta(days=1),
+            )
+            db.add(session)
+            db.flush()
+            db.add(
+                ExpoPushToken(
+                    user_id=user_id,
+                    session_id=session.id,
+                    token=f"ExponentPushToken[slow-phone-{index}]",
+                    local_alerts=[],
+                )
+            )
+            db.add(
+                PushSubscription(user_id=user_id, endpoint=f"{WEB}-{index}", p256dh="k", auth="a")
+            )
+        db.commit()
+    settings = Settings()
+    started = clock.monotonic()
+    results = [
+        notifications.send_push_notification(
+            SessionLocal, settings, title="Workout saved", body="Saved.", user_id=user_id
+        )
+        for user_id in users
+    ]
+    assert clock.monotonic() - started < 0.8
+    assert results == [True, True, True]
+    assert len(web) == 3
+    dispatcher.drain(timeout=10)
+    assert sorted(sent) == [f"ExponentPushToken[slow-phone-{index}]" for index in range(3)]
+
+
+def test_the_app_test_alert_reports_this_phones_own_outcome(client, other_client, expo):
+    calls, replies = expo
+    register(client)
+    register(client, TABLET)
+    test = f"{TOKENS}/test"
+    assert client.post(test, json={"token": PHONE}).status_code == 204
+    assert to(calls) == [PHONE]
+    assert calls[0]["body"] == "Phone alerts are on for this phone."
+
+    replies[PHONE] = {"status": "error", "details": {"error": "MessageRateExceeded"}}
+    response = client.post(test, json={"token": PHONE})
+    assert response.status_code == 502
+    assert response.json()["error"]["code"] == "push_delivery_failed"
+
+    replies[PHONE] = {"status": "error", "details": {"error": "DeviceNotRegistered"}}
+    response = client.post(test, json={"token": PHONE})
+    assert response.status_code == 410
+    assert [row.token for row in tokens()] == [TABLET]
+
+
+def test_the_app_test_alert_never_reaches_another_accounts_phone(client, other_client, expo):
+    calls, _ = expo
+    register(other_client, BOB_PHONE)
+    response = client.post(f"{TOKENS}/test", json={"token": BOB_PHONE})
+    assert response.status_code == 410
+    assert calls == []
+    assert [row.token for row in tokens()] == [BOB_PHONE]
+
+
+def test_the_account_wide_test_alert_keeps_its_answer_for_older_clients(client, expo):
+    calls, replies = expo
+    register(client)
+    replies[PHONE] = {"status": "error", "details": {"error": "MessageRateExceeded"}}
+    assert client.post("/api/notifications/push/test").status_code == 204
+
+
+def test_android_alerts_use_the_apps_channel_and_name_nothing_private(client, expo):
+    register(client, platform="android")
+    register(client, TABLET, platform="ios")
+    notifications.send_push_notification(
+        SessionLocal,
+        client.app.state.settings,
+        title="Workout saved",
+        body="Upper body was saved automatically.",
+        native_body="Your workout was saved automatically.",
+        user_id=client.user["id"],
+    )
+    calls, _ = expo
+    by_token = {message["to"]: message for message in calls}
+    assert by_token[PHONE]["channelId"] == "relay-alerts"
+    assert "channelId" not in by_token[TABLET]
+    assert {message["body"] for message in calls} == {"Your workout was saved automatically."}
+
+
+def test_video_alerts_name_no_workout_on_the_phone_and_open_videos():
+    from app.processing import NATIVE_VIDEO_BODIES
+
+    assert set(NATIVE_VIDEO_BODIES) == {
+        "Workout video ready",
+        "Workout video needs attention",
+        "Relay needs YouTube permission",
+    }
+    assert all("{" not in body for body in NATIVE_VIDEO_BODIES.values())
+
+
+def test_an_alert_handed_over_twice_with_the_same_key_reaches_the_app_once(client, expo):
+    register(client)
+    alert = ExpoAlert(user_id=client.user["id"], title="t", body="b", dedupe_key="same")
+    expo_dispatcher.submit(SessionLocal, client.app.state.settings, alert)
+    expo_dispatcher.submit(SessionLocal, client.app.state.settings, alert)
+    calls, _ = expo
+    assert to(calls) == [PHONE]

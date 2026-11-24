@@ -15,8 +15,10 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.orm import Session
 
 from .auth import AuthContextDependency, CurrentUser
-from .database import get_db
+from .config import Settings
+from .database import SessionLocal, get_db
 from .errors import api_error
+from .expo_delivery import ExpoAlert, expo_dispatcher
 from .models import ExpoPushToken, UserSession
 from .push_security import MAX_EXPO_PUSH_TOKENS
 from .schemas import ExpoLocalReminderUpdate, ExpoPushTokenCreate, ExpoPushTokenDelete
@@ -116,3 +118,37 @@ def save_local_reminder(
     row.local_reminder_workout = payload.workout_started_at if scheduled else None
     row.local_reminder_due_ms = payload.due_at_ms if scheduled else None
     db.commit()
+
+
+def limit_tests(request: Request, user: CurrentUser) -> None:
+    # Shares the web's allowance for test alerts.
+    if not request.app.state.push_rate_limiter.allow(f"{user.id}:test", 3):
+        raise api_error(429, "push_rate_limited", "Wait a moment before trying alerts again.")
+
+
+@expo_push_router.post("/tokens/test", status_code=204, dependencies=[Depends(limit_tests)])
+def send_test_alert(payload: ExpoPushTokenDelete, request: Request, user: CurrentUser) -> None:
+    """Sends a test alert to this phone only and says whether Expo accepted it.
+
+    The account-wide ``/api/notifications/push/test`` keeps its answer for older clients.
+    """
+    settings: Settings = request.app.state.settings
+    outcome = expo_dispatcher.send_now(
+        SessionLocal,
+        settings,
+        ExpoAlert(
+            user_id=user.id,
+            title="Relay alerts are ready",
+            body="Phone alerts are on for this phone.",
+            data={"url": "/", "tag": "test"},
+        ),
+        payload.token,
+    )
+    if outcome == "unregistered":
+        raise api_error(
+            410,
+            "push_token_not_registered",
+            "This phone is no longer registered for alerts. Turn Phone alerts off and on again.",
+        )
+    if outcome != "ok":
+        raise api_error(502, "push_delivery_failed", "The test alert couldn't be sent. Try again.")
