@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    minHeight: 24,
+    minHeight: 32,
   },
   lockedBox: {
     minHeight: 46,
