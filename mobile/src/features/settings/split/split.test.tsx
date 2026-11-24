@@ -1,5 +1,5 @@
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 import { Alert, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -18,6 +18,13 @@ import { apiGet, apiSend } from '../../../data/api';
 import { OFFLINE_MESSAGE } from '../../../data/offline';
 import { showMenu } from '../../../ui/prompts';
 import { showToast } from '../../../ui/Toast';
+import { coachHighlight } from '../../guides/GuideCoach';
+import {
+  activeSetupGuide,
+  resetSetupGuideForTests,
+  startSetupGuide,
+} from '../../guides/setupGuides';
+import { resetTipsForTests, tipsFor } from '../../guides/tips';
 import { SplitEditorScreen } from './SplitEditorScreen';
 import { SplitLibraryScreen } from './SplitLibraryScreen';
 
@@ -370,5 +377,122 @@ describe('the split editor', () => {
     });
     await fireEvent.press(chest);
     expect(screen.getAllByText('+3 sets')).toHaveLength(3);
+  });
+});
+
+describe('the splits setup guide', () => {
+  const withoutActiveSplit = () => {
+    const answer = jest.mocked(apiGet).getMockImplementation()!;
+    jest
+      .mocked(apiGet)
+      .mockImplementation(async (path: string) =>
+        path.startsWith('/api/training-split') ? { ...split, enabled: false } : answer(path),
+      );
+  };
+  const chooseReps = () =>
+    jest
+      .mocked(showMenu)
+      .mock.calls.at(-1)![1]
+      .find((item) => item.label === '8–12')!
+      .onPress();
+  beforeEach(() => {
+    resetSetupGuideForTests();
+    resetTipsForTests();
+  });
+
+  it('opens on the templates without an active split, and on Edit split with one', async () => {
+    startSetupGuide('split', 'u1', []);
+    await show(<SplitLibraryScreen />);
+    expect(await screen.findByText('Open your split')).toBeTruthy();
+    // The active split already plans exercises, so the guide skips planning days.
+    expect(screen.getByText('Setup guide · 1 of 3')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.edit');
+    await act(async () => client.clear());
+
+    withoutActiveSplit();
+    await show(<SplitLibraryScreen />);
+    expect(await screen.findByText('Start from a template')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 1 of 6')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.templates');
+  });
+
+  it('plans, adds a rep range and saves a new split, then makes it active', async () => {
+    withoutActiveSplit();
+    startSetupGuide('split', 'u1', []);
+    mockParams = { id: 'ul' };
+    await show(<SplitEditorScreen />);
+    expect(await screen.findByText('Plan your days')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 2 of 6')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.days');
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Give an exercise a rep range')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.reps');
+    // Next waits for a rep range.
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Rep range for Bench press on day 1: Any' }),
+    );
+    await act(async () => chooseReps());
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Save your split')).toBeTruthy();
+    expect(screen.getByText('Tap Save. Then you’ll make it your active split.')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.save');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save split' }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    // A new split still needs starting, so the guide moves on to Use split for it.
+    expect(activeSetupGuide()?.useRoutineId).toBe('ul');
+    await act(async () => client.clear());
+
+    await show(<SplitLibraryScreen />);
+    expect(await screen.findByText('Make it your split')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 5 of 6')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.use');
+    await fireEvent.press(
+      within(screen.getByLabelText('Upper day')).getByRole('button', { name: 'Use split' }),
+    );
+    expect(await screen.findByText('Pick a start date')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 6 of 6')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.confirm');
+    await fireEvent.press(screen.getByRole('button', { name: 'Use this split' }));
+    await waitFor(() => expect(activeSetupGuide()).toBeNull());
+    expect(tipsFor('u1').get().seen).toMatchObject({ split: 'learned', repRange: 'learned' });
+  });
+
+  it('adds a rep range to the active split, and saving it finishes the guide', async () => {
+    startSetupGuide('split', 'u1', []);
+    mockParams = { id: 'ppl' };
+    await show(<SplitEditorScreen />);
+    expect(await screen.findByText('Give an exercise a rep range')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 2 of 3')).toBeTruthy();
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Rep range for Bench press on day 1: Any' }),
+    );
+    await act(async () => chooseReps());
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(
+      screen.getByText('Tap Save. Your next workout shows the target as you log.'),
+    ).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('Give an exercise a rep range')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save split' }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(activeSetupGuide()).toBeNull();
+    expect(tipsFor('u1').get().seen).toMatchObject({ split: 'learned', repRange: 'learned' });
+  });
+
+  it('shows no coaching outside a guide, and Skip guide leaves it without marking it', async () => {
+    mockParams = { id: 'ppl' };
+    await show(<SplitEditorScreen />);
+    expect(await screen.findByDisplayValue('Push / Pull / Legs')).toBeTruthy();
+    expect(screen.queryByText(/Setup guide/)).toBeNull();
+    await act(async () => client.clear());
+
+    startSetupGuide('split', 'u1', []);
+    await show(<SplitLibraryScreen />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Skip guide' }));
+    expect(activeSetupGuide()).toBeNull();
+    expect(screen.queryByText(/Setup guide/)).toBeNull();
+    expect(tipsFor('u1').get().seen.split).toBeUndefined();
   });
 });

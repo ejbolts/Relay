@@ -1,4 +1,5 @@
 import {
+  useContext,
   useEffect,
   useRef,
   useState,
@@ -18,7 +19,7 @@ import {
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type {
   CoachStepPlan,
   CoachTarget as CoachTargetId,
@@ -173,7 +174,8 @@ export function GuideCoach({
   inline?: boolean;
 }) {
   const { colors, radius, scheme } = useTheme();
-  const insets = useSafeAreaInsets();
+  // Optional, so screens rendered without a safe-area provider (tests) still work.
+  const bottomInset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
   const reduced = useReduceMotion();
   const card = useRef<ComponentRef<typeof View>>(null);
   const anchor = useRef<ComponentRef<typeof View>>(null);
@@ -331,7 +333,7 @@ export function GuideCoach({
         style={[
           styles.docked,
           {
-            bottom: lift > 0 ? lift + 8 : Math.max(12, insets.bottom + 8),
+            bottom: lift > 0 ? lift + 8 : Math.max(12, bottomInset + 8),
             backgroundColor: scheme === 'light' ? colors.surfaceRaised : colors.surface2,
             borderColor: colors.lineStrong,
             borderRadius: radius.sheet - 8,

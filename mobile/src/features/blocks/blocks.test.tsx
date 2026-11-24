@@ -15,6 +15,9 @@ import { apiGet, apiSend } from '../../data/api';
 import { showToast } from '../../ui/Toast';
 import { preferences, TODAY } from '../training/trainingFixtures';
 import { selectBlock, useBlockScope } from './blockQueries';
+import { coachHighlight } from '../guides/GuideCoach';
+import { activeSetupGuide, resetSetupGuideForTests, startSetupGuide } from '../guides/setupGuides';
+import { resetTipsForTests, tipsFor } from '../guides/tips';
 import { BlockFormScreen } from './BlockFormScreen';
 import { BlocksScreen } from './BlocksScreen';
 import { BlockSummaryScreen } from './BlockSummaryScreen';
@@ -271,6 +274,61 @@ describe('the block form', () => {
       color: '#b59cf0',
     });
     expect(showToast).toHaveBeenCalledWith('Training block started');
+  });
+
+  test('the training blocks guide coaches a new block’s form and finishes once it starts', async () => {
+    resetSetupGuideForTests();
+    resetTipsForTests();
+    jest.mocked(apiSend).mockResolvedValueOnce({ blocks: [base, peak, block('Winter', today)] });
+    startSetupGuide('blocks', 'u1', []);
+    await open(<BlockFormScreen />);
+    expect(await screen.findByText('Setup guide · 1 of 4')).toBeVisible();
+    expect(screen.getByText('Name this phase')).toBeVisible();
+    expect(coachHighlight()).toBe('blocks.name');
+    // Next waits for a name, as the web's.
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await fireEvent.changeText(screen.getByLabelText('Block name'), 'Winter');
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Pick a start')).toBeVisible();
+    expect(coachHighlight()).toBe('blocks.start');
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('Name this phase')).toBeVisible();
+    for (let step = 0; step < 3; step++)
+      await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Start the block')).toBeVisible();
+    expect(screen.getByText('Setup guide · 4 of 4')).toBeVisible();
+    expect(coachHighlight()).toBe('blocks.submit');
+    // The last step finishes with the real Start.
+    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Start block' }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(activeSetupGuide()).toBeNull();
+    expect(tipsFor('u1').get().seen.blocks).toBe('learned');
+    expect(screen.queryByText(/Setup guide/)).toBeNull();
+  });
+
+  test('a block form opened outside a guide shows no coaching; Skip guide or leaving marks nothing', async () => {
+    resetSetupGuideForTests();
+    resetTipsForTests();
+    let view = await open(<BlockFormScreen />);
+    expect(await screen.findByLabelText('Block name')).toBeVisible();
+    expect(screen.queryByText(/Setup guide/)).toBeNull();
+    await view.unmount();
+
+    startSetupGuide('blocks', 'u1', []);
+    view = await open(<BlockFormScreen />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Skip guide' }));
+    expect(activeSetupGuide()).toBeNull();
+    expect(screen.queryByText(/Setup guide/)).toBeNull();
+    expect(coachHighlight()).toBeNull();
+    await view.unmount();
+
+    startSetupGuide('blocks', 'u1', []);
+    view = await open(<BlockFormScreen />);
+    expect(await screen.findByText('Setup guide · 1 of 4')).toBeVisible();
+    await view.unmount();
+    await waitFor(() => expect(activeSetupGuide()).toBeNull());
+    expect(tipsFor('u1').get().seen.blocks).toBeUndefined();
   });
 
   test('a custom start asks for the date', async () => {

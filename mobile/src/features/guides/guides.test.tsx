@@ -1,10 +1,11 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
-import { AppState } from 'react-native';
+import { AppState, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { tipStorageKey } from '../../../../frontend/src/tipsState';
 import type { TrackedWorkout, User } from '../../../../frontend/src/types';
 import { memoryKv } from '../../testing/memoryKvStore';
+import { CoachTarget, coachHighlight, GuideCoach } from './GuideCoach';
 import { GuidesScreen } from './GuidesScreen';
 import { HelpSettings } from './HelpSettings';
 import { AppTourHost } from './AppTourHost';
@@ -126,6 +127,66 @@ test('a split tip starts its setup guide with your own training and opens Splits
   expect(stored().seen).toEqual({ split: 'seen' });
   finishSetupGuide('split');
   expect(stored().seen).toMatchObject({ split: 'learned', repRange: 'learned' });
+});
+
+test('the coach highlights its control, folds from its grabber and opens again on the next step', async () => {
+  const step = (title: string, disabled = false) => ({
+    title,
+    body: `${title} body`,
+    target: 'blocks.name' as const,
+    next: { disabled },
+  });
+  const onNext = jest.fn();
+  const onExit = jest.fn();
+  const view = await show(
+    <>
+      <CoachTarget id="blocks.name">
+        <Text>Block name</Text>
+      </CoachTarget>
+      <GuideCoach
+        step={step('Name this phase', true)}
+        index={0}
+        total={4}
+        onNext={onNext}
+        onExit={onExit}
+      />
+    </>,
+  );
+  expect(coachHighlight()).toBe('blocks.name');
+  expect(screen.getByLabelText('Setup guide')).toBeVisible();
+  expect(screen.getByText('Setup guide · 1 of 4')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  // A tap (or a screen reader's activation) folds it; swiping down folds and up opens it.
+  await fireEvent(screen.getByRole('button', { name: 'Minimise guide' }), 'accessibilityAction', {
+    nativeEvent: { actionName: 'activate' },
+  });
+  expect(screen.queryByText('Name this phase body')).toBeNull();
+  expect(screen.getByText('Name this phase')).toBeVisible();
+  const grabber = screen.getByRole('button', { name: 'Show guide' });
+  await fireEvent(grabber, 'touchStart', { nativeEvent: { pageY: 500 } });
+  await fireEvent(grabber, 'touchEnd', { nativeEvent: { pageY: 460 } });
+  expect(screen.getByText('Name this phase body')).toBeVisible();
+  const open = screen.getByRole('button', { name: 'Minimise guide' });
+  await fireEvent(open, 'touchStart', { nativeEvent: { pageY: 500 } });
+  await fireEvent(open, 'touchEnd', { nativeEvent: { pageY: 540 } });
+  expect(screen.queryByText('Name this phase body')).toBeNull();
+  await view.rerender(
+    <GuideCoach
+      step={step('Pick a start')}
+      index={1}
+      total={4}
+      onNext={onNext}
+      onBack={jest.fn()}
+      onExit={onExit}
+    />,
+  );
+  expect(screen.getByText('Pick a start body')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+  expect(onNext).toHaveBeenCalledTimes(1);
+  await fireEvent.press(screen.getByRole('button', { name: 'Skip guide' }));
+  expect(onExit).toHaveBeenCalledTimes(1);
+  await view.unmount();
+  expect(coachHighlight()).toBeNull();
 });
 
 test('Settings starts each setup guide in its feature', async () => {

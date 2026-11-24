@@ -64,8 +64,10 @@ export function useExitGuideOnLeave(id: SetupGuideId, scope = id) {
     mounted.set(scope, (mounted.get(scope) ?? 0) + 1);
     return () => {
       mounted.set(scope, (mounted.get(scope) ?? 1) - 1);
+      // Only the guide that was running here: one started since then is left alone.
+      const left = run.get();
       setTimeout(() => {
-        if (!mounted.get(scope)) run.exit(id);
+        if (!mounted.get(scope) && left && run.get() === left) run.exit(id);
       }, 0);
     };
   }, [id, scope]);
