@@ -2,7 +2,7 @@
 import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from './api';
+import { api, ApiError } from './api';
 import { TipsProvider, TipSlot, TipsSettings, useTips } from './Tips';
 import { HomeTips } from './HomeTips';
 import { SetupGuideHost } from './SetupGuide';
@@ -11,9 +11,12 @@ import { onTipTarget, type TipAction } from './tipActions';
 import { Toast, ToastProvider } from './Toast';
 import { freshTips, TIP_COOLDOWN } from './tipsState';
 import { loadTips, saveTips } from './tipsStorage';
+import { mergeTipStates } from './tipSync';
 
 let root: Root, container: HTMLDivElement;
 let controller: ReturnType<typeof useTips>;
+/** The account's tips on the server, which merges every save as /api/tips does. */
+let server: Record<string, unknown> = {};
 let resting = true,
   ready = true,
   workoutCount = 5,
@@ -62,6 +65,11 @@ beforeEach(() => {
   resting = ready = true;
   workoutCount = 5;
   page = 'log';
+  server = {};
+  vi.spyOn(api, 'saveTipState').mockImplementation(async (state) => {
+    server = mergeTipStates(server, state);
+    return server;
+  });
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
     top: 100,
     bottom: 150,
@@ -202,14 +210,14 @@ describe('shared tip presentation', () => {
   it('turns every surface off immediately, remembers the switch and keeps the library available', async () => {
     await render();
     await advance();
-    await act(async () => button('Show tips on this device').click());
+    await act(async () => button('Show tips').click());
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
     expect(loadTips('alice').enabled).toBe(false);
     await act(async () => button('Browse tips').click());
     expect(document.querySelector('dialog')?.textContent).toContain('Machine taken?');
     await render('bob');
     await advance();
-    expect(button('Show tips on this device').getAttribute('aria-checked')).toBe('true');
+    expect(button('Show tips').getAttribute('aria-checked')).toBe('true');
     await render('alice');
     await advance();
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
@@ -384,7 +392,7 @@ describe('shared tip presentation', () => {
       window.dispatchEvent(new StorageEvent('storage', { key: 'relay:tips:v1:alice' })),
     );
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
-    expect(button('Show tips on this device').getAttribute('aria-checked')).toBe('false');
+    expect(button('Show tips').getAttribute('aria-checked')).toBe('false');
   });
   async function homeBulb(child = <HomeTips workouts={[]} hasSplit />) {
     page = 'dashboard';
@@ -492,7 +500,7 @@ describe('shared tip presentation', () => {
     workoutCount = 0;
     await homeBulb();
     expect(bulb()).not.toBeNull();
-    await act(async () => button('Show tips on this device').click());
+    await act(async () => button('Show tips').click());
     expect(bulb()).toBeNull();
   });
   const machineWorkout = (id: string, date: string, machine: string) => ({
@@ -611,5 +619,93 @@ describe('shared tip presentation', () => {
     expect(loadTips('alice').seen.normalise).toBe('seen');
     exitGuide();
     stop();
+  });
+});
+
+describe('tips that follow the account', () => {
+  it('brings the account’s tips from its other devices on sign-in', async () => {
+    server = {
+      seen: { plates: 'learned', reorder: 'dismissed', futureTip: 'dismissed' },
+      enabled: false,
+      enabledAt: 5,
+    };
+    saveTips('alice', { ...freshTips(), seen: { swap: 'dismissed' } });
+    await render();
+    await advance(0);
+    expect(loadTips('alice')).toMatchObject({
+      enabled: false,
+      enabledAt: 5,
+      seen: { plates: 'learned', reorder: 'dismissed', swap: 'dismissed' },
+    });
+    expect(button('Show tips').getAttribute('aria-checked')).toBe('false');
+    // This browser's progress reached the account too, and the unknown tip stayed there.
+    expect(server.seen).toEqual({
+      plates: 'learned',
+      reorder: 'dismissed',
+      futureTip: 'dismissed',
+      swap: 'dismissed',
+    });
+  });
+
+  it('saves Show tips with its time after a pause, so the latest choice wins elsewhere', async () => {
+    await render();
+    await advance(0);
+    vi.mocked(api.saveTipState).mockClear();
+    await act(async () => button('Show tips').click());
+    await advance(4000);
+    expect(api.saveTipState).not.toHaveBeenCalled();
+    await advance(1000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(1);
+    expect(server).toMatchObject({ enabled: false, enabledAt: Date.now() - 5000 });
+  });
+
+  it('keeps an interrupted nudge’s showing off the account, so its rollback stands', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // Coming back to the tab while the nudge shows would sync, but the showing is held back.
+    window.dispatchEvent(new Event('focus'));
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    document.body.append(dialog);
+    await advance(500);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    await advance(6000);
+    expect((server.shows as Record<string, number>).reorder).toBeUndefined();
+    expect(server.lastShown).toBe(0);
+    expect(loadTips('alice').shows?.reorder).toBeUndefined();
+    // Once it has really been seen, the showing is saved to the account.
+    dialog.remove();
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    await advance(6000);
+    expect((server.shows as Record<string, number>).reorder).toBe(1);
+  });
+
+  it('never lets one account’s late reply reach the next account', async () => {
+    let reply: (value: Record<string, unknown>) => void = () => {};
+    vi.mocked(api.saveTipState).mockImplementationOnce(
+      () => new Promise((resolve) => (reply = resolve)),
+    );
+    await render('alice');
+    await advance(0);
+    await render('bob');
+    await act(async () => reply({ seen: { plates: 'learned' }, enabled: false, enabledAt: 9 }));
+    await advance(0);
+    expect(loadTips('bob').seen).toEqual({});
+    expect(loadTips('bob').enabled).toBe(true);
+    expect(loadTips('alice').seen).toEqual({});
+  });
+
+  it('keeps working on this browser alone with a server that has no tip store', async () => {
+    vi.mocked(api.saveTipState).mockRejectedValue(new ApiError('Not found', 'not_found', 404));
+    await render();
+    await advance(0);
+    await act(async () => button('Show tips').click());
+    await advance(10_000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(1);
+    expect(loadTips('alice').enabled).toBe(false);
   });
 });

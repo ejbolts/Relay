@@ -33,10 +33,12 @@ import {
   tipStorageKey,
   TIP_DEFINITIONS,
   withTipReminders,
+  withTipsEnabled,
   type TipId,
   type TipState,
 } from './tipsState';
-import { loadTips, saveTips } from './tipsStorage';
+import { loadTips, saveTips, sendTips } from './tipsStorage';
+import { createTipSync, tipSyncHoldUntil, type TipSync } from './tipSync';
 import './tips.css';
 
 type Environment = TipEnvironment;
@@ -135,6 +137,8 @@ export function TipsProvider({
   const quietSince = useRef(0);
   const toastShowing = useRef(false);
   toastShowing.current = useToast().active;
+  // Keeps this account's tips in step with its other devices and the app (tipSync).
+  const syncRef = useRef<TipSync | null>(null);
   const [api] = useState(() => {
     function write(change: TipState) {
       // A guided tip put away before its feature is used is scheduled to come back.
@@ -142,6 +146,7 @@ export function TipsProvider({
       stateRef.current = next;
       setState(next);
       if (account) saveTips(account, next);
+      syncRef.current?.changed();
     }
     function close() {
       activeRef.current = null;
@@ -218,7 +223,7 @@ export function TipsProvider({
         openTipTarget({ target: action.target, ...(exerciseId && { exerciseId }) });
       },
       enable(enabled: boolean) {
-        write({ ...stateRef.current, enabled });
+        write(withTipsEnabled(stateRef.current, enabled, Date.now()));
         if (!enabled) close();
       },
       library() {
@@ -231,6 +236,20 @@ export function TipsProvider({
     // Keep reminders that came back or were scheduled while loading.
     if (account && JSON.stringify(loadTips(account)) !== JSON.stringify(stateRef.current))
       saveTips(account, stateRef.current);
+    const tipSync: TipSync | null = account
+      ? createTipSync({
+          read: () => stateRef.current,
+          write: (next) => {
+            stateRef.current = next;
+            setState(next);
+            saveTips(account, next);
+          },
+          send: sendTips,
+          current: () => syncRef.current === tipSync,
+        })
+      : null;
+    syncRef.current = tipSync;
+    tipSync?.syncNow();
     const sync = (event: StorageEvent) => {
       if (!account || (event.key !== tipStorageKey(account) && event.key !== null)) return;
       const next = withTipReminders(loadTips(account), Date.now());
@@ -256,6 +275,7 @@ export function TipsProvider({
             stateRef.current = next;
             setState(next);
             saveTips(account, next);
+            tipSync?.changed();
             pending.current.set(currentNudge.id, reverted.request);
           }
         }
@@ -325,6 +345,9 @@ export function TipsProvider({
       stateRef.current = next;
       setState(next);
       saveTips(account!, next);
+      // An interrupted nudge may be put back, so its showing waits before reaching the server.
+      if (nudge) tipSync?.hold(tipSyncHoldUntil(now));
+      tipSync?.changed();
       setSlot(nudge ? null : (candidate?.[0] ?? null));
       activeRef.current = id;
       activeSince.current = now;
@@ -355,15 +378,22 @@ export function TipsProvider({
         stateRef.current = reminded;
         setState(reminded);
         if (account) saveTips(account, reminded);
+        tipSync?.changed();
       }
+      tipSync?.refresh();
     };
+    const focus = () => tipSync?.refresh();
     const timer = window.setInterval(tick, 500);
     document.addEventListener('visibilitychange', visibility);
     window.addEventListener('storage', sync);
+    window.addEventListener('focus', focus);
     return () => {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('storage', sync);
+      window.removeEventListener('focus', focus);
+      tipSync?.stop();
+      if (syncRef.current === tipSync) syncRef.current = null;
     };
   }, [account, api]);
   useEffect(() => {
@@ -588,13 +618,13 @@ export function TipsSettings() {
         </button>
       </header>
       <div className="notification-setting-row">
-        <strong>Show tips on this device</strong>
+        <strong>Show tips</strong>
         <button
           type="button"
           className={tips.state.enabled ? 'is-on' : ''}
           role="switch"
           aria-checked={tips.state.enabled}
-          aria-label="Show tips on this device"
+          aria-label="Show tips"
           onClick={() => tips.enable(!tips.state.enabled)}
         >
           <span />

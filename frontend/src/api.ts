@@ -1242,6 +1242,13 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(layout),
     }),
+  /** Merges this browser's tips into the account's and returns the result (tipSync.ts). */
+  saveTipState: (state: unknown) =>
+    request<Record<string, unknown>>('/api/tips', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(state),
+    }),
   getWorkoutTypeColors: () => accountRead<WorkoutTypeColors>('/api/workout-type-colors'),
   getWorkoutTypes: () => accountRead<WorkoutType[]>('/api/workout-types'),
   createWorkoutType: (payload: { name: string; color: string }) =>
