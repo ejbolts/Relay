@@ -740,3 +740,49 @@ def test_the_dispatcher_follows_every_app_lifespan_using_it():
     assert worker.running
     worker.stop()
     assert not worker.running
+
+
+def test_a_worker_from_an_ended_lifespan_cannot_add_work_to_the_next():
+    import threading
+    import time as clock
+
+    worker = expo_delivery.ExpoPushDispatcher(workers=1)
+    blocked, ran = threading.Event(), []
+
+    def slow_then_retry():
+        blocked.wait(5)
+        # Like a retry or receipt check scheduled after its Expo call returns.
+        worker._later(0, ran.append, "late")
+        worker._admit(ran.append, ("admitted",))
+
+    worker.start()
+    worker._admit(slow_then_retry, ())
+    clock.sleep(0.05)
+    worker.stop(timeout=0.1)
+    worker.start()  # The next lifespan in the same process.
+    try:
+        blocked.set()
+        clock.sleep(0.3)
+        assert ran == []
+        worker._admit(ran.append, ("new lifespan",))
+        deadline = clock.monotonic() + 2
+        while not ran and clock.monotonic() < deadline:
+            clock.sleep(0.01)
+        assert ran == ["new lifespan"]
+    finally:
+        worker.stop()
+
+
+def test_the_dispatcher_stops_when_the_processor_fails_to_start(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+    from app.processing import SessionProcessor
+
+    async def fail(self):
+        raise RuntimeError("processor could not start")
+
+    monkeypatch.setattr(SessionProcessor, "start", fail)
+    with pytest.raises(RuntimeError), TestClient(create_app()):
+        pass
+    assert not expo_dispatcher.running

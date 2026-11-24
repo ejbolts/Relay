@@ -274,9 +274,13 @@ class ExpoPushDispatcher:
         self._users = 0
         self._closed = True
         self._queue: queue.Queue = queue.Queue(maxsize=max_queued)
-        self._waiting: list[tuple[float, int, Callable, tuple]] = []
+        self._waiting: list[tuple[float, int, int, Callable, tuple]] = []
         self._sequence = 0
         self._threads: list[threading.Thread] = []
+        # Each start begins a generation. Work belongs to the generation that admitted it, and a
+        # worker still busy from an earlier one can never add work to a later one.
+        self._generation = 0
+        self._local = threading.local()
         self._recent: OrderedDict[str, float] = OrderedDict()
         # In inline mode, retries and receipt checks wait here until a test runs them.
         self._pending_later: list[tuple] = []
@@ -289,14 +293,23 @@ class ExpoPushDispatcher:
             if not self._closed:
                 return
             self._closed = False
+            self._generation += 1
+            generation = self._generation
             self._queue = queue.Queue(maxsize=self._max_queued)
             self._waiting = []
             self._threads = [
-                threading.Thread(target=self._work, name=f"expo-push-{index}", daemon=True)
+                threading.Thread(
+                    target=self._work,
+                    args=(generation, self._queue),
+                    name=f"expo-push-{index}",
+                    daemon=True,
+                )
                 for index in range(self._workers)
             ]
             self._threads.append(
-                threading.Thread(target=self._schedule, name="expo-push-later", daemon=True)
+                threading.Thread(
+                    target=self._schedule, args=(generation,), name="expo-push-later", daemon=True
+                )
             )
             for thread in self._threads:
                 thread.start()
@@ -331,21 +344,29 @@ class ExpoPushDispatcher:
     def running(self) -> bool:
         return not self._closed
 
-    def _work(self) -> None:
-        work = self._queue
+    def _open(self, generation: int) -> bool:
+        """Whether that generation may still take work. Call it holding the lock."""
+        return not self._closed and generation == self._generation
+
+    def _work(self, generation: int, work: queue.Queue) -> None:
+        # Anything this worker admits or schedules belongs to its own generation.
+        self._local.generation = generation
         while True:
             item = work.get()
             try:
                 if item is None:
                     return
-                if not self._closed:
+                with self._lock:
+                    current = self._open(generation)
+                if current:
                     self._guard(*item)
             finally:
                 work.task_done()
 
-    def _schedule(self) -> None:
+    def _schedule(self, generation: int) -> None:
+        self._local.generation = generation
         with self._lock:
-            while not self._closed:
+            while self._open(generation):
                 if not self._waiting:
                     self._lock.wait()
                     continue
@@ -353,28 +374,35 @@ class ExpoPushDispatcher:
                 if due > 0:
                     self._lock.wait(due)
                     continue
-                _, _, function, args = heapq.heappop(self._waiting)
-                self._admit(function, args)
+                _, _, owner, function, args = heapq.heappop(self._waiting)
+                self._admit(function, args, owner)
 
     # --- admission -------------------------------------------------------------------------
-    def _admit(self, function: Callable, args: tuple) -> None:
+    def _generation_of_caller(self) -> int:
+        """A worker's own generation; the current one for the app's own threads."""
+        return getattr(self._local, "generation", None) or self._generation
+
+    def _admit(self, function: Callable, args: tuple, generation: int | None = None) -> None:
         if self.inline:
             self._guard(function, *args)
             return
-        if self._closed:
-            logger.debug("Expo push work dropped: the app is not running")
-            return
-        try:
-            self._queue.put_nowait((function, *args))
-        except queue.Full:
-            logger.warning("Expo push queue is full; an alert was dropped")
+        with self._lock:
+            owner = self._generation_of_caller() if generation is None else generation
+            if not self._open(owner):
+                logger.debug("Expo push work dropped: its app lifespan has ended")
+                return
+            try:
+                self._queue.put_nowait((function, *args))
+            except queue.Full:
+                logger.warning("Expo push queue is full; an alert was dropped")
 
     def _later(self, delay: float, function: Callable, *args) -> None:
         if self.inline:
             self._pending_later.append((function, args))
             return
         with self._lock:
-            if self._closed:
+            owner = self._generation_of_caller()
+            if not self._open(owner):
                 return
             if len(self._waiting) >= self._max_waiting:
                 logger.warning(
@@ -383,7 +411,7 @@ class ExpoPushDispatcher:
                 return
             self._sequence += 1
             heapq.heappush(
-                self._waiting, (time.monotonic() + delay, self._sequence, function, args)
+                self._waiting, (time.monotonic() + delay, self._sequence, owner, function, args)
             )
             self._lock.notify_all()
 

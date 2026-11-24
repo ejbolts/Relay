@@ -279,8 +279,16 @@ belong to the same account and sign-in; credential errors are logged. `GYM_EXPO_
 schedules Still working out? on the phone too, so it lists `inactive-workout` in `local_alerts` and
 reports the workout and due time of the reminder it has scheduled with
 `PUT /api/notifications/expo/tokens/local-reminder`. The server skips that phone when its own
-reminder is for the same workout and due within two minutes of the server's, either way. Tokens are
-device registrations and are left out of account backups.
+reminder is for the same workout and due within two minutes of the server's, either way, and sends
+its own reminder to a phone at most once per idle spell (`native_reminder_due_ms`), up to 30
+minutes after it was due. The app's alerts are sent by workers that start and stop with the app,
+from a bounded queue. This avoids duplicate alerts in normal use but can't rule them out: a phone
+clock that is far off, a phone whose report hasn't reached the server (offline, or a first
+registration not yet reported), more than one server process (the service runs one), or an Expo
+request whose outcome is lost before it is recorded can each still give a phone two alerts.
+Stopping the server or a full queue can also drop a phone's reminder after its browsers have had
+theirs; queued native alerts are not kept across restarts. Tokens are device registrations and are
+left out of account backups.
 A workout left running can be saved with **Actual duration (minutes)**; the correction stays in
 its draft until saved. Inactivity reminders do not finish or discard the workout.
 
