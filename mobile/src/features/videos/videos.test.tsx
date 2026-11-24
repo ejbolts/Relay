@@ -255,9 +255,9 @@ it('picks set videos, uploads them in order with labels, then follows processing
   expect(Linking.openURL).toHaveBeenCalledWith('https://youtu.be/v');
 });
 
-it('hands connecting YouTube to the web and disconnects in the app', async () => {
+// Connecting is covered by youtube.test.tsx.
+it('disconnects YouTube in the app', async () => {
   jest.spyOn(Alert, 'alert');
-  jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
   jest.mocked(apiSend).mockResolvedValue({
     ...connected,
     status: 'not_connected',
@@ -266,13 +266,7 @@ it('hands connecting YouTube to the web and disconnects in the app', async () =>
     message: 'YouTube disconnected.',
   });
   await open(<VideosScreen />);
-  await fireEvent.press(
-    await screen.findByRole('button', { name: 'Reconnect YouTube on the web' }),
-  );
-  const handOff = jest.mocked(Alert.alert).mock.lastCall?.[2] as AlertButton[];
-  await act(async () => handOff.find((button) => button.text === 'Continue')?.onPress?.());
-  expect(Linking.openURL).toHaveBeenCalledWith('https://relay.test/#videos');
-  await fireEvent.press(screen.getByRole('button', { name: 'Disconnect' }));
+  await fireEvent.press(await screen.findByRole('button', { name: 'Disconnect' }));
   const buttons = jest.mocked(Alert.alert).mock.lastCall?.[2] as AlertButton[];
   await act(async () =>
     buttons.find((button) => button.text === 'Disconnect YouTube')?.onPress?.(),
@@ -552,23 +546,6 @@ it('checks the status one request at a time', async () => {
   await act(async () => check.resolve({ ...session, status: 'stitching' }));
   expect(await screen.findByText('Stitching your workout')).toBeTruthy();
 }, 30000);
-
-it('names the account before handing off, and says so if the browser will not open', async () => {
-  jest.spyOn(Alert, 'alert');
-  jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('No browser'));
-  await open(<VideosScreen />);
-  await fireEvent.press(
-    await screen.findByRole('button', { name: 'Reconnect YouTube on the web' }),
-  );
-  expect(jest.mocked(Alert.alert).mock.lastCall?.[1]).toBe(
-    'Sign in to the web as @preview to connect YouTube.',
-  );
-  await alertButton('Cancel');
-  expect(Linking.openURL).not.toHaveBeenCalled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Reconnect YouTube on the web' }));
-  await alertButton('Continue');
-  expect(await screen.findByText(/Could not open the browser/)).toBeTruthy();
-});
 
 it('drops a disconnect reply that arrives after signing out', async () => {
   jest.spyOn(Alert, 'alert');

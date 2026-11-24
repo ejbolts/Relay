@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Alert, AppState, Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   youtubeAvailable,
+  youtubeCallbackResult,
   youtubeConnectLabel,
   youtubePrivacyCopy,
   youtubeStatusLabel,
@@ -12,24 +13,32 @@ import { serverOrigin } from '../../data/api';
 import { useUser } from '../../session/SessionProvider';
 import { Button, Card, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
-import { showToast } from '../../ui/Toast';
+import { showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { videoApi, videoKeys, useYouTubeConnection } from './videoData';
 import { useAccountGuard } from '../admin/accountGuard';
-import { videoIcons } from './icons';
+import { connectYouTubeInApp } from './youtubeConnect';
 
 /**
- * The web's YouTube channel panel. Connecting happens on the web: Google returns to the server's
- * web page in the browser session that started it, which an app session can't continue, so the
- * button hands off to the web's Videos page and the card checks again when the app returns.
+ * The web's YouTube channel panel. Connecting opens Google in a sign-in browser over the app,
+ * which returns to the app with the same results the web shows after Google. A server from before
+ * the app's sign-in can only connect on the web, so the card hands off there instead.
+ * `canConnect` is false in Settings for an account that can't upload videos, as on the web.
  */
-export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
+export function YouTubeCard({
+  disabled = false,
+  canConnect = true,
+}: {
+  disabled?: boolean;
+  canConnect?: boolean;
+}) {
   const client = useQueryClient();
   const connection = useYouTubeConnection();
   const { colors, type, radius } = useTheme();
   const user = useUser();
   const guard = useAccountGuard();
   const [working, setWorking] = useState(false);
+  const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const data = connection.data ?? null;
 
@@ -53,6 +62,34 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
         { text: 'Continue', onPress: () => void connectOnWeb() },
       ],
     );
+  }
+
+  async function connect() {
+    setConnecting(true);
+    setError(null);
+    // The result belongs to the account that started; after a switch it is dropped.
+    const check = guard();
+    const account = toastAccount();
+    try {
+      const outcome = await connectYouTubeInApp();
+      if (!check.sameSession()) return;
+      void client.invalidateQueries({ queryKey: videoKeys.youtube });
+      if (outcome.kind === 'web') {
+        if (check.open()) confirmConnectOnWeb();
+        return;
+      }
+      // Closing the sign-in browser leaves the connection as it was, like declining on Google.
+      const result = youtubeCallbackResult(
+        outcome.kind === 'result' ? outcome.result : 'cancelled',
+      );
+      if (result.confirmation) showToast(result.message, undefined, { account });
+      // A failed return stays until the next attempt, as on the web.
+      else if (check.open()) setError(result.message);
+    } catch (reason) {
+      if (check.open()) setError(errorMessage(reason));
+    } finally {
+      setConnecting(false);
+    }
   }
 
   async function connectOnWeb() {
@@ -139,20 +176,19 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
         </Text>
       )}
       <View style={styles.actions}>
-        {available && (
+        {available && canConnect && (
           <Button
-            label={`${youtubeConnectLabel(data)} on the web`}
-            icon={videoIcons.web}
+            label={connecting ? 'Working…' : youtubeConnectLabel(data)}
             variant={connected ? 'secondary' : 'primary'}
-            disabled={disabled || working}
-            onPress={confirmConnectOnWeb}
+            disabled={disabled || working || connecting}
+            onPress={() => void connect()}
           />
         )}
         {data?.channel_id && (
           <Button
             label={working ? 'Disconnecting…' : 'Disconnect'}
             variant="secondary"
-            disabled={disabled || working || !data.can_disconnect}
+            disabled={disabled || working || connecting || !data.can_disconnect}
             onPress={confirmDisconnect}
           />
         )}
@@ -163,6 +199,11 @@ export function YouTubeCard({ disabled = false }: { disabled?: boolean }) {
       {data && !data.can_disconnect && (
         <Text style={[type.footnote, { color: colors.muted }]}>
           Disconnect is available after video processing finishes.
+        </Text>
+      )}
+      {available && !canConnect && (
+        <Text style={[type.footnote, { color: colors.muted }]}>
+          Video uploads are disabled for this account. Ask the administrator to enable them.
         </Text>
       )}
     </Card>

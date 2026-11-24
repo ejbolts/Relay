@@ -44,6 +44,7 @@ import { AuthBackdrop, AuthBrand } from './AuthChrome';
 import { queueImportPrompt } from '../features/data/importPrompt';
 import { registerAccount, useRegistrationConfig } from './registration';
 import { useSession } from './SessionProvider';
+import { pendingRegistrationInvite } from './friendInvite';
 
 /** Shown instead of the app until the account is signed in. */
 export function SignInScreen() {
@@ -58,7 +59,8 @@ export function SignInScreen() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [displayName, setDisplayName] = useState('');
-  const [inviteCode, setInviteCode] = useState('');
+  // A friend's link for a closed server carries its registration code, as on the web.
+  const [inviteCode, setInviteCode] = useState(() => pendingRegistrationInvite() ?? '');
   const [needsInviteCode, setNeedsInviteCode] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [sampleOpen, setSampleOpen] = useState(false);

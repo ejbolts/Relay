@@ -1,6 +1,8 @@
 const { version } = require('../frontend/release.json');
+const { withAppLinks } = require('./appLinks');
 
-module.exports = ({ config }) => ({
-  ...config,
-  extra: { ...config.extra, relayCompatibilityVersion: version },
-});
+module.exports = ({ config }) =>
+  withAppLinks({
+    ...config,
+    extra: { ...config.extra, relayCompatibilityVersion: version },
+  });
