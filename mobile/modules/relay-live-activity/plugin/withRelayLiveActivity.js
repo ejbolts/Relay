@@ -129,6 +129,33 @@ function withWidgetFiles(config) {
 const quote = (value) => `"${value}"`;
 const unquote = (value) => String(value).replace(/^"(.*)"$/, '$1');
 
+const EMBED_PHASE = 'Embed Foundation Extensions';
+
+/**
+ * addTarget appends the app's "Copy Files" phase for the .appex after its script phases (bundling
+ * React Native, CocoaPods resources). Xcode can then report a dependency cycle, so the phase moves
+ * up to just after the app's Resources, under the name Xcode itself gives it.
+ */
+function placeEmbedPhase(project) {
+  const app = project.getFirstTarget().firstTarget;
+  const section = project.hash.project.objects.PBXCopyFilesBuildPhase || {};
+  const index = app.buildPhases.findIndex((phase) => {
+    const item = section[phase.value];
+    return (
+      item &&
+      String(item.dstSubfolderSpec) === '13' &&
+      (item.files || []).some((file) => String(file.comment).includes(`${TARGET}.appex`))
+    );
+  });
+  if (index < 0) return;
+  const [phase] = app.buildPhases.splice(index, 1);
+  section[phase.value].name = quote(EMBED_PHASE);
+  section[`${phase.value}_comment`] = EMBED_PHASE;
+  phase.comment = EMBED_PHASE;
+  const resources = app.buildPhases.findIndex((item) => item.comment === 'Resources');
+  app.buildPhases.splice(resources < 0 ? app.buildPhases.length : resources + 1, 0, phase);
+}
+
 /** Adds the extension target, builds its Swift, and embeds it in the app. */
 function withWidgetTarget(config, bundleIdentifier) {
   return withXcodeProject(config, (config) => {
@@ -153,6 +180,7 @@ function withWidgetTarget(config, bundleIdentifier) {
     project.addBuildPhase([], 'PBXResourcesBuildPhase', 'Resources', target.uuid);
     // SwiftUI, WidgetKit and ActivityKit link automatically from their Swift imports.
     project.addBuildPhase([], 'PBXFrameworksBuildPhase', 'Frameworks', target.uuid);
+    placeEmbedPhase(project);
     // The xcode library leaves unset file types as `undefined`, which it would write out as the
     // literal word and Xcode would read as a file type.
     const ours = new Set([...SWIFT_FILES, 'Info.plist', `${TARGET}.appex`].map(quote));
