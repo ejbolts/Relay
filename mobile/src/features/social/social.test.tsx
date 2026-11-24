@@ -1,7 +1,8 @@
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import * as Clipboard from 'expo-clipboard';
 import type { ReactNode } from 'react';
-import { ScrollView } from 'react-native';
+import { Alert, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { commentTime } from '../../../../frontend/src/commentDisplay';
 import { feedStats } from '../../../../frontend/src/friendFeedData';
@@ -60,11 +61,18 @@ function switchAccount(id: string) {
   mockSession.status = { kind: 'signed-in', user: { id } };
   mockSession.listeners.forEach((listener) => listener());
 }
+jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn(async () => true) }));
+jest.mock('../../data/authorisedImage', () => ({
+  useAuthorisedImage: () => null,
+  loadAuthorisedImage: jest.fn(async () => null),
+}));
+const mockUpdateUser = jest.fn();
 jest.mock('../../session/SessionProvider', () => {
   const { useSyncExternalStore } = jest.requireActual<typeof import('react')>('react');
   return {
     useUser: () => mockUser,
     useOptionalSession: () => ({
+      updateUser: mockUpdateUser,
       status: useSyncExternalStore(
         (listener) => {
           mockSession.listeners.add(listener);
@@ -474,17 +482,266 @@ test('a confirmed removal stays removed when the refresh after it fails', async 
   );
 });
 
-test('your own profile opens Edit profile, sharing choices and your QR code', async () => {
+test('your own profile edits inline, copies your account UUID, and opens sharing choices', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  let displayName = 'Preview';
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/me')
+      return { ...casey, id: 'me', display_name: displayName, is_you: true, visibility: 'public' };
+    if (path.startsWith('/api/sharing/')) return [];
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string, body?: unknown) => {
+    if (path === '/api/profile' && method === 'PATCH') {
+      const changes = body as { display_name?: string; sex?: User['sex'] };
+      if (changes.display_name) displayName = changes.display_name;
+      return { ...mockUser, ...changes };
+    }
+    return undefined;
+  });
+  await show(<ProfileScreen profileId="me" />);
+
+  // Account UUID is shown and copied on the profile screen with a toast confirmation.
+  expect(await screen.findByText('Account UUID')).toBeVisible();
+  expect(screen.getByText('me')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Copy account UUID' }));
+  await waitFor(() => expect(Clipboard.setStringAsync).toHaveBeenCalledWith('me'));
+  expect(await screen.findByText('UUID copied.')).toBeOnTheScreen();
+
+  // Sharing choices still open from the profile header.
+  await fireEvent.press(screen.getByRole('button', { name: 'Sharing: Public' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/social/sharing');
+  mockRouter.push.mockClear();
+
+  // Edit profile opens inline without leaving the profile screen.
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit profile' }));
+  expect(mockRouter.push).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('Username, preview, locked')).toBeVisible();
+
+  // Cancel discards drafts and returns to read-only header.
+  await fireEvent.changeText(screen.getByLabelText('Name'), 'Draft Name');
+  await fireEvent.press(screen.getByRole('button', { name: 'Cancel' }));
+  expect(screen.getByText('Preview')).toBeVisible();
+  expect(screen.queryByLabelText('Name')).toBeNull();
+
+  // Saving a new name and sex confirms sex once, updates the profile and shows a toast.
+  await fireEvent.press(screen.getByRole('button', { name: 'Edit profile' }));
+  await fireEvent.changeText(screen.getByLabelText('Name'), 'Sam');
+  await fireEvent.press(screen.getByRole('tab', { name: 'Female' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
+  expect(alert).toHaveBeenCalledWith(
+    'Save your sex as Female?',
+    expect.stringContaining('only an administrator can change it'),
+    expect.any(Array),
+  );
+  expect(apiSend).not.toHaveBeenCalled();
+  await act(async () => {
+    alert.mock.calls[0][2]!.find((button) => button.text === 'Save')!.onPress!();
+  });
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/profile', 'PATCH', {
+      display_name: 'Sam',
+      sex: 'female',
+    }),
+  );
+  expect(mockUpdateUser).toHaveBeenCalledWith(
+    expect.objectContaining({ display_name: 'Sam', sex: 'female' }),
+  );
+  expect(await screen.findByText('Profile saved.')).toBeOnTheScreen();
+  expect(screen.getByText('Sam')).toBeVisible();
+  alert.mockRestore();
+});
+
+test('inline profile editing surfaces validation and conflict errors without leaving the form', async () => {
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     if (path === '/api/sharing/profiles/me')
       return { ...casey, id: 'me', display_name: 'Preview', is_you: true, visibility: 'public' };
     throw new Error(`Unexpected GET ${path}`);
   });
+  jest
+    .mocked(apiSend)
+    .mockRejectedValueOnce(new ApiError(409, 'That name is taken.', 'display_name_taken'));
   await show(<ProfileScreen profileId="me" />);
   await fireEvent.press(await screen.findByRole('button', { name: 'Edit profile' }));
-  expect(mockRouter.push).toHaveBeenLastCalledWith('/settings/profile');
-  await fireEvent.press(screen.getByRole('button', { name: 'Sharing: Public' }));
-  expect(mockRouter.push).toHaveBeenLastCalledWith('/social/sharing');
+
+  await fireEvent.changeText(screen.getByLabelText('Name'), '   ');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
+  expect(await screen.findByRole('alert')).toBeVisible();
+  expect(apiSend).not.toHaveBeenCalled();
+
+  await fireEvent.changeText(screen.getByLabelText('Name'), 'Taken');
+  await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Another account already uses that name. Add a surname, initial or nickname.',
+  );
+  expect(screen.getByLabelText('Name')).toBeVisible();
+});
+
+test('a machine photo in a friend’s profile history filters that friend’s history by the machine', async () => {
+  const machinePhoto = {
+    id: 'mp-lat',
+    caption: 'Alex Lat Station',
+    thumbnail_url: '/api/machine-photos/mp-lat/thumb',
+    full_url: '/api/machine-photos/mp-lat/full',
+    width: 800,
+    height: 600,
+  };
+  const workoutWithMachine = {
+    ...upper,
+    id: 'w-lat',
+    name: 'Pull day',
+    movements: [
+      {
+        ...movement('lat', 'Lat Pulldown', 60),
+        machine_photos: [machinePhoto],
+      },
+    ],
+  } as unknown as TrackedWorkout;
+  const friendProfile: SharedProfile = {
+    ...casey,
+    ...alex,
+    friend_status: 'friends',
+    can_view: true,
+    cardio_sessions: [],
+    shares: {
+      notes: true,
+      body_weight: false,
+      body_sizes: false,
+      goals: false,
+      machine_photos: true,
+    },
+  };
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/alex') return friendProfile;
+    if (path === '/api/sharing/profiles/alex/splits') return [];
+    if (path === '/api/sharing/profiles/alex/lifts') return { selected: [], lifts: [] };
+    if (path === '/api/sharing/profiles/alex/workout-filters') {
+      return { exercises: [], machines: [{ id: 'mp-lat', caption: 'Alex Lat Station' }] };
+    }
+    if (path.startsWith('/api/sharing/profiles/alex/workouts')) {
+      return { total: 1, workouts: [workoutWithMachine], personal_records: [], reactions: {} };
+    }
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  // Opened at the workout, so its day is already a filter: the machine is added to it, as on the web.
+  await show(
+    <ProfileScreen
+      profileId="alex"
+      targetWorkout={{ id: 'w-lat', workout_date: workoutWithMachine.workout_date }}
+    />,
+  );
+  await fireEvent.press(await screen.findByRole('imagebutton', { name: 'View Alex Lat Station' }));
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'All workouts on this machine' }),
+  );
+  await waitFor(() =>
+    expect(apiGet).toHaveBeenCalledWith(
+      expect.stringMatching(
+        new RegExp(
+          `start_date=${workoutWithMachine.workout_date}.*machine_photo_id=mp-lat|machine_photo_id=mp-lat.*start_date=${workoutWithMachine.workout_date}`,
+        ),
+      ),
+      expect.anything(),
+    ),
+  );
+  expect(
+    await screen.findByRole('button', { name: 'Filter workouts, 2 filters on' }),
+  ).toBeVisible();
+  // Reopening the same machine photo while already filtered to it hides the redundant filter button.
+  await fireEvent.press(await screen.findByText('Pull day'));
+  await fireEvent.press(await screen.findByRole('imagebutton', { name: 'View Alex Lat Station' }));
+  expect(screen.queryByRole('button', { name: 'All workouts on this machine' })).toBeNull();
+});
+
+test('SharedWorkoutScreen opens a friend’s profile filtered to a machine, and keeps Training’s machine filter for own workouts', async () => {
+  const machinePhoto = {
+    id: 'mp-leg',
+    caption: 'Alex Leg Press',
+    thumbnail_url: '/api/machine-photos/mp-leg/thumb',
+    full_url: '/api/machine-photos/mp-leg/full',
+    width: 800,
+    height: 600,
+  };
+  const workoutWithMachine = {
+    ...upper,
+    id: 'w-leg',
+    name: 'Leg day',
+    movements: [
+      {
+        ...movement('leg-press', 'Leg Press', 170),
+        machine_photos: [machinePhoto],
+      },
+    ],
+  } as unknown as TrackedWorkout;
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path.startsWith('/api/sharing/profiles/alex/workouts'))
+      return { total: 1, workouts: [workoutWithMachine], personal_records: [], reactions: {} };
+    if (path.startsWith('/api/sharing/profiles/me/workouts'))
+      return { total: 1, workouts: [workoutWithMachine], personal_records: [], reactions: {} };
+    if (path === '/api/sharing/profiles/alex') return { ...casey, ...alex, can_view: true };
+    if (path === '/api/sharing/profiles/me')
+      return { ...casey, id: 'me', is_you: true, can_view: true };
+    if (path.startsWith('/api/sharing/workouts/w-leg/comments'))
+      return { total: 0, next_offset: null, items: [] };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+
+  // Friend's shared workout -> friend's profile filtered to that machine.
+  const view = await show(<SharedWorkoutScreen workoutId="w-leg" memberId="alex" date={today} />);
+  await fireEvent.press(await screen.findByRole('imagebutton', { name: 'View Alex Leg Press' }));
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'All workouts on this machine' }),
+  );
+  expect(mockRouter.push).toHaveBeenLastCalledWith({
+    pathname: '/social/profile/[id]',
+    params: { id: 'alex', machine: 'mp-leg' },
+  });
+
+  // Own workout in SharedWorkoutScreen -> Training's existing machine filter.
+  mockRouter.push.mockClear();
+  await view.rerender(<SharedWorkoutScreen workoutId="w-leg" memberId="me" date={today} />);
+  await fireEvent.press(await screen.findByRole('imagebutton', { name: 'View Alex Leg Press' }));
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'All workouts on this machine' }),
+  );
+  expect(mockRouter.push).toHaveBeenLastCalledWith({
+    pathname: '/training/machine/[id]',
+    params: { id: 'mp-leg', caption: 'Alex Leg Press', exercise: 'Leg Press' },
+  });
+});
+
+test('opening a profile with targetMachine filters history to that machine immediately', async () => {
+  const friendProfile: SharedProfile = {
+    ...casey,
+    ...alex,
+    friend_status: 'friends',
+    can_view: true,
+    shares: {
+      notes: true,
+      body_weight: false,
+      body_sizes: false,
+      goals: false,
+      machine_photos: true,
+    },
+  };
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/alex') return friendProfile;
+    if (path === '/api/sharing/profiles/alex/splits') return [];
+    if (path === '/api/sharing/profiles/alex/lifts') return { selected: [], lifts: [] };
+    if (path === '/api/sharing/profiles/alex/workout-filters') {
+      return { exercises: [], machines: [{ id: 'mp-leg', caption: 'Alex Leg Press' }] };
+    }
+    if (path.startsWith('/api/sharing/profiles/alex/workouts')) {
+      return { total: 1, workouts: [upper], personal_records: [], reactions: {} };
+    }
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  await show(<ProfileScreen profileId="alex" targetMachine="mp-leg" />);
+  expect(await screen.findByRole('button', { name: 'Filter workouts, 1 filter on' })).toBeVisible();
+  expect(apiGet).toHaveBeenCalledWith(
+    expect.stringContaining('machine_photo_id=mp-leg'),
+    expect.anything(),
+  );
 });
 
 test('scanning a friend code opens their invite, and other codes say why not', async () => {
