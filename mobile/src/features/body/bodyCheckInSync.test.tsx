@@ -61,6 +61,8 @@ jest.mock('../workout/WorkoutProvider', () => ({
     hostSyncConflict: () => () => undefined,
     syncConflictHosted: false,
   }),
+  useOptionalWorkout: () => null,
+  useLogger: () => null,
 }));
 
 const userA = {
