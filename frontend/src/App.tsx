@@ -438,9 +438,9 @@ import {
   applySupersetSelection,
   clearSuperset,
   keepSupersetTogether,
+  isSupersetUpNext,
   nextInSupersetRound,
   supersetGroupName,
-  supersetRoundPending,
 } from './workoutSupersets';
 import {
   HISTORY_WEEKS_PER_PAGE,
@@ -5224,11 +5224,7 @@ function WorkoutLogger({
               number={movementIndex + 1}
               prBadges={prBadges.get(movement.key) ?? new Map()}
               supersetLabel={supersetLabel(movement.supersetKey)}
-              supersetUpNext={Boolean(
-                movement.supersetKey &&
-                !initialWorkout &&
-                supersetRoundPending(movements, movement.supersetKey)[0]?.key === movement.key,
-              )}
+              supersetUpNext={!initialWorkout && isSupersetUpNext(movements, movement.key)}
               history={recentExerciseHistory(
                 historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
                 movement.exercise.id,

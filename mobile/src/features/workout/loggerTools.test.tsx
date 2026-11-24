@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useEffect, type ReactNode } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Alert, Platform, StyleSheet } from 'react-native';
 import { readActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
 import { freshTips, parseTips, tipStorageKey } from '../../../../frontend/src/tipsState';
 import { resetTipsForTests } from '../guides/tips';
@@ -222,6 +222,30 @@ describe('correcting the workout time', () => {
     expect(draft()?.adjustedMs).toBeUndefined();
   });
 
+  test('out-of-range time stops the save instead of being clamped or cut short', async () => {
+    await openLogger();
+    await fireEvent.press(screen.getByRole('button', { name: /^Correct workout time/ }));
+    await fireEvent.changeText(screen.getByLabelText('Minutes'), '65');
+    expect(screen.getByText('0 to 59')).toBeVisible();
+    const setTime = screen.getByRole('button', { name: 'Set time' });
+    expect(setTime.props.accessibilityState).toMatchObject({ disabled: true });
+    await fireEvent.press(setTime);
+    expect(screen.getByText('Workout time so far')).toBeVisible();
+    expect(draft()?.adjustedMs).toBeUndefined();
+    // A pasted 100 stays 100 (and invalid); it is never cut to 10.
+    await fireEvent.changeText(screen.getByLabelText('Minutes'), '100');
+    expect(screen.getByLabelText('Minutes').props.value).toBe('100');
+    expect(screen.getByText('0 to 59')).toBeVisible();
+    await fireEvent.changeText(screen.getByLabelText('Hours'), '24');
+    expect(screen.getByText('0 to 23')).toBeVisible();
+    await fireEvent.changeText(screen.getByLabelText('Hours'), '1');
+    await fireEvent.changeText(screen.getByLabelText('Minutes'), '');
+    await fireEvent.press(screen.getByRole('button', { name: 'Set time' }));
+    expect(
+      await screen.findByRole('button', { name: /^Correct workout time, Live 1:00:0\d$/ }),
+    ).toBeVisible();
+  });
+
   test('a corrected clock keeps counting after the app reopens', async () => {
     const view = await openLogger();
     await fireEvent.press(screen.getByRole('button', { name: /^Correct workout time/ }));
@@ -281,8 +305,13 @@ describe('folding an exercise card', () => {
     await openLogger();
     const footer = () => screen.getAllByRole('button', { name: 'Collapse Bench Press' }).at(-1)!;
     expect(screen.getAllByRole('button', { name: 'Collapse Bench Press' })).toHaveLength(2);
+    const fill = () => StyleSheet.flatten(footer().props.style).backgroundColor;
+    const before = fill();
     await fireEvent.press(screen.getAllByRole('button', { name: 'Complete set 1' })[0]);
+    expect(fill()).toBe(before);
     await fireEvent.press(screen.getAllByRole('button', { name: 'Complete set 2' })[0]);
+    // Every working set ticked: the collapse button takes the green done treatment.
+    expect(fill()).not.toBe(before);
     // Ticking every set never folds the card by itself.
     expect(screen.getAllByRole('button', { name: 'Collapse Bench Press' })).toHaveLength(2);
     await fireEvent.press(footer());
@@ -328,6 +357,37 @@ async function dragSet(row: number, dy: number, canceled = false) {
   await act(async () => drag.onUpdate({ translationY: dy }));
   await act(async () => dragOf(row).onDeactivate({ canceled }));
 }
+
+async function addOverheadPress() {
+  await fireEvent.press(screen.getByRole('button', { name: 'Add exercise' }));
+  await fireEvent.changeText(screen.getByLabelText('Search exercises'), 'press');
+  await fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Add 1' }));
+}
+
+describe('folded supersets', () => {
+  test('a folded card that becomes next in its superset round opens and says Up next', async () => {
+    await openLogger();
+    await addOverheadPress();
+    await fireEvent.press(screen.getByRole('button', { name: 'Actions for Bench Press' }));
+    await act(async () =>
+      option(
+        jest.mocked(showMenu).mock.calls.at(-1)![1] as MenuOption[],
+        'Superset with',
+      ).onPress(),
+    );
+    await act(async () => option(menuCall('Superset with'), 'Overhead Press').onPress());
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Collapse Overhead Press' })[0]);
+    expect(screen.getByRole('button', { name: 'Expand Overhead Press' })).toBeVisible();
+    expect(screen.queryByText('Up next')).toBeNull();
+
+    // Logging Bench Press's set makes Overhead Press next in the round.
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Complete set 1' })[0]);
+    expect(await screen.findByText('Up next')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Expand Overhead Press' })).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Collapse Overhead Press' })).toHaveLength(2);
+  });
+});
 
 describe('dragging to reorder sets', () => {
   test('the drop place is the block under the dragged set’s middle', () => {

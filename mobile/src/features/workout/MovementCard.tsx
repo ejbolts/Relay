@@ -89,8 +89,11 @@ export interface MovementActions {
   openMachines: (movementKey: string) => void;
   /** Pins the machines the exercise's last session used, for a movement that has none yet. */
   restoreMachines: (movementKey: string, machinePhotoIds: string[]) => void;
-  /** Brings the exercise's header back into view, after folding it from the bottom of its card. */
-  revealMovement?: (movementKey: string) => void;
+  /**
+   * Brings the exercise into view: its header, after folding it from the bottom of its card, or
+   * the card, when it becomes next in a superset round.
+   */
+  revealMovement?: (movementKey: string, part?: 'header' | 'card') => void;
 }
 
 const NO_BADGES: ReadonlyMap<string, string[]> = new Map();
@@ -113,6 +116,7 @@ export const MovementCard = memo(function MovementCard({
   weightUnit,
   skipHighRepWarning,
   machineTip = false,
+  supersetUpNext = false,
   actions,
 }: {
   /** Its place in the workout, on the picture's badge. */
@@ -136,6 +140,8 @@ export const MovementCard = memo(function MovementCard({
   skipHighRepWarning: boolean;
   /** The machine photo tip applies: a machine or cable exercise logged a few times without one. */
   machineTip?: boolean;
+  /** Next to do in its superset's round in progress: opens if folded and says "Up next". */
+  supersetUpNext?: boolean;
   actions: MovementActions;
 }) {
   const { colors, type, radius, space } = useTheme();
@@ -215,11 +221,20 @@ export const MovementCard = memo(function MovementCard({
     setWasComplete(movement.isComplete);
     if (!movement.isComplete) setExpanded(true);
   }
+  // The next exercise in a superset round opens, as on the web, so its set is in reach.
+  const [wasUpNext, setWasUpNext] = useState(supersetUpNext);
+  if (wasUpNext !== supersetUpNext) {
+    setWasUpNext(supersetUpNext);
+    if (supersetUpNext) setExpanded(true);
+  }
   const toggle = () => {
     haptics.selection();
     setExpanded((current) => !current);
   };
   const { revealMovement } = actions;
+  useEffect(() => {
+    if (supersetUpNext) revealMovement?.(movement.key, 'card');
+  }, [supersetUpNext, revealMovement, movement.key]);
   const collapseFromFooter = () => {
     haptics.selection();
     setExpanded(false);
@@ -252,6 +267,9 @@ export const MovementCard = memo(function MovementCard({
           <Text style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}>
             {supersetGroupName(supersetNames.length)}
           </Text>
+          {supersetUpNext && (
+            <Text style={[type.caption, { color: colors.good, fontWeight: '800' }]}>Up next</Text>
+          )}
         </View>
       )}
       <View style={styles.header}>

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   applySupersetSelection,
   clearSuperset,
+  isSupersetUpNext,
   keepSupersetTogether,
   nextInSupersetRound,
   supersetGroupName,
@@ -96,6 +97,19 @@ describe('tri-sets', () => {
     expect(nextInSupersetRound(triSet(1, 1, 0), 'row')?.key).toBe('curl');
     expect(nextInSupersetRound(triSet(1, 1, 1), 'curl')).toBeNull();
     expect(nextInSupersetRound(triSet(2, 1, 1), 'bench')?.key).toBe('row');
+  });
+
+  it('marks only the exercise owed the next set in the round as up next', () => {
+    expect(isSupersetUpNext(triSet(1, 0, 0), 'row')).toBe(true);
+    expect(isSupersetUpNext(triSet(1, 0, 0), 'curl')).toBe(false);
+    expect(isSupersetUpNext(triSet(1, 0, 0), 'bench')).toBe(false);
+    expect(isSupersetUpNext(triSet(1, 1, 1), 'bench')).toBe(false);
+    expect(
+      isSupersetUpNext(
+        movements.map((item) => ({ ...item, sets: [] })),
+        'bench',
+      ),
+    ).toBe(false);
   });
 
   it('returns to an earlier exercise that was skipped this round', () => {

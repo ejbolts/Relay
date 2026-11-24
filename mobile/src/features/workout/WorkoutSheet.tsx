@@ -34,6 +34,7 @@ import {
   type PrCelebrations,
 } from '../../../../frontend/src/workoutPr';
 import { activeElapsedSeconds } from '../../../../frontend/src/workoutPause';
+import { isSupersetUpNext } from '../../../../frontend/src/workoutSupersets';
 import { newId } from '../../data/deviceStorage';
 import { useDashboard, useTrainingPreferences } from '../../data/queries';
 import { Button } from '../../ui/components';
@@ -395,13 +396,16 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const scrollY = useRef(0);
   const cardTops = useRef(new Map<string, number>());
   const reducedMotion = useReduceMotion();
+  const viewportHeight = useRef(0);
   const revealMovement = useCallback(
-    (movementKey: string) => {
+    (movementKey: string, part: 'header' | 'card' = 'header') => {
       requestAnimationFrame(() => {
         const top = cardTops.current.get(movementKey);
         if (top === undefined) return;
         const target = Math.max(0, top - space.gutter);
-        if (target < scrollY.current)
+        // A card becoming next in a superset also comes up when it sits below the screen.
+        const below = part === 'card' && top + 120 > scrollY.current + viewportHeight.current;
+        if (target < scrollY.current || below)
           scrollRef.current?.scrollTo({ y: target, animated: !reducedMotion });
       });
     },
@@ -680,7 +684,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Correct workout time, ${paused ? elapsed : `Live ${elapsed}`}`}
-                hitSlop={{ top: 12, bottom: 12, left: 6, right: 6 }}
+                hitSlop={{ left: 6, right: 6 }}
                 onPress={() => {
                   haptics.tap();
                   openTimeEditor();
@@ -701,8 +705,14 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
                   {paused ? elapsed : `Live ${elapsed}`}
                 </Text>
               </Pressable>
-              {paused && <Text style={[styles.metaText, { color: colors.muted }]}>· Paused</Text>}
-              <Text style={[styles.metaText, type.number, { color: colors.muted }]}>
+              {paused && (
+                <Text style={[styles.metaText, styles.metaLine, { color: colors.muted }]}>
+                  · Paused
+                </Text>
+              )}
+              <Text
+                style={[styles.metaText, styles.metaLine, type.number, { color: colors.muted }]}
+              >
                 · {ticked} {ticked === 1 ? 'set' : 'sets'}
               </Text>
             </View>
@@ -767,6 +777,9 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       </View>
       <ScrollView
         ref={scrollRef}
+        onLayout={(event) => {
+          viewportHeight.current = event.nativeEvent.layout.height;
+        }}
         onScroll={(event) => {
           scrollY.current = event.nativeEvent.contentOffset.y;
         }}
@@ -809,6 +822,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
               weightUnit={logger.weightUnit}
               skipHighRepWarning={state.skipHighRepWarning}
               machineTip={machineTipFor(movement.exercise)}
+              supersetUpNext={isSupersetUpNext(state.movements, movement.key)}
               actions={actions}
             />
           </View>
@@ -1101,9 +1115,9 @@ const styles = StyleSheet.create({
     gap: 16,
     padding: 24,
   },
+  // The clock's 44 pt row reaches the header's bottom edge, so it needs no padding below.
   header: {
     paddingHorizontal: 14,
-    paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   // A 44 pt tall touch area around the grabber.
@@ -1115,14 +1129,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   grabber: { width: 36, height: 5, borderRadius: 3 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  titleBlock: { flex: 1, minWidth: 0, gap: 3 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  titleBlock: { flex: 1, minWidth: 0 },
   // The web's live title: 17 pt, extra bold, one line.
   title: { fontSize: 17, lineHeight: 22, fontWeight: '800', letterSpacing: -0.4 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  // A 44 pt row under the title: the clock's touch area fills its height without reaching the
+  // title (which renames), and the text keeps its place just under the title.
+  meta: { flexDirection: 'row', alignItems: 'stretch', gap: 5, minHeight: 44 },
+  metaLine: { paddingTop: 3 },
   metaText: { fontSize: 13, fontWeight: '600' },
-  liveDot: { width: 6, height: 6, borderRadius: 3 },
-  clock: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, marginTop: 6 },
+  clock: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, paddingTop: 3, paddingRight: 4 },
   clockText: { textDecorationLine: 'underline', textDecorationStyle: 'dotted' },
   square: {
     width: 44,

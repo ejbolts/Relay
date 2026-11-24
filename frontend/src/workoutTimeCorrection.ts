@@ -29,3 +29,16 @@ export function workoutTimeSeconds(hours: string, minutes: string): number {
     wholeNumber(hours, 23) * 3600 + wholeNumber(minutes, 59) * 60,
   );
 }
+
+/** The largest hours and minutes the correction accepts, as the web's number fields allow. */
+export const WORKOUT_TIME_MAX = { hours: 23, minutes: 59 } as const;
+
+/**
+ * Whether a field's text can be saved, as the web's bounded number fields judge it: empty (read
+ * as 0) or a whole number from 0 to `max`. Anything else stops the save rather than being
+ * clamped or cut short.
+ */
+export function workoutTimeFieldValid(value: string, max: number): boolean {
+  const text = value.trim();
+  return text === '' || (/^\d+$/.test(text) && Number(text) <= max);
+}

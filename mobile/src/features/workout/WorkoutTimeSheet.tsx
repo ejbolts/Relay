@@ -1,7 +1,9 @@
 import { useRef, useState, type ComponentRef } from 'react';
 import { StyleSheet, View, type TextInput } from 'react-native';
 import {
+  WORKOUT_TIME_MAX,
   workoutTimeFields,
+  workoutTimeFieldValid,
   workoutTimeSeconds,
 } from '../../../../frontend/src/workoutTimeCorrection';
 import { Button } from '../../ui/components';
@@ -29,7 +31,14 @@ export function WorkoutTimeSheet({
   const [hours, setHours] = useState(starting.hours);
   const [minutes, setMinutes] = useState(starting.minutes);
   const minutesField = useRef<ComponentRef<typeof TextInput>>(null);
-  const save = () => onSave(workoutTimeSeconds(hours, minutes));
+  // Out-of-range or partly numeric text stops the save, as the web's bounded fields do, and the
+  // workout is left alone until both fields are valid.
+  const hoursValid = workoutTimeFieldValid(hours, WORKOUT_TIME_MAX.hours);
+  const minutesValid = workoutTimeFieldValid(minutes, WORKOUT_TIME_MAX.minutes);
+  const valid = hoursValid && minutesValid;
+  const save = () => {
+    if (valid) onSave(workoutTimeSeconds(hours, minutes));
+  };
 
   return (
     <Sheet visible={visible} onClose={onClose} title="Workout time so far">
@@ -42,7 +51,7 @@ export function WorkoutTimeSheet({
           keyboardType="number-pad"
           selectTextOnFocus
           returnKeyType="next"
-          maxLength={2}
+          error={hoursValid ? null : `0 to ${WORKOUT_TIME_MAX.hours}`}
           onSubmitEditing={() => minutesField.current?.focus()}
           style={styles.field}
         />
@@ -55,13 +64,13 @@ export function WorkoutTimeSheet({
           keyboardType="number-pad"
           selectTextOnFocus
           returnKeyType="done"
-          maxLength={2}
+          error={minutesValid ? null : `0 to ${WORKOUT_TIME_MAX.minutes}`}
           onSubmitEditing={save}
           style={styles.field}
         />
       </View>
       <View style={styles.actions}>
-        <Button label="Set time" onPress={save} block />
+        <Button label="Set time" onPress={save} disabled={!valid} block />
         <Button label="Cancel" variant="secondary" onPress={onClose} block />
       </View>
     </Sheet>

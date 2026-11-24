@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_LIVE_CLOCK_SECONDS } from './workoutPause';
-import { workoutTimeFields, workoutTimeSeconds } from './workoutTimeCorrection';
+import {
+  workoutTimeFields,
+  workoutTimeFieldValid,
+  workoutTimeSeconds,
+} from './workoutTimeCorrection';
 
 describe('workout time correction', () => {
   it('starts from the clock in whole hours and minutes', () => {
@@ -16,5 +20,14 @@ describe('workout time correction', () => {
     expect(workoutTimeSeconds('-2', 'abc')).toBe(0);
     expect(workoutTimeSeconds('', '')).toBe(0);
     expect(workoutTimeSeconds('99', '99')).toBe(MAX_LIVE_CLOCK_SECONDS);
+  });
+
+  it('accepts only empty fields or whole numbers within range, as the web fields do', () => {
+    for (const ok of ['', ' ', '0', '7', '07', '59'])
+      expect(workoutTimeFieldValid(ok, 59)).toBe(true);
+    for (const bad of ['60', '65', '100', '-1', '1.5', '1e1', 'abc'])
+      expect(workoutTimeFieldValid(bad, 59)).toBe(false);
+    expect(workoutTimeFieldValid('23', 23)).toBe(true);
+    expect(workoutTimeFieldValid('24', 23)).toBe(false);
   });
 });
