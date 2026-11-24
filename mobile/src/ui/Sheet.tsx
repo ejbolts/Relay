@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import {
   Keyboard,
   Modal,
@@ -13,6 +13,36 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReduceMotion } from '../features/settings/devicePreferences';
 import { Icon } from './Icon';
 import { useTheme } from './theme';
+
+/**
+ * How much of the Android modal backdrop is obstructed by the soft keyboard, computed from the
+ * backdrop's bottom in window coordinates and the keyboard's top (`screenY`). Handles full-height
+ * edge-to-edge modals with three-button navigation (where `endCoordinates.height` omits the
+ * system-bar inset) and already-resized windows (where `backdropBottom <= screenY`, yielding 0).
+ */
+export function keyboardObstruction(
+  backdropBottom: number,
+  keyboard: { screenY?: number; height?: number } | null | undefined,
+): number {
+  if (!keyboard) return 0;
+  if (typeof keyboard.screenY === 'number' && Number.isFinite(keyboard.screenY)) {
+    return Math.max(0, Math.round(backdropBottom - keyboard.screenY));
+  }
+  return Math.max(0, Math.round(keyboard.height ?? 0));
+}
+
+export const sheetBackdropLayout = {
+  measure: (
+    node: ComponentRef<typeof View>,
+    done: (bounds: { y: number; height: number }) => void,
+  ): boolean => {
+    if (typeof node.measureInWindow !== 'function') return false;
+    node.measureInWindow((_x, y, _width, height) => {
+      done({ y, height });
+    });
+    return true;
+  },
+};
 
 /**
  * A sheet that doesn't need its own route: a native page sheet on iOS (swipe down to close), and
@@ -41,23 +71,45 @@ export function Sheet({
   const reduced = useReduceMotion();
   const insets = useSafeAreaInsets();
   const ios = Platform.OS === 'ios';
-  const [keyboardHeight, setKeyboardHeight] = useState(() =>
-    ios || typeof Keyboard.metrics !== 'function' ? 0 : (Keyboard.metrics()?.height ?? 0),
-  );
+  const backdropRef = useRef<ComponentRef<typeof View>>(null);
+  const keyboardCoords = useRef<{ screenY?: number; height?: number } | null>(null);
+  const measureSeq = useRef(0);
+  const [keyboardOverlap, setKeyboardOverlap] = useState(0);
+
+  const updateOverlap = useCallback((coords: { screenY?: number; height?: number } | null) => {
+    keyboardCoords.current = coords;
+    const seq = ++measureSeq.current;
+    if (!coords || (coords.height ?? 0) <= 0) {
+      setKeyboardOverlap(0);
+      return;
+    }
+    const node = backdropRef.current;
+    if (
+      !node ||
+      !sheetBackdropLayout.measure(node, ({ y, height }) => {
+        if (seq !== measureSeq.current || height <= 0) return;
+        setKeyboardOverlap(keyboardObstruction(y + height, coords));
+      })
+    ) {
+      setKeyboardOverlap(Math.max(0, Math.round(coords.height ?? 0)));
+    }
+  }, []);
+
   useEffect(() => {
     if (ios) return;
     const show = Keyboard.addListener('keyboardDidShow', (event) => {
-      setKeyboardHeight(event.endCoordinates.height);
+      updateOverlap(event.endCoordinates);
     });
     const hide = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardHeight(0);
+      updateOverlap(null);
     });
     return () => {
+      measureSeq.current += 1;
       show.remove();
       hide.remove();
     };
-  }, [ios]);
-  const keyboardLift = !ios && visible ? keyboardHeight : 0;
+  }, [ios, updateOverlap]);
+  const keyboardLift = !ios && visible ? keyboardOverlap : 0;
   const header = (
     <View style={styles.header}>
       <View style={{ flex: 1, gap: 2 }}>
@@ -115,6 +167,14 @@ export function Sheet({
         <View style={{ flex: 1, backgroundColor: colors.surface }}>{body}</View>
       ) : (
         <View
+          ref={backdropRef}
+          collapsable={false}
+          onLayout={() => {
+            const active =
+              keyboardCoords.current ??
+              (typeof Keyboard.metrics === 'function' ? Keyboard.metrics() : null);
+            if (active && (active.height ?? 0) > 0) updateOverlap(active);
+          }}
           style={[
             styles.backdrop,
             keyboardLift > 0 && { paddingTop: insets.top + 48, paddingBottom: keyboardLift },
