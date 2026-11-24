@@ -39,7 +39,7 @@ from .auth import (
 from .client_versions import ClientVersion, ClientVersionGateMiddleware, normalized_version
 from .config import Settings, get_settings
 from .database import Base, SessionLocal, engine, get_db
-from .errors import api_error
+from .errors import api_error, format_validation_errors
 from .feedback import admin_feedback_router, feedback_router
 from .frontend import FrontendFiles
 from .home_layout import router as home_layout_router
@@ -207,7 +207,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(RequestValidationError)
     async def validation_exception_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
-        details = exc.errors()
+        raw_details = exc.errors()
+        message = format_validation_errors(raw_details) or "Request validation failed."
+        details = [dict(detail) for detail in raw_details]
         for detail in details:
             detail.pop("ctx", None)
             # Malformed non-JSON requests can carry bytes, which JSONResponse cannot encode.
@@ -218,7 +220,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             content={
                 "error": {
                     "code": "validation_error",
-                    "message": "Request validation failed.",
+                    "message": message,
                     "details": details,
                 }
             },

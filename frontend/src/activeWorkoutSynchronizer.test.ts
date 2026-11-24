@@ -54,9 +54,9 @@ describe('the shared synchronizer', () => {
     expect(box.server.draft?.notes).toBe('Phone');
   });
 
-  it('finishes offline only when the server could not be reached', async () => {
+  it('finishes offline only when the server could not be reached and surfaces refusal reasons', async () => {
     const failing = vi.fn(async () => {
-      throw new Error('down');
+      throw new Error('Set 1: average heart rate (1,132 bpm) must be at most 250 bpm.');
     });
     const offline = harness(
       { read: failing, put: failing },
@@ -68,6 +68,19 @@ describe('the shared synchronizer', () => {
       draft('37be7007-c0dc-4df2-932f-eb40d4a5ecbc'),
     );
     await expect(refused.sync.finishFields()).rejects.toThrow(
+      'Could not sync the workout: Set 1: average heart rate (1,132 bpm) must be at most 250 bpm.',
+    );
+    const silentRefusal = harness(
+      {
+        read: vi.fn(async () => {
+          throw new Error('');
+        }),
+        put: failing,
+        connectionFailure: () => false,
+      },
+      draft('37be7007-c0dc-4df2-932f-eb40d4a5ecbc'),
+    );
+    await expect(silentRefusal.sync.finishFields()).rejects.toThrow(
       'Could not sync the workout. Try again before finishing.',
     );
   });

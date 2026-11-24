@@ -151,31 +151,44 @@ def _matching_line(lines: list[OcrLine], labels: tuple[str, ...]) -> OcrLine | N
     return None
 
 
-def _value_below(
+def _value_below_match(
     lines: list[OcrLine],
     labels: tuple[str, ...],
     value_pattern: re.Pattern[str],
-) -> str | None:
+) -> tuple[str, str] | None:
     anchor = _matching_line(lines, labels)
     if anchor is None:
         return None
     inline = value_pattern.search(anchor.text)
     if inline:
-        return inline.group(0)
-    candidates: list[tuple[float, OcrLine]] = []
+        return inline.group(0), inline.group(0)
+    candidates: list[tuple[float, str, str]] = []
     for line in lines:
         if line.top < anchor.bottom - 4 or line.top - anchor.bottom > max(180, anchor.height * 5):
             continue
-        if not value_pattern.search(line.text):
+        match = value_pattern.search(line.text)
+        if not match:
             continue
         horizontal_gap = abs(line.center_x - anchor.center_x)
         column_width = max(anchor.right - anchor.left, line.right - line.left, 80)
         if horizontal_gap > column_width * 0.85:
             continue
-        candidates.append((line.top - anchor.bottom + horizontal_gap * 0.2, line))
+        candidates.append(
+            (line.top - anchor.bottom + horizontal_gap * 0.2, match.group(0), line.text)
+        )
     if not candidates:
         return None
-    return min(candidates, key=lambda item: item[0])[1].text
+    _, matched, full_text = min(candidates, key=lambda item: item[0])
+    return matched, full_text
+
+
+def _value_below(
+    lines: list[OcrLine],
+    labels: tuple[str, ...],
+    value_pattern: re.Pattern[str],
+) -> str | None:
+    found = _value_below_match(lines, labels, value_pattern)
+    return found[1] if found else None
 
 
 def _number(value: str | None) -> float | None:
@@ -296,6 +309,29 @@ def _pace_to_speed(lines: list[OcrLine]) -> float | None:
     return round(speed, 1)
 
 
+def _heart_rate(lines: list[OcrLine]) -> int | None:
+    labels = ("avg heart rate", "average heart rate", "avg hr")
+    # Prefer the token carrying "bpm" and read only the match so an icon read as a stray digit
+    # (for example "1 132 bpm") cannot merge into "1132", while a fused misread ("1132 bpm") is
+    # still caught and rejected instead of falling through to another metric below it.
+    found = _value_below_match(lines, labels, re.compile(r"\b\d+\s*bpm\b", re.I))
+    if found is None:
+        found = _value_below_match(lines, labels, re.compile(r"\b\d{2,3}\b"))
+    if found is None:
+        return None
+    value = _number(found[0])
+    if value is None:
+        return None
+    bpm = int(round(value))
+    return bpm if 20 <= bpm <= 250 else None
+
+
+def _in_range(value: int | float | None, minimum: float, maximum: float):
+    if value is None:
+        return None
+    return value if minimum <= value <= maximum else None
+
+
 def parse_cardio_ocr(lines: list[OcrLine], today: date | None = None) -> dict[str, object]:
     active_calories_raw = _value_below(
         lines,
@@ -311,13 +347,6 @@ def parse_cardio_ocr(lines: list[OcrLine], today: date | None = None) -> dict[st
     distance = _number(distance_raw)
     if distance is not None and distance_raw and re.search(r"\b(?:mi|mile)", distance_raw, re.I):
         distance *= 1.609344
-    heart_rate = _number(
-        _value_below(
-            lines,
-            ("avg heart rate", "average heart rate", "avg hr"),
-            re.compile(r"\b\d{2,3}\s*(?:bpm)?\b", re.I),
-        )
-    )
     elevation_raw = _value_below(
         lines,
         ("elevation gain", "elev gain", "elevation", "total ascent"),
@@ -329,12 +358,16 @@ def parse_cardio_ocr(lines: list[OcrLine], today: date | None = None) -> dict[st
     parsed = {
         "session_date": _workout_date(lines, today or date.today()),
         "activity_type": _activity_type(lines),
-        "duration_minutes": _duration_minutes(lines),
-        "calories_kcal": int(round(calories)) if calories is not None else None,
-        "average_heart_rate_bpm": int(round(heart_rate)) if heart_rate is not None else None,
-        "distance_km": round(distance, 3) if distance is not None else None,
-        "average_speed_kph": _pace_to_speed(lines),
-        "elevation_gain_m": round(elevation, 1) if elevation is not None else None,
+        "duration_minutes": _in_range(_duration_minutes(lines), 1, 1_440),
+        "calories_kcal": _in_range(
+            int(round(calories)) if calories is not None else None, 0, 100_000
+        ),
+        "average_heart_rate_bpm": _heart_rate(lines),
+        "distance_km": _in_range(round(distance, 3) if distance is not None else None, 0, 10_000),
+        "average_speed_kph": _in_range(_pace_to_speed(lines), 0, 100),
+        "elevation_gain_m": _in_range(
+            round(elevation, 1) if elevation is not None else None, 0, 30_000
+        ),
     }
     field_labels = {
         "session_date": "date",
