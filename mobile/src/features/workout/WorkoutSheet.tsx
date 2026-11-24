@@ -217,10 +217,23 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const closeShelf = useCallback(() => setShelf(null), []);
 
   const swap = useCallback(
-    (movementKey: string, replacement: Exercise, machineChoices?: ExerciseMachineChoices) => {
+    (
+      movementKey: string,
+      replacement: Exercise,
+      machineChoices?: ExerciseMachineChoices,
+      machineUse?: Readonly<Record<string, number>>,
+    ) => {
       const before = getState();
       if (!before) return;
-      void swapOntoMachine(change, movementKey, replacement, context, machineChoices);
+      void swapOntoMachine(
+        change,
+        movementKey,
+        replacement,
+        context,
+        machineChoices,
+        undefined,
+        machineUse,
+      );
       showToast(`Swapped to ${replacement.name}`, {
         label: 'Undo',
         run: () => change((current) => ({ ...current, movements: before.movements })),
@@ -753,10 +766,10 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         category={identity.category}
         chooseMachines
         lastDone={lastDone}
-        onAdd={(selected, machineChoices) => {
+        onAdd={(selected, machineChoices, machineUse) => {
           const target = picker?.swapping;
           if (target) {
-            if (selected[0]) swap(target, selected[0], machineChoices);
+            if (selected[0]) swap(target, selected[0], machineChoices, machineUse);
           } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}
         onCreateSuperset={(selected, machineChoices) =>

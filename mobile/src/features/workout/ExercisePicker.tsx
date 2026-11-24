@@ -80,7 +80,15 @@ export function ExercisePicker({
   /** The workout's type, which a new exercise created from a search starts in. */
   category?: WorkoutCategory;
   /** The picks in the order tapped, with the machine chosen for each that has saved machines. */
-  onAdd: (selected: Exercise[], machineChoices: ExerciseMachineChoices) => void;
+  /**
+   * `machineUse` gives each chosen machine's saved workout count, by machine id, as far as the
+   * picker knows it: a machine no workout has used can be planned from the general suggestion.
+   */
+  onAdd: (
+    selected: Exercise[],
+    machineChoices: ExerciseMachineChoices,
+    machineUse?: Readonly<Record<string, number>>,
+  ) => void;
   /** Adds the picks as a superset (tri-set, giant set) instead. */
   onCreateSuperset?: (selected: Exercise[], machineChoices: ExerciseMachineChoices) => void;
   /** Offers each picked exercise's saved machines. */
@@ -111,9 +119,11 @@ export function ExercisePicker({
   // have machines to choose from. A list being read again (after a workout was saved, or once
   // it is old) is provisional too: it still shows its machines to choose from, but nothing is
   // chosen automatically from it, as its last-used machine may have changed.
+  // A list whose refresh failed is no surer: the error shows, with Swap without choosing a machine.
   const catalogKnown =
     !machinesOn ||
-    (allMachines !== undefined && !(machinesQuery.isStale && machinesQuery.isFetching));
+    (allMachines !== undefined &&
+      !(machinesQuery.isStale && (machinesQuery.isFetching || machinesQuery.isRefetchError)));
   const catalogProblem = catalogKnown
     ? null
     : waitingForNetwork(machinesQuery)
@@ -218,6 +228,16 @@ export function ExercisePicker({
     );
     if (!picked) setSelected((current) => (swap ? [exercise] : [...current, exercise]));
   };
+  /** How many saved workouts each chosen machine has, from the list shown. */
+  const machineUseOf = (choices: ExerciseMachineChoices) =>
+    Object.fromEntries(
+      Object.entries(choices).flatMap(([exerciseId, machineId]) => {
+        const machine = machineId
+          ? savedMachines.get(exerciseId)?.find((item) => item.id === machineId)
+          : undefined;
+        return machine ? [[machine.id, machine.workout_count]] : [];
+      }),
+    );
   /**
    * A machine photographed from the strip, for the account that took it (the strip checks).
    * `session` and `selected` here are as they were when the photo was started: the new machine
@@ -599,7 +619,7 @@ export function ExercisePicker({
               }
               block
               onPress={() => {
-                onAdd([selected[0]], resolvedChoices);
+                onAdd([selected[0]], resolvedChoices, machineUseOf(resolvedChoices));
                 close();
               }}
             />

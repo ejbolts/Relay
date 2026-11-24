@@ -285,7 +285,7 @@ describe("the picker's Swap exercise mode", () => {
     expect(onAdd).not.toHaveBeenCalled();
     expect(screen.getByRole('checkbox', { name: 'Hammer Strength press' })).toBeChecked();
     await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Swap exercise' })));
-    expect(onAdd).toHaveBeenCalledWith([press], { press: 'hammer' });
+    expect(onAdd).toHaveBeenCalledWith([press], { press: 'hammer' }, { hammer: 2 });
     expect(onClose).toHaveBeenCalled();
   });
 
@@ -299,7 +299,7 @@ describe("the picker's Swap exercise mode", () => {
     );
     expect(screen.getByText('Baseline exercise')).toBeVisible();
     await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Swap exercise' })));
-    expect(onAdd).toHaveBeenCalledWith([press], { press: null });
+    expect(onAdd).toHaveBeenCalledWith([press], { press: null }, {});
   });
 
   it('still swaps on one tap to an exercise without saved machines', async () => {
@@ -557,7 +557,7 @@ describe('the swap picker before the saved machines are known', () => {
     await act(async () => catalog.resolve([hammer]));
     expect(await screen.findByRole('checkbox', { name: 'Hammer Strength press' })).toBeChecked();
     await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Swap exercise' })));
-    expect(onAdd).toHaveBeenCalledWith([press], { press: 'hammer' });
+    expect(onAdd).toHaveBeenCalledWith([press], { press: 'hammer' }, { hammer: 2 });
   });
 
   it('offers Try again, or swapping without choosing a machine, when they fail to load', async () => {
@@ -571,7 +571,7 @@ describe('the swap picker before the saved machines are known', () => {
     await act(async () =>
       fireEvent.press(screen.getByRole('button', { name: 'Swap without choosing a machine' })),
     );
-    expect(onAdd).toHaveBeenCalledWith([press], {});
+    expect(onAdd).toHaveBeenCalledWith([press], {}, {});
   });
 });
 
@@ -767,7 +767,7 @@ describe('the swap picker while its machines are read again', () => {
       await screen.findByRole('checkbox', { name: 'Cybex press', checked: true }),
     ).toBeVisible();
     await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Swap exercise' })));
-    expect(onAdd).toHaveBeenCalledWith([press], { press: 'cybex' });
+    expect(onAdd).toHaveBeenCalledWith([press], { press: 'cybex' }, { cybex: 5 });
   });
 });
 
@@ -842,6 +842,82 @@ describe("a machine photo's session", () => {
     expect(await screen.findByRole('checkbox', { name: 'New press' })).not.toBeChecked();
     expect(screen.getByRole('checkbox', { name: 'Hammer Strength press' })).toBeChecked();
     await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Swap exercise' })));
-    expect(onAdd).toHaveBeenCalledWith([press], { press: 'hammer' });
+    expect(onAdd).toHaveBeenCalledWith([press], { press: 'hammer' }, { hammer: 2 });
   });
+});
+
+describe('a machine no saved workout has used', () => {
+  it('keeps the general suggestion at once, so a quick tick logs a weight', async () => {
+    const requested: string[] = [];
+    jest.mocked(apiGet).mockImplementation(async (path: string) => {
+      requested.push(path);
+      return (path.includes('machine-settings') ? { settings: [] } : []) as never;
+    });
+    let state = pushDayLogger();
+    const change = (update: (current: LoggerState) => LoggerState) => {
+      state = update(state);
+    };
+    const movementKey = state.movements[0].key;
+    const settled = swapOntoMachine(
+      change,
+      movementKey,
+      press,
+      context({ workouts: [lastPush, pressOnCybex] }),
+      { press: 'hammer' },
+      undefined,
+      { hammer: 0 },
+    );
+    // The usual suggestion, straight away; there is no session of its own to wait for.
+    expect(state.movements[0].sets.map((item) => item.weight_kg)).toEqual([85, 85]);
+    const ticked = updateSet(
+      state,
+      movementKey,
+      state.movements[0].sets[0].key,
+      { completed: true },
+      { addedByHand: false, workoutBodyweight: null },
+    ).state;
+    expect(ticked.movements[0].sets[0]).toMatchObject({ completed: true, weight_kg: 85 });
+    await act(async () => settled);
+    // Only its settings are read.
+    expect(requested).toEqual(['/api/exercises/press/machine-settings?machine_photo_id=hammer']);
+  });
+
+  it('is reported to the swap by the picker with its saved workout count', async () => {
+    routes = { '/api/machine-photos': [{ ...hammer, workout_count: 0, last_used_date: null }] };
+    const onAdd = await openSwap();
+    await screen.findByRole('button', { name: 'Show machines for Overhead Press' });
+    await act(async () =>
+      fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })),
+    );
+    await act(async () =>
+      fireEvent.press(screen.getByRole('checkbox', { name: 'Hammer Strength press' })),
+    );
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Swap exercise' })));
+    expect(onAdd).toHaveBeenCalledWith([press], { press: 'hammer' }, { hammer: 0 });
+  });
+});
+
+test('a machine list whose refresh failed chooses nothing, and offers swapping without one', async () => {
+  let reads = 0;
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path !== '/api/machine-photos') return [] as never;
+    reads += 1;
+    if (reads > 1) throw new Error('Relay is unavailable');
+    return [hammer, { ...cybex, last_used_date: '2026-11-01' }] as never;
+  });
+  const onAdd = await openSwap();
+  await screen.findByRole('button', { name: 'Show machines for Overhead Press' });
+  const { refreshTraining } =
+    jest.requireActual<typeof import('../../data/queries')>('../../data/queries');
+  await act(async () => {
+    await refreshTraining(client).catch(() => undefined);
+  });
+  await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })));
+  expect(await screen.findByText('Relay is unavailable')).toBeVisible();
+  // The old list's Hammer isn't chosen for you.
+  expect(screen.getByRole('checkbox', { name: 'Hammer Strength press' })).not.toBeChecked();
+  await act(async () =>
+    fireEvent.press(screen.getByRole('button', { name: 'Swap without choosing a machine' })),
+  );
+  expect(onAdd).toHaveBeenCalledWith([press], {}, {});
 });

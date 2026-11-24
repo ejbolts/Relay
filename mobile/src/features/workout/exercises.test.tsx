@@ -215,15 +215,32 @@ describe('swapping an exercise', () => {
     expect(screen.getByText('2 planned sets move across')).toBeVisible();
     // Nothing in the sample library trains the same muscles, so browse every exercise.
     expect(screen.getByText('No close alternatives')).toBeVisible();
+    // The saved machines: one, for another exercise, so the list shows once they have loaded.
+    jest.mocked(apiGet).mockImplementation(async (path: string) =>
+      path === '/api/machine-photos'
+        ? [
+            {
+              id: 'rower',
+              exercise_id: 'row',
+              caption: 'Concept rower',
+              thumbnail_url: '',
+              full_url: '',
+              width: 1,
+              height: 1,
+              created_at: '',
+              exercise_name: 'Rowing Machine',
+              workout_count: 1,
+              last_used_date: '2026-11-18',
+            },
+          ]
+        : [],
+    );
     await fireEvent.press(screen.getByRole('button', { name: 'Browse all exercises' }));
     expect(screen.getByText('Swap exercise')).toBeVisible();
     // One tap swaps once the saved machines are known to have none for it.
-    await waitFor(() =>
-      expect(client.getQueryState(['machine-photos'])).toMatchObject({
-        status: 'success',
-        fetchStatus: 'idle',
-      }),
-    );
+    expect(
+      await screen.findByRole('button', { name: 'Show machines for Rowing Machine' }),
+    ).toBeVisible();
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' }));
     expect(screen.getByText('Swapped from Bench Press')).toBeVisible();
     expect(readActiveWorkoutDraft(deviceStorage)?.movements.map((item) => item.exerciseId)).toEqual(

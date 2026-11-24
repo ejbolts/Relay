@@ -619,7 +619,7 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         addedIds={addedIds}
         category={identity.category}
         chooseMachines
-        onAdd={(selected, machineChoices) => {
+        onAdd={(selected, machineChoices, machineUse) => {
           const target = picker?.swapping;
           if (target) {
             if (selected[0])
@@ -630,6 +630,7 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
                 context,
                 machineChoices,
                 workout.id,
+                machineUse,
               );
           } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}

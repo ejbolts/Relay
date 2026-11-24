@@ -61,7 +61,8 @@ let swapCount = 0;
  * web's logger loads them for a newly pinned machine), and, when the recent history has no
  * session on that machine, its last session from the machine's own workouts, so the planned loads
  * are that machine's as recorded. Until that session arrives the loads stay empty rather than
- * another machine's, and they stay empty if it can't be read. Both apply only to the newest swap
+ * another machine's, and they stay empty if it can't be read; a machine the picker knows no
+ * saved workout has used keeps the general suggestion at once. Both apply only to the newest swap
  * onto the row, while it still has that exercise, machine and workout date, its sets are
  * untouched and the account is the same; settings already in the draft are kept, and carried
  * rows keep their keys, so a note or edit made meanwhile still reaches its row.
@@ -73,6 +74,8 @@ export function swapOntoMachine(
   context: LoggerContext,
   machineChoices: ExerciseMachineChoices = {},
   excludedWorkoutId?: string,
+  /** Saved workout counts by machine id, as the picker knew them; a missing one is unknown. */
+  machineUse: Readonly<Record<string, number>> = {},
 ): Promise<void> {
   const captured: { before?: LoggerState; swapped?: WorkoutDraftMovement } = {};
   // Both screens apply a change synchronously, so the swapped movement is known straight away.
@@ -99,9 +102,13 @@ export function swapOntoMachine(
   if (!machineId) return Promise.resolve();
   const excluded = excludedWorkoutId ?? before.resumingWorkoutId ?? undefined;
   const workoutDate = before.workoutDate;
+  // A machine no saved workout has used (one just photographed, say) has no session to wait
+  // for: it keeps the general suggestion at once, as on the web, and only its settings load.
+  const unused = machineUse[machineId] === 0;
   const needsHistory =
+    !unused &&
     lastSessionSetsOnMachine(context.workouts, replacement.id, workoutDate, excluded, machineId) ===
-    null;
+      null;
   // Another machine's loads would be wrong here, so they wait for this machine's session.
   const plannedSets = needsHistory ? withoutLoads(swapped.sets) : swapped.sets;
   if (plannedSets !== swapped.sets)
