@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Animated, View } from 'react-native';
+import { Animated, Keyboard, TextInput, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import { haptics } from '../../ui/haptics';
 
@@ -67,6 +67,10 @@ export function useSetDrag(setKeys: string[], onDrop: (setKey: string, targetKey
     (key: string) => {
       const from = latest.current.setKeys.indexOf(key);
       if (from < 0) return;
+      // Blur any focused set input before reordering so Android does not move focus to another
+      // set's field and reopen the soft keyboard when the focused row moves.
+      TextInput.State.currentlyFocusedInput()?.blur();
+      Keyboard.dismiss();
       offset.setValue(0);
       haptics.press();
       active.current = { key, target: from, targetKey: key };
