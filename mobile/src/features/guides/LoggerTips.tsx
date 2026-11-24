@@ -40,6 +40,7 @@ import { useTheme } from '../../ui/theme';
 import * as prompts from '../../ui/prompts';
 import { toastShowing } from '../../ui/Toast';
 import { guideIcons } from './icons';
+import { tipSyncHoldUntil } from '../../../../frontend/src/tipSync';
 import { tipsFor, useTips } from './tips';
 
 /**
@@ -47,8 +48,8 @@ import { tipsFor, useTips } from './tips';
  * a first logged warm-up) asks for a nudge, which appears in a quiet moment between sets; a dot
  * beside an eligible control (the machine row) opens its tip. Tips use the account's tip state
  * on this phone (the web's format and key), so one dismissed here counts on Home's bulb and the
- * Tips page, and Show tips off stops them. Like the web's, that state stays on the device: it
- * does not follow the account to the web or another phone.
+ * Tips page, and Show tips off stops them. That state follows the account to the web and other
+ * devices (TipSyncHost).
  */
 
 const PAGE = 'log';
@@ -238,7 +239,13 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
         quietSince.current = 0;
         if (shown.current) {
           const currentNudge = shown.current.nudge;
-          if (currentNudge) {
+          // As on the web, a newer showing (here from a sync with the account) is left alone.
+          const stillOurs =
+            currentNudge &&
+            tipState.lastShown === currentNudge.at &&
+            (tipState.shows?.[currentNudge.id] ?? 0) === currentNudge.shownCount &&
+            tipState.seen[currentNudge.id] === currentNudge.seenAfter;
+          if (currentNudge && stillOurs) {
             const reverted = interruptedNudge(tipState, currentNudge, now);
             if (reverted) {
               tips.update(() => reverted.state);
@@ -271,14 +278,27 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
       if (!id) return;
       const previousLastShown = tipState.lastShown;
       const request = nudge ? pending.current.get(nudge) : undefined;
+      // A nudge's showing stays off the server while an interruption could still undo it.
+      if (nudge) tips.holdSync(tipSyncHoldUntil(now));
       tips.shown(id, now);
+      const after = tips.get();
       const slot = nudge ? null : (hint?.[0] ?? null);
       shown.current = {
         id,
         page: PAGE,
         at: now,
         slot,
-        nudge: nudge && request ? { id: nudge, at: now, previousLastShown, request } : null,
+        nudge:
+          nudge && request
+            ? {
+                id: nudge,
+                at: now,
+                previousLastShown,
+                request,
+                shownCount: after.shows?.[nudge] ?? 0,
+                seenAfter: after.seen[nudge],
+              }
+            : null,
       };
       pending.current.delete(id);
       setActive({ id, slot });

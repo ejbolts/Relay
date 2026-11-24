@@ -5,17 +5,23 @@ import {
   tipShown,
   tipStorageKey,
   withTipReminders,
+  withTipsEnabled,
   type TipId,
   type TipState,
 } from '../../../../frontend/src/tipsState';
+import { createTipSync, type TipSync, type TipSyncOptions } from '../../../../frontend/src/tipSync';
 import { deviceStorage } from '../../data/deviceStorage';
 import { useUser } from '../../session/SessionProvider';
 
 // Each account's tips on this phone, in the web's format and under its key (frontend/src/tipsState).
 // Guided tips put away before their feature is used come back on the web's reminder schedule.
+// The phone's copy is the source while offline; TipSyncHost merges it with the account's copy on
+// the server (frontend/src/tipSync), so tips follow the account to the web and other devices.
 
 const cache = new Map<string, TipState>();
 const listeners = new Set<() => void>();
+/** The running sync for each signed-in account (one at a time in practice). */
+const syncs = new Map<string, TipSync>();
 
 function read(account: string): TipState {
   let state = cache.get(account);
@@ -32,7 +38,7 @@ function read(account: string): TipState {
   return state;
 }
 
-function write(account: string, change: TipState) {
+function write(account: string, change: TipState, fromSync = false) {
   const next = withTipReminders(change, Date.now());
   cache.set(account, next);
   try {
@@ -41,6 +47,34 @@ function write(account: string, change: TipState) {
     // Keep the in-memory state.
   }
   listeners.forEach((listener) => listener());
+  // A local change reaches the server after a pause; a merged reply is already there.
+  if (!fromSync) syncs.get(account)?.changed();
+}
+
+/**
+ * Starts keeping one account's tips in step with the server, with the caller's transport and
+ * session check. Returns the sync, whose `stop()` ends it.
+ */
+export function startTipSync(
+  account: string,
+  { send, current }: Pick<TipSyncOptions, 'send' | 'current'>,
+): TipSync {
+  const sync: TipSync = createTipSync({
+    read: () => read(account),
+    write: (next) => write(account, next, true),
+    send,
+    current: () => syncs.get(account) === sync && current(),
+  });
+  syncs.get(account)?.stop();
+  syncs.set(account, sync);
+  const stop = sync.stop;
+  return {
+    ...sync,
+    stop: () => {
+      stop();
+      if (syncs.get(account) === sync) syncs.delete(account);
+    },
+  };
 }
 
 const subscribe = (listener: () => void) => {
@@ -92,9 +126,13 @@ function makeActions(account: string) {
       if (!state.homeDone?.includes(id))
         write(account, { ...state, homeDone: [...(state.homeDone ?? []), id] });
     },
-    enable: (enabled: boolean) => write(account, { ...read(account), enabled }),
+    /** Show tips on or off; the account's other devices and the web follow the latest choice. */
+    enable: (enabled: boolean) =>
+      write(account, withTipsEnabled(read(account), enabled, Date.now())),
     /** A contextual tip appeared (the logger's): counted towards its showings and the daily tip. */
     shown: (id: TipId, now: number) => write(account, tipShown(read(account), id, now)),
+    /** Keeps the tips off the server until `until`, while a nudge's showing may still be undone. */
+    holdSync: (until: number) => syncs.get(account)?.hold(until),
     /** Any other change worked out by the shared rules, such as counting a tip's event. */
     update: (change: (state: TipState) => TipState) => write(account, change(read(account))),
   };
@@ -131,4 +169,6 @@ export function useTipReminders(account: string) {
 /** For tests: forget the cached tips. */
 export function resetTipsForTests() {
   cache.clear();
+  syncs.forEach((sync) => sync.stop());
+  syncs.clear();
 }

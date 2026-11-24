@@ -11,6 +11,7 @@ import { BodyCheckInSync } from '../features/body/BodyCheckInSync';
 // B5 (data): asks a new account whether to import its history.
 import { useImportPrompt } from '../features/data';
 import { AppTourHost } from '../features/guides/AppTourHost';
+import { TipSyncHost } from '../features/guides/TipSyncHost';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { useDeferredFriendInvite } from '../session/friendInvite';
@@ -127,6 +128,8 @@ function Navigation() {
         </Stack>
         {/* Mobile batch 4, B4: the quick tour, above the tabs so it stays open as it opens each. */}
         {signedIn && !mustChangePassword && <AppTourHost />}
+        {/* Tips follow the account: this phone's tips merge with the server's and the web's. */}
+        {signedIn && !mustChangePassword && <TipSyncHost />}
         {/* Android's menu sheets and text dialogs for every screen. The logger, a separate native
             sheet, mounts its own. */}
         <PromptHost />

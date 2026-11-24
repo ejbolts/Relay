@@ -175,6 +175,8 @@ beforeEach(() => {
     '/api/sharing/notifications': { requests: [], accepted: [] },
     '/api/release': null,
     '/api/weekly-review': null,
+    // Tips like the maintenance range wait for a first saved workout, as on the web.
+    '/api/workouts/snapshot': { workouts: [{ id: 'w1', is_sample: false }] },
   };
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     const value = responses[path.split('?')[0]];
@@ -413,10 +415,16 @@ test('choosing an outline offers to save it as the account’s sex', async () =>
   ).toBeVisible();
 });
 
+/** The maintenance tip appears after the web's quiet moment, which can take a few seconds here. */
+const findTip = () => screen.findByLabelText('Quick tip', {}, { timeout: 5000 });
+/** Long enough for the tip to have appeared if it were going to. */
+const quietMoment = () => act(() => new Promise((resolve) => setTimeout(resolve, 2500)));
+const storedTips = () => JSON.parse(memoryKv.get(tipStorageKey(mockUser.id)) ?? '{}');
+
 test('reaching a loss goal suggests a maintenance range until it is dismissed', async () => {
   responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
   await renderBody('79.6 kg');
-  const tip = await screen.findByLabelText('Quick tip');
+  const tip = await findTip();
   expect(within(tip).getByText('Maintain a range, not a single number')).toBeVisible();
   await fireEvent.press(within(tip).getByRole('button', { name: 'Set a goal' }));
   // The goal form opens on Maintain, and the tip doesn't come back.
@@ -447,11 +455,63 @@ test('the maintenance tip stays away while tips are switched off', async () => {
 test('dismissing the maintenance tip retires it for the account', async () => {
   responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
   await renderBody('79.6 kg');
-  const tip = await screen.findByLabelText('Quick tip');
+  const tip = await findTip();
   await fireEvent.press(within(tip).getByRole('button', { name: 'Dismiss tip' }));
   expect(screen.queryByLabelText('Quick tip')).toBeNull();
   // Home's bulb leaves out dismissed tips (homeTipList), so it goes from there too.
   expect(JSON.parse(memoryKv.get(tipStorageKey(mockUser.id))!).seen.maintenance).toBe('dismissed');
+});
+
+test('the maintenance tip spends the day’s tip and counts a showing, as on the web', async () => {
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
+  const before = Date.now();
+  await renderBody('79.6 kg');
+  await findTip();
+  expect(storedTips().lastShown).toBeGreaterThanOrEqual(before);
+  expect(storedTips().shows.maintenance).toBe(1);
+});
+
+test('the maintenance tip waits for tomorrow once today’s tip has shown', async () => {
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
+  const lastShown = Date.now() - 60 * 60 * 1000;
+  memoryKv.set(
+    tipStorageKey(mockUser.id),
+    JSON.stringify({ enabled: true, lastShown, seen: {}, counts: {} }),
+  );
+  await renderBody('79.6 kg');
+  expect(await screen.findByText('Log weigh-in')).toBeVisible();
+  await quietMoment();
+  expect(screen.queryByLabelText('Quick tip')).toBeNull();
+  expect(storedTips().lastShown).toBe(lastShown);
+});
+
+test('the maintenance tip comes back the next day, up to three showings', async () => {
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
+  const yesterday = Date.now() - 25 * 60 * 60 * 1000;
+  memoryKv.set(
+    tipStorageKey(mockUser.id),
+    JSON.stringify({
+      enabled: true,
+      lastShown: yesterday,
+      seen: {},
+      counts: {},
+      shows: { maintenance: 2 },
+    }),
+  );
+  await renderBody('79.6 kg');
+  // Its third showing stays for the visit, then it has been seen.
+  expect(await findTip()).toBeVisible();
+  expect(storedTips().seen.maintenance).toBe('seen');
+  expect(storedTips().shows.maintenance).toBe(3);
+});
+
+test('the maintenance tip waits for a first saved workout', async () => {
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
+  responses['/api/workouts/snapshot'] = { workouts: [{ id: 'sample', is_sample: true }] };
+  await renderBody('79.6 kg');
+  expect(await screen.findByText('Log weigh-in')).toBeVisible();
+  await quietMoment();
+  expect(screen.queryByLabelText('Quick tip')).toBeNull();
 });
 
 test('the maintenance tip never shows once a goal has used a range', async () => {
