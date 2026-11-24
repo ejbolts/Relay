@@ -1,9 +1,10 @@
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { AccessibilityInfo } from 'react-native';
+import { AccessibilityInfo, AppState, type AppStateStatus } from 'react-native';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { defaultHomeLayout } from '../../../../frontend/src/homeLayout';
+import { TRAINING_SYNC_INTERVAL_MS } from '../../../../frontend/src/trainingSync';
 import type { BodyMeasurement, User } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { ApiError, apiGet, apiSend } from '../../data/api';
@@ -14,7 +15,9 @@ import { SocialScreen } from '../social/SocialScreen';
 import { TrainingTabScreen } from '../training/TrainingTabScreen';
 import { BodyCheckInSync } from './BodyCheckInSync';
 import { bodyCheckInStatus, saveBodyCheckIn, setBodyCheckInOwner } from './bodyCheckInQueue';
+import { CheckInSyncCard } from './BodyNotices';
 import { BodyScreen } from './BodyScreen';
+import { WeighInSheet } from './WeighInSheet';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 jest.mock('react-native-gesture-handler', () => ({
@@ -385,5 +388,134 @@ test('the tab on screen announces the card once on iOS; other tabs and tab switc
   expect(announce).toHaveBeenCalledTimes(2);
 
   announce.mockRestore();
+  await view.unmount();
+});
+
+test('retries a connection failure on the sync interval, skips overlapping sends, and pauses in background or on sign-out', async () => {
+  jest.useFakeTimers();
+  let appListener: ((state: AppStateStatus) => void) | undefined;
+  const appSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+    appListener = listener;
+    return { remove: () => (appListener = undefined) };
+  });
+  try {
+    const view = await render(
+      <Shell>
+        <CheckInSyncCard />
+      </Shell>,
+    );
+
+    // First send fails with a connection error: Retry sync appears on the card.
+    jest.mocked(apiSend).mockRejectedValueOnce(new Error('Could not reach Relay.'));
+    await act(async () => {
+      saveBodyCheckIn({
+        measurement_date: today,
+        weight_kg: 82.4,
+        body_fat_pct: null,
+        notes: null,
+      });
+    });
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(screen.getByText('1 check-in saved on this phone')).toBeVisible();
+    expect(screen.getByText('Waiting to sync')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Retry sync' })).toBeVisible();
+    expect(apiSend).toHaveBeenCalledTimes(1);
+
+    // Backgrounding pauses the interval: advancing several intervals makes no attempt.
+    await act(async () => appListener?.('background'));
+    await act(async () => jest.advanceTimersByTimeAsync(TRAINING_SYNC_INTERVAL_MS * 3));
+    expect(apiSend).toHaveBeenCalledTimes(1);
+
+    // Returning to active starts a send; a slow in-flight send is not overlapped by interval ticks.
+    let finishSlow!: (value: BodyMeasurement) => void;
+    jest.mocked(apiSend).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finishSlow = resolve;
+        }),
+    );
+    await act(async () => appListener?.('active'));
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(apiSend).toHaveBeenCalledTimes(2);
+    await act(async () => jest.advanceTimersByTimeAsync(TRAINING_SYNC_INTERVAL_MS * 2));
+    expect(apiSend).toHaveBeenCalledTimes(2);
+
+    // Once that send succeeds, the card disappears and the interval stops.
+    await act(async () => finishSlow(serverRow(today, 82.4)));
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(bodyCheckInStatus().pending).toBe(0);
+    expect(screen.queryByLabelText('Check-in sync')).toBeNull();
+
+    // Another connection failure recovers automatically on the next 5 s tick.
+    jest.mocked(apiSend).mockRejectedValueOnce(new Error('Could not reach Relay.'));
+    await act(async () => {
+      saveBodyCheckIn({
+        measurement_date: '2026-11-03',
+        weight_kg: 81.9,
+        body_fat_pct: null,
+        notes: null,
+      });
+    });
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(apiSend).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole('button', { name: 'Retry sync' })).toBeVisible();
+
+    await act(async () => jest.advanceTimersByTimeAsync(TRAINING_SYNC_INTERVAL_MS));
+    expect(apiSend).toHaveBeenCalledTimes(4);
+    expect(bodyCheckInStatus().pending).toBe(0);
+    expect(screen.queryByLabelText('Check-in sync')).toBeNull();
+
+    // Signing out stops the interval even while a check-in is pending.
+    jest.mocked(apiSend).mockRejectedValue(new Error('Could not reach Relay.'));
+    await act(async () => {
+      saveBodyCheckIn({
+        measurement_date: '2026-11-04',
+        weight_kg: 81.5,
+        body_fat_pct: null,
+        notes: null,
+      });
+    });
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    const beforeSignOut = jest.mocked(apiSend).mock.calls.length;
+    mockSession = { kind: 'signed-out' };
+    await view.rerender(
+      <Shell>
+        <CheckInSyncCard />
+      </Shell>,
+    );
+    await act(async () => jest.advanceTimersByTimeAsync(TRAINING_SYNC_INTERVAL_MS * 3));
+    expect(apiSend).toHaveBeenCalledTimes(beforeSignOut);
+
+    await view.unmount();
+  } finally {
+    appSpy.mockRestore();
+    jest.useRealTimers();
+  }
+});
+
+test('Log weigh-in closes at once when queued even while the server refresh hangs', async () => {
+  jest.mocked(apiGet).mockImplementation((path: string) => {
+    if (path === '/api/body-measurements') return new Promise(() => undefined);
+    if (path === '/api/training-preferences')
+      return Promise.resolve({ preferred_weight_unit: 'kg', week_start: 'monday' });
+    return Promise.resolve([]);
+  });
+  jest.mocked(apiSend).mockImplementation(() => new Promise(() => undefined));
+  const onClose = jest.fn();
+  const view = await render(
+    <Shell>
+      <WeighInSheet
+        visible
+        measurements={[serverRow('2026-11-01', 80)]}
+        editing={null}
+        onClose={onClose}
+      />
+    </Shell>,
+  );
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Increase by 0.1 kg' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Save check-in' }));
+  await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  expect(bodyCheckInStatus().pending).toBe(1);
   await view.unmount();
 });

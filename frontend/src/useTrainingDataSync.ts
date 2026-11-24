@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
+import { TRAINING_SYNC_INTERVAL_MS } from './trainingSync';
 
-export const TRAINING_SYNC_INTERVAL_MS = 5000;
+export { TRAINING_SYNC_INTERVAL_MS };
 
 /** Check quietly while visible, and immediately after returning or reconnecting. */
 export function useTrainingDataSync(check: () => Promise<void>, enabled: boolean) {

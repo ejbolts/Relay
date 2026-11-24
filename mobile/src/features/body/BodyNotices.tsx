@@ -29,7 +29,11 @@ import { sheetShowing } from '../../ui/Sheet';
 import { toastShowing } from '../../ui/Toast';
 import { tipAnchorLayout } from '../guides/LoggerTips';
 import { useTips } from '../guides/tips';
-import { retryBodyCheckIns, useBodyCheckInStatus } from './BodyCheckInSync';
+import {
+  retryBodyCheckIns,
+  useBodyCheckInStatus,
+  useBodyCheckInSyncFailed,
+} from './BodyCheckInSync';
 import { bodyIcons } from './bodyIcons';
 
 const TICK_MS = 500;
@@ -45,13 +49,24 @@ let lastAnnounced: string | null = null;
  */
 export function CheckInSyncCard() {
   const { pending, error } = useBodyCheckInStatus();
+  const syncFailed = useBodyCheckInSyncFailed();
   useEffect(() => {
     if (pending === 0) lastAnnounced = null;
   }, [pending]);
-  return pending === 0 ? null : <CheckInSyncDetails pending={pending} error={error} />;
+  return pending === 0 ? null : (
+    <CheckInSyncDetails pending={pending} error={error} canRetry={!!error || syncFailed} />
+  );
 }
 
-function CheckInSyncDetails({ pending, error }: { pending: number; error: string | null }) {
+function CheckInSyncDetails({
+  pending,
+  error,
+  canRetry,
+}: {
+  pending: number;
+  error: string | null;
+  canRetry: boolean;
+}) {
   const { colors, type, radius } = useTheme();
   // Every tab keeps its card mounted; only the one on screen speaks.
   const focused = useIsFocused();
@@ -87,17 +102,17 @@ function CheckInSyncDetails({ pending, error }: { pending: number; error: string
         )}
       </View>
       {error && (
-        <>
-          <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
-            {error}
-          </Text>
-          <Button
-            label="Retry sync"
-            variant="secondary"
-            size="small"
-            onPress={() => void retryBodyCheckIns()}
-          />
-        </>
+        <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
+          {error}
+        </Text>
+      )}
+      {canRetry && (
+        <Button
+          label="Retry sync"
+          variant="secondary"
+          size="small"
+          onPress={() => void retryBodyCheckIns()}
+        />
       )}
     </Card>
   );

@@ -777,8 +777,8 @@ test('pulling Body down retries a check-in that is still waiting', async () => {
   await fireEvent.press(screen.getByRole('button', { name: 'Increase by 0.1 kg' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Update check-in' }));
   expect(await screen.findByText('Waiting to sync')).toBeVisible();
-  // A timeout isn't a refusal, so there is no Retry sync button; pulling down retries it.
-  expect(screen.queryByRole('button', { name: 'Retry sync' })).toBeNull();
+  // A failed connection attempt also offers Retry sync; pulling down retries it too.
+  expect(screen.getByRole('button', { name: 'Retry sync' })).toBeVisible();
   // The page's scroll view carries the pull-to-refresh control.
   let page = screen.getByText('Log weigh-in') as {
     parent: typeof page | null;
