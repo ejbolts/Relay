@@ -266,15 +266,20 @@ export function GuideCoach({
   );
 
   // Brings the control into view above the coach once the screen has laid out, again a moment
-  // later in case loading content moved it, and whenever the control itself appears or moves.
-  // Each pass measures afresh, a newer pass cancels an older one still measuring, and a pass
-  // with nothing to move does nothing.
+  // later in case loading content moved it out of view, and whenever the control itself appears
+  // or moves out of view. Each pass measures afresh, a newer pass cancels an older one still
+  // measuring, and a pass with nothing to move does nothing.
   useEffect(() => {
     if (inline || !scroll) return;
     let live = true;
     let latest = 0;
     let soon: ReturnType<typeof setTimeout> | undefined;
-    const reveal = async () => {
+    /**
+     * `gentle` passes (after the first, or because the control grew or moved) leave a control
+     * that is already partly in view where it is, so a long list growing as someone works lower
+     * down never jumps back to its top.
+     */
+    const reveal = async (gentle: boolean) => {
       const pass = ++latest;
       const marked = targets.get(target);
       const scroller = scroll.current;
@@ -289,17 +294,18 @@ export function GuideCoach({
       const top = frame.y + 8;
       const bottom = Math.min(frame.y + frame.height, coach?.y ?? Infinity) - 16;
       const end = control.y + control.height;
+      if (gentle && end > top && control.y < bottom) return;
       let delta = 0;
       if (end > bottom) delta = Math.min(end - bottom, control.y - top);
       else if (control.y < top) delta = control.y - top;
       if (Math.abs(delta) < 4) return;
       scroller.scrollTo({ y: Math.max(0, frame.y - content.y + delta), animated: !reduced });
     };
-    const timers = [350, 1100].map((delay) => setTimeout(() => void reveal(), delay));
+    const timers = [350, 1100].map((delay, pass) => setTimeout(() => void reveal(pass > 0), delay));
     const listener = (asked: CoachTargetId) => {
       if (asked !== target) return;
       clearTimeout(soon);
-      soon = setTimeout(() => void reveal(), 120);
+      soon = setTimeout(() => void reveal(true), 120);
     };
     revealListeners.add(listener);
     return () => {
