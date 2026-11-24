@@ -314,7 +314,7 @@ async function preferServer<T>(
   const answerFromSaved = async (): Promise<T | typeof serverTooSlow> => {
     const copy = await saved();
     if (!copy) return serverTooSlow;
-    reportSavedDataUsed();
+    reportSavedDataUsed(copy.value);
     return copy.value;
   };
   const offline = typeof navigator !== 'undefined' && navigator.onLine === false;
@@ -1111,7 +1111,8 @@ export const api = {
   listBodyMeasurements: () => listLocalBodyMeasurements(bodyMeasurementTransport),
   localBodyMeasurements,
   refreshBodyMeasurements: () => refreshBodyMeasurements(bodyMeasurementTransport),
-  syncBodyMeasurements: (retry = false) => syncBodyMeasurements(bodyMeasurementTransport, retry),
+  syncBodyMeasurements: (retry = false, immediate = false) =>
+    syncBodyMeasurements(bodyMeasurementTransport, retry, immediate),
   saveBodyMeasurement: saveLocalBodyMeasurement,
   deleteBodyMeasurement: deleteLocalBodyMeasurement,
   exportBodyMeasurements: (range: DateRange = {}) =>

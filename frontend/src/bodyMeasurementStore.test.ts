@@ -7,6 +7,7 @@ import {
   listLocalBodyMeasurements,
   localBodyMeasurements,
   refreshBodyMeasurements,
+  resetBodyMeasurementSyncBackoff,
   saveLocalBodyMeasurement,
   syncBodyMeasurements,
   type BodyMeasurementTransport,
@@ -50,6 +51,7 @@ let backend: MemoryBackend;
 let transport: BodyMeasurementTransport;
 beforeEach(() => {
   localStorage.clear();
+  resetBodyMeasurementSyncBackoff();
   localStorage.setItem(LAST_USER_KEY, JSON.stringify(owner));
   backend = new MemoryBackend();
   replaceOfflineBackend(backend);
@@ -129,6 +131,89 @@ describe('durable local body check-ins', () => {
     await syncBodyMeasurements(transport);
     expect(bodyMeasurementSyncStatus().pending).toBe(0);
     expect((await localBodyMeasurements())[0]).toEqual(row);
+  });
+
+  it('asks what the server holds before sending again after an attempt with no answer', async () => {
+    await saveLocalBodyMeasurement(input);
+    // The server saved it, but the answer never arrived: the phone gave up waiting.
+    vi.mocked(transport.save).mockRejectedValueOnce(new DOMException('Timed out', 'AbortError'));
+    await expect(syncBodyMeasurements(transport)).rejects.toThrow('Timed out');
+    expect(transport.list).not.toHaveBeenCalled();
+    vi.mocked(transport.list).mockResolvedValue([row]);
+    await syncBodyMeasurements(transport);
+    // Sending it again would only make the server repeat its work.
+    expect(transport.save).toHaveBeenCalledOnce();
+    expect(bodyMeasurementSyncStatus()).toEqual({ pending: 0, error: null });
+    expect(await localBodyMeasurements()).toEqual([row]);
+  });
+
+  it('sends again after an attempt with no answer when the server does not hold it', async () => {
+    await saveLocalBodyMeasurement(input);
+    vi.mocked(transport.save).mockRejectedValueOnce(
+      new ApiError('Server error', 'http_error', 500),
+    );
+    await expect(syncBodyMeasurements(transport)).rejects.toThrow('Server error');
+    vi.mocked(transport.list).mockResolvedValue([{ ...row, weight_kg: 80 }]);
+    await syncBodyMeasurements(transport);
+    expect(transport.save).toHaveBeenCalledTimes(2);
+    expect(bodyMeasurementSyncStatus().pending).toBe(0);
+  });
+
+  it('stops waiting to send a check-in the server history already shows', async () => {
+    await saveLocalBodyMeasurement(input);
+    await saveLocalBodyMeasurement({ ...input, measurement_date: '2026-11-05', weight_kg: 85 });
+    vi.mocked(transport.list).mockResolvedValue([row]);
+    expect(await refreshBodyMeasurements(transport)).toEqual([
+      expect.objectContaining({ measurement_date: '2026-11-05', weight_kg: 85 }),
+      row,
+    ]);
+    // Only the check-in the server lacks is still waiting.
+    expect(bodyMeasurementSyncStatus().pending).toBe(1);
+    await syncBodyMeasurements(transport);
+    expect(transport.save).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ measurement_date: '2026-11-05' }),
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('waits longer between automatic attempts the server keeps leaving unanswered', async () => {
+    const now = vi.spyOn(Date, 'now').mockReturnValue(1_000_000);
+    await saveLocalBodyMeasurement(input);
+    vi.mocked(transport.save).mockRejectedValue(new TypeError('Connection lost'));
+    const attempt = (retry = false, immediate = false) =>
+      syncBodyMeasurements(transport, retry, immediate).catch(() => undefined);
+    await attempt();
+    // The first retry comes with the next check; a second unanswered attempt starts a pause.
+    await attempt();
+    expect(transport.save).toHaveBeenCalledTimes(2);
+    await attempt();
+    now.mockReturnValue(1_000_000 + 14_000);
+    await attempt();
+    expect(transport.save).toHaveBeenCalledTimes(2);
+    now.mockReturnValue(1_000_000 + 15_000);
+    await attempt();
+    expect(transport.save).toHaveBeenCalledTimes(3);
+    // Thirty seconds this time. Coming back to the app, or asking again, does not wait.
+    now.mockReturnValue(1_000_000 + 15_000 + 29_000);
+    await attempt();
+    expect(transport.save).toHaveBeenCalledTimes(3);
+    await attempt(false, true);
+    expect(transport.save).toHaveBeenCalledTimes(4);
+    await attempt(true);
+    expect(transport.save).toHaveBeenCalledTimes(5);
+    // Nor does a change just made on this device.
+    await saveLocalBodyMeasurement({ ...input, weight_kg: 85 });
+    await attempt();
+    expect(transport.save).toHaveBeenCalledTimes(6);
+    // An answer ends the pause, and the next save is sent without asking first.
+    vi.mocked(transport.save).mockResolvedValue({ ...row, weight_kg: 85 });
+    await attempt(true);
+    const asked = vi.mocked(transport.list).mock.calls.length;
+    await saveLocalBodyMeasurement({ ...input, weight_kg: 86 });
+    vi.mocked(transport.save).mockResolvedValue({ ...row, weight_kg: 86 });
+    await attempt();
+    expect(bodyMeasurementSyncStatus().pending).toBe(0);
+    expect(transport.list).toHaveBeenCalledTimes(asked);
   });
 
   it('retains a rejected check-in with an actionable error, avoiding automatic replays', async () => {

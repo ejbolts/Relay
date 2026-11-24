@@ -1,6 +1,8 @@
 import { captureAccountCacheScope, type AccountCacheScope } from './accountCacheScope';
+import { serverHasCheckIn } from './checkInSync';
 import { browserAccountStorage, type AccountStorage } from './deviceAccount';
 import { readOffline, writeOffline } from './offlineStore';
+import { syncRetryDelay } from './syncBackoff';
 import type { BodyMeasurement } from './types';
 
 export type BodyMeasurementInput = Pick<
@@ -33,6 +35,19 @@ export interface BodyMeasurementTransport {
 
 let serial: Promise<unknown> = Promise.resolve();
 let revision = 0;
+/**
+ * Attempts in a row that ended without a usable answer: a timeout, a dropped connection or a
+ * server error. The server may still have saved such an attempt, so the next one asks what it
+ * holds before sending anything again, and automatic attempts wait until `retryAfter`.
+ */
+let unanswered = 0;
+let retryAfter = 0;
+
+/** Forgets earlier unanswered attempts, so the next sync starts afresh. */
+export function resetBodyMeasurementSyncBackoff(): void {
+  unanswered = 0;
+  retryAfter = 0;
+}
 function locked<T>(action: () => Promise<T>): Promise<T> {
   const run = () =>
     typeof navigator !== 'undefined' && navigator.locks
@@ -58,7 +73,7 @@ function publish(rows?: BodyMeasurement[]) {
   ++revision;
   window.dispatchEvent(new CustomEvent(BODY_MEASUREMENTS_CHANGED, { detail: rows }));
 }
-function persist(next: Queue, scope: AccountCacheScope) {
+function store(next: Queue, scope: AccountCacheScope) {
   check(scope);
   const storage = browserAccountStorage();
   if (!storage)
@@ -68,6 +83,9 @@ function persist(next: Queue, scope: AccountCacheScope) {
   } catch {
     throw new Error('Could not save on this device. Free some storage and try again.');
   }
+}
+function persist(next: Queue, scope: AccountCacheScope) {
+  store(next, scope);
   publish();
 }
 
@@ -75,6 +93,7 @@ export function clearBodyMeasurementQueue(
   storage: AccountStorage | null = browserAccountStorage(),
 ) {
   storage?.removeItem(BODY_MEASUREMENT_QUEUE_KEY);
+  resetBodyMeasurementSyncBackoff();
 }
 export function reconcileBodyMeasurementQueue(owner: string, storage: AccountStorage | null) {
   const raw = storage?.getItem(BODY_MEASUREMENT_QUEUE_KEY);
@@ -146,6 +165,8 @@ export async function saveLocalBodyMeasurement(payload: BodyMeasurementInput) {
       createdAt: row?.created_at ?? new Date().toISOString(),
       payload,
     });
+    // A change just made here is sent at once, even during a pause left by earlier attempts.
+    retryAfter = 0;
     persist(next, scope);
     return overlay(row ? [row] : [], next.changes).find(
       (item) => item.measurement_date === payload.measurement_date,
@@ -168,6 +189,7 @@ export async function deleteLocalBodyMeasurement(id: string) {
       createdAt: new Date().toISOString(),
       payload: null,
     });
+    retryAfter = 0;
     persist(next, scope);
   });
 }
@@ -183,7 +205,15 @@ export async function refreshBodyMeasurements(transport: BodyMeasurementTranspor
     if (started === revision) {
       await writeOffline(CACHE_KEY, rows, owner, scope.isCurrent);
       check(scope);
-      const merged = overlay(rows, queue(owner).changes);
+      // A save can reach the server without its answer reaching this device. What the server
+      // already holds is done: stop waiting to send it, instead of sending it again.
+      const waiting = queue(owner);
+      const unsent = waiting.changes.filter((change) => !serverHasCheckIn(change, rows));
+      if (unsent.length !== waiting.changes.length) {
+        store({ ...waiting, changes: unsent }, scope);
+        resetBodyMeasurementSyncBackoff();
+      }
+      const merged = overlay(rows, unsent);
       publish(merged);
       return merged;
     }
@@ -215,11 +245,18 @@ if (typeof window !== 'undefined') {
 }
 
 let syncing: Promise<void> | null = null;
+/**
+ * Sends waiting check-ins. `retry` is the person asking again: it also retries check-ins the
+ * server refused. `immediate` is the app coming back to the foreground or online. Other calls
+ * are automatic and wait out the pause that follows attempts the server did not answer.
+ */
 export function syncBodyMeasurements(
   transport: BodyMeasurementTransport,
   retry = false,
+  immediate = false,
 ): Promise<void> {
   if (syncing) return syncing;
+  if (!retry && !immediate && Date.now() < retryAfter) return Promise.resolve();
   const scope = captureAccountCacheScope();
   const run = async () => {
     const owner = check(scope);
@@ -235,14 +272,17 @@ export function syncBodyMeasurements(
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20_000);
       try {
+        // A removal needs the check-in's id. After an attempt that got no answer, the server
+        // may already hold this change, so ask before sending it again: a repeated save makes
+        // the server redo its work, and a slow server then falls further behind.
+        const rows =
+          !change.payload || unanswered > 0 ? await transport.list(controller.signal) : null;
+        if (rows) check(scope);
+        const existing = rows?.find((item) => item.measurement_date === change.date) ?? null;
         let saved: BodyMeasurement | null = null;
-        if (change.payload) saved = await transport.save(change.payload, controller.signal);
-        else {
-          const rows = await transport.list(controller.signal);
-          check(scope);
-          const existing = rows.find((item) => item.measurement_date === change.date);
-          if (existing) await transport.remove(existing.id, controller.signal);
-        }
+        if (rows && serverHasCheckIn(change, rows)) saved = existing;
+        else if (change.payload) saved = await transport.save(change.payload, controller.signal);
+        else if (existing) await transport.remove(existing.id, controller.signal);
         await locked(async () => {
           check(scope);
           const rows = (await readOffline<BodyMeasurement[]>(CACHE_KEY, owner))?.value ?? [];
@@ -253,6 +293,7 @@ export function syncBodyMeasurements(
           next.changes = next.changes.filter((item) => item.token !== change.token);
           persist(next, scope);
         });
+        resetBodyMeasurementSyncBackoff();
       } catch (reason) {
         const status = (reason as { status?: number })?.status;
         if (
@@ -271,6 +312,10 @@ export function syncBodyMeasurements(
                 reason instanceof Error ? reason.message : 'Could not sync this check-in.';
             persist(next, scope);
           });
+        } else if (scope.isCurrent()) {
+          // No usable answer. Leave a growing pause before the next automatic attempt.
+          unanswered += 1;
+          retryAfter = Date.now() + syncRetryDelay(unanswered);
         }
         throw reason;
       } finally {

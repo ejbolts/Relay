@@ -4601,8 +4601,9 @@ describe('cross-device training updates', () => {
     });
     // Too slow to wait for: the read shows this device's older saved copy instead.
     vi.mocked(api.listWorkouts).mockImplementationOnce(async () => {
-      reportSavedDataUsed();
-      return [];
+      const copy: TrackedWorkout[] = [];
+      reportSavedDataUsed(copy);
+      return copy;
     });
     await focusApp();
     expect(container.querySelectorAll('.history-card')).toHaveLength(0);
@@ -4612,6 +4613,75 @@ describe('cross-device training updates', () => {
     expect(api.listWorkouts).toHaveBeenCalledTimes(3);
     await focusApp();
     expect(api.listWorkouts).toHaveBeenCalledTimes(3);
+  });
+  describe('when the server answers a read too slowly', () => {
+    const reads = () =>
+      [api.dashboard, api.listExercises, api.listBodyMeasurements, api.listPersonalRecords].map(
+        (read) => vi.mocked(read).mock.calls.length,
+      );
+    /** Like the real read: after a few seconds it shows this device's saved copy instead. */
+    const savedRecords = async () => {
+      const copy: import('./types').PersonalRecord[] = [];
+      reportSavedDataUsed(copy);
+      return copy;
+    };
+    /** Another device changed something. Like the real request, an answer means the server is reachable. */
+    const changedElsewhere = (revision = 'phone-workout') =>
+      vi.mocked(api.workoutRevision).mockImplementation(async () => {
+        reportServerReached();
+        return { revision };
+      });
+    it('asks again only for that read, as the other answers are still current', async () => {
+      await mount();
+      changedElsewhere();
+      vi.mocked(api.listWorkouts).mockResolvedValue([remoteWorkout()]);
+      vi.mocked(api.listPersonalRecords).mockImplementationOnce(savedRecords);
+      const [dashboard, exercises, checkIns, records] = reads();
+      await focusApp();
+      expect(reads()).toEqual([dashboard + 1, exercises + 1, checkIns + 1, records + 1]);
+      const revisions = vi.mocked(api.workoutRevision).mock.calls.length;
+      await focusApp();
+      expect(reads()).toEqual([dashboard + 1, exercises + 1, checkIns + 1, records + 2]);
+      // One revision request per check: the refresh reuses the one the check just read.
+      expect(api.workoutRevision).toHaveBeenCalledTimes(revisions + 1);
+      expect(container.querySelector('.history-card')?.textContent).toContain('Phone workout');
+      // The server has answered every read for this revision now.
+      await focusApp();
+      expect(reads()).toEqual([dashboard + 1, exercises + 1, checkIns + 1, records + 2]);
+    });
+    it('reads everything again once the revision has moved on', async () => {
+      await mount();
+      changedElsewhere();
+      vi.mocked(api.listPersonalRecords).mockImplementationOnce(savedRecords);
+      const [dashboard, exercises, checkIns, records] = reads();
+      await focusApp();
+      changedElsewhere('another-change');
+      await focusApp();
+      expect(reads()).toEqual([dashboard + 2, exercises + 2, checkIns + 2, records + 2]);
+    });
+    it('pauses the timed checks for longer each time, and still checks on return', async () => {
+      vi.useFakeTimers();
+      await mount();
+      changedElsewhere();
+      vi.mocked(api.listPersonalRecords).mockImplementation(savedRecords);
+      const asked = () => vi.mocked(api.listPersonalRecords).mock.calls.length;
+      const start = asked();
+      const tick = () => act(async () => void (await vi.advanceTimersByTimeAsync(5000)));
+      // The first retry comes with the next check; the second unanswered refresh starts a pause.
+      await tick();
+      await tick();
+      expect(asked()).toBe(start + 2);
+      await tick();
+      await tick();
+      expect(asked()).toBe(start + 2);
+      await tick();
+      expect(asked()).toBe(start + 3);
+      // Thirty seconds now, but coming back to the app does not wait for it.
+      await tick();
+      expect(asked()).toBe(start + 3);
+      await focusApp();
+      expect(asked()).toBe(start + 4);
+    });
   });
   it('rechecks a change made during a refresh on the next check', async () => {
     await mount();

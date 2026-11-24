@@ -2,22 +2,24 @@ import { useSyncExternalStore } from 'react';
 import { POPUP_MS } from './popupTiming';
 
 let usingSavedData = false;
-let savedAnswers = 0;
+const savedCopies = new WeakSet<object>();
 
 /**
- * How many reads have answered from saved copies. A refresh compares this before and after, so
- * it does not mark server data as loaded when a slow read showed an older saved copy instead.
+ * Whether a read's answer is this device's saved copy, not the server's. A refresh checks each
+ * of its reads, so it does not mark server data as loaded when a slow read showed an older saved
+ * copy instead, and it knows which reads to ask for again.
  */
-export function savedDataAnswerCount(): number {
-  return savedAnswers;
+export function isSavedCopy(answer: unknown): boolean {
+  return typeof answer === 'object' && answer !== null && savedCopies.has(answer);
 }
 
 /**
  * A screen is showing this device's saved copy, because the server was slow or could not be
  * reached. Slow is not the same as offline, so this only asks for a quiet connection check.
+ * `copy` is the saved answer a read is about to return.
  */
-export function reportSavedDataUsed(): void {
-  savedAnswers += 1;
+export function reportSavedDataUsed(copy?: unknown): void {
+  if (typeof copy === 'object' && copy !== null) savedCopies.add(copy);
   usingSavedData = true;
   verifyConnection();
 }
