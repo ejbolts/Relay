@@ -118,7 +118,12 @@ export function WeeklyReviewScreen() {
           unit={unit}
           isCurrentWeek={weeksAgo === 0}
           onOpenExercise={(id) =>
-            leave(() => router.push({ pathname: '/training/exercise/[id]', params: { id } }))
+            leave(() =>
+              router.push(
+                { pathname: '/training/exercise/[id]', params: { id } },
+                { withAnchor: true },
+              ),
+            )
           }
           onOpenRecords={() => leave(() => router.navigate(trainingRoute('exercises')))}
           onOpenCardio={() => leave(() => router.navigate(trainingRoute('cardio')))}

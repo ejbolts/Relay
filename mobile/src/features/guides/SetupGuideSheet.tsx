@@ -53,10 +53,13 @@ export function SetupGuideSheet({
     if (starts === 'blocks') router.push('/blocks/edit');
     else if (starts === 'split') router.push('/split');
     else
-      router.push({
-        pathname: '/training/machine-weights/[id]',
-        params: { id: machineExerciseId! },
-      });
+      router.push(
+        {
+          pathname: '/training/machine-weights/[id]',
+          params: { id: machineExerciseId! },
+        },
+        { withAnchor: true },
+      );
   }, [starts, tips, user.id, workouts, onClose, router, machineExerciseId]);
 
   return (

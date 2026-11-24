@@ -1,5 +1,5 @@
 import { Redirect, Stack } from 'expo-router';
-import { HeaderBack } from '../../features/settings/HeaderBack';
+import { firstRouteHeaderLeft } from '../../features/settings/HeaderBack';
 import { useUser } from '../../session/SessionProvider';
 import { headerOptions } from '../../ui/navigation';
 import { useTheme } from '../../ui/theme';
@@ -20,10 +20,10 @@ function AdminStack() {
   const { colors } = useTheme();
   return (
     <Stack
-      screenOptions={({ navigation, route }) => ({
+      screenOptions={{
         ...headerOptions(colors),
-        headerLeft: navigation.getState().routes[0]?.key === route.key ? HeaderBack : undefined,
-      })}
+        headerLeft: firstRouteHeaderLeft,
+      }}
     >
       <Stack.Screen name="index" options={{ title: 'Admin', headerLargeTitle: true }} />
       <Stack.Screen name="account/[id]" options={{ title: '' }} />

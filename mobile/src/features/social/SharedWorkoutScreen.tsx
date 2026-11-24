@@ -190,7 +190,7 @@ export function SharedWorkoutScreen({
               unit={unit}
               onFilterMachine={(filter) =>
                 own
-                  ? router.push(machineWorkoutsRoute(filter))
+                  ? router.push(machineWorkoutsRoute(filter), { withAnchor: true })
                   : nav.openProfileMachine({ id: memberId }, filter.photo.id)
               }
             />
