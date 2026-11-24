@@ -111,6 +111,7 @@ import {
 import { useHistoryBaselines, useWorkoutAutoSave } from './loggerQueries';
 import { forgetOfflineQueries, saveOfflineQueries, seedOfflineQueries } from './offlineQueries';
 import { askForRestAlerts, syncRestAlert } from './restAlerts';
+import { useRestActivity } from './restActivity';
 import {
   onWorkoutReminderOpened,
   remindAboutRestAlerts,
@@ -606,6 +607,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
     );
   }, [rest, weightUnit]);
   useEffect(() => () => void syncRestAlert(NO_REST, null), []);
+  // On iPhone the rest also shows on the Lock Screen and in the Dynamic Island.
+  useRestActivity(rest, logger, weightUnit, waiting !== null);
 
   // "Still working out?" follows the live workout's last activity; tapping it opens the logger.
   // It is cancelled when the workout is finished or discarded (no logger) and on sign-out.

@@ -36,7 +36,8 @@
           "cameraPermission": "Relay uses the camera to take your profile picture and workout photos.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "./modules/relay-live-activity/app.plugin.js"
     ]
   }
 }
