@@ -12,6 +12,7 @@ import { CardioShareHost } from '../features/cardio/CardioShareSheet';
 // B5 (data): asks a new account whether to import its history.
 import { useImportPrompt } from '../features/data';
 import { AppTourHost } from '../features/guides/AppTourHost';
+import { TipSyncHost } from '../features/guides/TipSyncHost';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { VideoUploadSessionSync } from '../features/videos';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
@@ -136,6 +137,8 @@ function Navigation() {
         {signedIn && !mustChangePassword && <AppTourHost />}
         {/* Opens a cardio share card from the save toast after returning from the log screen. */}
         {signedIn && !mustChangePassword && <CardioShareHost />}
+        {/* Tips follow the account: this phone's tips merge with the server's and the web's. */}
+        {signedIn && !mustChangePassword && <TipSyncHost />}
         {/* Android's menu sheets and text dialogs for every screen. The logger, a separate native
             sheet, mounts its own. */}
         <PromptHost />

@@ -5,6 +5,7 @@ import {
   replacesRemovedExercise,
   savedWorkoutCount,
   TIP_REMOVAL_WINDOW_MS,
+  tipWorkoutCount,
   type TipRemoval,
 } from './tipTriggers';
 
@@ -46,5 +47,18 @@ describe('tip triggers', () => {
     // ...but a photo in any workout, sample ones included, means it is already known.
     expect(machineTipEligible(cable, [...three, workout('row', 1, true)])).toBe(false);
     expect(savedWorkoutCount([workout('row'), workout('row', 0, true)])).toBe(1);
+  });
+});
+
+describe('tipWorkoutCount', () => {
+  const sample = { is_sample: true };
+  const saved = { is_sample: false };
+  it('counts the account’s saved workouts from its total, leaving out samples', () => {
+    expect(tipWorkoutCount([saved, sample], 40)).toBe(39);
+    expect(tipWorkoutCount([sample], 1)).toBe(0);
+  });
+  it('falls back to the loaded history, and never counts fewer than it holds', () => {
+    expect(tipWorkoutCount([saved, saved, sample], undefined)).toBe(2);
+    expect(tipWorkoutCount([saved, saved], 0)).toBe(2);
   });
 });

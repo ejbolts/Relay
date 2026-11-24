@@ -4,7 +4,7 @@ import { useEffect, type ReactNode } from 'react';
 import { Alert, Keyboard, Platform, StyleSheet, TextInput } from 'react-native';
 import { readActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
 import { freshTips, parseTips, tipStorageKey } from '../../../../frontend/src/tipsState';
-import { resetTipsForTests } from '../guides/tips';
+import { resetTipsForTests, startTipSync, tipsFor } from '../guides/tips';
 import { apiGet, apiSend, currentUser } from '../../data/api';
 import type { TrackedWorkout, WorkoutInput } from '../../../../frontend/src/types';
 import { deviceStorage } from '../../data/deviceStorage';
@@ -666,5 +666,64 @@ describe('tips beside the logger', () => {
     mockPromptOpen.value = false;
     await pause(3000);
     expect(screen.queryByText('Warm-up or working set?')).toBeNull();
+  }, 30000);
+
+  test('an interrupted nudge leaves a newer showing synced from another device', async () => {
+    await openLogger();
+    await logWarmup();
+    expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
+    // The account's tips arrive from the web with a later showing of the same tip.
+    const later = storedTips().lastShown + 100;
+    await act(async () =>
+      tipsFor('u1').update((state) => ({ ...state, lastShown: later, shows: { setType: 2 } })),
+    );
+    mockPromptOpen.value = true;
+    await waitFor(() => expect(screen.queryByText('Warm-up or working set?')).toBeNull(), TIP_WAIT);
+    expect(storedTips().shows?.setType).toBe(2);
+    expect(storedTips().lastShown).toBe(later);
+    mockPromptOpen.value = false;
+    await pause(3000);
+    expect(screen.queryByText('Warm-up or working set?')).toBeNull();
+  }, 30000);
+
+  test('a nudge goes at once when a sync brings its dismissal', async () => {
+    await openLogger();
+    await logWarmup();
+    expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
+    // A restore the sync adopted, or another device, dismissed it.
+    await act(async () =>
+      tipsFor('u1').update((state) => ({
+        ...state,
+        seen: { ...state.seen, setType: 'dismissed' },
+      })),
+    );
+    expect(screen.queryByText('Warm-up or working set?')).toBeNull();
+    await pause(3000);
+    expect(screen.queryByText('Warm-up or working set?')).toBeNull();
+    expect(storedTips().seen.setType).toBe('dismissed');
+  }, 30000);
+
+  test('an interrupted nudge’s showing never reaches the account', async () => {
+    const sent: { shows?: Record<string, number>; lastShown: number }[] = [];
+    const sync = startTipSync('u1', {
+      send: async (state) => {
+        sent.push(state);
+        return state;
+      },
+      current: () => true,
+    });
+    await openLogger();
+    await logWarmup();
+    expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
+    // Coming back to the app asks for a sync while the nudge shows.
+    await act(async () => sync.refresh());
+    mockPromptOpen.value = true;
+    await waitFor(() => expect(screen.queryByText('Warm-up or working set?')).toBeNull(), TIP_WAIT);
+    // After the pause before saving, only the rolled-back tips have been sent.
+    await pause(6000);
+    expect(sent.length).toBeGreaterThan(0);
+    expect(sent.every((state) => !state.shows?.setType && state.lastShown === 0)).toBe(true);
+    mockPromptOpen.value = false;
+    sync.stop();
   }, 30000);
 });

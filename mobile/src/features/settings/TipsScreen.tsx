@@ -40,7 +40,7 @@ export function TipsScreen() {
     <SettingsPage>
       <Section>
         <SwitchRow
-          label="Show tips on this device"
+          label="Show tips"
           icon={settingsIcons.tips}
           value={tips.state.enabled}
           onChange={tips.enable}

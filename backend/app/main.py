@@ -87,6 +87,7 @@ from .storage import (
     remove_session_files,
     stream_upload_to_disk,
 )
+from .tip_state import router as tip_state_router
 from .tracker import router as tracker_router
 from .tracker import seed_default_exercises, sync_all_workout_cardio_sessions
 from .training_blocks import router as training_blocks_router
@@ -754,6 +755,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(account_archive_router)
     app.include_router(workout_type_exercises_router)
     app.include_router(home_layout_router)
+    app.include_router(tip_state_router)
     app.include_router(app_notices_router)
     app.include_router(machine_settings_router)
     app.include_router(weight_mapping_router)
