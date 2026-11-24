@@ -51,6 +51,7 @@ from .client_versions import (
 from .config import Settings
 from .database import get_db
 from .errors import api_error
+from .expo_push import remove_account_tokens, remove_session_tokens
 from .models import (
     AccountBackup,
     ActiveWorkoutReminder,
@@ -62,6 +63,7 @@ from .models import (
     Clip,
     Exercise,
     ExerciseMuscleContribution,
+    ExpoPushToken,
     Friendship,
     ImportBatch,
     LiveWorkout,
@@ -395,6 +397,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         delete(LiveWorkout).where(LiveWorkout.user_id == user_id),
         delete(ActiveWorkoutSync).where(ActiveWorkoutSync.user_id == user_id),
         delete(PushSubscription).where(PushSubscription.user_id == user_id),
+        delete(ExpoPushToken).where(ExpoPushToken.user_id == user_id),
         delete(UserSetting).where(UserSetting.user_id == user_id),
         delete(ProfileSharing).where(ProfileSharing.user_id == user_id),
         delete(Friendship).where(
@@ -601,6 +604,7 @@ def logout(request: Request, response: Response, db: DbDependency, settings: App
         )
         db.execute(delete(UserSession).where(UserSession.user_id == user_id))
         db.execute(delete(PushSubscription).where(PushSubscription.user_id == user_id))
+        remove_account_tokens(db, user_id)
         db.execute(delete(ActiveWorkoutReminder).where(ActiveWorkoutReminder.user_id == user_id))
         db.commit()
         session_events.changed(user_id)
@@ -626,6 +630,8 @@ def logout_session(
     )
     if session is not None:
         user_id = session.user_id
+        # The app's push token goes with its sign-in, even if the app could not remove it first.
+        remove_session_tokens(db, session.id)
         db.delete(session)
         db.commit()
         session_events.changed(user_id)

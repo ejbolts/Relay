@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_SESSION_COOKIE = "gym_session"
@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     youtube_processing_poll_seconds: int = Field(default=20, ge=10, le=3_600)
     web_push_vapid_private_key_path: Path = Path("data/web-push-vapid-private.pem")
     web_push_contact_email: str = "mailto:admin@localhost"
+    # Optional Expo access token, for an Expo project with enhanced push security turned on.
+    # Read from GYM_EXPO_ACCESS_TOKEN or EXPO_ACCESS_TOKEN; never commit a real value.
+    expo_access_token: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("GYM_EXPO_ACCESS_TOKEN", "EXPO_ACCESS_TOKEN"),
+    )
     delete_originals_after_success: bool = True
     delete_output_after_success: bool = True
     trim_start_seconds: float = Field(default=5, ge=0, le=60)

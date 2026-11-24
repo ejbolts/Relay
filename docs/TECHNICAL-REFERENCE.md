@@ -256,6 +256,24 @@ when that device reconnects, so the server can only act on activity it has recei
 `0057_active_workout_sync` creates the private draft, revision tombstone and reminder state;
 account deletion removes them and account backups exclude them. Legacy two-hour reminders remain
 supported for older clients, and are suppressed for a session using shared activity tracking.
+
+The native app registers an Expo push token instead of a Web Push subscription (migration
+`0066_expo_push_tokens`). `POST /api/notifications/expo/tokens` (`token`, optional `platform` and
+`local_alerts`) saves or refreshes it for the signed-in account and binds it to that sign-in; the
+same limit of 10 devices applies, and a token signed in to another account moves to it.
+`DELETE /api/notifications/expo/tokens` removes it. Alerts go only to tokens whose sign-in is still
+current, so signing out of the app (`/api/auth/logout-session`), signing out everywhere, a
+password change, disabling or deleting the account all stop them, and ended tokens are pruned.
+Account-wide alerts (Still working out?, auto-save, video ready, admin requests and the test
+alert) reach the app through `https://exp.host/--/api/v2/push/send`; rest timers and the legacy
+two-hour reminder stay with the browser that scheduled them. Tokens Expo reports as
+`DeviceNotRegistered` are removed. `GYM_EXPO_ACCESS_TOKEN` (or `EXPO_ACCESS_TOKEN`) is optional,
+for an Expo project with enhanced push security. The app schedules Still working out? on the
+phone too, so it lists `inactive-workout` in `local_alerts` and reports the workout and due time
+of the reminder it has scheduled with `PUT /api/notifications/expo/tokens/local-reminder`. The
+server skips that phone when its own reminder is for the same workout and due no more than two
+minutes before the server's, and still counts the alert as delivered. Tokens are device
+registrations and are left out of account backups.
 A workout left running can be saved with **Actual duration (minutes)**; the correction stays in
 its draft until saved. Inactivity reminders do not finish or discard the workout.
 

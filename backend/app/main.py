@@ -40,6 +40,7 @@ from .client_versions import ClientVersion, ClientVersionGateMiddleware, normali
 from .config import Settings, get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import api_error
+from .expo_push import expo_push_router
 from .feedback import admin_feedback_router, feedback_router
 from .frontend import FrontendFiles
 from .home_layout import router as home_layout_router
@@ -747,6 +748,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sharing_router)
     app.include_router(presence_router)
     app.include_router(protected)
+    app.include_router(expo_push_router)
     app.include_router(video)
     app.include_router(tracker_router)
     app.include_router(training_blocks_router)
