@@ -60,8 +60,9 @@ test('the extension Info.plist is a WidgetKit extension with the app version', (
   expect(plist).toMatch(/CFBundleVersion<\/key>\s*<string>7</);
 });
 
-test('without a bundle identifier it adds only the Info.plist key', () => {
+test('without a bundle identifier it adds only the Info.plist key, and says so at prebuild', () => {
   const config = withRelayLiveActivity({ ...base });
   expect(config.extra).toBeUndefined();
-  expect(Object.keys(config.mods.ios)).toEqual(['infoPlist']);
+  expect(Object.keys(config.mods.ios).sort()).toEqual(['dangerous', 'infoPlist']);
+  expect(config.mods.ios.xcodeproj).toBeUndefined();
 });

@@ -206,12 +206,18 @@ function withRelayLiveActivity(config) {
   const bundleIdentifier = widgetBundleId(config);
   if (!bundleIdentifier) {
     // Without the app's bundle identifier there's nothing to name the extension after. The app
-    // still builds; it just has no Live Activity layouts to show.
-    WarningAggregator.addWarningIOS(
-      'relay-live-activity',
-      'ios.bundleIdentifier is not set, so the rest timer widget extension was not added.',
-    );
-    return config;
+    // still builds; it just has no Live Activity layouts to show. Said at prebuild only, so
+    // `expo start` stays quiet.
+    return withDangerousMod(config, [
+      'ios',
+      async (config) => {
+        WarningAggregator.addWarningIOS(
+          'relay-live-activity',
+          'ios.bundleIdentifier is not set, so the rest timer widget extension was not added.',
+        );
+        return config;
+      },
+    ]);
   }
   config = withEasExtension(config, bundleIdentifier);
   config = withWidgetFiles(config);
