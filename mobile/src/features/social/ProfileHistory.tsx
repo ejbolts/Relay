@@ -43,6 +43,37 @@ const NO_REACTIONS: WorkoutReactions = { counts: [], yours: null, comment_count:
 const NO_OPTIONS = { exercises: [], machines: [] };
 
 /**
+ * The history's tab, filters and open workout. The profile holds them, so its calendar days and
+ * head-to-head lifts can filter the history, as on the web.
+ */
+export function useProfileHistoryState(targetWorkout?: LinkedWorkout) {
+  const [tab, setTab] = useState<SharedHistoryTab>('all');
+  const [filters, setFilters] = useState<SharedWorkoutFilters>(() =>
+    sharedFiltersForTarget(targetWorkout),
+  );
+  const [openId, setOpenId] = useState<string | null>(targetWorkout?.id ?? null);
+  return {
+    tab,
+    setTab,
+    filters,
+    openId,
+    setOpenId,
+    changeFilters(next: SharedWorkoutFilters) {
+      setFilters(next);
+      setOpenId(null);
+    },
+    /** Every workout matching a calendar day or a lift, on the All tab: either can be cardio. */
+    showMatching(next: SharedWorkoutFilters) {
+      setTab('all');
+      setFilters(next);
+      setOpenId(null);
+    },
+  };
+}
+
+export type ProfileHistoryState = ReturnType<typeof useProfileHistoryState>;
+
+/**
  * The shared history, in the web's tabs when the member logs cardio, opening like Training's.
  * Each workout has its reactions and comments under its summary, as in the feed. Its filters
  * (workout type, exercise, machine and dates) open in a sheet from the button beside the title.
@@ -52,11 +83,14 @@ const NO_OPTIONS = { exercises: [], machines: [] };
  */
 export function ProfileHistory({
   profile,
+  state,
   targetWorkout,
   linkedRef,
   onLinkedLayout,
 }: {
   profile: SharedProfile;
+  /** From `useProfileHistoryState`, held by the profile. */
+  state: ProfileHistoryState;
   targetWorkout?: LinkedWorkout;
   /** The linked workout's row, which the profile keeps in view until the reader scrolls. */
   linkedRef: LinkedRow['targetRef'];
@@ -65,12 +99,8 @@ export function ProfileHistory({
   const { colors, type } = useTheme();
   const nav = useSocialNavigation();
   const unit = useWeightUnit();
-  const [tab, setTab] = useState<SharedHistoryTab>('all');
-  const [filters, setFilters] = useState<SharedWorkoutFilters>(() =>
-    sharedFiltersForTarget(targetWorkout),
-  );
+  const { tab, setTab, filters, openId, setOpenId, changeFilters } = state;
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [openId, setOpenId] = useState<string | null>(targetWorkout?.id ?? null);
   const cardioTab = !!profile.cardio_sessions;
   const kind = cardioTab ? SHARED_HISTORY_KIND[tab] : undefined;
   const invalidDates = sharedFilterDatesInvalid(filters);
@@ -107,11 +137,6 @@ export function ProfileHistory({
     !needsMore &&
     !isFetching &&
     !workouts.some((workout) => workout.id === linkedId);
-
-  function changeFilters(next: SharedWorkoutFilters) {
-    setFilters(next);
-    setOpenId(null);
-  }
 
   return (
     <Card>

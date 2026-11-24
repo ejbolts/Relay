@@ -31,6 +31,11 @@ export function sharedFiltersOnDay(date: string): SharedWorkoutFilters {
   return { ...NO_SHARED_WORKOUT_FILTERS, start_date: date, end_date: date };
 }
 
+/** The one day the filters show, which the calendar marks, or null for a range or no dates. */
+export function sharedFiltersDay(filters: SharedWorkoutFilters): string | null {
+  return filters.start_date && filters.start_date === filters.end_date ? filters.start_date : null;
+}
+
 /** The filters a profile opens with: a linked workout's day, or none. */
 export function sharedFiltersForTarget(
   target?: Pick<TrackedWorkout, 'workout_date'> | null,

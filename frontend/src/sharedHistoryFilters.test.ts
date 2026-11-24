@@ -4,6 +4,7 @@ import {
   linkedWorkoutNeedsMore,
   NO_SHARED_WORKOUT_FILTERS,
   sharedFilterDatesInvalid,
+  sharedFiltersDay,
   sharedFiltersForExercise,
   sharedFiltersForTarget,
   sharedFiltersOnDay,
@@ -33,6 +34,20 @@ describe('shared history filters', () => {
       end_date: '2026-03-04',
     });
     expect(sharedFiltersForTarget(undefined)).toBe(NO_SHARED_WORKOUT_FILTERS);
+  });
+
+  it('reads the one day a calendar tap or link shows, and no day for a range', () => {
+    expect(sharedFiltersDay(sharedFiltersOnDay('2026-03-04'))).toBe('2026-03-04');
+    expect(
+      sharedFiltersDay({
+        ...NO_SHARED_WORKOUT_FILTERS,
+        start_date: '2026-03-04',
+        end_date: '2026-03-05',
+      }),
+    ).toBeNull();
+    expect(sharedFiltersDay({ ...NO_SHARED_WORKOUT_FILTERS, start_date: '2026-03-04' })).toBeNull();
+    expect(sharedFiltersDay(NO_SHARED_WORKOUT_FILTERS)).toBeNull();
+    expect(sharedFiltersDay(sharedFiltersForExercise('bench'))).toBeNull();
   });
 
   it('keeps the linked workout only while the filters show just its day', () => {

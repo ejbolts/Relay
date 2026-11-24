@@ -1,8 +1,13 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { formatMemberSince } from '../../../../frontend/src/profileDisplay';
+import {
+  sharedFiltersDay,
+  sharedFiltersForExercise,
+  sharedFiltersOnDay,
+} from '../../../../frontend/src/sharedHistoryFilters';
 import {
   blockConfirmation,
   friendPill,
@@ -17,7 +22,11 @@ import {
   VISIBILITY_LABELS,
   type InviteResult,
 } from '../../../../frontend/src/sharedProfileDisplay';
-import type { FriendStatus, SharedProfile } from '../../../../frontend/src/types';
+import type {
+  FriendStatus,
+  SharedProfile,
+  SharedWorkoutFilters,
+} from '../../../../frontend/src/types';
 import { useWeightUnit } from '../../data/queries';
 import {
   Button,
@@ -33,6 +42,7 @@ import { MenuButton, type MenuItem } from '../../ui/MenuButton';
 import { pendingActions, usePendingActions } from '../../ui/pendingActions';
 import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
+import { useReduceMotion } from '../settings/devicePreferences';
 import { pushedScreenOptions } from '../../ui/navigation';
 import { Avatar } from './Avatar';
 import { PhotoViewer } from './PhotoViewer';
@@ -41,7 +51,7 @@ import { FriendSplits } from './FriendSplits';
 import { socialIcons } from './icons';
 import { useLinkedScroll, type LinkedRow } from './linkedScroll';
 import { useSocialNavigation, type LinkedWorkout } from './navigation';
-import { ProfileHistory } from './ProfileHistory';
+import { ProfileHistory, useProfileHistoryState } from './ProfileHistory';
 import { SharingLocked, SmallButton } from './parts';
 import { ProfileStats } from './profile/ProfileStats';
 import { notFound, sharingRequired, socialApi } from './socialApi';
@@ -63,7 +73,7 @@ export function ProfileScreen({
   targetWorkout?: LinkedWorkout;
 }) {
   const { colors, space } = useTheme();
-  const { scrollRef, targetRef, reveal, onScrollBeginDrag, onContentSizeChange } =
+  const { scrollRef, targetRef, reveal, scrollToSection, onScrollBeginDrag, onContentSizeChange } =
     useLinkedScroll();
   const client = useQueryClient();
   const query = useSharedProfile(profileId);
@@ -105,6 +115,7 @@ export function ProfileScreen({
         targetWorkout={targetWorkout}
         linkedRef={targetRef}
         onLinkedLayout={reveal}
+        scrollToSection={scrollToSection}
       />
     );
 
@@ -194,13 +205,23 @@ function ProfileBody({
   targetWorkout,
   linkedRef,
   onLinkedLayout,
+  scrollToSection,
 }: {
   profile: SharedProfile;
   onBlocked: () => void;
   targetWorkout?: LinkedWorkout;
   linkedRef: LinkedRow['targetRef'];
   onLinkedLayout: () => void;
+  scrollToSection: ReturnType<typeof useLinkedScroll>['scrollToSection'];
 }) {
+  const history = useProfileHistoryState(targetWorkout);
+  const historyRef = useRef<ComponentRef<typeof View>>(null);
+  const reduceMotion = useReduceMotion();
+  // As on the web, a calendar day or a lift filters the history below and brings it into view.
+  const showMatching = (filters: SharedWorkoutFilters) => {
+    history.showMatching(filters);
+    scrollToSection(historyRef.current, !reduceMotion);
+  };
   return (
     <>
       <ProfileHeader profile={profile} onBlocked={onBlocked} />
@@ -209,14 +230,22 @@ function ProfileBody({
       ) : (
         <>
           {!profile.is_you && <FriendSplits key={profile.id} ownerId={profile.id} />}
-          <ProfileStats profile={profile} />
-          {profile.goals && <GoalsCard profile={profile} />}
-          <ProfileHistory
+          <ProfileStats
             profile={profile}
-            targetWorkout={targetWorkout}
-            linkedRef={linkedRef}
-            onLinkedLayout={onLinkedLayout}
+            selectedDate={sharedFiltersDay(history.filters)}
+            onOpenDay={(date) => showMatching(sharedFiltersOnDay(date))}
+            onOpenLift={(exerciseId) => showMatching(sharedFiltersForExercise(exerciseId))}
           />
+          {profile.goals && <GoalsCard profile={profile} />}
+          <View ref={historyRef} collapsable={false}>
+            <ProfileHistory
+              profile={profile}
+              state={history}
+              targetWorkout={targetWorkout}
+              linkedRef={linkedRef}
+              onLinkedLayout={onLinkedLayout}
+            />
+          </View>
         </>
       )}
     </>

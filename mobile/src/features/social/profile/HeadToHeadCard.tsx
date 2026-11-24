@@ -8,11 +8,7 @@ import {
   liftBarShare,
   liftRowSummary,
 } from '../../../../../frontend/src/liftComparisonDisplay';
-import type {
-  LiftComparison,
-  SharedProfileSummary,
-  WorkoutType,
-} from '../../../../../frontend/src/types';
+import type { LiftComparison, SharedProfileSummary } from '../../../../../frontend/src/types';
 import { OFFLINE_MESSAGE, waitingForNetwork } from '../../../data/offline';
 import { useWeightUnit } from '../../../data/queries';
 import { useUser } from '../../../session/SessionProvider';
@@ -24,24 +20,21 @@ import { Avatar } from '../Avatar';
 import { accessRevoked } from '../socialApi';
 import { useMemberRefusal, useSharedLifts } from '../socialQueries';
 import { LiftPickerSheet } from './LiftPickerSheet';
-import { ProfileWorkoutsSheet } from './ProfileWorkoutsSheet';
 
 type Member = Pick<SharedProfileSummary, 'id' | 'display_name' | 'profile_photo_url'>;
 
 /**
  * Your best lifts against another member's, on their profile. Starts empty on each visit;
- * lifts chosen belong to this visit only. Tapping a lift the member has logged opens their
- * sessions of that lift.
+ * lifts chosen belong to this visit only. Tapping a lift the member has logged filters their
+ * history to that lift.
  */
 export function HeadToHeadCard({
   member,
-  workoutTypes = [],
   onOpenLift,
 }: {
   member: Member;
-  workoutTypes?: WorkoutType[];
-  /** Optional override for opening a member's sessions of one of their exercises. */
-  onOpenLift?: (exerciseId: string) => void;
+  /** Opens the member's sessions of one of their exercises: the profile filters its history. */
+  onOpenLift: (exerciseId: string) => void;
 }) {
   const { colors, type } = useTheme();
   const unit = useWeightUnit();
@@ -56,7 +49,6 @@ export function HeadToHeadCard({
   const [picking, setPicking] = useState(false);
   // While the sheet is open, keep the lifts shown before opening, then commit on close.
   const [held, setHeld] = useState<string[] | null>(null);
-  const [activeLift, setActiveLift] = useState<{ exerciseId: string; name: string } | null>(null);
   const byId = useMemo(
     () => new Map((lifts ?? []).map((lift) => [lift.exercise_id, lift])),
     [lifts],
@@ -202,13 +194,7 @@ export function HeadToHeadCard({
               first={index === 0}
               last={index === chosen.length - 1}
               onOpen={
-                lift.theirs?.exercise_id
-                  ? () => {
-                      const theirExercise = lift.theirs!.exercise_id;
-                      if (onOpenLift) onOpenLift(theirExercise);
-                      else setActiveLift({ exerciseId: theirExercise, name: lift.name });
-                    }
-                  : undefined
+                lift.theirs?.exercise_id ? () => onOpenLift(lift.theirs!.exercise_id) : undefined
               }
             />
           ))}
@@ -253,16 +239,6 @@ export function HeadToHeadCard({
           <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void query.refetch()} />
         </Sheet>
       )}
-
-      <ProfileWorkoutsSheet
-        visible={!!activeLift}
-        profileId={member.id}
-        workoutTypes={workoutTypes}
-        kicker={member.display_name.toUpperCase()}
-        title={activeLift?.name ?? ''}
-        exerciseId={activeLift?.exerciseId}
-        onClose={() => setActiveLift(null)}
-      />
     </Card>
   );
 }

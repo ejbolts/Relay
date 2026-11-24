@@ -30,7 +30,31 @@ export function useLinkedScroll() {
   const onScrollBeginDrag = useCallback(() => {
     movedRef.current = true;
   }, []);
-  return { scrollRef, targetRef, reveal, onScrollBeginDrag, onContentSizeChange: reveal };
+  /**
+   * Scrolls the profile to a section the reader asked for, as the web's calendar and lift taps
+   * bring its history into view. The linked row stops being followed from then on.
+   */
+  const scrollToSection = useCallback(
+    (section: ComponentRef<typeof View> | null, animated: boolean) => {
+      const content = scrollRef.current?.getInnerViewRef?.();
+      if (!section || !content) return;
+      movedRef.current = true;
+      requestAnimationFrame(() =>
+        section.measureLayout(content, (_x, y) =>
+          scrollRef.current?.scrollTo({ y: Math.max(0, y - ABOVE), animated }),
+        ),
+      );
+    },
+    [],
+  );
+  return {
+    scrollRef,
+    targetRef,
+    reveal,
+    scrollToSection,
+    onScrollBeginDrag,
+    onContentSizeChange: reveal,
+  };
 }
 
 /** What the history needs to keep its linked row in view. */
