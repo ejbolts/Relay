@@ -23,6 +23,7 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
@@ -31,7 +32,8 @@ from .account_limits import limit_save_rate
 from .auth import CurrentUser
 from .database import get_db
 from .errors import api_error
-from .training_metrics import get_setting, set_setting
+from .models import UserSetting
+from .training_metrics import set_setting
 
 TIP_STATE_KEY = "tip_state"
 # The server-managed TIP_STATE_GENERATION_KEY (account_backups.py): an archive restore replaces
@@ -215,16 +217,28 @@ def _too_large(text: str) -> bool:
     return len(text.encode("utf-8")) > MAX_TIP_STATE_BYTES
 
 
-def stored_tip_state(db: Session, user_id: str) -> dict[str, Any]:
+def _tips(text: str | None) -> dict[str, Any]:
     try:
-        value = json.loads(get_setting(db, user_id, TIP_STATE_KEY, "{}"))
+        value = json.loads(text or "{}")
     except ValueError:
         return {}
     return value if isinstance(value, dict) else {}
 
 
-def tip_state_generation(db: Session, user_id: str) -> str:
-    return get_setting(db, user_id, TIP_STATE_GENERATION_KEY, INITIAL_GENERATION)
+def read_tip_state(db: Session, user_id: str) -> tuple[dict[str, Any], str]:
+    """The account's tips and their generation, read in one statement: a restore committing
+    between two reads could otherwise pair the old tips with the new generation."""
+    rows = dict(
+        db.execute(
+            select(UserSetting.key, UserSetting.value).where(
+                UserSetting.user_id == user_id,
+                UserSetting.key.in_((TIP_STATE_KEY, TIP_STATE_GENERATION_KEY)),
+            )
+        )
+        .tuples()
+        .all()
+    )
+    return _tips(rows.get(TIP_STATE_KEY)), rows.get(TIP_STATE_GENERATION_KEY, INITIAL_GENERATION)
 
 
 def start_tip_state_generation(live: sqlite3.Connection, user_id: str) -> None:
@@ -264,6 +278,12 @@ def _check_account(user: CurrentUser, account: str | None) -> None:
         )
 
 
+def _busy(error: OperationalError) -> bool:
+    """SQLite gave up waiting for another connection's lock (a writer, or a reader at commit)."""
+    message = str(error.orig).lower()
+    return "locked" in message or "busy" in message
+
+
 @router.get("")
 def get_tip_state(
     db: DbSession, user: CurrentUser, account: ExpectedAccount = None
@@ -271,7 +291,8 @@ def get_tip_state(
     """The account's tips as last merged (an empty object before any client has saved them),
     with the server's ``generation``."""
     _check_account(user, account)
-    return {**stored_tip_state(db, user.id), "generation": tip_state_generation(db, user.id)}
+    tips, generation = read_tip_state(db, user.id)
+    return {**tips, "generation": generation}
 
 
 @router.put("", dependencies=[Depends(limit_save_rate)])
@@ -279,31 +300,34 @@ def save_tip_state(
     db: DbSession,
     user: CurrentUser,
     payload: Annotated[dict[str, Any], Body()],
-    account: ExpectedAccount = None,
+    account: Annotated[str, Query(max_length=64)],
     generation: Annotated[str | None, Query(max_length=64)] = None,
 ) -> dict[str, Any]:
     """Merges a client's tips into the account's and returns the result, with the server's
-    ``generation``, for it to adopt. A client that names an earlier generation (it synced before an
-    archive restore) gets the stored tips unmerged, to replace its own. A client that names none is
-    taken to hold the initial generation, so it can't merge older tips into a restored account."""
+    ``generation``, for it to adopt. The client must name the account its tips belong to. A client
+    that names an earlier generation (it synced before an archive restore) gets the stored tips
+    unmerged, to replace its own; one that names none is taken to hold the initial generation, so
+    it can't merge older tips into a restored account."""
     _check_account(user, account)
     if _too_large(_encoded(payload)):
         raise api_error(413, "tip_state_too_large", "These tips are too large to save.")
     try:
         _begin_write(db)
+        stored, current = read_tip_state(db, user.id)
+        if (generation if generation is not None else INITIAL_GENERATION) != current:
+            db.rollback()
+            return {**stored, "generation": current}
+        merged = merge_tip_states(stored, payload)
+        text = _encoded(merged)
+        if _too_large(text):
+            db.rollback()
+            raise api_error(413, "tip_state_too_large", "These tips are too large to save.")
+        set_setting(db, user.id, TIP_STATE_KEY, text)
+        db.commit()
     except OperationalError as error:
+        # Busy at any step, including a reader holding the database at commit: ask to retry.
         db.rollback()
-        raise BUSY from error
-    current = tip_state_generation(db, user.id)
-    stored = stored_tip_state(db, user.id)
-    if (generation if generation is not None else INITIAL_GENERATION) != current:
-        db.rollback()
-        return {**stored, "generation": current}
-    merged = merge_tip_states(stored, payload)
-    text = _encoded(merged)
-    if _too_large(text):
-        db.rollback()
-        raise api_error(413, "tip_state_too_large", "These tips are too large to save.")
-    set_setting(db, user.id, TIP_STATE_KEY, text)
-    db.commit()
+        if _busy(error):
+            raise BUSY from error
+        raise
     return {**merged, "generation": current}
