@@ -171,3 +171,44 @@ test('signOut runs registered beforeSignOut cleanups before revoking the token a
     unregisterFail();
   }
 });
+
+test('a hanging beforeSignOut handler still lets signOut proceed after about 2 s', async () => {
+  jest.useFakeTimers();
+  jest.mocked(currentUser).mockResolvedValue(user);
+  const unregisterHang = registerBeforeSignOut(() => new Promise(() => undefined));
+  function SignOutButton() {
+    const { signOut: doSignOut } = useSession();
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Sign out"
+        onPress={() => void doSignOut()}
+      />
+    );
+  }
+  try {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const view = await render(
+      <QueryClientProvider client={client}>
+        <SessionProvider>
+          <Probe />
+          <SignOutButton />
+        </SessionProvider>
+      </QueryClientProvider>,
+    );
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(screen.getByText('Signed in as preview')).toBeVisible();
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Sign out' }));
+    await act(async () => jest.advanceTimersByTimeAsync(1900));
+    expect(signOut).not.toHaveBeenCalled();
+
+    await act(async () => jest.advanceTimersByTimeAsync(200));
+    expect(signOut).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('signed-out')).toBeVisible();
+    await view.unmount();
+  } finally {
+    unregisterHang();
+    jest.useRealTimers();
+  }
+});

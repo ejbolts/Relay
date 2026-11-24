@@ -230,7 +230,7 @@ export function GuideCoach({
     indexRef.current = index;
   }, [index]);
   const triggerReveal = useRef<((gentle: boolean) => void) | null>(null);
-  const revealedCard = useRef<{ index: number; height: number } | null>(null);
+  const revealedCard = useRef<{ index: number; target: CoachTargetId } | null>(null);
 
   useEffect(() => {
     highlighted = { owner: me, target };
@@ -359,15 +359,16 @@ export function GuideCoach({
     };
   }, [inline, scroll, target, reduced]);
 
-  // Rerun a reveal when the card's measured height or keyboard lift changes for the current step,
-  // so a card that laid out after the first pass still brings the control clear of it.
+  // Rerun a reveal when the card's measured height or keyboard lift changes for the current step.
+  // Only the first measured height for a step runs non-gentle; later fold/unfold changes run
+  // gentle so a tall target scrolled past its top never jumps back up.
   useEffect(() => {
     if (inline || coachHeight <= 0) return;
     const prev = revealedCard.current;
-    const grewForStep = !prev || prev.index !== index || coachHeight > prev.height;
-    revealedCard.current = { index, height: coachHeight };
-    triggerReveal.current?.(!grewForStep);
-  }, [inline, coachHeight, lift, index]);
+    const firstForStep = !prev || prev.index !== index || prev.target !== target;
+    revealedCard.current = { index, target };
+    triggerReveal.current?.(!firstForStep);
+  }, [inline, coachHeight, lift, index, target]);
 
   // Tapping the grabber folds or opens the card; swiping it down folds it and up opens it. The
   // 40 x 5 pt bar sits in a 44 pt band that answers touches, and screen readers activate it.

@@ -1,6 +1,6 @@
 import { Stack } from 'expo-router';
 import { useReduceMotion } from '../../features/settings/devicePreferences';
-import { firstRouteHeaderLeft } from '../../features/settings/HeaderBack';
+import { HeaderBack } from '../../features/settings/HeaderBack';
 import { headerOptions } from '../../ui/navigation';
 import { useTheme } from '../../ui/theme';
 
@@ -13,10 +13,10 @@ export default function DataLayout() {
   const reduced = useReduceMotion();
   return (
     <Stack
-      screenOptions={{
+      screenOptions={({ navigation, route }) => ({
         ...headerOptions(colors, reduced),
-        headerLeft: firstRouteHeaderLeft,
-      }}
+        headerLeft: navigation.getState().routes[0]?.key === route.key ? HeaderBack : undefined,
+      })}
     >
       <Stack.Screen name="import" options={{ title: 'Import workouts' }} />
       <Stack.Screen name="import-review" options={{ title: 'Review import' }} />

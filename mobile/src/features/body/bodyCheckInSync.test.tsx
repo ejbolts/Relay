@@ -493,6 +493,37 @@ test('retries a connection failure on the sync interval, skips overlapping sends
   }
 });
 
+test('stops the sync interval while only refused check-ins remain', async () => {
+  jest.useFakeTimers();
+  try {
+    const view = await render(
+      <Shell>
+        <CheckInSyncCard />
+      </Shell>,
+    );
+    jest.mocked(apiSend).mockRejectedValueOnce(new ApiError(400, 'Weight is out of range.'));
+    await act(async () => {
+      saveBodyCheckIn({
+        measurement_date: today,
+        weight_kg: 82.4,
+        body_fat_pct: null,
+        notes: null,
+      });
+    });
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(apiSend).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Weight is out of range.')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Retry sync' })).toBeVisible();
+
+    // Advancing several intervals does not wake or resend a refused check-in automatically.
+    await act(async () => jest.advanceTimersByTimeAsync(TRAINING_SYNC_INTERVAL_MS * 3));
+    expect(apiSend).toHaveBeenCalledTimes(1);
+    await view.unmount();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 test('Log weigh-in closes at once when queued even while the server refresh hangs', async () => {
   jest.mocked(apiGet).mockImplementation((path: string) => {
     if (path === '/api/body-measurements') return new Promise(() => undefined);

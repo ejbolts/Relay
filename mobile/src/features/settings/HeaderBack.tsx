@@ -4,14 +4,6 @@ import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 
 /**
- * Renders `HeaderBack` only on a stack's first screen (`canGoBack` is false inside its stack);
- * pushed screens return undefined so the native stack back button stays in charge.
- */
-export function firstRouteHeaderLeft({ canGoBack }: { canGoBack?: boolean }) {
-  return canGoBack ? undefined : <HeaderBack />;
-}
-
-/**
  * The back button for the first screen of a pushed stack (Settings, Your splits), whose own
  * stack has nothing to go back to: it returns to the screen that opened it.
  */

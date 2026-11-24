@@ -1,5 +1,5 @@
 import { Stack } from 'expo-router';
-import { firstRouteHeaderLeft } from '../../features/settings/HeaderBack';
+import { HeaderBack } from '../../features/settings/HeaderBack';
 import { headerOptions } from '../../ui/navigation';
 import { useTheme } from '../../ui/theme';
 
@@ -11,10 +11,10 @@ export default function BlocksLayout() {
   const { colors } = useTheme();
   return (
     <Stack
-      screenOptions={{
+      screenOptions={({ navigation, route }) => ({
         ...headerOptions(colors),
-        headerLeft: firstRouteHeaderLeft,
-      }}
+        headerLeft: navigation.getState().routes[0]?.key === route.key ? HeaderBack : undefined,
+      })}
     >
       <Stack.Screen name="index" options={{ title: 'Training blocks', headerLargeTitle: true }} />
       <Stack.Screen name="edit" options={{ title: 'New training block' }} />

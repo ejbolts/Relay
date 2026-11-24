@@ -260,30 +260,34 @@ async function deleteSessionBestEffort(sessionId: string, token: string): Promis
   }
 }
 
+function isMidTransferUpload(current: VideoUploadState): boolean {
+  return (
+    current.session !== null &&
+    STILL_UPLOADABLE.includes(current.session.status) &&
+    (current.phase === 'creating' || current.phase === 'uploading') &&
+    current.clips.some((clip) => clip.status !== 'uploaded')
+  );
+}
+
 /**
  * Deletes an unfinished upload session with its captured token before sign-out revokes it.
- * Never throws and never delays sign-out past SIGN_OUT_DELETE_TIMEOUT_MS.
+ * Only runs while a transfer is actually in flight, never throws, and never delays sign-out
+ * past SIGN_OUT_DELETE_TIMEOUT_MS. Marks interrupted clips failed so Retry stays available if
+ * sign-out itself fails.
  */
 async function cleanupActiveUploadForSignOut(): Promise<void> {
   const session = state.session;
   const token = activeToken;
-  if (
-    !session ||
-    !token ||
-    !STILL_UPLOADABLE.includes(session.status) ||
-    state.phase === 'starting'
-  ) {
-    return;
-  }
+  if (!session || !token || !isMidTransferUpload(state)) return;
   activeToken = undefined;
-  stopActiveTransfers(false);
+  stopActiveTransfers(true);
   await deleteSessionBestEffort(session.id, token);
 }
 
 function abortAndReset(nextUserId: string | null, nextEpoch: number, cleanup = false) {
   const session = state.session;
   const token = activeToken;
-  const phase = state.phase;
+  const shouldDelete = cleanup && isMidTransferUpload(state);
   activeToken = undefined;
   runId += 1;
   ownerUserId = nextUserId;
@@ -294,13 +298,7 @@ function abortAndReset(nextUserId: string | null, nextEpoch: number, cleanup = f
   releaseWakeLock();
   state = initialState();
   emit();
-  if (
-    cleanup &&
-    session &&
-    token &&
-    STILL_UPLOADABLE.includes(session.status) &&
-    phase !== 'starting'
-  ) {
+  if (shouldDelete && session && token) {
     void deleteSessionBestEffort(session.id, token);
   }
 }
@@ -342,7 +340,7 @@ export function syncVideoUploadSession(userId: string | null, allowed = true) {
   const epoch = sessionEpoch();
   if (!userId || !allowed) {
     if (ownerUserId !== null || ownerEpoch !== epoch || hasSessionState()) {
-      abortAndReset(null, epoch, true);
+      abortAndReset(null, epoch, !userId);
     } else {
       ownerEpoch = epoch;
     }

@@ -358,6 +358,86 @@ test('the coach brings a control clear of the card when the card lays out late o
   }
 });
 
+test('folding and unfolding the coach does not jump a scrolled tall target back to its top', async () => {
+  const listeners: Record<string, ((event?: unknown) => void) | undefined> = {};
+  const kbSpy = jest.spyOn(Keyboard, 'addListener').mockImplementation((name, fn) => {
+    listeners[name] = fn as (event?: unknown) => void;
+    return { remove: () => (listeners[name] = undefined) } as never;
+  });
+  const scrollTo = jest.fn();
+  const scroll = { current: { scrollTo, getInnerViewRef: () => ({}) } };
+  const boxes = {
+    frame: { y: 0, height: 800 },
+    content: { y: -700, height: 3000 },
+    control: { y: -600, height: 1400 },
+    coach: { y: 560, height: 240 },
+  };
+  const measure = jest
+    .spyOn(coachLayout, 'measure')
+    .mockImplementation(async (_view, part) => boxes[part]);
+  const coach = (
+    <GuideCoach
+      step={{ title: 'Plan your days', body: 'Plan body', target: 'split.days' }}
+      index={1}
+      total={6}
+      scroll={scroll as never}
+      onExit={jest.fn()}
+    />
+  );
+  try {
+    const view = await show(
+      <>
+        <CoachTarget id="split.days">
+          <Text>Days</Text>
+        </CoachTarget>
+        {coach}
+      </>,
+    );
+    // Initial expanded card layout runs the step's first non-gentle reveal.
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 560, width: 366, height: 240 } },
+    });
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ y: 92, animated: true }));
+    await act(() => new Promise<void>((done) => setTimeout(done, 1150)));
+    scrollTo.mockClear();
+
+    // User scrolls down past the tall target's top, then keyboard folds and unfolds the card.
+    boxes.control = { y: -900, height: 2400 };
+    await act(async () =>
+      listeners.keyboardDidShow?.({ endCoordinates: { screenY: 500, height: 300 } }),
+    );
+    boxes.coach = { y: 400, height: 96 };
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 400, width: 366, height: 96 } },
+    });
+    await act(async () => listeners.keyboardDidHide?.());
+    boxes.coach = { y: 560, height: 240 };
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 560, width: 366, height: 240 } },
+    });
+    await act(() => new Promise<void>((done) => setTimeout(done, 250)));
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // Manual grabber fold and unfold also leave the scrolled tall target where it is.
+    await fireEvent.press(screen.getByRole('button', { name: 'Minimise guide' }));
+    boxes.coach = { y: 700, height: 96 };
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 700, width: 366, height: 96 } },
+    });
+    await fireEvent.press(screen.getByRole('button', { name: 'Show guide' }));
+    boxes.coach = { y: 560, height: 240 };
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 560, width: 366, height: 240 } },
+    });
+    await act(() => new Promise<void>((done) => setTimeout(done, 250)));
+    expect(scrollTo).not.toHaveBeenCalled();
+    await view.unmount();
+  } finally {
+    measure.mockRestore();
+    kbSpy.mockRestore();
+  }
+});
+
 test('the coach folds while the keyboard is up and unfolds when it closes or the step changes', async () => {
   const listeners: Record<string, ((event?: unknown) => void) | undefined> = {};
   const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation((name, fn) => {

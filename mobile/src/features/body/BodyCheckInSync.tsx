@@ -4,6 +4,7 @@ import { AppState } from 'react-native';
 import { TRAINING_SYNC_INTERVAL_MS } from '../../../../frontend/src/trainingSync';
 import { useOptionalSession } from '../../session/SessionProvider';
 import {
+  bodyCheckInHasSendable,
   bodyCheckInStatus,
   bodyCheckInSyncFailed,
   bodyCheckInSyncing,
@@ -49,7 +50,7 @@ export function BodyCheckInSync() {
     let timer: ReturnType<typeof setInterval> | null = null;
     setBodyCheckInOwner(userId);
     const syncTimer = () => {
-      const want = active && appActive && bodyCheckInStatus().pending > 0;
+      const want = active && appActive && (bodyCheckInHasSendable() || bodyCheckInSyncFailed());
       if (want && !timer) {
         timer = setInterval(() => {
           if (
@@ -57,7 +58,7 @@ export function BodyCheckInSync() {
             !appActive ||
             inFlight > 0 ||
             bodyCheckInSyncing() ||
-            bodyCheckInStatus().pending === 0
+            (!bodyCheckInHasSendable() && !bodyCheckInSyncFailed())
           )
             return;
           void send();

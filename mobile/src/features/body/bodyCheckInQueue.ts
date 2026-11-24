@@ -133,6 +133,10 @@ export const bodyCheckInSyncFailed = () => syncFailed;
 /** Whether a sync attempt is currently running. */
 export const bodyCheckInSyncing = () => syncing !== null;
 
+/** Whether any queued check-in is sendable automatically (excludes refused changes waiting on Retry). */
+export const bodyCheckInHasSendable = () =>
+  owner !== null && nextBodyMeasurementChange(queueFor(owner)) !== null;
+
 /**
  * The account the phone's copy belongs to. Signing out removes the copy, so before the session
  * has started this is the account opening the app.
@@ -258,6 +262,7 @@ export function syncBodyCheckIns(retry = false): Promise<number> {
           }
           throw reason;
         }
+        syncFailed = false;
         persist(
           withRefusedBodyMeasurementChange(
             queueFor(account),
