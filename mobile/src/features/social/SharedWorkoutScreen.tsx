@@ -120,7 +120,8 @@ export function SharedWorkoutScreen({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={own ? 'Open your profile' : `Open ${name}’s profile`}
-            onPress={() => nav.openProfile({ id: memberId })}
+            // Their profile opens at this workout in its history, as the web's session links do.
+            onPress={() => nav.openProfileAt({ id: memberId }, workout)}
             style={({ pressed }) => [styles.person, pressed && { opacity: 0.6 }]}
           >
             {member && <Avatar person={member} size={42} />}
@@ -220,7 +221,7 @@ export function SharedWorkoutScreen({
 }
 
 const styles = StyleSheet.create({
-  person: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  person: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
   statsRow: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   records: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   composer: {

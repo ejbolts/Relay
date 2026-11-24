@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Stack, useRouter } from 'expo-router';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
@@ -116,7 +116,11 @@ function Library({
   const activeId = split?.enabled ? (split.routine_id ?? 'current-split') : null;
   const legacy = legacySplitRoutine(split, types);
   const displayed = splitsActiveFirst([...(legacy ? [legacy] : []), ...routines], activeId);
-  const [expanded, setExpanded] = useState<string | null>(activeId);
+  // Opened from a friend's profile after Save split, at the saved copy, as the web's View my splits.
+  const { open: openParam } = useLocalSearchParams<{ open?: string }>();
+  const [expanded, setExpanded] = useState<string | null>(() =>
+    openParam && displayed.some((routine) => routine.id === openParam) ? openParam : activeId,
+  );
   // Active split's exercise breakdown starts collapsed (matching web) so Templates stay above the fold.
   const [exercisesOpen, setExercisesOpen] = useState<Record<string, boolean>>({});
   const secondary = buttonColors(colors, 'secondary');
