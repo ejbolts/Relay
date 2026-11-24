@@ -111,6 +111,7 @@ import {
 import { useHistoryBaselines, useWorkoutAutoSave } from './loggerQueries';
 import { forgetOfflineQueries, saveOfflineQueries, seedOfflineQueries } from './offlineQueries';
 import { askForRestAlerts, syncRestAlert } from './restAlerts';
+import { syncRestActivity, useRestActivity } from './restActivity';
 import {
   onWorkoutReminderOpened,
   remindAboutRestAlerts,
@@ -319,6 +320,12 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (signedOut) forgetOfflineQueries();
+  }, [signedOut]);
+  // Confirmed signed out, as when the app opens after the session ended: an iPhone rest Live
+  // Activity left from the last account goes. While the session is still loading it stays, so a
+  // restored rest can carry it on.
+  useEffect(() => {
+    if (signedOut) void syncRestActivity(null);
   }, [signedOut]);
 
   const idle = useMemo<WorkoutApi>(
@@ -606,6 +613,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
     );
   }, [rest, weightUnit]);
   useEffect(() => () => void syncRestAlert(NO_REST, null), []);
+  // On iPhone the rest also shows on the Lock Screen and in the Dynamic Island.
+  useRestActivity(rest, logger, weightUnit, waiting !== null);
 
   // "Still working out?" follows the live workout's last activity; tapping it opens the logger.
   // It is cancelled when the workout is finished or discarded (no logger) and on sign-out.

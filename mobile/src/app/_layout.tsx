@@ -13,6 +13,7 @@ import { useImportPrompt } from '../features/data';
 import { AppTourHost } from '../features/guides/AppTourHost';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
+import { WorkoutLinkOpener } from '../features/workout/workoutLink';
 import { useDeferredFriendInvite } from '../session/friendInvite';
 import { SessionProvider, useSession } from '../session/SessionProvider';
 import { pushedScreenOptions, sheetScreenOptions } from '../ui/navigation';
@@ -64,6 +65,8 @@ function Navigation() {
         {/* Mobile batch 4, records stream (B2): sends check-ins saved offline. Before the
             screens, so their check-in queries start with the signed-in account. */}
         <BodyCheckInSync />
+        {/* A cold-start tap on the rest timer's Live Activity opens the logger once it can. */}
+        <WorkoutLinkOpener />
         <Stack
           screenOptions={{
             headerShown: false,
