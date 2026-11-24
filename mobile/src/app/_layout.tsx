@@ -11,6 +11,7 @@ import { BodyCheckInSync } from '../features/body/BodyCheckInSync';
 // B5 (data): asks a new account whether to import its history.
 import { useImportPrompt } from '../features/data';
 import { AppTourHost } from '../features/guides/AppTourHost';
+import { RemotePushSync } from '../features/push/RemotePushSync';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { useDeferredFriendInvite } from '../session/friendInvite';
@@ -64,6 +65,8 @@ function Navigation() {
         {/* Mobile batch 4, records stream (B2): sends check-ins saved offline. Before the
             screens, so their check-in queries start with the signed-in account. */}
         <BodyCheckInSync />
+        {/* Remote push (C5): registers this phone for Phone alerts and opens tapped alerts. */}
+        {signedIn && !mustChangePassword && <RemotePushSync userId={status.user.id} />}
         <Stack
           screenOptions={{
             headerShown: false,

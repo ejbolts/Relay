@@ -2,14 +2,16 @@ import * as Notifications from 'expo-notifications';
 import { Alert, Linking } from 'react-native';
 import { readJson, writeJson } from '../../data/deviceStorage';
 import { showToast } from '../../ui/Toast';
+import { reportLocalReminder } from '../push/remotePush';
 import { restTimerPreference } from '../settings/devicePreferences';
 
 // The web's two workout reminders, adapted to the app's own local notifications:
 // - "Turn on rest alerts?" when a workout starts and rest alerts are off (RestAlertReminder.tsx);
 // - "Still working out?" when the live workout has had no activity for a while. On the web the
 //   server pushes it (backend/app/notifications.py, deliver_inactive, which replaced the elapsed
-//   time reminder in activeWorkoutReminder.ts for clients that share their live workout). The app
-//   has no push subscription, so the phone schedules it itself.
+//   time reminder in activeWorkoutReminder.ts for clients that share their live workout). The
+//   phone schedules it itself, so it works offline too, and tells the server (features/push) so
+//   the server's push skips this phone.
 
 /** Set once the app has asked for notification permission at the first rest (restAlerts.ts). */
 export const REST_ALERTS_ASKED_KEY = 'relay.mobile.rest-alert-asked.v1';
@@ -86,6 +88,7 @@ async function applyInactiveReminder() {
   if (target === scheduledAt) return;
   await Notifications.cancelScheduledNotificationAsync(INACTIVE_ID).catch(() => undefined);
   scheduledAt = null;
+  reportLocalReminder(null, null);
   if (target === null) {
     await Notifications.dismissNotificationAsync(INACTIVE_ID).catch(() => undefined);
     return;
@@ -103,6 +106,7 @@ async function applyInactiveReminder() {
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: target },
   });
   scheduledAt = target;
+  reportLocalReminder(wantedWorkout, target);
 }
 
 /**

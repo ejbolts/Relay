@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Alert, Linking } from 'react-native';
 import { writeJson } from '../../data/deviceStorage';
 import { memoryKv } from '../../testing/memoryKvStore';
+import { reportLocalReminder } from '../push/remotePush';
 import { showToast } from '../../ui/Toast';
 import { restTimerPreference } from '../settings/devicePreferences';
 import {
@@ -15,6 +16,7 @@ import {
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 jest.mock('../../ui/Toast', () => ({ showToast: jest.fn() }));
+jest.mock('../push/remotePush', () => ({ reportLocalReminder: jest.fn() }));
 jest.mock('expo-notifications', () => ({
   getPermissionsAsync: jest.fn(),
   requestPermissionsAsync: jest.fn(),
@@ -124,6 +126,21 @@ describe('the inactive workout reminder', () => {
     await syncInactiveReminder(now);
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
     expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    // Nothing is scheduled, so the server's push must not skip this phone.
+    expect(jest.mocked(reportLocalReminder).mock.calls).toEqual([[null, null]]);
+  });
+
+  it("tells the server's push which reminder this phone scheduled itself", async () => {
+    permission(true);
+    await syncInactiveReminder(now, now - 600_000);
+    expect(reportLocalReminder).toHaveBeenLastCalledWith(now - 600_000, now + INACTIVE_REMINDER_MS);
+    await syncInactiveReminder(now + 60_000, now - 600_000);
+    expect(reportLocalReminder).toHaveBeenLastCalledWith(
+      now - 600_000,
+      now + 60_000 + INACTIVE_REMINDER_MS,
+    );
+    await syncInactiveReminder(null);
+    expect(reportLocalReminder).toHaveBeenLastCalledWith(null, null);
   });
 });
 
