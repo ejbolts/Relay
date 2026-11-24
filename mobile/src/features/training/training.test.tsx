@@ -108,6 +108,7 @@ const responses: Record<string, unknown> = {
     reference_machine_id: null,
     machines: [],
   },
+  '/api/sharing/lifts/bench': { entries: [] },
   '/api/cardio': cardio,
   '/api/workouts/w-upper': upper,
 };

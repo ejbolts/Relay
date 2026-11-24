@@ -1,7 +1,7 @@
 import { exerciseEquipmentOptions } from './exerciseEquipment';
+import { CUSTOM_EQUIPMENT_OPTION } from './exerciseFilters';
 
-// Option value for "custom exercises only"; equipment names never start with a colon.
-const CUSTOM_OPTION = ':custom';
+const CUSTOM_OPTION = CUSTOM_EQUIPMENT_OPTION;
 
 export function ExerciseEquipmentFilter({
   exercises,

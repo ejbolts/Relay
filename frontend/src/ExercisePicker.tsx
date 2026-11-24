@@ -89,8 +89,7 @@ export function ExercisePicker({
     (exercise) =>
       !exercise.hidden &&
       !excludedIds.includes(exercise.id) &&
-      (!customOnly || exercise.is_custom) &&
-      matchesExerciseFilters(exercise, bodyPart, equipment),
+      matchesExerciseFilters(exercise, bodyPart, equipment, customOnly),
   );
   const recent = recentExerciseIds
     .slice(0, 10)

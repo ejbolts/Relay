@@ -10,4 +10,5 @@ export const trainingIcons = {
   down: { sf: 'arrow.down', md: 'arrow-downward' },
   heart: { sf: 'waveform.path.ecg', md: 'monitor-heart' },
   video: { sf: 'play.rectangle.fill', md: 'smart-display' },
+  help: { sf: 'questionmark.circle', md: 'help-outline' },
 } satisfies Record<string, IconPair>;
