@@ -1149,7 +1149,7 @@ const styles = StyleSheet.create({
   metaLine: { paddingTop: 3 },
   metaText: { fontSize: 13, fontWeight: '600' },
   liveDot: { width: 6, height: 6, borderRadius: 3, marginTop: 6 },
-  clock: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, paddingTop: 3, paddingRight: 4 },
+  clock: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, paddingTop: 3 },
   clockText: { textDecorationLine: 'underline', textDecorationStyle: 'dotted' },
   square: {
     width: 44,
