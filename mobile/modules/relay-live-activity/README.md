@@ -19,8 +19,7 @@ Expo Go can't load local native code, so there the module is missing and the res
 
 Expo Go can't show any of this. You need an EAS development build on an iPhone with iOS 16.4 or later; the Dynamic Island needs an iPhone 14 Pro or later.
 
-1. Give the app a bundle identifier, for example in `app.config` from an environment variable, so it stays out of Git:
-   `ios: { bundleIdentifier: process.env.RELAY_IOS_BUNDLE_ID }`. The plugin names the widget extension `<bundle identifier>.RestWidget`; without a bundle identifier it adds only the Info.plist key.
+1. Give the app a bundle identifier. `mobile/app.config.ts` sets `ios.bundleIdentifier` from `RELAY_IOS_BUNDLE_ID`, so it stays out of Git. The plugin names the widget extension `<bundle identifier>.RestWidget`; without a bundle identifier it adds only the Info.plist key. A later prebuild with a different bundle identifier renames the extension to match.
 2. Add a development profile to `mobile/eas.json`:
 
    ```json
@@ -44,10 +43,15 @@ Expo Go can't show any of this. You need an EAS development build on an iPhone w
 
 1. Start a workout and log a set. The rest starts, and the Dynamic Island shows a timer and the time left; the time counts down by itself.
 2. Lock the phone. The Lock Screen shows the exercise, the countdown, "Next: Set 2 · …" and a shrinking bar.
-3. Unlock and pause the workout. The activity shows "Paused" and the frozen time. Resume: it counts down again from the same time.
+3. Unlock and pause the workout. The activity shows "Paused" and the frozen time. Wait past the moment the rest would have ended: it stays paused, with no "Rest complete". Resume: it counts down again from the same time and ends on time.
 4. Tap +30 s and −30 s. The time on the Lock Screen and in the Island moves by 30 seconds.
 5. Lock the phone and let the rest run out. The activity turns to "Rest complete" with a tick, and the "Rest complete" alert arrives as before. Opening Relay ends the activity.
-6. Start another rest and skip it ("End rest timer"): the activity goes. Start another and finish the workout: it goes.
-7. Mid-rest, swipe Relay away and reopen it. The same activity carries on, with no second one.
-8. Long-press the Island: the expanded view shows the exercise, the time, the next set and the bar. Tap it: Relay opens on the live workout.
-9. Turn Live Activities off for Relay in Settings, then log a set: the rest works in the app, with no activity.
+6. Start another rest and skip it ("End rest timer"): the activity goes. Start another and finish the workout: it goes. Pause one and discard the workout: it goes.
+7. Mid-rest, swipe Relay away and reopen it: the same activity carries on, with no second one. Do the same with the workout paused.
+8. Long-press the Island: the expanded view shows the exercise, the time, the next set and the bar.
+9. Tap the activity with Relay open (warm), on the Lock Screen and in the Island: Relay shows the live workout.
+10. Swipe Relay away mid-rest, then tap the activity (cold), on the Lock Screen and in the Island: Relay opens, signs in from the saved session and then opens the live workout, not Home.
+11. Mid-rest, sign out in Settings: the activity goes. Sign in as another account: nothing of the first account's rest comes back.
+12. Mid-rest, swipe Relay away, end the session elsewhere (sign out on the web, or change the password), then open Relay: it lands on Sign in and the activity goes.
+13. Mid-rest, switch to another account straight after tapping +30 s: the first account's activity goes and isn't shown again.
+14. Turn Live Activities off for Relay in Settings, then log a set: the rest works in the app, with no activity.
