@@ -89,24 +89,28 @@ export function DayRing({
 const DayCell = memo(function DayCell({
   day,
   selected,
+  readOnly,
   onPress,
 }: {
   day: CalendarDay;
   selected: boolean;
+  readOnly: boolean;
   onPress: (day: CalendarDay) => void;
 }) {
   const { colors } = useTheme();
   const trained = !!day.entry;
   const count = day.entry?.workout_count ?? 0;
   const ring = day.filteredOut ? [colors.deemph] : day.ring;
+  const disabled = readOnly && !trained;
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
+      disabled={disabled}
       accessibilityLabel={
         trained
           ? `View ${count} ${count === 1 ? 'workout' : 'workouts'} for ${prettyDate(day.date)}`
-          : `${prettyDate(day.date)}${day.scheduledNote ? `, ${day.scheduledNote}` : ''}`
+          : `${readOnly ? 'No workouts for ' : ''}${prettyDate(day.date)}${day.scheduledNote ? `, ${day.scheduledNote}` : ''}`
       }
       onPress={() => {
         haptics.selection();
@@ -120,7 +124,7 @@ const DayCell = memo(function DayCell({
             styles.box,
             day.today && { backgroundColor: colors.surface3 },
             selected && { backgroundColor: colors.accentSoft },
-            pressed && { opacity: 0.6 },
+            pressed && !disabled && { opacity: 0.6 },
           ]}
         >
           {ring.length > 0 ? (
@@ -167,8 +171,9 @@ export function WorkoutCalendar({
   onMonthChange,
   selectedDate,
   onSelectDay,
-  loadingOlder,
-  olderError,
+  readOnly = false,
+  loadingOlder = false,
+  olderError = null,
   onRetryOlder,
 }: {
   /** The pages, oldest first. */
@@ -178,9 +183,11 @@ export function WorkoutCalendar({
   onMonthChange: (month: MonthKey) => void;
   selectedDate: string | null;
   onSelectDay: (day: CalendarDay) => void;
-  loadingOlder: boolean;
-  olderError: string | null;
-  onRetryOlder: () => void;
+  /** Disables days without logged workouts (for shared profile calendars). */
+  readOnly?: boolean;
+  loadingOlder?: boolean;
+  olderError?: string | null;
+  onRetryOlder?: () => void;
 }) {
   const { colors, type } = useTheme();
   const [width, setWidth] = useState(0);
@@ -201,7 +208,12 @@ export function WorkoutCalendar({
     pager.current?.scrollToIndex({ index: index + delta, animated: true });
   };
   const page = (key: MonthKey) => (
-    <MonthPage view={viewFor(key)} selectedDate={selectedDate} onSelectDay={onSelectDay} />
+    <MonthPage
+      view={viewFor(key)}
+      selectedDate={selectedDate}
+      readOnly={readOnly}
+      onSelectDay={onSelectDay}
+    />
   );
   return (
     <View style={{ gap: 4 }}>
@@ -277,10 +289,12 @@ export function WorkoutCalendar({
 const MonthPage = memo(function MonthPage({
   view,
   selectedDate,
+  readOnly,
   onSelectDay,
 }: {
   view: CalendarMonthView;
   selectedDate: string | null;
+  readOnly: boolean;
   onSelectDay: (day: CalendarDay) => void;
 }) {
   const { colors, type } = useTheme();
@@ -301,6 +315,7 @@ const MonthPage = memo(function MonthPage({
                 key={day.date}
                 day={day}
                 selected={day.date === selectedDate}
+                readOnly={readOnly}
                 onPress={onSelectDay}
               />
             ) : (
@@ -348,11 +363,14 @@ export function CalendarLegend({
   categoryColors,
   hidden,
   onToggle,
+  minTargetHeight,
 }: {
   types: WorkoutType[];
   categoryColors: WorkoutTypeColors;
   hidden: ReadonlySet<string>;
   onToggle: (id: string) => void;
+  /** Optional minimum touch-target height for chips (Training keeps its compact 32 pt layout). */
+  minTargetHeight?: number;
 }) {
   const { colors, type } = useTheme();
   if (!types.length) return null;
@@ -370,7 +388,11 @@ export function CalendarLegend({
               haptics.selection();
               onToggle(item.id);
             }}
-            style={({ pressed }) => [styles.legendItem, pressed && { opacity: 0.6 }]}
+            style={({ pressed }) => [
+              styles.legendItem,
+              minTargetHeight ? { minHeight: minTargetHeight, minWidth: minTargetHeight } : null,
+              pressed && { opacity: 0.6 },
+            ]}
           >
             <View
               style={[

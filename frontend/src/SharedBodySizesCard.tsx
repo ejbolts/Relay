@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { BodyFigure } from './BodyFigure';
-import { BODY_SIZE_FIELDS, type BodySizeLog } from './bodySizes';
+import { bodyFigureKindForSex, bodySizeUnit, sharedBodyFigureValues } from './bodySizeEntries';
+import type { BodySizeLog } from './bodySizes';
 import { Icon } from './Icon';
 import { useWeightUnit } from './trainingPreferencesContext';
 import type { Sex } from './types';
@@ -20,8 +21,7 @@ export function SharedBodySizesCard({
   entries: BodySizeLog[];
   sex: Sex | null | undefined;
 }) {
-  const unit = useWeightUnit() === 'lb' ? 'in' : 'cm';
-  const factor = unit === 'in' ? 2.54 : 1;
+  const size = bodySizeUnit(useWeightUnit());
   const [index, setIndex] = useState(0);
   const shown = entries[Math.min(index, entries.length - 1)];
   return (
@@ -60,14 +60,9 @@ export function SharedBodySizesCard({
             )}
           </div>
           <BodyFigure
-            kind={sex === 'female' ? 'female' : 'male'}
-            unit={unit}
-            values={Object.fromEntries(
-              BODY_SIZE_FIELDS.filter(([key]) => shown[key] != null).map(([key]) => [
-                key,
-                String(Number((shown[key]! / factor).toFixed(1))),
-              ]),
-            )}
+            kind={bodyFigureKindForSex(sex)}
+            unit={size.unit}
+            values={sharedBodyFigureValues(shown, size)}
           />
         </>
       )}

@@ -22,37 +22,40 @@ import { haptics } from '../../ui/haptics';
 import { useTheme } from '../../ui/theme';
 
 const WIDTH = FIGURE_HALF_WIDTH * 2;
+const EMPTY_CARRIED: ReadonlySet<BodySizeField> = new Set();
 
 /**
  * The web's body outline with every measurement drawn across the part it measures and labelled
- * beside it (frontend/src/bodyFigureLayout.ts places them). Each label is a button; while
- * `editing` names one, a number box takes the place of its value so it can be typed in place.
+ * beside it (frontend/src/bodyFigureLayout.ts places them). When `onPick` is provided, each label
+ * is a button and `editing` opens a number box in place; without `onPick`, the figure is read-only
+ * and shows only measured fields.
  */
 export function BodyFigure({
   kind,
   values,
-  carried,
+  carried = EMPTY_CARRIED,
   unit,
   onPick,
-  editing,
-  editValue,
-  invalid,
+  editing = null,
+  editValue = '',
+  invalid = false,
   onCommit,
   onCancel,
 }: {
   kind: BodyFigureKind;
-  /** Shown values by field; a field left out has an empty label. */
+  /** Shown values by field; a field left out has an empty label when editable, or is hidden when read-only. */
   values: Partial<Record<BodySizeField, string>>;
   /** Values from an earlier entry than the one shown, drawn muted. */
-  carried: ReadonlySet<BodySizeField>;
+  carried?: ReadonlySet<BodySizeField>;
   unit: string;
-  onPick: (field: BodySizeField) => void;
-  editing: BodySizeField | null;
-  editValue: string;
-  invalid: boolean;
+  /** Makes each label a button. Without it the figure only shows what was measured. */
+  onPick?: (field: BodySizeField) => void;
+  editing?: BodySizeField | null;
+  editValue?: string;
+  invalid?: boolean;
   /** Called with the typed text; returns whether the box can close. */
-  onCommit: (field: BodySizeField, text: string) => boolean;
-  onCancel: () => void;
+  onCommit?: (field: BodySizeField, text: string) => boolean;
+  onCancel?: () => void;
 }) {
   const { colors, scheme } = useTheme();
   const [width, setWidth] = useState(0);
@@ -60,7 +63,10 @@ export function BodyFigure({
   const outline = useMemo(() => bodyFigurePath(shape.half), [shape]);
   const extras = shape.extras ?? [];
   const maskId = `body-figure-${useId().replace(/[^a-zA-Z0-9_-]/g, '')}`;
-  const callouts = useMemo(() => bodyFigureCallouts(kind, () => true), [kind]);
+  const callouts = useMemo(
+    () => bodyFigureCallouts(kind, (field) => Boolean(onPick || values[field])),
+    [kind, onPick, values],
+  );
   const scale = width / WIDTH;
   const frame = { x: -FIGURE_HALF_WIDTH, y: FIGURE_TOP, width: WIDTH, height: FIGURE_HEIGHT };
   const active = callouts.find((item) => item.field === editing);
@@ -68,10 +74,21 @@ export function BodyFigure({
   const py = (y: number) => (y - FIGURE_TOP) * scale;
   // About how wide " cm" or " in" is at the unit's size, in figure units.
   const unitWidth = 22 * 0.56 * unit.length + 14;
+  const readOnlySummary = !onPick
+    ? callouts
+        .filter((item) => values[item.field])
+        .map((item) => `${item.name} ${values[item.field]} ${unit}`)
+        .join(', ')
+    : '';
 
   return (
     <View
-      accessibilityLabel="Measurements on the body"
+      accessible={!onPick}
+      accessibilityLabel={
+        readOnlySummary
+          ? `Measurements on the body: ${readOnlySummary}`
+          : 'Measurements on the body'
+      }
       style={[styles.frame, { aspectRatio: WIDTH / FIGURE_HEIGHT }]}
       onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
     >
@@ -207,7 +224,8 @@ export function BodyFigure({
           })}
         </Svg>
       )}
-      {width > 0 &&
+      {onPick &&
+        width > 0 &&
         callouts.map((item) => {
           const value = values[item.field];
           const left = item.column < 0 ? -FIGURE_HALF_WIDTH : FIGURE_HALF_WIDTH - LABEL_WIDTH;
@@ -239,7 +257,7 @@ export function BodyFigure({
             />
           );
         })}
-      {active && width > 0 && (
+      {active && width > 0 && onCommit && onCancel && (
         <InlineEditor
           key={active.field}
           name={active.name}

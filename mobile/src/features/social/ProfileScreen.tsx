@@ -2,11 +2,6 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import {
-  averagePerWeek,
-  consistencyWeeks,
-  firstTrainingDay,
-} from '../../../../frontend/src/consistencyWeeks';
 import { formatMemberSince } from '../../../../frontend/src/profileDisplay';
 import {
   blockConfirmation,
@@ -15,24 +10,14 @@ import {
   inviteMessage,
   inviteSendsRequest,
   profileStats,
-  sharedBodyWeight,
   sharedGoalsSummary,
   SHARING_LOCKED,
-  signedWeightChange,
   sinceMonthLabel,
   unavailableProfile,
   VISIBILITY_LABELS,
-  BODY_WEIGHT_CHART_DAYS,
   type InviteResult,
 } from '../../../../frontend/src/sharedProfileDisplay';
-import { dayMonth } from '../../../../frontend/src/trainingSummary';
-import type {
-  FriendStatus,
-  SharedConsistency,
-  SharedProfile,
-} from '../../../../frontend/src/types';
-import { localDate } from '../../../../frontend/src/utils';
-import { formatWeight } from '../../../../frontend/src/weightUnits';
+import type { FriendStatus, SharedProfile } from '../../../../frontend/src/types';
 import { useWeightUnit } from '../../data/queries';
 import {
   Button,
@@ -58,8 +43,9 @@ import { useLinkedScroll, type LinkedRow } from './linkedScroll';
 import { useSocialNavigation, type LinkedWorkout } from './navigation';
 import { ProfileHistory } from './ProfileHistory';
 import { SharingLocked, SmallButton } from './parts';
+import { ProfileStats } from './profile/ProfileStats';
 import { notFound, sharingRequired, socialApi } from './socialApi';
-import { refreshSocial, socialKeys, useSharedProfile } from './socialQueries';
+import { refreshSocial, socialKeys, useMemberRefusal, useSharedProfile } from './socialQueries';
 
 /**
  * A member's profile, or your own: who they are and how you're connected, then what they share
@@ -81,9 +67,13 @@ export function ProfileScreen({
     useLinkedScroll();
   const client = useQueryClient();
   const query = useSharedProfile(profileId);
+  // A refusal of this member's data (a 403 or 404 on any of it) locks the profile until it is
+  // confirmed viewable again, even if the cached profile or a later network error says otherwise.
+  const refusal = useMemberRefusal(profileId);
+  const error = refusal ?? query.error;
   const [blocked, setBlocked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const profile = query.data;
+  const profile = refusal && query.data ? { ...query.data, can_view: false } : query.data;
   const title = profile?.is_you ? 'Profile' : (profile?.display_name ?? '');
   useInvite(profileId, invite, profile);
 
@@ -99,8 +89,8 @@ export function ProfileScreen({
   let body;
   if (blocked && profile)
     body = <BlockedPanel profile={profile} onUnblocked={() => setBlocked(false)} />;
-  else if (sharingRequired(query.error)) body = <LockedPanel invite={invite} />;
-  else if (notFound(query.error)) body = <Unavailable state="missing" name="" invite={invite} />;
+  else if (sharingRequired(error)) body = <LockedPanel invite={invite} />;
+  else if (notFound(error)) body = <Unavailable state="missing" name="" invite={invite} />;
   else if (!profile)
     body = query.error ? (
       <ErrorState message={errorMessage(query.error)} onRetry={() => void query.refetch()} />
@@ -219,8 +209,7 @@ function ProfileBody({
       ) : (
         <>
           {!profile.is_you && <FriendSplits key={profile.id} ownerId={profile.id} />}
-          {profile.consistency && <ConsistencySummary consistency={profile.consistency} />}
-          {profile.body_weight && <BodyWeightCard profile={profile} />}
+          <ProfileStats profile={profile} />
           {profile.goals && <GoalsCard profile={profile} />}
           <ProfileHistory
             profile={profile}
@@ -231,24 +220,6 @@ function ProfileBody({
         </>
       )}
     </>
-  );
-}
-
-/** The web's Consistency numbers for the last 12 weeks; the calendar is still web-only. */
-function ConsistencySummary({ consistency }: { consistency: SharedConsistency }) {
-  const streak = consistency.current_streak;
-  const weeks = consistencyWeeks(firstTrainingDay(consistency.heatmap), localDate());
-  return (
-    <Card>
-      <CardHeader title="Consistency" detail="Last 12 weeks" />
-      <StatRow
-        stats={[
-          { label: 'Streak', value: `${streak} ${streak === 1 ? 'day' : 'days'}` },
-          { label: 'Training days', value: String(consistency.training_days) },
-          { label: 'Avg / week', value: averagePerWeek(consistency.training_days, weeks) },
-        ]}
-      />
-    </Card>
   );
 }
 
@@ -647,41 +618,6 @@ function BlockedPanel({
         onPress={() => unblock.mutate()}
       />
     </Unavailable>
-  );
-}
-
-function BodyWeightCard({ profile }: { profile: SharedProfile }) {
-  const { colors, type } = useTheme();
-  const unit = useWeightUnit();
-  const summary = sharedBodyWeight(profile.body_weight ?? []);
-  return (
-    <Card>
-      <CardHeader
-        title="Body weight"
-        detail={summary ? dayMonth(summary.latest.measurement_date) : undefined}
-      />
-      {!summary ? (
-        <Text style={[type.callout, { color: colors.secondary }]}>No weigh-ins yet.</Text>
-      ) : (
-        <StatRow
-          boxed
-          stats={[
-            { label: 'Latest', value: formatWeight(summary.latest.weight_kg, unit, 1) },
-            ...(summary.change !== null
-              ? [
-                  {
-                    label: `${BODY_WEIGHT_CHART_DAYS} days`,
-                    value: signedWeightChange(summary.change, unit),
-                  },
-                ]
-              : []),
-            ...(summary.latestFat !== null
-              ? [{ label: 'Body fat', value: `${summary.latestFat}%` }]
-              : []),
-          ]}
-        />
-      )}
-    </Card>
   );
 }
 
