@@ -41,7 +41,7 @@ export interface LiveMuscleSources {
  * completed working sets. Typing a weight, ticking the clock or pausing leaves it unchanged, so
  * the screens that count live sets don't recompute on every logger change.
  */
-export function creditKey(state: LoggerState | null): string {
+export function creditKey(state: LoggerState | null, shownName?: string | null): string {
   if (!state) return '';
   const draft = loggerToDraft(state, state.lastActiveAt);
   const credited: ActiveWorkoutDraft = {
@@ -50,7 +50,8 @@ export function creditKey(state: LoggerState | null): string {
     ...(draft.resumingWorkoutId && { resumingWorkoutId: draft.resumingWorkoutId }),
     startedAt: draft.startedAt,
     updatedAt: 0,
-    name: draft.name,
+    // An unnamed workout's sets are listed under the name the logger shows for it.
+    name: draft.name.trim() || shownName || draft.name,
     workoutDate: draft.workoutDate,
     category: draft.category,
     notes: '',
@@ -77,7 +78,7 @@ export function useLiveMuscleSources(userId: string, dashboard: unknown): LiveMu
   const workout = useOptionalWorkout();
   const logger = useLogger();
   const justSaved = useJustSavedWorkouts();
-  const key = creditKey(logger?.state ?? null);
+  const key = creditKey(logger?.state ?? null, workout?.live?.name);
   const draft = useMemo(() => (key ? (JSON.parse(key) as ActiveWorkoutDraft) : null), [key]);
   const queue = workout?.queue ?? null;
   const exercises = logger?.exercises ?? NO_EXERCISES;
