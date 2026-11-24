@@ -22,11 +22,13 @@ import {
 } from 'react-native';
 import {
   hintMayShow,
+  interruptedNudge,
   priorityTipWaiting,
   shownTipEnds,
   tipEventRequest,
   TIP_QUIET_MS,
   waitingNudge,
+  type ShownNudge,
   type TipEnvironment,
   type TipRequest,
 } from '../../../../frontend/src/tipScheduling';
@@ -147,7 +149,13 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
   const holds = useRef(new Set<string>());
   const completedSetAt = useRef(0);
   const quietSince = useRef(0);
-  const shown = useRef<{ id: TipId; page: string; at: number; slot: string | null } | null>(null);
+  const shown = useRef<{
+    id: TipId;
+    page: string;
+    at: number;
+    slot: string | null;
+    nudge: ShownNudge | null;
+  } | null>(null);
 
   const close = useCallback(() => {
     shown.current = null;
@@ -221,9 +229,24 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
             hint.visible = width > 0 && y >= 0 && y + h < height - BOTTOM_RESERVED;
           });
       const tipState = tips.get();
-      if (!current.ready || !tipState.enabled || !quiet(holds.current)) {
+      if (!tipState.enabled) {
         quietSince.current = 0;
         if (shown.current) close();
+        return;
+      }
+      if (!current.ready || !quiet(holds.current)) {
+        quietSince.current = 0;
+        if (shown.current) {
+          const currentNudge = shown.current.nudge;
+          if (currentNudge) {
+            const reverted = interruptedNudge(tipState, currentNudge, now);
+            if (reverted) {
+              tips.update(() => reverted.state);
+              pending.current.set(currentNudge.id, reverted.request);
+            }
+          }
+          close();
+        }
         return;
       }
       if (!quietSince.current) quietSince.current = now;
@@ -246,9 +269,17 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
       );
       const id = nudge ?? hint?.[1].id;
       if (!id) return;
+      const previousLastShown = tipState.lastShown;
+      const request = nudge ? pending.current.get(nudge) : undefined;
       tips.shown(id, now);
       const slot = nudge ? null : (hint?.[0] ?? null);
-      shown.current = { id, page: PAGE, at: now, slot };
+      shown.current = {
+        id,
+        page: PAGE,
+        at: now,
+        slot,
+        nudge: nudge && request ? { id: nudge, at: now, previousLastShown, request } : null,
+      };
       pending.current.delete(id);
       setActive({ id, slot });
       if (nudge) {

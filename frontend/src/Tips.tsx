@@ -15,11 +15,13 @@ import { useToast } from './Toast';
 import { openTipTarget } from './tipActions';
 import {
   hintMayShow,
+  interruptedNudge,
   priorityTipWaiting,
   shownTipEnds,
   tipEventRequest,
   TIP_QUIET_MS,
   waitingNudge,
+  type ShownNudge,
   type TipEnvironment,
 } from './tipScheduling';
 import {
@@ -129,6 +131,7 @@ export function TipsProvider({
   const [libraryOpen, setLibraryOpen] = useState(false);
   const activePage = useRef('');
   const activeSince = useRef(0);
+  const activeNudge = useRef<ShownNudge | null>(null);
   const quietSince = useRef(0);
   const toastShowing = useRef(false);
   toastShowing.current = useToast().active;
@@ -142,6 +145,7 @@ export function TipsProvider({
     }
     function close() {
       activeRef.current = null;
+      activeNudge.current = null;
       setSlot(null);
       setActive(null);
     }
@@ -234,14 +238,31 @@ export function TipsProvider({
       setState(next);
       api.close();
     };
+    const interrupt = (now: number) => {
+      const currentNudge = activeNudge.current;
+      if (currentNudge) {
+        const reverted = interruptedNudge(stateRef.current, currentNudge, now);
+        if (reverted) {
+          const next = withTipReminders(reverted.state, now);
+          stateRef.current = next;
+          setState(next);
+          if (account) saveTips(account, next);
+          pending.current.set(currentNudge.id, reverted.request);
+        }
+      }
+      api.close();
+    };
     const tick = () => {
       const now = Date.now(),
         current = env.current;
-      const available =
-        !!account && current.ready && stateRef.current.enabled && quiet(toastShowing.current);
-      if (!available) {
+      if (!account || !stateRef.current.enabled) {
         quietSince.current = 0;
         if (activeRef.current) api.close();
+        return;
+      }
+      if (!current.ready || !quiet(toastShowing.current)) {
+        quietSince.current = 0;
+        if (activeRef.current) interrupt(now);
         return;
       }
       if (!quietSince.current) quietSince.current = now;
@@ -288,6 +309,8 @@ export function TipsProvider({
         setState(stored);
         return;
       }
+      const previousLastShown = stateRef.current.lastShown;
+      const request = nudge ? pending.current.get(nudge) : undefined;
       const next = withTipReminders(tipShown(stateRef.current, id, now), now);
       stateRef.current = next;
       setState(next);
@@ -296,13 +319,15 @@ export function TipsProvider({
       activeRef.current = id;
       activeSince.current = now;
       activePage.current = current.page;
+      activeNudge.current =
+        nudge && request ? { id: nudge, at: now, previousLastShown, request } : null;
       setActive(id);
       pending.current.delete(id);
     };
     const visibility = () => {
       if (document.visibilityState === 'hidden') {
         quietSince.current = 0;
-        api.close();
+        if (activeRef.current) interrupt(Date.now());
         return;
       }
       // An app left open for days still brings reminders back when it is next looked at.

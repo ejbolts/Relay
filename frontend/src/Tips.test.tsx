@@ -247,6 +247,35 @@ describe('shared tip presentation', () => {
     expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
     expect(loadTips('alice').shows?.reorder).toBe(2);
   });
+  it('returns an interrupted nudge to pending without spending its showing or daily slot', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // A dialog interrupts the nudge right after it appears.
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    document.body.append(dialog);
+    await advance(500);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice').shows?.reorder).toBeUndefined();
+    expect(loadTips('alice').lastShown).toBe(0);
+    // Once the dialog closes and things are quiet again, the nudge appears.
+    dialog.remove();
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    expect(loadTips('alice').shows?.reorder).toBe(1);
+    expect(loadTips('alice').lastShown).toBeGreaterThan(0);
+    // After staying visible long enough, an interruption keeps the showing counted.
+    await advance(3500);
+    document.body.append(dialog);
+    await advance(500);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice').shows?.reorder).toBe(1);
+    expect(loadTips('alice').lastShown).toBeGreaterThan(0);
+    dialog.remove();
+  });
   it('brings a dot back on later visits until it has been shown three times', async () => {
     await render();
     for (const visit of [1, 2, 3]) {
