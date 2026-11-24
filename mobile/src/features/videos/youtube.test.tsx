@@ -200,6 +200,17 @@ it('shows the result the server confirms, keeping failures beside the card', asy
   expect(screen.queryByText(/Allow the requested YouTube permission/)).toBeNull();
 });
 
+it('shows a code the server cannot confirm as interrupted, not as expired', async () => {
+  returns(`youtube=finish&code=${CODE}`);
+  finishResult = 'expired';
+  await open();
+  await connect();
+  expect(await screen.findByText(INTERRUPTED)).toBeTruthy();
+  expect(sent('/api/youtube/finish')).toHaveLength(1);
+  expect(screen.queryByText(/expired or belongs to another sign-in/)).toBeNull();
+  expect(showToast).not.toHaveBeenCalled();
+});
+
 it('treats closing the sign-in browser as cancelling', async () => {
   jest
     .mocked(WebBrowser.openAuthSessionAsync)

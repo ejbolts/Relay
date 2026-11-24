@@ -94,5 +94,8 @@ export async function connectYouTubeInApp(
     '/api/youtube/finish',
     { state: start.state, code: returned.code, verifier },
   );
+  // `expired` means the server couldn't confirm this code for this attempt: nothing is known
+  // about what happened on Google, so it reads as interrupted, like an unconfirmed link.
+  if (finished.result === 'expired') return { kind: 'interrupted' };
   return { kind: 'result', result: finished.result, connection: finished.connection };
 }

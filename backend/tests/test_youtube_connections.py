@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
+from sqlalchemy import delete
 
 from app import youtube_connections
 from app.auth import hash_token
@@ -920,3 +921,176 @@ def test_finish_needs_a_sign_in(anonymous_client):
         "/api/youtube/finish", json={"state": "any", "code": "any", "verifier": VERIFIER}
     )
     assert response.status_code == 401
+
+
+def overlap_finish_and_disconnect(client, app_session, state, code, monkeypatch):
+    """Runs a finish that holds its write until a disconnect from another device has started,
+    then lets both complete. Returns the finish result and the disconnect response."""
+    import threading
+    import time
+
+    writing, release = threading.Event(), threading.Event()
+    original = youtube_connections.write_connection
+
+    def slow_write(*args, **kwargs):
+        result = original(*args, **kwargs)
+        writing.set()
+        release.wait(10)
+        return result
+
+    monkeypatch.setattr(youtube_connections, "write_connection", slow_write)
+    finished, disconnected = [], []
+    with bearer_client(client, client.user["id"]) as other_device:
+        saver = threading.Thread(
+            target=lambda: finished.append(finish_in_app(app_session, state, code))
+        )
+        saver.start()
+        assert writing.wait(10)
+        remover = threading.Thread(
+            target=lambda: disconnected.append(other_device.delete("/api/youtube/connection"))
+        )
+        remover.start()
+        # The disconnect is now waiting for the finish's write lock.
+        time.sleep(0.5)
+        release.set()
+        saver.join(15)
+        remover.join(15)
+    return finished[0], disconnected[0]
+
+
+def test_a_disconnect_during_a_first_connect_removes_it(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    revoke = Mock(return_value=True)
+    monkeypatch.setattr("app.youtube_connections.revoke_credentials", revoke)
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch, creds=credentials(refresh="new-refresh-token"))
+    code = returned(finish(browser, state))[1]["code"][0]
+    result, response = overlap_finish_and_disconnect(client, app_session, state, code, monkeypatch)
+    assert result["result"] == "connected"
+    assert response.status_code == 200
+    # The disconnect waited for the save, then removed the channel it saved and revoked its grant.
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+    revoke.assert_called_once()
+    assert revoke.call_args.args[0].refresh_token == "new-refresh-token"
+
+
+def test_a_disconnect_during_a_replacement_revokes_the_new_grant(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    save_connection(
+        real_youtube, client.user["id"], "old-channel", creds=credentials(refresh="old-refresh")
+    )
+    revoke = Mock(return_value=True)
+    monkeypatch.setattr("app.youtube_connections.revoke_credentials", revoke)
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch, channel="new-channel", creds=credentials(refresh="new-refresh"))
+    code = returned(finish(browser, state))[1]["code"][0]
+    result, response = overlap_finish_and_disconnect(client, app_session, state, code, monkeypatch)
+    assert result["result"] == "connected"
+    assert response.status_code == 200
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+    revoke.assert_called_once()
+    assert revoke.call_args.args[0].refresh_token == "new-refresh"
+
+
+def test_a_sweep_spares_an_exchange_that_began_before_the_deadline(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    state = begin_in_app(app_session)
+    # Consent arrives a few seconds before the ten-minute start window closes.
+    with SessionLocal() as db:
+        db.get(YouTubeOAuthState, hash_token(state)).expires_at = datetime.now(UTC) + timedelta(
+            seconds=5
+        )
+        db.commit()
+    exchange = fake_provider(monkeypatch)
+    real_now = youtube_connections.utc_now
+
+    def answer_slowly(**_):
+        # Google answers after the old deadline, and a sweep runs meanwhile.
+        later = real_now() + timedelta(seconds=30)
+        monkeypatch.setattr(youtube_connections, "utc_now", lambda: later)
+        assert youtube_connections.remove_expired_states(SessionLocal) == 0
+        monkeypatch.setattr(youtube_connections, "utc_now", real_now)
+
+    exchange.side_effect = answer_slowly
+    link, query = returned(finish(browser, state))
+    assert query["youtube"] == ["finish"]
+    assert finish_in_app(app_session, state, query["code"][0])["result"] == "connected"
+
+
+def test_a_callback_after_the_deadline_claims_nothing(
+    real_youtube, app_session, browser, monkeypatch
+):
+    state = begin_in_app(app_session)
+    exchange = fake_provider(monkeypatch)
+    # The row is read just before its deadline, but the claim runs just after it.
+    original = youtube_connections.find_state
+
+    def read_then_expire(*args, **kwargs):
+        found = original(*args, **kwargs)
+        with SessionLocal() as db:
+            db.get(YouTubeOAuthState, hash_token(state)).expires_at = datetime.now(UTC) - timedelta(
+                seconds=1
+            )
+            db.commit()
+        return found
+
+    monkeypatch.setattr(youtube_connections, "find_state", read_then_expire)
+    assert returned(finish(browser, state)) == (APP_RETURN, {"youtube": ["expired"]})
+    exchange.assert_not_called()
+
+
+def test_the_web_reports_a_failure_when_a_disconnect_wins_the_save(
+    client, real_youtube, monkeypatch
+):
+    save_connection(real_youtube, client.user["id"], "old-channel")
+    state = begin(client)["state"][0]
+    fake_provider(monkeypatch, channel="new-channel")
+
+    def disconnected_meanwhile(db, user_id):
+        # Another device disconnects between the save's read and its update.
+        with SessionLocal() as other:
+            other.execute(delete(YouTubeConnection).where(YouTubeConnection.user_id == user_id))
+            other.commit()
+        return False
+
+    monkeypatch.setattr(youtube_connections, "has_active_job", disconnected_meanwhile)
+    assert finish(client, state).headers["location"] == "/?youtube=failed#videos"
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+
+
+def test_stopping_the_sweeper_waits_for_a_sweep_in_progress(monkeypatch):
+    import asyncio
+    import threading
+
+    entered, release = threading.Event(), threading.Event()
+    finished = []
+
+    def held_sweep(_):
+        entered.set()
+        release.wait(10)
+        finished.append(True)
+        return 0
+
+    monkeypatch.setattr(youtube_connections, "remove_expired_states", held_sweep)
+
+    async def scenario():
+        sweeper = youtube_connections.OAuthStateSweeper(SessionLocal)
+        sweeper.start()
+        await asyncio.to_thread(entered.wait, 10)
+        stopping = asyncio.create_task(sweeper.stop())
+        await asyncio.sleep(0.2)
+        assert not stopping.done()
+        release.set()
+        await asyncio.wait_for(stopping, 10)
+        assert finished == [True]
+        # No further sweep was scheduled after stopping.
+        await asyncio.sleep(0.1)
+        assert finished == [True]
+
+    asyncio.run(scenario())

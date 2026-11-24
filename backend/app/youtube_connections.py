@@ -109,6 +109,9 @@ class YouTubeConnectionError(YouTubeUploadError):
 APP_RETURN_URL = "relay-mobile://youtube-return"
 EXPO_RETURN_URL = re.compile(r"exps?://([A-Za-z0-9.-]{1,253}(?::[0-9]{1,5})?)/--/youtube-return")
 STATE_MINUTES = 10
+# Long enough for Google's token exchange (20 s timeout) and channel lookup after a claim, so a
+# sweep can't remove an exchange that started in time.
+EXCHANGE_DEADLINE = timedelta(minutes=2)
 
 
 class ConnectRequest(BaseModel):
@@ -430,14 +433,20 @@ def find_state(
     return row, app_flow(settings, row.encrypted_verifier)
 
 
-def replace_flow(db: Session, state_hash: str, current: str, sealed: str, **values) -> bool:
-    """Swaps a flow's sealed details only if they are still `current`."""
+def replace_flow(
+    db: Session, state_hash: str, current: str, sealed: str, *, unexpired: bool = False, **values
+) -> bool:
+    """Swaps a flow's sealed details only if they are still `current` (and, with `unexpired`,
+    only before the flow's deadline)."""
+    conditions = [
+        YouTubeOAuthState.state_hash == state_hash,
+        YouTubeOAuthState.encrypted_verifier == current,
+    ]
+    if unexpired:
+        conditions.append(YouTubeOAuthState.expires_at > utc_now())
     changed = db.execute(
         update(YouTubeOAuthState)
-        .where(
-            YouTubeOAuthState.state_hash == state_hash,
-            YouTubeOAuthState.encrypted_verifier == current,
-        )
+        .where(*conditions)
         .values(encrypted_verifier=sealed, **values)
         .execution_options(synchronize_session=False)
     ).rowcount
@@ -513,12 +522,15 @@ def write_connection(db: Session, user_id: str, encrypted: str, channel_id: str,
         "needs_reconnect": False,
     }
     if current:
-        db.execute(
+        changed = db.execute(
             update(YouTubeConnection)
             .where(YouTubeConnection.user_id == user_id)
             .values(**values)
             .execution_options(synchronize_session=False)
-        )
+        ).rowcount
+        if changed != 1:
+            # Disconnected meanwhile: report a failure rather than a connection nobody saved.
+            raise YouTubeConnectionError("The connection changed while saving.")
     else:
         db.add(YouTubeConnection(user_id=user_id, **values))
     return "connected"
@@ -558,7 +570,15 @@ def app_callback(
     claimed = {key: value for key, value in flow.items() if key != "verifier"}
     claimed["stage"] = "exchanging"
     claimed_sealed = seal_flow(settings, claimed)
-    if not replace_flow(db, row.state_hash, row.encrypted_verifier, claimed_sealed):
+    # The claim checks the deadline atomically, and gives the exchange its own short one.
+    if not replace_flow(
+        db,
+        row.state_hash,
+        row.encrypted_verifier,
+        claimed_sealed,
+        unexpired=True,
+        expires_at=utc_now() + EXCHANGE_DEADLINE,
+    ):
         return app_redirect(return_url, "expired")
     if not may_connect(db, settings, row.user_id, row.session_id):
         forget_flow(db, row.state_hash)
@@ -726,53 +746,79 @@ def remove_expired_states(session_factory: Callable[[], Session]) -> int:
 
 
 class OAuthStateSweeper:
-    """Removes expired connection attempts on startup and every few minutes after."""
+    """Removes expired connection attempts on startup and every few minutes after.
+
+    Stopping ends the waits between sweeps, and waits for a sweep already running to finish, so
+    no sweep outlives the app's shutdown.
+    """
 
     interval_seconds = 300
 
     def __init__(self, session_factory: Callable[[], Session]) -> None:
         self.session_factory = session_factory
         self._task: asyncio.Task[None] | None = None
+        self._stopping: asyncio.Event | None = None
 
     def start(self) -> None:
+        self._stopping = asyncio.Event()
         self._task = asyncio.create_task(self._run())
 
     async def stop(self) -> None:
+        if self._stopping:
+            self._stopping.set()
         if self._task:
-            self._task.cancel()
             await asyncio.gather(self._task, return_exceptions=True)
 
     async def _run(self) -> None:
-        while True:
+        assert self._stopping is not None
+        while not self._stopping.is_set():
             try:
                 await asyncio.to_thread(remove_expired_states, self.session_factory)
             except Exception:
                 # The next sweep tries again; expired attempts can't be used meanwhile.
                 logger.warning("Could not remove expired YouTube connection attempts")
-            await asyncio.sleep(self.interval_seconds)
+            try:
+                await asyncio.wait_for(self._stopping.wait(), self.interval_seconds)
+            except TimeoutError:
+                pass
 
 
 @router.delete("/connection", response_model=YouTubeConnectionRead)
 def disconnect(user: CurrentUser, db: Db, settings: AppSettings) -> YouTubeConnectionRead:
+    db.commit()  # Start from a clean transaction, so the first statement below begins the write.
+    # Deleting pending attempts first takes SQLite's write lock, so an app finish saving a channel
+    # either commits before everything below reads, or waits until this disconnect is done.
+    db.execute(
+        delete(YouTubeOAuthState)
+        .where(YouTubeOAuthState.user_id == user.id)
+        .execution_options(synchronize_session=False)
+    )
     if has_active_job(db, user.id):
+        db.rollback()
         raise api_error(
             409, "youtube_busy", "Wait for video processing to finish before disconnecting."
         )
-    connection = db.get(YouTubeConnection, user.id)
+    removed = db.execute(
+        delete(YouTubeConnection)
+        .where(YouTubeConnection.user_id == user.id)
+        .returning(YouTubeConnection.encrypted_credentials)
+        .execution_options(synchronize_session=False)
+    ).scalar_one_or_none()
+    db.commit()
+    # Revoke the grant of the row this disconnect deleted, never one read before the lock.
     credentials = None
-    if connection:
+    if removed is not None:
         try:
-            credentials = decrypt_credentials(settings, connection)
+            credentials = decrypt_credentials(
+                settings, YouTubeConnection(user_id=user.id, encrypted_credentials=removed)
+            )
         except YouTubeConnectionError:
             pass
-        db.delete(connection)
-    db.execute(delete(YouTubeOAuthState).where(YouTubeOAuthState.user_id == user.id))
-    db.commit()
     revoked = credentials is not None and revoke_credentials(credentials)
     result = read_connection(db, settings, user.id)
     result.message = (
         "YouTube disconnected. Existing videos stay on your channel."
-        if revoked or connection is None
+        if revoked or removed is None
         else "YouTube disconnected from this app. Remove its access in your Google account too."
     )
     return result
