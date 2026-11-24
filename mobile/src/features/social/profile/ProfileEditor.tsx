@@ -18,7 +18,12 @@ import { showMenu } from '../../../ui/prompts';
 import { isToastAccountCurrent, showToast, toastAccount } from '../../../ui/Toast';
 import { useTheme } from '../../../ui/theme';
 import { settingsIcons } from '../../settings/icons';
-import { removeProfilePhoto, updateProfile, uploadProfilePhoto } from '../../settings/settingsData';
+import {
+  deleteProfilePhoto,
+  profileSession,
+  saveProfileDetails,
+  saveProfilePhoto,
+} from './profileWrites';
 
 const SEXES: Sex[] = ['male', 'female'];
 type PickedPhoto = { uri: string; mimeType?: string | null };
@@ -37,6 +42,15 @@ export function ProfileEditor({
   // Shown only on your own profile, behind the sign-in gate.
   const user = useUser();
   const { colors, type, radius } = useTheme();
+  // The session the draft belongs to: every confirmation and write checks it, and sends with its
+  // token, so a late callback can't save this draft into an account signed in since.
+  const [account] = useState(toastAccount);
+  // What the draft started from, advanced to what the server saved: only fields the user changed
+  // are sent, so a photo or sex save can't undo a name changed on another device meanwhile.
+  const [baseline, setBaseline] = useState(() => ({
+    name: user.display_name,
+    sex: user.sex ?? null,
+  }));
   const [displayName, setDisplayName] = useState(user.display_name);
   // Chosen once: the draft exists only until the account has a sex.
   const [sex, setSex] = useState<Sex | null>(null);
@@ -45,8 +59,9 @@ export function ProfileEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sexDirty = !user.sex && sex !== null;
-  const textDirty = displayName.trim() !== user.display_name || sexDirty;
+  const sexDirty = !user.sex && !baseline.sex && sex !== null;
+  const nameDirty = displayName.trim() !== baseline.name;
+  const textDirty = nameDirty || sexDirty;
   const dirty = textDirty || photo !== null || removePhoto;
   const hasPhoto = !!photo || (!!user.profile_photo_url && !removePhoto);
   const joined = formatMemberSince(user.created_at);
@@ -101,7 +116,7 @@ export function ProfileEditor({
   }
 
   async function save(sexConfirmed = false) {
-    if (saving || !dirty) return;
+    if (saving || !dirty || !isToastAccountCurrent(account)) return;
     setError(null);
     const nameError = profileNameError(displayName);
     if (nameError) {
@@ -120,26 +135,28 @@ export function ProfileEditor({
       );
       return;
     }
-    const account = toastAccount();
     setSaving(true);
     let detailsSaved = false;
     try {
+      const session = await profileSession(account);
+      if (!session) return setSaving(false);
       if (textDirty) {
-        const updated = await updateProfile({
-          ...(displayName.trim() !== user.display_name ? { display_name: displayName.trim() } : {}),
+        const updated = await saveProfileDetails(session, {
+          ...(nameDirty ? { display_name: displayName.trim() } : {}),
           ...(sexDirty && sex ? { sex } : {}),
         });
-        if (!isToastAccountCurrent(account)) return;
+        if (!updated) return setSaving(false);
         onSaved(updated);
+        setBaseline({ name: updated.display_name, sex: updated.sex ?? null });
         detailsSaved = true;
       }
       if (photo) {
-        const updated = await uploadProfilePhoto(photo);
-        if (!isToastAccountCurrent(account)) return;
+        const updated = await saveProfilePhoto(session, photo);
+        if (!updated) return setSaving(false);
         onSaved(updated);
       } else if (removePhoto) {
-        const updated = await removeProfilePhoto();
-        if (!isToastAccountCurrent(account)) return;
+        const updated = await deleteProfilePhoto(session);
+        if (!updated) return setSaving(false);
         onSaved(updated);
       }
       showToast('Profile saved.', undefined, { account });
@@ -215,7 +232,20 @@ export function ProfileEditor({
         <LockedField label="Sex" value={SEX_LABELS[user.sex]} />
       ) : (
         <View style={styles.field}>
-          <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>Sex</Text>
+          <View style={styles.labelRow}>
+            <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>Sex</Text>
+            {/* The web clears a choice with a second press; a native segmented control can't. */}
+            {sex !== null && (
+              <Button
+                label="Clear"
+                variant="link"
+                size="small"
+                accessibilityLabel="Clear sex"
+                disabled={saving}
+                onPress={() => setSex(null)}
+              />
+            )}
+          </View>
           <Segmented
             accessibilityLabel="Sex"
             values={SEXES.map((option) => SEX_LABELS[option])}
@@ -294,6 +324,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   field: { gap: 6 },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    minHeight: 24,
+  },
   lockedBox: {
     minHeight: 46,
     borderWidth: 1,

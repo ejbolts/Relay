@@ -241,18 +241,28 @@ function ProfileBody({
 }) {
   const history = useProfileHistoryState(targetWorkout, targetMachine);
   const historyRef = useRef<ComponentRef<typeof View>>(null);
+  // Whether the history has settled since it was last shown, for a jump asked for as it appears.
   const historySettledRef = useRef(false);
+  // Opened from a shared workout's machine photo: jump to the filtered history once, when it is
+  // first shown. A cached friends-only profile can grant access only after a refresh.
+  const machineJumpRef = useRef(Boolean(targetMachine && !targetWorkout));
   const reduceMotion = useReduceMotion();
   const handleHistorySettled = useCallback(() => {
     historySettledRef.current = true;
     onHistorySettled();
   }, [onHistorySettled]);
-  // Opened from a shared workout's machine photo: jump straight to the filtered history.
+  const historyShown = profile.can_view;
   useEffect(() => {
-    if (targetMachine && !targetWorkout) {
-      scrollToSection(historyRef.current, false, historySettledRef.current);
+    if (!historyShown) {
+      historySettledRef.current = false;
+      return;
     }
-  }, [targetMachine, targetWorkout, scrollToSection]);
+    if (!machineJumpRef.current || !historyRef.current) return;
+    machineJumpRef.current = false;
+    // The history's own settle effect has run by now when its results were already loaded;
+    // otherwise `onHistorySettled` finishes the jump once they load.
+    scrollToSection(historyRef.current, false, historySettledRef.current);
+  }, [historyShown, scrollToSection]);
   // As on the web, a calendar day or a lift filters the history below and brings it into view.
   const showMatching = (filters: SharedWorkoutFilters) => {
     // Nothing to load when it already shows them; otherwise the jump finishes once they load.
@@ -304,7 +314,12 @@ function ProfileHeader({ profile, onBlocked }: { profile: SharedProfile; onBlock
   const nav = useSocialNavigation();
   const [qrOpen, setQrOpen] = useState(false);
   const [viewing, setViewing] = useState(false);
-  const [editing, setEditing] = useState(false);
+  // The editor belongs to the account that opened it: another account signing in closes it and
+  // drops its draft, rather than showing it to (or saving it as) the new account.
+  const signedInId = session?.status.kind === 'signed-in' ? session.status.user.id : null;
+  const [editingFor, setEditingFor] = useState<string | null>(null);
+  if (editingFor !== null && editingFor !== signedInId) setEditingFor(null);
+  const editing = editingFor !== null;
   const memberSince = formatMemberSince(profile.member_since);
   const photo = profile.profile_photo_url;
 
@@ -326,7 +341,7 @@ function ProfileHeader({ profile, onBlocked }: { profile: SharedProfile; onBlock
   return (
     <Card>
       {profile.is_you && editing ? (
-        <ProfileEditor onSaved={handleSaved} onClose={() => setEditing(false)} />
+        <ProfileEditor onSaved={handleSaved} onClose={() => setEditingFor(null)} />
       ) : (
         <>
           <View style={styles.headerRow}>
@@ -390,7 +405,7 @@ function ProfileHeader({ profile, onBlocked }: { profile: SharedProfile; onBlock
                 <IconButton
                   icon={socialIcons.edit}
                   accessibilityLabel="Edit profile"
-                  onPress={() => setEditing(true)}
+                  onPress={() => setEditingFor(signedInId)}
                   style={{ borderColor: colors.lineStrong }}
                 />
               </View>
