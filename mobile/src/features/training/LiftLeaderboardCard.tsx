@@ -1,11 +1,7 @@
 import { useRouter } from 'expo-router';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import {
-  formatLiftBestSet,
-  formatLiftEstimate,
-  liftRankingName,
-  liftRankingRowLabel,
-} from '../../../../frontend/src/liftRanking';
+import { liftRankingName, liftRankingRowLabel } from '../../../../frontend/src/liftRanking';
+import { formatLiftBestSet, formatLiftEstimate } from '../../../../frontend/src/liftWeightDisplay';
 import { waitingForNetwork } from '../../data/offline';
 import { useWeightUnit } from '../../data/queries';
 import { Card, CardHeader } from '../../ui/components';

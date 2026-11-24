@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
-  formatLiftBestSet,
-  formatLiftEstimate,
   headToHeadScore,
   leaderOf,
   liftBarShare,
   liftRowSummary,
 } from '../../../../../frontend/src/liftComparisonDisplay';
+import {
+  formatLiftBestSet,
+  formatLiftEstimate,
+} from '../../../../../frontend/src/liftWeightDisplay';
 import type { LiftComparison, SharedProfileSummary } from '../../../../../frontend/src/types';
 import { OFFLINE_MESSAGE, waitingForNetwork } from '../../../data/offline';
 import { useWeightUnit } from '../../../data/queries';
