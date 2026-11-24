@@ -1,32 +1,58 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import type { ReactElement } from 'react';
+import { Alert } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import type { TrackedWorkout, User } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { apiGet, apiSend } from '../../data/api';
+import { refreshTraining } from '../../data/queries';
 import { uploadFile } from '../../data/uploadFile';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
+import { memoryKv } from '../../testing/memoryKvStore';
 import { showMenu } from '../../ui/prompts';
-import { Alert } from 'react-native';
+import { ToastHost } from '../../ui/Toast';
+import { setWorkoutShareReminder } from '../guides/shareReminder';
 import { CardioSection } from '../training/CardioSection';
 import { CardioEditScreen, CardioLogScreen } from './CardioLogScreen';
 import { CardioMetricsScreen } from './CardioMetricsScreen';
+import { CardioShareHost } from './CardioShareSheet';
 import { CardioZonesScreen } from './CardioZonesScreen';
 
+const mockCreate = jest.fn();
+const mockWrite = jest.fn(async () => undefined);
+const mockDelete = jest.fn();
+
+jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 jest.mock('../../data/api', () => ({ apiGet: jest.fn(), apiSend: jest.fn() }));
 jest.mock('../../data/uploadFile', () => ({ uploadFile: jest.fn() }));
 jest.mock('../../ui/prompts', () => ({ showMenu: jest.fn() }));
-jest.mock('../../ui/Toast', () => ({ showToast: jest.fn() }));
 jest.mock('../body/DateField', () => ({ DateField: () => null }));
+jest.mock('expo-clipboard', () => ({
+  hasImageAsync: jest.fn(async () => false),
+  getImageAsync: jest.fn(async () => null),
+}));
+jest.mock('expo-file-system', () => ({
+  File: jest.fn().mockImplementation((...parts: unknown[]) => ({
+    uri: parts.map(String).join('/'),
+    create: mockCreate,
+    write: mockWrite,
+    delete: mockDelete,
+  })),
+  Paths: { cache: 'file:///cache' },
+}));
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
   launchCameraAsync: jest.fn(),
   requestCameraPermissionsAsync: jest.fn(),
 }));
-jest.mock('./CardioShareSheet', () => {
+jest.mock('../social/ShareWorkoutSheet', () => {
   const { Text } = jest.requireActual<typeof import('react-native')>('react-native');
   return {
-    CardioShareSheet: ({ session }: { session: { activity_type: string } }) => (
-      <Text>Sharing {session.activity_type}</Text>
+    ShareWorkoutSheet: ({ workout }: { workout: TrackedWorkout }) => (
+      <Text>Sharing {workout.name}</Text>
     ),
   };
 });
@@ -40,6 +66,26 @@ jest.mock('expo-router', () => ({
   useLocalSearchParams: () => mockParams,
   useNavigation: () => mockNavigation,
   useRouter: () => mockRouter,
+}));
+
+const defaultUser: User = {
+  id: 'u1',
+  username: 'preview',
+  display_name: 'Preview',
+  is_admin: false,
+  can_upload_videos: false,
+  created_at: '2026-11-01T00:00:00Z',
+  sex: null,
+  profile_photo_url: null,
+};
+let mockUser: User = { ...defaultUser };
+let mockSessionStatus: { kind: 'signed-in'; user: User } | { kind: 'signed-out' } = {
+  kind: 'signed-in',
+  user: mockUser,
+};
+jest.mock('../../session/SessionProvider', () => ({
+  useUser: () => mockUser,
+  useOptionalSession: () => ({ status: mockSessionStatus }),
 }));
 
 const mockRouter = { back: jest.fn(), push: jest.fn() };
@@ -63,25 +109,48 @@ const session = {
   duration_minutes: 34,
   calories_kcal: 218,
   average_heart_rate_bpm: 126,
+  source_workout_id: null,
+};
+const metrics = {
+  frame: { x: 0, y: 0, width: 390, height: 844 },
+  insets: { top: 0, left: 0, right: 0, bottom: 0 },
 };
 let client: QueryClient;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  memoryKv.clear();
+  mockUser = { ...defaultUser };
+  mockSessionStatus = { kind: 'signed-in', user: mockUser };
+  setWorkoutShareReminder(mockUser.id, true);
   mockParams = { id: 'session-1' };
   mockTransitionEnd.length = 0;
+  jest.mocked(Clipboard.hasImageAsync).mockResolvedValue(false);
+  jest.mocked(Clipboard.getImageAsync).mockResolvedValue(null);
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   jest
     .mocked(apiGet)
     .mockImplementation(async (path) =>
-      path === '/api/exercises' ? [exercise] : { sessions: [session] },
+      path === '/api/exercises'
+        ? [exercise]
+        : path.startsWith('/api/personal-records')
+          ? []
+          : { sessions: [session] },
     );
-  jest.mocked(apiSend).mockResolvedValue({ source_workout_id: null });
+  jest.mocked(apiSend).mockResolvedValue(session);
 });
 afterEach(() => client.clear());
 
 async function open(component: ReactElement) {
-  await render(<QueryClientProvider client={client}>{component}</QueryClientProvider>);
+  return render(
+    <SafeAreaProvider initialMetrics={metrics}>
+      <QueryClientProvider client={client}>
+        {component}
+        <CardioShareHost />
+        <ToastHost />
+      </QueryClientProvider>
+    </SafeAreaProvider>,
+  );
 }
 
 it('opens the chosen picker once the screen has arrived, and leaves the form usable after cancel', async () => {
@@ -160,6 +229,7 @@ it('reviews a picked screenshot before writing and prevents an invalid session',
   });
   await open(<CardioLogScreen />);
   await fireEvent.press(await screen.findByRole('button', { name: 'Import screenshot' }));
+  await waitFor(() => expect(showMenu).toHaveBeenCalledTimes(1));
   const choose = jest
     .mocked(showMenu)
     .mock.calls[0][1].find(({ label }) => label === 'Choose screenshot');
@@ -202,6 +272,196 @@ it('reviews a picked screenshot before writing and prevents an invalid session',
       }),
     ),
   );
+});
+
+it('pastes a clipboard screenshot from the import menu and on arrival, and cleans up the temp file', async () => {
+  jest.mocked(Clipboard.hasImageAsync).mockResolvedValue(true);
+  jest.mocked(Clipboard.getImageAsync).mockResolvedValue({
+    data: 'data:image/png;base64,aW1hZ2U=',
+    size: { width: 540, height: 960 },
+  });
+  jest.mocked(uploadFile).mockResolvedValue({
+    activity_type: exercise.name,
+    session_date: null,
+    duration_minutes: 42,
+    calories_kcal: 310,
+    average_heart_rate_bpm: 135,
+    distance_km: 3.5,
+    average_speed_kph: null,
+    fields_found: ['duration', 'active calories'],
+    warning: null,
+  });
+  await open(<CardioLogScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Import screenshot' }));
+  await waitFor(() => expect(showMenu).toHaveBeenCalledTimes(1));
+  const options = jest.mocked(showMenu).mock.calls[0][1];
+  expect(options.map((item) => item.label)).toEqual([
+    'Choose screenshot',
+    'Take photo',
+    'Paste screenshot',
+  ]);
+  await act(async () => options.find((item) => item.label === 'Paste screenshot')!.onPress());
+  const minutes = await screen.findByLabelText('Minutes');
+  await waitFor(() => expect(minutes).toHaveProp('value', '42'));
+  expect(mockWrite).toHaveBeenCalledWith('aW1hZ2U=', { encoding: 'base64' });
+  expect(uploadFile).toHaveBeenCalledWith(
+    '/api/cardio/scan',
+    'POST',
+    expect.objectContaining({ name: 'screenshot.png', type: 'image/png' }),
+    expect.anything(),
+  );
+  expect(mockDelete).toHaveBeenCalledTimes(1);
+});
+
+it('pastes a clipboard screenshot automatically on arrival when opened with import=clipboard', async () => {
+  mockParams = { import: 'clipboard' };
+  jest.mocked(Clipboard.getImageAsync).mockResolvedValue({
+    data: 'data:image/png;base64,aW1hZ2U=',
+    size: { width: 540, height: 960 },
+  });
+  jest.mocked(uploadFile).mockResolvedValue({
+    activity_type: exercise.name,
+    session_date: null,
+    duration_minutes: 37,
+    calories_kcal: 290,
+    average_heart_rate_bpm: 130,
+    distance_km: null,
+    average_speed_kph: null,
+    fields_found: ['duration', 'active calories'],
+    warning: null,
+  });
+  await open(<CardioLogScreen />);
+  const minutes = await screen.findByLabelText('Minutes');
+  expect(Clipboard.getImageAsync).not.toHaveBeenCalled();
+  await arrive();
+  await waitFor(() => expect(minutes).toHaveProp('value', '37'));
+  expect(mockDelete).toHaveBeenCalledTimes(1);
+});
+
+it('opens Paste screenshot from CardioSection only when an image is on the clipboard', async () => {
+  jest.mocked(apiGet).mockImplementation(async () => overview([historySession('a', null)]));
+  jest.mocked(Clipboard.hasImageAsync).mockResolvedValueOnce(false).mockResolvedValueOnce(true);
+  await open(<CardioSection />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Import screenshot' }));
+  await waitFor(() => expect(showMenu).toHaveBeenCalledTimes(1));
+  expect(jest.mocked(showMenu).mock.calls[0][1].map((item) => item.label)).toEqual([
+    'Choose screenshot',
+    'Take photo',
+  ]);
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Import screenshot' }));
+  await waitFor(() => expect(showMenu).toHaveBeenCalledTimes(2));
+  const second = jest.mocked(showMenu).mock.calls[1][1];
+  expect(second.map((item) => item.label)).toEqual([
+    'Choose screenshot',
+    'Take photo',
+    'Paste screenshot',
+  ]);
+  second.find((item) => item.label === 'Paste screenshot')!.onPress();
+  expect(mockRouter.push).toHaveBeenCalledWith({
+    pathname: '/cardio/log',
+    params: { import: 'clipboard' },
+  });
+});
+
+it('offers Share card in the save toast when share reminder is on, and opens the card even after leaving', async () => {
+  const saved = { ...session, id: 'new-cardio', activity_type: 'Outdoor Run' };
+  jest.mocked(apiSend).mockResolvedValue(saved);
+  const view = await open(<CardioLogScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Add cardio session' }));
+  expect(await screen.findByText('Workout saved')).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Share card' })).toBeOnTheScreen();
+
+  // Simulate navigating back (CardioLogScreen unmounts while root hosts stay mounted).
+  await view.rerender(
+    <SafeAreaProvider initialMetrics={metrics}>
+      <QueryClientProvider client={client}>
+        {null}
+        <CardioShareHost />
+        <ToastHost />
+      </QueryClientProvider>
+    </SafeAreaProvider>,
+  );
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Share card' }));
+  expect(await screen.findByText('Sharing Outdoor Run')).toBeOnTheScreen();
+
+  // Switching account immediately closes the open share sheet.
+  nextSessionEpoch();
+  mockUser = { ...defaultUser, id: 'u2', username: 'sam' };
+  mockSessionStatus = { kind: 'signed-in', user: mockUser };
+  await view.rerender(
+    <SafeAreaProvider initialMetrics={metrics}>
+      <QueryClientProvider client={client}>
+        {null}
+        <CardioShareHost />
+        <ToastHost />
+      </QueryClientProvider>
+    </SafeAreaProvider>,
+  );
+  expect(screen.queryByText('Sharing Outdoor Run')).toBeNull();
+});
+
+it('keeps Share card on a cardio PR celebration toast and omits it when share reminder is off', async () => {
+  const saved = { ...session, id: 'pr-cardio', source_workout_id: 'w-pr' };
+  jest.mocked(apiSend).mockResolvedValue(saved);
+  jest.mocked(apiGet).mockImplementation(async (path) => {
+    if (path === '/api/exercises') return [exercise];
+    if (path === '/api/personal-records?workout_id=w-pr') {
+      return [
+        {
+          id: 'pr-1',
+          exercise_id: exercise.id,
+          exercise_name: exercise.name,
+          record_type: 'cardio_fastest_distance',
+          scope: 'all_time',
+          distance_km: 5,
+          duration_seconds: 1500,
+          achieved_date: session.session_date,
+          workout_id: 'w-pr',
+        },
+      ];
+    }
+    return { sessions: [saved] };
+  });
+  const first = await open(<CardioLogScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Add cardio session' }));
+  expect(await screen.findByRole('button', { name: 'Share card' })).toBeOnTheScreen();
+  await act(async () => first.unmount());
+
+  // Turning off the share reminder shows a plain confirmation without Share card.
+  setWorkoutShareReminder(mockUser.id, false);
+  jest.mocked(apiSend).mockResolvedValue({ ...session, source_workout_id: null });
+  await open(<CardioLogScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Add cardio session' }));
+  expect(await screen.findByText('Cardio saved')).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: 'Share card' })).toBeNull();
+});
+
+it('drops a cardio save toast and refresh if the account switches while saving', async () => {
+  let resolveSave!: (value: typeof session) => void;
+  jest.mocked(apiSend).mockReturnValue(
+    new Promise((resolve) => {
+      resolveSave = resolve;
+    }),
+  );
+  const view = await open(<CardioLogScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Add cardio session' }));
+  nextSessionEpoch();
+  mockUser = { ...defaultUser, id: 'u2', username: 'sam' };
+  mockSessionStatus = { kind: 'signed-in', user: mockUser };
+  await view.rerender(
+    <SafeAreaProvider initialMetrics={metrics}>
+      <QueryClientProvider client={client}>
+        <CardioShareHost />
+        <ToastHost />
+      </QueryClientProvider>
+    </SafeAreaProvider>,
+  );
+  await act(async () => resolveSave(session));
+  expect(refreshTraining).not.toHaveBeenCalled();
+  expect(screen.queryByText('Workout saved')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Share card' })).toBeNull();
 });
 
 it('clears a metric without replacing the session itself', async () => {
@@ -264,7 +524,7 @@ const historySession = (id: string, workout: string | null, extra = {}) => ({
   ...extra,
 });
 
-it('edits every field of a session logged on its own', async () => {
+it('edits every field of a session logged on its own without offering Share card', async () => {
   await open(<CardioEditScreen sessionId="session-1" />);
   await fireEvent.changeText(await screen.findByLabelText('Minutes'), '40');
   await fireEvent.press(screen.getByRole('button', { name: 'Save changes' }));
@@ -280,6 +540,8 @@ it('edits every field of a session logged on its own', async () => {
     zone: null,
     qualifies_zone2: false,
   });
+  expect(await screen.findByText('Cardio saved')).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: 'Share card' })).toBeNull();
 });
 
 it('deletes standalone sessions and lone cardio workouts, and shares a card', async () => {

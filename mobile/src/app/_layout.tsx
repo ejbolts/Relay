@@ -8,10 +8,12 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createQueryClient } from '../data/queryClient';
 // Mobile batch 4, records stream (B2).
 import { BodyCheckInSync } from '../features/body/BodyCheckInSync';
+import { CardioShareHost } from '../features/cardio/CardioShareSheet';
 // B5 (data): asks a new account whether to import its history.
 import { useImportPrompt } from '../features/data';
 import { AppTourHost } from '../features/guides/AppTourHost';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
+import { VideoUploadSessionSync } from '../features/videos';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
 import { useDeferredFriendInvite } from '../session/friendInvite';
 import { SessionProvider, useSession } from '../session/SessionProvider';
@@ -64,6 +66,8 @@ function Navigation() {
         {/* Mobile batch 4, records stream (B2): sends check-ins saved offline. Before the
             screens, so their check-in queries start with the signed-in account. */}
         <BodyCheckInSync />
+        {/* Keeps app-level video uploads bound to the active account across navigation. */}
+        <VideoUploadSessionSync />
         <Stack
           screenOptions={{
             headerShown: false,
@@ -127,6 +131,8 @@ function Navigation() {
         </Stack>
         {/* Mobile batch 4, B4: the quick tour, above the tabs so it stays open as it opens each. */}
         {signedIn && !mustChangePassword && <AppTourHost />}
+        {/* Opens a cardio share card from the save toast after returning from the log screen. */}
+        {signedIn && !mustChangePassword && <CardioShareHost />}
         {/* Android's menu sheets and text dialogs for every screen. The logger, a separate native
             sheet, mounts its own. */}
         <PromptHost />

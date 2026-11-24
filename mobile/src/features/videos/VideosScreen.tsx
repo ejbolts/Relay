@@ -1,26 +1,16 @@
 import * as ImagePicker from 'expo-image-picker';
-import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
-import { usePreventRemove } from 'expo-router';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Alert, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { plural } from '../../../../frontend/src/adminDisplay';
 import type { WorkoutSession } from '../../../../frontend/src/types';
-import { ApiError } from '../../data/api';
-import { UploadStopped } from '../../data/uploadFile';
-import { formatBytes, formatSeconds, localDate } from '../../../../frontend/src/utils';
+import { formatBytes, formatSeconds } from '../../../../frontend/src/utils';
 import {
   canDeleteSession,
-  ALREADY_PROCESSING_CODES,
-  moveItem,
-  newerSession,
-  PROCESSING_SESSION_STATUSES,
   overallUploadProgress,
-  SESSION_POLL_MS,
   sessionKicker,
   sessionRetryLabel,
   sessionStatusDetail,
   sessionStatusText,
-  TERMINAL_SESSION_STATUSES,
   VIDEO_FILE_TYPES,
   youtubeReady,
 } from '../../../../frontend/src/videoSessions';
@@ -29,74 +19,32 @@ import { useUser } from '../../session/SessionProvider';
 import { Button, Card, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { showMenu } from '../../ui/prompts';
-import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
-import { useAccountGuard } from '../admin/accountGuard';
 import { DateField } from '../body/DateField';
 import { SettingsPage } from '../settings/SettingsList';
 import { ClipPreview } from './ClipPreview';
-import type { ClipTransfer } from './clipUpload';
 import { videoIcons } from './icons';
+import { clipFromAsset, useVideoHealth, useYouTubeConnection, type PhoneClip } from './videoData';
 import {
-  clipFromAsset,
-  useVideoHealth,
-  useYouTubeConnection,
-  videoApi,
-  type PhoneClip,
-} from './videoData';
+  syncVideoUploadSession,
+  useVideoUploadState,
+  videoUploadActions,
+} from './videoUploadStore';
 import { YouTubeCard } from './YouTubeCard';
-
-type Step = 'upload' | 'progress' | 'processing' | 'complete';
-/**
- * What the batch is doing with the server: creating its session, uploading clips, starting
- * processing (or reading back whether it started), or stopping. One runs at a time.
- */
-type Phase = 'idle' | 'creating' | 'uploading' | 'starting' | 'stopping';
-
-// The phases that can't be interrupted: leaving waits for them, with this reason.
-const HOLD_REASONS: Partial<Record<Phase, string>> = {
-  creating: 'Wait while the session is created.',
-  starting: 'Wait until processing has started.',
-  stopping: 'Wait while the upload stops.',
-};
-const STILL_UPLOADABLE: WorkoutSession['status'][] = ['draft', 'uploading', 'upload_failed'];
-const UPLOAD_WAKE_LOCK_TAG = 'relay-video-upload';
-let wakeLockRuns = 0;
-/** The server has started work on the batch (or finished it), so it can't be cancelled. */
-const processingBegan = (status: WorkoutSession['status']) =>
-  PROCESSING_SESSION_STATUSES.includes(status) || status === 'complete' || status === 'failed';
-
-/** Keeps the phone awake while clips upload, releasing when the upload ends, stops or unmounts. */
-function useUploadWakeLock(active: boolean) {
-  useEffect(() => {
-    if (!active) return;
-    // Each run holds its own tag, so a late activation or release from an earlier run can never
-    // drop the lock a retry holds.
-    wakeLockRuns += 1;
-    const tag = `${UPLOAD_WAKE_LOCK_TAG}-${wakeLockRuns}`;
-    let released = false;
-    void activateKeepAwakeAsync(tag)
-      .then(() => {
-        if (released) return deactivateKeepAwake(tag);
-      })
-      .catch(() => {
-        // Upload still works; wake locks are a best-effort guard only.
-      });
-    return () => {
-      released = true;
-      void deactivateKeepAwake(tag).catch(() => undefined);
-    };
-  }, [active]);
-}
 
 /**
  * The web's videos tab: record or pick each set's video, upload the batch, then follow it while
- * the server stitches it and sends it to the connected YouTube channel.
+ * the server stitches it and sends it to the connected YouTube channel. Uploads live in the
+ * app-level store, so leaving this screen keeps them running while Relay stays open.
  */
 export function VideosScreen() {
   const user = useUser();
   const { colors, type } = useTheme();
-  if (user.can_upload_videos === false)
+  const allowed = user.can_upload_videos !== false;
+  useEffect(() => {
+    syncVideoUploadSession(user.id, allowed);
+  }, [user.id, allowed]);
+  if (!allowed)
     return (
       <SettingsPage>
         <Text style={[type.callout, { color: colors.secondary }]}>
@@ -111,247 +59,36 @@ function VideoUploader() {
   const { colors, type } = useTheme();
   const youtube = useYouTubeConnection();
   const health = useVideoHealth();
-  const [step, setStep] = useState<Step>('upload');
-  const [name, setName] = useState('');
-  const [date, setDate] = useState(localDate);
-  const [notes, setNotes] = useState('');
-  const [clips, setClips] = useState<PhoneClip[]>([]);
-  // The one clip whose preview is open; the others have no player.
+  const { step, name, date, notes, clips, session, busy, message, processFailed, phase } =
+    useVideoUploadState();
+  // The one clip whose preview is open; stays local so leaving releases the video player.
   const [previewing, setPreviewing] = useState<string | null>(null);
-  const [session, setSession] = useState<WorkoutSession | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  // Every clip uploaded but the request to start processing failed: offer to start it again.
-  const [processFailed, setProcessFailed] = useState(false);
-  const [phase, setPhaseState] = useState<Phase>('idle');
-  // Read synchronously, so a second action in the same frame sees the first.
-  const phaseRef = useRef<Phase>('idle');
-  function setPhase(next: Phase) {
-    phaseRef.current = next;
-    setPhaseState(next);
-  }
-  // A function, so a check after an await reads the phase as it is then.
-  const currentPhase = () => phaseRef.current;
-  useUploadWakeLock(phase === 'creating' || phase === 'uploading' || phase === 'starting');
+  const settleQuestionRef = useRef<((choice: 'keep' | 'stop') => void) | null>(null);
   const ready = youtubeReady(youtube.data ?? null);
-  const guard = useAccountGuard();
-  // The batch's uploads: `stopped` keeps workers from starting another clip, and each transfer
-  // in flight can be cancelled. Both outlive renders, so a stop reaches every worker at once.
-  const stopped = useRef(false);
-  const transfers = useRef(new Set<ClipTransfer>());
-
-  function stopUploads() {
-    stopped.current = true;
-    for (const transfer of transfers.current) transfer.stop();
-    transfers.current.clear();
-    // Clips cut off part-way can be sent again with Retry failed uploads.
-    setClips((current) =>
-      current.map((clip) =>
-        clip.status === 'uploading' || clip.status === 'waiting'
-          ? { ...clip, status: 'failed', error: 'Stopped.' }
-          : clip,
-      ),
-    );
-  }
-
-  /** Shows a session as the server reports it, whichever request it came from. */
-  function follow(next: WorkoutSession) {
-    setSession(next);
-    if (next.status === 'complete') setStep('complete');
-    else if (!STILL_UPLOADABLE.includes(next.status)) setStep('processing');
-    else setStep('progress');
-  }
-
-  /**
-   * Stops every upload, then cancels the session once the server confirms it, and with `discard`
-   * deletes it and its clips too. If processing had already started, the session can't be
-   * cancelled: the screen shows its status instead. Resolves true once everything asked is done.
-   */
-  async function stopAndCancel(target: WorkoutSession, discard: boolean): Promise<boolean> {
-    setPhase('stopping');
-    stopUploads();
-    setProcessFailed(false);
-    setMessage(null);
-    const check = guard();
-    try {
-      let cancelled: WorkoutSession;
-      try {
-        cancelled = await videoApi.cancel(target.id);
-      } catch (reason) {
-        if (!check.open()) return false;
-        if (!(reason instanceof ApiError && reason.code === 'cannot_cancel')) {
-          setMessage(errorMessage(reason));
-          return false;
-        }
-        // Refused: read the session back to see why.
-        let latest: WorkoutSession;
-        try {
-          latest = await videoApi.get(target.id);
-        } catch (readFailure) {
-          if (check.open()) setMessage(errorMessage(readFailure));
-          return false;
-        }
-        if (!check.open()) return false;
-        if (latest.id === target.id && latest.status === 'cancelled') {
-          // An earlier cancel reached the server but its answer was lost: it is cancelled.
-          cancelled = latest;
-        } else if (processingBegan(latest.status)) {
-          follow(latest);
-          setMessage('Processing had already started, so this session carries on.');
-          return false;
-        } else {
-          follow(latest);
-          setMessage(errorMessage(reason));
-          return false;
-        }
-      }
-      if (!check.open()) return false;
-      follow(cancelled);
-      if (!discard) return true;
-      try {
-        await videoApi.remove(target.id);
-      } catch (reason) {
-        if (check.open())
-          setMessage(`The session is cancelled but couldn’t be deleted. ${errorMessage(reason)}`);
-        return false;
-      }
-      return true;
-    } finally {
-      setPhase('idle');
-    }
-  }
-
-  // The batch exists only on this screen, so it can't be left while it is being created,
-  // uploaded or started. Leaving an upload asks first, then stops every clip, cancels the session
-  // and deletes it, and leaves only once the server has confirmed both. While a session is being
-  // created or processing is starting, leaving waits.
-  const holding = step === 'progress' || phase !== 'idle';
-  // A leave confirmed by the server, waiting for the screen to stop holding. State, not a ref,
-  // so setting it renders and the effect below runs even when nothing else changes.
-  const [leave, setLeave] = useState<(() => void) | null>(null);
-  // The open Stop and discard question, answered with what was chosen.
-  const stopQuestion = useRef<Promise<'keep' | 'stop'> | null>(null);
-  // The session as last shown, for handlers that run after the screen moved on.
-  const latestSession = useRef<WorkoutSession | null>(null);
-  useEffect(() => {
-    latestSession.current = session;
-  });
-
-  /** Starts processing once any open Stop and discard question has been answered Keep. */
-  async function startWhenAnswered(target: WorkoutSession) {
-    const question = stopQuestion.current;
-    if (question && (await question) === 'stop') return;
-    if (currentPhase() === 'uploading') await beginProcessing(target);
-  }
-  usePreventRemove(holding, ({ repeat }) => {
-    const reason = HOLD_REASONS[currentPhase()];
-    if (reason) {
-      showToast(reason);
-      return;
-    }
-    const target = session;
-    if (!target) {
-      repeat();
-      return;
-    }
-    // While the question is open, the batch doesn't start processing even if its last clip
-    // finishes behind it (startWhenAnswered), so Stop and discard never races a start.
-    let answer!: (choice: 'keep' | 'stop') => void;
-    stopQuestion.current = new Promise((resolve) => (answer = resolve));
-    const settle = (choice: 'keep' | 'stop') => {
-      stopQuestion.current = null;
-      answer(choice);
-    };
-    Alert.alert(
-      'Stop and discard this upload?',
-      'Uploading stops, and this session and the clips sent so far are deleted.',
-      [
-        { text: 'Keep uploading', style: 'cancel', onPress: () => settle('keep') },
-        {
-          text: 'Stop and discard',
-          style: 'destructive',
-          onPress: () => {
-            settle('stop');
-            // Checked again now: the batch may have moved on while the question was open.
-            const latest = latestSession.current;
-            if (
-              currentPhase() === 'starting' ||
-              currentPhase() === 'stopping' ||
-              !latest ||
-              latest.id !== target.id ||
-              !STILL_UPLOADABLE.includes(latest.status)
-            ) {
-              if (latest && processingBegan(latest.status))
-                setMessage('Processing had already started, so this session carries on.');
-              return;
-            }
-            void stopAndCancel(target, true).then((done) => {
-              // Leaves once the screen no longer holds; otherwise it stays with the reason shown.
-              if (done) setLeave(() => repeat);
-            });
-          },
-        },
-      ],
-      { cancelable: true, onDismiss: () => settle('keep') },
-    );
-  });
-  useEffect(() => {
-    if (!holding && leave) leave();
-  }, [holding, leave]);
-
-  // Signing out unmounts the screen: stop sending this account's clips.
-  useEffect(() => {
-    const running = transfers.current;
-    return () => {
-      stopped.current = true;
-      for (const transfer of running) transfer.stop();
-    };
-  }, []);
+  const concurrency = health.data?.upload_concurrency ?? 2;
   const inputStyle = useInputStyle();
 
-  const sessionId = session?.id ?? null;
-  const finished = session ? TERMINAL_SESSION_STATUSES.includes(session.status) : false;
-  useEffect(() => {
-    // One status check at a time: the next starts only after the last has answered, and a reply
-    // that arrives after leaving this state is dropped. A late reply can't move a finished
-    // session back (newerSession).
-    if (!sessionId || step !== 'processing' || finished) return;
-    let active = true;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const check = async () => {
-      try {
-        const next = await videoApi.get(sessionId);
-        if (!active) return;
-        setSession((current) => newerSession(current, next));
-        if (next.status === 'complete') setStep('complete');
-      } catch (reason) {
-        if (active) setMessage(errorMessage(reason));
-      } finally {
-        if (active) timer = setTimeout(() => void check(), SESSION_POLL_MS);
-      }
-    };
-    timer = setTimeout(() => void check(), SESSION_POLL_MS);
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [sessionId, step, finished]);
-
-  function updateClip(clientId: string, update: Partial<PhoneClip>) {
-    setClips((current) =>
-      current.map((clip) => (clip.clientId === clientId ? { ...clip, ...update } : clip)),
-    );
-  }
+  // If the screen unmounts while a Stop and discard alert was somehow still pending, unblock the
+  // background upload instead of leaving it waiting on a closed dialog.
+  useEffect(
+    () => () => {
+      settleQuestionRef.current?.('keep');
+      settleQuestionRef.current = null;
+    },
+    [],
+  );
 
   async function addVideos(source: 'camera' | 'library') {
     if (!ready) {
-      setMessage('Connect your YouTube channel before adding clips.');
+      videoUploadActions.setMessage('Connect your YouTube channel before adding clips.');
       return;
     }
-    setMessage(null);
+    videoUploadActions.setMessage(null);
     try {
       if (source === 'camera' && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
-        setMessage('Allow camera access in your phone’s settings to record a set.');
+        videoUploadActions.setMessage(
+          'Allow camera access in your phone’s settings to record a set.',
+        );
         return;
       }
       const options: ImagePicker.ImagePickerOptions = {
@@ -368,10 +105,10 @@ function VideoUploader() {
       const added = result.assets.map((asset, index) => clipFromAsset(asset, clips.length + index));
       const accepted = added.filter((clip): clip is PhoneClip => clip !== null);
       if (accepted.length !== added.length)
-        setMessage(`Only ${VIDEO_FILE_TYPES} video files were added.`);
-      setClips((current) => [...current, ...accepted]);
+        videoUploadActions.setMessage(`Only ${VIDEO_FILE_TYPES} video files were added.`);
+      videoUploadActions.addClips(accepted);
     } catch (reason) {
-      setMessage(errorMessage(reason));
+      videoUploadActions.setMessage(errorMessage(reason));
     }
   }
 
@@ -382,157 +119,32 @@ function VideoUploader() {
     ]);
   }
 
-  async function uploadClips(target: WorkoutSession, selected: PhoneClip[]) {
-    const concurrency = health.data?.upload_concurrency ?? 2;
-    let next = 0;
-    let failed = false;
-    async function worker() {
-      while (next < selected.length && !stopped.current) {
-        const clip = selected[next++];
-        if (stopped.current) return;
-        updateClip(clip.clientId, { status: 'uploading', progress: 0, error: undefined });
-        const transfer = videoApi.uploadClip(
-          target.id,
-          clip,
-          clips.findIndex((item) => item.clientId === clip.clientId),
-          (progress) => {
-            if (!stopped.current) updateClip(clip.clientId, { progress });
+  function confirmStopAndDiscard(target: WorkoutSession) {
+    if (phase === 'starting' || phase === 'stopping') return;
+    // While the question is open, the batch doesn't start processing even if its last clip
+    // finishes behind it, so Stop and discard never races a start.
+    const settle = videoUploadActions.beginStopQuestion();
+    settleQuestionRef.current = settle;
+    const answer = (choice: 'keep' | 'stop') => {
+      if (settleQuestionRef.current === settle) settleQuestionRef.current = null;
+      settle(choice);
+    };
+    Alert.alert(
+      'Stop and discard this upload?',
+      'Uploading stops, and this session and the clips sent so far are deleted.',
+      [
+        { text: 'Keep uploading', style: 'cancel', onPress: () => answer('keep') },
+        {
+          text: 'Stop and discard',
+          style: 'destructive',
+          onPress: () => {
+            answer('stop');
+            void videoUploadActions.stopAndDiscard(target);
           },
-        );
-        transfers.current.add(transfer);
-        try {
-          await transfer.done;
-          if (!stopped.current) updateClip(clip.clientId, { status: 'uploaded', progress: 100 });
-        } catch (reason) {
-          failed = true;
-          if (stopped.current || reason instanceof UploadStopped) return;
-          updateClip(clip.clientId, { status: 'failed', error: errorMessage(reason) });
-        } finally {
-          transfers.current.delete(transfer);
-        }
-      }
-    }
-    await Promise.all(Array.from({ length: Math.min(concurrency, selected.length) }, worker));
-    return !failed && !stopped.current;
-  }
-
-  /**
-   * Starts processing the uploaded batch. When the answer is lost or refused, the session is read
-   * back first: if the server already started it, the screen follows it; otherwise Start
-   * processing stays offered. Retrying asks the same session again, so it can't make another.
-   * Cancel and leaving wait while this runs.
-   */
-  async function beginProcessing(target: WorkoutSession) {
-    setPhase('starting');
-    setProcessFailed(false);
-    const check = guard();
-    try {
-      try {
-        const started = await videoApi.process(target.id);
-        if (check.open()) follow(started);
-        return;
-      } catch (reason) {
-        if (!check.open()) return;
-        const alreadyStarted =
-          reason instanceof ApiError && ALREADY_PROCESSING_CODES.includes(reason.code ?? '');
-        try {
-          const latest = await videoApi.get(target.id);
-          if (!check.open()) return;
-          if (alreadyStarted || !STILL_UPLOADABLE.includes(latest.status)) {
-            follow(latest);
-            return;
-          }
-        } catch {
-          // Still unreachable: offer Start processing again below.
-        }
-        setProcessFailed(true);
-        setMessage(errorMessage(reason));
-      }
-    } finally {
-      if (currentPhase() === 'starting') setPhase('idle');
-    }
-  }
-
-  async function startUpload() {
-    if (!name.trim() || !date || !clips.length || busy || !ready) return;
-    if (currentPhase() !== 'idle') return;
-    setBusy(true);
-    setMessage(null);
-    stopped.current = false;
-    setPhase('creating');
-    const check = guard();
-    try {
-      const created = await videoApi.create({
-        name: name.trim(),
-        workout_date: date,
-        notes: notes.trim() || null,
-        expected_clip_count: clips.length,
-      });
-      if (!check.open()) return;
-      setSession(created);
-      setStep('progress');
-      setPhase('uploading');
-      const uploaded = await uploadClips(created, clips);
-      if (uploaded && currentPhase() === 'uploading') await startWhenAnswered(created);
-    } catch (reason) {
-      if (check.open()) setMessage(errorMessage(reason));
-    } finally {
-      setBusy(false);
-      if (currentPhase() === 'creating' || currentPhase() === 'uploading') setPhase('idle');
-    }
-  }
-
-  async function retryFailedUploads() {
-    if (!session || busy || currentPhase() !== 'idle') return;
-    setBusy(true);
-    setMessage(null);
-    stopped.current = false;
-    setPhase('uploading');
-    try {
-      const failed = clips.filter((clip) => clip.status === 'failed');
-      const uploaded = await uploadClips(session, failed);
-      if (uploaded && currentPhase() === 'uploading') await startWhenAnswered(session);
-    } finally {
-      setBusy(false);
-      if (currentPhase() === 'uploading') setPhase('idle');
-    }
-  }
-
-  function cancelSession() {
-    // Waits for a start that is on its way, so the two never cross.
-    if (!session || currentPhase() === 'starting' || currentPhase() === 'stopping') return;
-    void stopAndCancel(session, false);
-  }
-
-  async function retryProcessingStart(target: WorkoutSession) {
-    if (busy || currentPhase() !== 'idle') return;
-    setBusy(true);
-    setMessage(null);
-    try {
-      await beginProcessing(target);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  function retryFailedSession() {
-    if (!session) return;
-    const retry = session.youtube_video_id ? videoApi.retryYoutube : videoApi.retryProcessing;
-    retry(session.id)
-      .then(setSession)
-      .catch((reason: unknown) => setMessage(errorMessage(reason)));
-  }
-
-  function reset() {
-    stopUploads();
-    setProcessFailed(false);
-    setClips([]);
-    setSession(null);
-    setName('');
-    setDate(localDate());
-    setNotes('');
-    setMessage(null);
-    setStep('upload');
+        },
+      ],
+      { cancelable: true, onDismiss: () => answer('keep') },
+    );
   }
 
   function confirmDelete(target: WorkoutSession) {
@@ -541,18 +153,7 @@ function VideoUploader() {
       {
         text: 'Delete',
         style: 'destructive',
-        onPress: async () => {
-          setBusy(true);
-          setMessage(null);
-          try {
-            await videoApi.remove(target.id);
-            reset();
-          } catch (reason) {
-            setMessage(errorMessage(reason));
-          } finally {
-            setBusy(false);
-          }
-        },
+        onPress: () => void videoUploadActions.deleteSession(target),
       },
     ]);
   }
@@ -605,20 +206,29 @@ function VideoUploader() {
           <Button
             label="Retry failed uploads"
             disabled={busy || phase !== 'idle'}
-            onPress={() => void retryFailedUploads()}
+            onPress={() => void videoUploadActions.retryFailedUploads(concurrency)}
           />
         )}
         {phase === 'starting' && (
           <Text style={[type.callout, { color: colors.secondary }]}>Starting processing…</Text>
         )}
         {processFailed && !failed && !busy && phase === 'idle' && (
-          <Button label="Start processing" onPress={() => void retryProcessingStart(session)} />
+          <Button
+            label="Start processing"
+            onPress={() => void videoUploadActions.retryProcessingStart(session)}
+          />
         )}
         <Button
           label={phase === 'stopping' ? 'Stopping…' : 'Cancel session'}
           variant="secondary"
           disabled={phase === 'starting' || phase === 'stopping'}
-          onPress={cancelSession}
+          onPress={videoUploadActions.cancelSession}
+        />
+        <Button
+          label={phase === 'stopping' ? 'Stopping…' : 'Stop and discard'}
+          variant="danger-soft"
+          disabled={phase === 'starting' || phase === 'stopping'}
+          onPress={() => confirmStopAndDiscard(session)}
         />
       </SettingsPage>
     );
@@ -640,9 +250,14 @@ function VideoUploader() {
           <Text style={[type.callout, { color: colors.danger }]}>{session.processing_error}</Text>
         )}
         {session.status === 'failed' && (
-          <Button label={sessionRetryLabel(session)} onPress={retryFailedSession} />
+          <Button
+            label={sessionRetryLabel(session)}
+            onPress={videoUploadActions.retryFailedSession}
+          />
         )}
-        {session.status === 'cancelled' && <Button label="Start a new upload" onPress={reset} />}
+        {session.status === 'cancelled' && (
+          <Button label="Start a new upload" onPress={videoUploadActions.reset} />
+        )}
         {canDeleteSession(session) && (
           <Button
             label="Delete this session"
@@ -692,7 +307,11 @@ function VideoUploader() {
             </Pressable>
           ))}
         </Card>
-        <Button label="Upload another session" variant="secondary" onPress={reset} />
+        <Button
+          label="Upload another session"
+          variant="secondary"
+          onPress={videoUploadActions.reset}
+        />
         <Button
           label="Delete this session"
           variant="danger"
@@ -714,18 +333,18 @@ function VideoUploader() {
           <TextInput
             accessibilityLabel="Session name"
             value={name}
-            onChangeText={setName}
+            onChangeText={videoUploadActions.setName}
             placeholder="e.g. Saturday lower body"
             placeholderTextColor={colors.muted}
             style={inputStyle}
           />
         </Field>
-        <DateField label="Workout date" value={date} onChange={setDate} />
+        <DateField label="Workout date" value={date} onChange={videoUploadActions.setDate} />
         <Field label="Notes">
           <TextInput
             accessibilityLabel="Notes"
             value={notes}
-            onChangeText={setNotes}
+            onChangeText={videoUploadActions.setNotes}
             multiline
             placeholder="Anything useful to keep with this session"
             placeholderTextColor={colors.muted}
@@ -758,19 +377,18 @@ function VideoUploader() {
               last={index === clips.length - 1}
               previewing={previewing === clip.clientId}
               onPreview={() => setPreviewing(clip.clientId)}
-              onLabel={(label) => updateClip(clip.clientId, { exerciseLabel: label })}
-              onMove={(to) => setClips((current) => moveItem(current, index, to))}
-              onRemove={() =>
-                setClips((current) => current.filter((item) => item.clientId !== clip.clientId))
-              }
+              onLabel={(label) => videoUploadActions.setClipLabel(clip.clientId, label)}
+              onMove={(to) => videoUploadActions.moveClip(index, to)}
+              onRemove={() => videoUploadActions.removeClip(clip.clientId)}
             />
           ))}
         </View>
       )}
       <Button
         label="Upload session"
+        loading={phase === 'creating'}
         disabled={!clips.length || !name.trim() || !date || busy || !ready}
-        onPress={() => void startUpload()}
+        onPress={() => void videoUploadActions.startUpload(concurrency, ready)}
       />
     </SettingsPage>
   );

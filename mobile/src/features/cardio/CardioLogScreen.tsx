@@ -20,8 +20,9 @@ import { useExercises } from '../../data/queries';
 import { Button, Card, CardHeader, ErrorState, Loading, errorMessage } from '../../ui/components';
 import { showMenu } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
-import { showToast } from '../../ui/Toast';
+import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { DateField } from '../body/DateField';
+import { useWorkoutShareReminder } from '../guides/shareReminder';
 import { useCardioOverview } from '../training/trainingQueries';
 import {
   cardioWorkoutRecords,
@@ -36,10 +37,17 @@ import {
   CardioMetricFields,
   CardioPage,
 } from './CardioFields';
+import {
+  CLIPBOARD_EMPTY_MESSAGE,
+  CLIPBOARD_READ_ERROR,
+  openCardioImportMenu,
+  readClipboardScreenshot,
+  type CardioImportSource,
+} from './cardioScreenshotImport';
+import { openCardioShareSheet } from './CardioShareSheet';
 import { useCardioWrite } from './useCardioWrite';
 
-/** Cardio's "Import screenshot" opens this screen straight into the picker it chose. */
-export type CardioImportSource = 'camera' | 'library';
+export type { CardioImportSource } from './cardioScreenshotImport';
 
 /** The native stack's transition event, which expo-router's navigation type leaves out. */
 type TransitionEvents = {
@@ -68,7 +76,11 @@ export function CardioLogScreen() {
       {exerciseQuery.data ? (
         <CardioLogForm
           exercises={exerciseQuery.data.filter((exercise) => exercise.kind === 'cardio')}
-          startImport={source === 'camera' || source === 'library' ? source : undefined}
+          startImport={
+            source === 'camera' || source === 'library' || source === 'clipboard'
+              ? source
+              : undefined
+          }
           ready={arrived}
         />
       ) : exerciseQuery.isError ? (
@@ -137,18 +149,94 @@ function CardioLogForm({
   const [metrics, setMetrics] = useState(() => cardioMetricDraft(initial));
   const [notes, setNotes] = useState(initial.notes ?? '');
   const [picking, setPicking] = useState(false);
-  const [scanning, setScanning] = useState(false);
+  const [scanPhase, setScanPhase] = useState<'paste' | 'scan' | null>(null);
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanWarning, setScanWarning] = useState('');
   const [checked, setChecked] = useState(false);
+  const [shareReminder] = useWorkoutShareReminder();
   const { write, saving, saveError } = useCardioWrite();
+  const openingMenu = useRef(false);
+  const importingRef = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const activity = exercises.find((exercise) => exercise.id === activityId);
   // An edited session keeps an activity that no longer matches a cardio exercise.
   const activityName = activity?.name ?? (session ? initial.activity_type : '');
   const minutes = Number(duration);
   const invalidDuration = !validCardioInteger(minutes, CARDIO_DURATION);
   const metricErrors = checked ? cardioMetricErrors(metrics, activityName) : {};
-  const busy = picking || scanning || saving;
+  const busy = picking || scanPhase !== null || saving;
+
+  async function importScreenshot(source: CardioImportSource, { lockForm = true } = {}) {
+    if (busy || importingRef.current) return;
+    importingRef.current = true;
+    const account = toastAccount();
+    if (lockForm) setPicking(true);
+    setScanError(null);
+    let cleanup: (() => void) | undefined;
+    try {
+      let file: { uri: string; fileName?: string | null; mimeType?: string | null };
+      if (source === 'clipboard') {
+        setScanPhase('paste');
+        let pasted: Awaited<ReturnType<typeof readClipboardScreenshot>>;
+        try {
+          pasted = await readClipboardScreenshot();
+        } catch {
+          if (mounted.current && isToastAccountCurrent(account)) setScanError(CLIPBOARD_READ_ERROR);
+          return;
+        }
+        if (!pasted) {
+          if (mounted.current && isToastAccountCurrent(account))
+            setScanError(CLIPBOARD_EMPTY_MESSAGE);
+          return;
+        }
+        file = pasted;
+        cleanup = pasted.cleanup;
+      } else {
+        if (source === 'camera' && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
+          if (mounted.current && isToastAccountCurrent(account))
+            setScanError('Allow camera access in your phone’s settings to take a photo.');
+          return;
+        }
+        const options: ImagePicker.ImagePickerOptions = {
+          mediaTypes: ['images'],
+          quality: 1,
+          allowsEditing: false,
+        };
+        const result =
+          source === 'camera'
+            ? await ImagePicker.launchCameraAsync(options)
+            : await ImagePicker.launchImageLibraryAsync(options);
+        if (result.canceled || !result.assets[0]) return;
+        file = result.assets[0];
+      }
+      if (!mounted.current || !isToastAccountCurrent(account)) return;
+      setScanPhase('scan');
+      const scan = await scanCardioPhoto(file);
+      if (!mounted.current || !isToastAccountCurrent(account)) return;
+      const { update, warning } = cardioSessionUpdateFromScan(scan, exercises);
+      if (update.session_date != null) setDate(update.session_date);
+      if (update.exercise_id != null) setActivityId(update.exercise_id);
+      if (update.duration_minutes != null) setDuration(String(update.duration_minutes));
+      setMetrics(cardioMetricDraft(update));
+      setScanWarning(warning);
+      showToast('Screenshot scanned. Review the fields before saving.', undefined, { account });
+    } catch (reason) {
+      if (mounted.current && isToastAccountCurrent(account)) setScanError(errorMessage(reason));
+    } finally {
+      cleanup?.();
+      importingRef.current = false;
+      if (mounted.current) {
+        setScanPhase(null);
+        setPicking(false);
+      }
+    }
+  }
 
   // Opened from Cardio's Import screenshot: go straight to the picker, once, after the screen has
   // arrived. That pick doesn't lock the form, so if the system never shows the picker, Import
@@ -163,39 +251,16 @@ function CardioLogForm({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [autoImport, ready]);
 
-  async function importScreenshot(source: CardioImportSource, { lockForm = true } = {}) {
-    if (busy) return;
-    if (lockForm) setPicking(true);
-    setScanError(null);
+  async function openImport() {
+    if (busy || openingMenu.current) return;
+    openingMenu.current = true;
     try {
-      if (source === 'camera' && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
-        setScanError('Allow camera access in your phone’s settings to take a photo.');
-        return;
-      }
-      const options: ImagePicker.ImagePickerOptions = {
-        mediaTypes: ['images'],
-        quality: 1,
-        allowsEditing: false,
-      };
-      const result =
-        source === 'camera'
-          ? await ImagePicker.launchCameraAsync(options)
-          : await ImagePicker.launchImageLibraryAsync(options);
-      if (result.canceled || !result.assets[0]) return;
-      setScanning(true);
-      const scan = await scanCardioPhoto(result.assets[0]);
-      const { update, warning } = cardioSessionUpdateFromScan(scan, exercises);
-      if (update.session_date != null) setDate(update.session_date);
-      if (update.exercise_id != null) setActivityId(update.exercise_id);
-      if (update.duration_minutes != null) setDuration(String(update.duration_minutes));
-      setMetrics(cardioMetricDraft(update));
-      setScanWarning(warning);
-      showToast('Screenshot scanned. Review the fields before saving.');
-    } catch (reason) {
-      setScanError(errorMessage(reason));
+      await openCardioImportMenu(
+        (source) => void importScreenshot(source),
+        () => mounted.current,
+      );
     } finally {
-      setScanning(false);
-      setPicking(false);
+      openingMenu.current = false;
     }
   }
 
@@ -228,6 +293,7 @@ function CardioLogForm({
       return;
     }
     if (!activity) return;
+    const reminderOn = shareReminder;
     void write(
       () =>
         createCardioSession({
@@ -239,10 +305,21 @@ function CardioLogForm({
           duration_minutes: minutes,
           notes: notes.trim() || null,
         }),
-      async (session) => {
-        if (!session.source_workout_id) return 'Cardio saved';
-        const records = await cardioWorkoutRecords(session.source_workout_id).catch(() => []);
-        return savedCardioRecordsToast(records)?.message ?? 'Cardio saved';
+      async (created, account) => {
+        const records = created.source_workout_id
+          ? await cardioWorkoutRecords(created.source_workout_id).catch(() => [])
+          : [];
+        const celebration = savedCardioRecordsToast(records);
+        const action = reminderOn
+          ? {
+              label: 'Share card',
+              run: () => openCardioShareSheet(created, account),
+            }
+          : undefined;
+        return {
+          message: celebration?.message ?? (reminderOn ? 'Workout saved' : 'Cardio saved'),
+          action,
+        };
       },
     );
   }
@@ -251,16 +328,17 @@ function CardioLogForm({
     <>
       <Card>
         <Button
-          label={scanning ? 'Scanning…' : 'Import screenshot'}
+          label={
+            scanPhase === 'paste'
+              ? 'Reading clipboard…'
+              : scanPhase === 'scan'
+                ? 'Scanning…'
+                : 'Import screenshot'
+          }
           variant="secondary"
           icon={{ sf: 'camera', md: 'photo-camera' }}
           disabled={busy}
-          onPress={() =>
-            showMenu('Import screenshot', [
-              { label: 'Choose screenshot', onPress: () => void importScreenshot('library') },
-              { label: 'Take photo', onPress: () => void importScreenshot('camera') },
-            ])
-          }
+          onPress={() => void openImport()}
         />
         {scanError && <CardioError message={scanError} />}
         {!!scanWarning && (
