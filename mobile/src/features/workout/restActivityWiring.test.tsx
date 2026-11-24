@@ -1,22 +1,22 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import { Alert } from 'react-native';
+import { Alert, Text } from 'react-native';
 import type { TrackedWorkout } from '../../../../frontend/src/types';
 import { readActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
 import {
   relayLiveActivity,
   type RelayLiveActivityNative,
 } from '../../../modules/relay-live-activity';
-import { apiSend, currentUser } from '../../data/api';
+import { ApiError, apiSend, currentUser, signIn } from '../../data/api';
 import { deviceStorage } from '../../data/deviceStorage';
 import { useUpNext } from '../../data/queries';
-import { SessionProvider } from '../../session/SessionProvider';
+import { SessionProvider, useSession } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { resetRestActivityForTests } from './restActivity';
 import { StartSheet } from './StartSheet';
 import { pushDay, types } from './testFixtures';
-import { WorkoutProvider } from './WorkoutProvider';
+import { useWorkout, WorkoutProvider } from './WorkoutProvider';
 import { WorkoutSheet } from './WorkoutSheet';
 
 // The live workout's rest drives the iPhone Live Activity through the native module, mocked here.
@@ -53,6 +53,8 @@ jest.mock('../../data/api', () => ({
   currentUser: jest.fn(),
   apiSend: jest.fn(),
   apiGet: jest.fn(async () => []),
+  signIn: jest.fn(),
+  signOut: jest.fn(async () => undefined),
 }));
 jest.mock('../../data/queries', () => {
   const fixtures = jest.requireActual<typeof import('./testFixtures')>('./testFixtures');
@@ -103,6 +105,18 @@ beforeEach(() => {
 });
 afterEach(() => client.clear());
 
+function Controls() {
+  const session = useSession();
+  const workout = useWorkout();
+  return (
+    <>
+      <Text onPress={() => void session.signOut()}>Sign out</Text>
+      <Text onPress={() => void session.signIn('sam', 'pw')}>Switch to sam</Text>
+      <Text onPress={workout.discard}>Discard</Text>
+    </>
+  );
+}
+
 async function open() {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const view = await render(
@@ -111,6 +125,7 @@ async function open() {
         <WorkoutProvider>
           <StartSheet />
           <WorkoutSheet />
+          <Controls />
         </WorkoutProvider>
       </SessionProvider>
     </QueryClientProvider>,
@@ -207,4 +222,95 @@ test('relaunched mid-rest, the activity carries on with the same rest', async ()
   await waitFor(() => expect(native.show).toHaveBeenCalled());
   expect(native.show.mock.calls.at(-1)).toEqual(shownBefore);
   expect(native.end).not.toHaveBeenCalled();
+});
+
+/** Holds the next native update until `release` is called, as a slow ActivityKit call would. */
+function holdNextShow() {
+  let release = () => undefined as void;
+  native.show.mockImplementationOnce(
+    () => new Promise<undefined>((resolve) => (release = () => resolve(undefined))),
+  );
+  return () => release();
+}
+
+const order = (mock: jest.Mock) => mock.mock.invocationCallOrder;
+
+test('opened after the session ended, an activity left from before ends', async () => {
+  jest.mocked(currentUser).mockRejectedValue(new ApiError(401, 'Not signed in'));
+  await open();
+  await waitFor(() => expect(native.end).toHaveBeenCalledTimes(1));
+  expect(native.show).not.toHaveBeenCalled();
+});
+
+test('while the session is still loading, an activity left from before stays', async () => {
+  jest.mocked(currentUser).mockReturnValue(new Promise(() => undefined));
+  await open();
+  await act(async () => undefined);
+  expect(native.end).not.toHaveBeenCalled();
+  expect(native.show).not.toHaveBeenCalled();
+});
+
+test('signing out mid-rest, with an update still on its way, ends the activity last', async () => {
+  await open();
+  await startRest();
+  native.end.mockClear();
+  const release = holdNextShow();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add 30 seconds to the rest' }));
+  await fireEvent.press(screen.getByText('Sign out'));
+  await waitFor(() => expect(screen.queryByText('Bench Press')).toBeNull());
+  // The update in flight finishes first; nothing else may follow the end.
+  expect(native.end).not.toHaveBeenCalled();
+  await act(async () => release());
+  await waitFor(() => expect(native.end).toHaveBeenCalledTimes(1));
+  expect(Math.max(...order(native.show))).toBeLessThan(order(native.end)[0]);
+});
+
+test('switching account with an update on its way never shows the old rest again', async () => {
+  await open();
+  await startRest();
+  native.end.mockClear();
+  const release = holdNextShow();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add 30 seconds to the rest' }));
+  const shows = native.show.mock.calls.length;
+  jest.mocked(signIn).mockResolvedValue({ id: 'u2', username: 'sam' } as never);
+  await fireEvent.press(screen.getByText('Switch to sam'));
+  await act(async () => release());
+  await waitFor(() => expect(native.end).toHaveBeenCalledTimes(1));
+  expect(native.show.mock.calls.length).toBe(shows);
+  expect(Math.max(...order(native.show))).toBeLessThan(order(native.end)[0]);
+});
+
+test('discarding the workout while paused ends the activity', async () => {
+  await open();
+  await startRest();
+  await fireEvent.press(screen.getByRole('button', { name: 'Pause workout and rest timer' }));
+  expect(lastShown()?.[4]).toEqual(expect.any(Number));
+  native.end.mockClear();
+  await fireEvent.press(screen.getByText('Discard'));
+  await waitFor(() => expect(native.end).toHaveBeenCalledTimes(1));
+});
+
+test('a paused rest stays frozen past its old end, and resumes with a new one', async () => {
+  let now = new Date(2026, 10, 23, 9, 0).getTime();
+  jest.spyOn(Date, 'now').mockImplementation(() => now);
+  jest.useFakeTimers({ doNotFake: ['Date'] });
+  try {
+    await open();
+    await startRest();
+    now += 20_000;
+    await fireEvent.press(screen.getByRole('button', { name: 'Pause workout and rest timer' }));
+    native.end.mockClear();
+    const shows = native.show.mock.calls.length;
+    // Well past when the rest would have ended: nothing settles, nothing is sent.
+    now += 300_000;
+    await act(async () => jest.advanceTimersByTime(300_000));
+    expect(native.end).not.toHaveBeenCalled();
+    expect(native.show.mock.calls.length).toBe(shows);
+    expect(lastShown()?.slice(3)).toEqual([120, 100]);
+
+    await fireEvent.press(screen.getByRole('button', { name: 'Resume workout and rest timer' }));
+    expect(lastShown()?.slice(2)).toEqual([now + 100_000, 120, null]);
+  } finally {
+    jest.useRealTimers();
+  }
 });

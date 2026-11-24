@@ -4,6 +4,9 @@ import WidgetKit
 
 /// Relay's accent blue (mobile/src/ui/theme.ts), which the activity can't read from the app.
 private let relayAccent = Color(red: 0x2C / 255, green: 0x74 / 255, blue: 0xD0 / 255)
+/// Tapping the activity, on the Lock Screen or in the Island, opens the live workout's logger
+/// (mobile/src/features/workout/workoutLink.ts keeps it through a cold start).
+private let workoutURL = URL(string: "relay-mobile://workout")
 
 /// The rest timer on the Lock Screen and in the Dynamic Island.
 struct RestActivityWidget: Widget {
@@ -12,6 +15,7 @@ struct RestActivityWidget: Widget {
       RestLockScreenView(state: context.state, isStale: context.isStale)
         .activityBackgroundTint(Color.black.opacity(0.75))
         .activitySystemActionForegroundColor(.white)
+        .widgetURL(workoutURL)
     } dynamicIsland: { context in
       let state = context.state
       let stale = context.isStale
@@ -46,7 +50,7 @@ struct RestActivityWidget: Widget {
       } minimal: {
         RestIcon(state: state, isStale: stale)
       }
-      .widgetURL(URL(string: "relay-mobile://workout"))
+      .widgetURL(workoutURL)
       .keylineTint(relayAccent)
     }
   }
