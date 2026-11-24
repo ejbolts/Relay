@@ -1288,6 +1288,24 @@ it('does not delete a fully uploaded session on sign-out when Start processing f
   await view.unmount();
 });
 
+it('stops a mid-upload batch without deleting it when the account loses upload access', async () => {
+  const stops = stoppableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return session;
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  await pickAndUpload(['one.mp4']);
+  await screen.findByText('UPLOADING SESSION');
+  await act(async () => syncVideoUploadSession(mockUser.id, true));
+
+  // Still signed in, so the session stays on the server: only sign-out and switching delete.
+  await act(async () => syncVideoUploadSession(mockUser.id, false));
+  await waitFor(() => expect(stops.every((stop) => stop.mock.calls.length > 0)).toBe(true));
+  expect(jest.mocked(apiSend).mock.calls.filter(([, method]) => method === 'DELETE')).toHaveLength(
+    0,
+  );
+});
+
 it('switches accounts mid-upload with exactly one DELETE using the old token and none with the new one', async () => {
   stoppableTransfers();
   jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
