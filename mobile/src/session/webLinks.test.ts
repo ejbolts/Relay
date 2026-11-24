@@ -99,6 +99,11 @@ describe('system links', () => {
     });
     expect(memoryKv.get('relay.pendingFriendInvite')).toBe(JSON.stringify('other'));
     expect(memoryKv.has('relay.pendingRegistrationInvite')).toBe(false);
+    // So does an app invite link, which never carries a code.
+    redirectSystemPath({ path: link, initial: false });
+    expect(memoryKv.get('relay.pendingRegistrationInvite')).toBe(JSON.stringify('sample-code'));
+    redirectSystemPath({ path: 'relay-mobile://social/profile/third?invite=1', initial: false });
+    expect(memoryKv.has('relay.pendingRegistrationInvite')).toBe(false);
   });
 
   it('passes app links through and keeps the YouTube return out of navigation', () => {

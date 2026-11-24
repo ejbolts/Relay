@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     youtube_web_client_secret_path: Path = Path("secrets/youtube-web-client-secret.json")
     youtube_credentials_key_path: Path = Path("secrets/youtube-credentials.key")
     youtube_redirect_uri: str | None = None
+    # Development only: comma-separated `host:port` values whose Expo Go links (exp://, exps://)
+    # may receive the app's YouTube return. A release app always returns to relay-mobile://.
+    youtube_app_dev_return_hosts: str | None = None
     youtube_privacy_status: str = "unlisted"
     youtube_mock_mode: bool = True
     youtube_title_template: str = "{session_name} — {workout_date}"

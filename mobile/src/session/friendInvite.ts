@@ -12,6 +12,13 @@ const SIGNED_OUT_PATHS = new Set(['/sign-in', '/password-required']);
 const listeners = new Set<() => void>();
 let pending: string | null | undefined;
 let canOpenNow = false;
+/** The latest link's registration code; `version` moves on each new invite link. */
+export interface RegistrationInvite {
+  code: string | null;
+  version: number;
+}
+const codeListeners = new Set<() => void>();
+let registration: RegistrationInvite | undefined;
 
 const currentInvite = () => {
   if (pending === undefined) pending = readJson<string>(KEY);
@@ -39,24 +46,45 @@ export function friendInviteFromUrl(url: string): string | null {
   return friendInviteIdFromHash(`#friend=${route[1]}`);
 }
 
+function storedCode(): string | null {
+  const code = readJson<string>(CODE_KEY);
+  return typeof code === 'string' && code.length <= 200 ? code : null;
+}
+const currentRegistration = () => (registration ??= { code: storedCode(), version: 0 });
+const subscribeCode = (listener: () => void) => {
+  codeListeners.add(listener);
+  return () => {
+    codeListeners.delete(listener);
+  };
+};
+function saveCode(code: string | null) {
+  writeJson(CODE_KEY, code);
+  registration = { code, version: currentRegistration().version + 1 };
+  codeListeners.forEach((listener) => listener());
+}
+
 /**
  * Keeps an invite link that arrives before its route can open (from `+native-intent`, which sees
  * every system link, the launch link included). A signed-in app opens the link itself.
- * `registrationCode` comes with a web friend link: as on the web, a link without one replaces
- * an earlier friend's code.
+ * `registrationCode` is the link's code for a closed server: as on the web, a link without one
+ * replaces an earlier friend's code.
  */
-export function captureFriendInvite(url: string, registrationCode?: string | null) {
+export function captureFriendInvite(url: string, registrationCode: string | null = null) {
   if (canOpenNow) return;
   const id = friendInviteFromUrl(url);
   if (!id) return;
-  if (registrationCode !== undefined) writeJson(CODE_KEY, registrationCode || null);
+  saveCode(registrationCode || null);
   if (currentInvite() !== id) saveInvite(id);
 }
 
 /** The registration code from the friend link that opened the app, for Create account. */
 export function pendingRegistrationInvite(): string | null {
-  const code = readJson<string>(CODE_KEY);
-  return typeof code === 'string' && code.length <= 200 ? code : null;
+  return currentRegistration().code;
+}
+
+/** The latest invite link's code, so an open Create account form follows a new link. */
+export function useRegistrationInvite(): RegistrationInvite {
+  return useSyncExternalStore(subscribeCode, currentRegistration);
 }
 
 /** Opens a kept invite once the visitor has signed in or created an account. */
@@ -76,7 +104,7 @@ export function useDeferredFriendInvite(canOpen: boolean) {
     const id = friendInviteIdFromHash(`#friend=${invite}`);
     saveInvite(null);
     // Signed in now: the code has done its job, as the web clears it with the invite.
-    writeJson(CODE_KEY, null);
+    saveCode(null);
     if (id && pathname !== `/social/profile/${id}`) router.navigate(socialRoutes.profile(id, true));
   }, [canOpen, pathname, invite, ready, router]);
 }

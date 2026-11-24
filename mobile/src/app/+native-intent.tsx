@@ -13,6 +13,7 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
   if (isYouTubeReturn(path)) return initial ? '/videos' : null;
   const link = webLinkRoute(path);
   const route = link?.route ?? path;
-  captureFriendInvite(route, link?.friend ? (link.registrationCode ?? null) : undefined);
+  // Any invite link, with or without a code, replaces an earlier link's code.
+  captureFriendInvite(route, link?.registrationCode ?? null);
   return route;
 }

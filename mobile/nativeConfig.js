@@ -16,7 +16,11 @@
 
 const HOSTNAME =
   /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/;
-const APP_ID = /^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)+$/;
+// The platforms' own rules, as the backend's GYM_IOS_BUNDLE_ID and GYM_ANDROID_PACKAGE check them:
+// iOS allows letters, digits and hyphens; Android allows letters, digits and underscores, with
+// each segment starting with a letter.
+const IOS_BUNDLE_ID = /^[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+$/;
+const ANDROID_PACKAGE = /^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$/;
 const PROJECT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const OWNER = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
 
@@ -45,9 +49,11 @@ function setting(name, value, pattern) {
 function withNativeConfig(config, env = process.env) {
   const hosts = linkHosts(env.RELAY_APP_LINK_HOSTS);
   const bundleIdentifier =
-    config.ios?.bundleIdentifier ?? setting('RELAY_IOS_BUNDLE_ID', env.RELAY_IOS_BUNDLE_ID, APP_ID);
+    config.ios?.bundleIdentifier ??
+    setting('RELAY_IOS_BUNDLE_ID', env.RELAY_IOS_BUNDLE_ID, IOS_BUNDLE_ID);
   const androidPackage =
-    config.android?.package ?? setting('RELAY_ANDROID_PACKAGE', env.RELAY_ANDROID_PACKAGE, APP_ID);
+    config.android?.package ??
+    setting('RELAY_ANDROID_PACKAGE', env.RELAY_ANDROID_PACKAGE, ANDROID_PACKAGE);
   const projectId =
     config.extra?.eas?.projectId ??
     setting('RELAY_EAS_PROJECT_ID', env.RELAY_EAS_PROJECT_ID, PROJECT_ID);

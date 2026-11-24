@@ -1,6 +1,7 @@
 /**
- * The app link Relay's server returns the YouTube sign-in browser to, with the result as
- * `?youtube=<result>` (the same words the web's `/?youtube=<result>` return uses).
+ * The app link Relay's server returns the YouTube sign-in browser to. Its `?youtube=<result>` is
+ * either `finish` with a one-time `code` the app must confirm with the server, or one of the
+ * web's failure words (`cancelled`, `expired`, `permission`…).
  */
 export const YOUTUBE_RETURN_PATH = 'youtube-return';
 
@@ -13,9 +14,18 @@ export function isYouTubeReturn(url: string): boolean {
   return RETURN.test(url);
 }
 
-/** The result word a return link carries; an unreadable return counts as a failure. */
-export function youtubeReturnResult(url: string): string {
-  const query = /\?([^#]*)/.exec(url)?.[1];
-  const result = query ? new URLSearchParams(query).get('youtube') : null;
-  return result && /^[a-z_]{1,40}$/.test(result) ? result : 'failed';
+export type YouTubeReturn = { result: 'finish'; code: string } | { result: string; code?: never };
+
+/**
+ * Reads the sign-in browser's return, only when it is exactly the link this attempt asked for.
+ * Anything else is null, so an unrelated link never counts as a result.
+ */
+export function readYouTubeReturn(url: string, returnUrl: string): YouTubeReturn | null {
+  if (!url.startsWith(`${returnUrl}?`) || url.includes('#')) return null;
+  const query = new URLSearchParams(url.slice(returnUrl.length + 1));
+  const result = query.get('youtube');
+  if (!result || !/^[a-z_]{1,40}$/.test(result)) return null;
+  if (result !== 'finish') return { result };
+  const code = query.get('code');
+  return code && /^[A-Za-z0-9_-]{20,200}$/.test(code) ? { result, code } : null;
 }

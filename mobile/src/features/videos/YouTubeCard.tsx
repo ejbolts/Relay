@@ -71,8 +71,10 @@ export function YouTubeCard({
     const check = guard();
     const account = toastAccount();
     try {
-      const outcome = await connectYouTubeInApp();
-      if (!check.sameSession()) return;
+      const outcome = await connectYouTubeInApp(check.sameSession);
+      if (outcome.kind === 'stale' || !check.sameSession()) return;
+      if (outcome.kind === 'result' && outcome.connection)
+        client.setQueryData<YouTubeConnection>(videoKeys.youtube, outcome.connection);
       void client.invalidateQueries({ queryKey: videoKeys.youtube });
       if (outcome.kind === 'web') {
         if (check.open()) confirmConnectOnWeb();

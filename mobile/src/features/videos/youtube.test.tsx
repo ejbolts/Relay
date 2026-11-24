@@ -7,13 +7,19 @@ import { apiGet, apiSend } from '../../data/api';
 import { nextSessionEpoch } from '../../session/sessionEpoch';
 import { showToast } from '../../ui/Toast';
 import { YouTubeCard } from './YouTubeCard';
-import { isYouTubeReturn, youtubeReturnResult } from './youtubeReturn';
+import { isYouTubeReturn, readYouTubeReturn } from './youtubeReturn';
 
 configure({ asyncUtilTimeout: 8000 });
 
 jest.mock('expo-web-browser', () => ({
   WebBrowserResultType: { CANCEL: 'cancel' },
   openAuthSessionAsync: jest.fn(),
+}));
+jest.mock('expo-crypto', () => ({
+  CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
+  CryptoEncoding: { HEX: 'hex' },
+  getRandomBytes: (size: number) => new Uint8Array(size).fill(171),
+  digestStringAsync: async () => 'c'.repeat(64),
 }));
 jest.mock('expo-linking', () => ({
   createURL: (path: string) => `exp://127.0.0.1:8081/--/${path}`,
@@ -29,7 +35,10 @@ const mockUser = { id: 'u1', username: 'preview' } as User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
 
 const RETURN = 'exp://127.0.0.1:8081/--/youtube-return';
-const START = 'https://relay.test/api/youtube/app-start?state=sample';
+const GOOGLE = 'https://accounts.google.com/o/oauth2/auth?state=sample-state';
+const START = { url: GOOGLE, flow: 'app', state: 'sample-state' };
+const VERIFIER = 'ab'.repeat(32);
+const CODE = 'sample-completion-code-1234';
 const notConnected: YouTubeConnection = {
   status: 'not_connected',
   channel_id: null,
@@ -55,7 +64,12 @@ beforeEach(() => {
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   youtube = notConnected;
   jest.mocked(apiGet).mockImplementation(async () => youtube);
-  jest.mocked(apiSend).mockResolvedValue({ url: START });
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/youtube/connect') return START;
+    // Finishing saves the channel on the server.
+    youtube = connected;
+    return { result: 'connected', connection: connected };
+  });
 });
 afterEach(() => client.clear());
 
@@ -67,20 +81,28 @@ async function open(canConnect = true) {
   );
 }
 
-function returns(result: string) {
-  jest.mocked(WebBrowser.openAuthSessionAsync).mockImplementation(async () => {
-    // The server saved the channel before sending the browser back.
-    if (result === 'connected') youtube = connected;
-    return { type: 'success', url: `${RETURN}?youtube=${result}` };
-  });
+function returns(query: string) {
+  jest
+    .mocked(WebBrowser.openAuthSessionAsync)
+    .mockResolvedValue({ type: 'success', url: `${RETURN}?${query}` });
 }
 
-it('connects in a sign-in browser over the app and shows the new channel', async () => {
-  returns('connected');
+it('connects in a sign-in browser and saves only when the server confirms', async () => {
+  returns(`youtube=finish&code=${CODE}`);
   await open();
   await fireEvent.press(await screen.findByRole('button', { name: 'Connect YouTube' }));
-  expect(apiSend).toHaveBeenCalledWith('/api/youtube/connect', 'POST', { return_url: RETURN });
-  expect(WebBrowser.openAuthSessionAsync).toHaveBeenCalledWith(START, RETURN);
+  expect(apiSend).toHaveBeenCalledWith('/api/youtube/connect', 'POST', {
+    return_url: RETURN,
+    app_challenge: 'c'.repeat(64),
+  });
+  expect(WebBrowser.openAuthSessionAsync).toHaveBeenCalledWith(GOOGLE, RETURN);
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/youtube/finish', 'POST', {
+      state: 'sample-state',
+      code: CODE,
+      verifier: VERIFIER,
+    }),
+  );
   await waitFor(() =>
     expect(showToast).toHaveBeenCalledWith(
       'YouTube connected. Your next upload will go to the channel shown below.',
@@ -92,8 +114,41 @@ it('connects in a sign-in browser over the app and shows the new channel', async
   expect(screen.getByRole('button', { name: 'Reconnect YouTube' })).toBeTruthy();
 });
 
+it('never counts a link alone as connected', async () => {
+  returns('youtube=connected');
+  await open();
+  await fireEvent.press(await screen.findByRole('button', { name: 'Connect YouTube' }));
+  expect(await screen.findByText(/Could not connect YouTube/)).toBeTruthy();
+  expect(apiSend).not.toHaveBeenCalledWith('/api/youtube/finish', 'POST', expect.anything());
+  expect(showToast).not.toHaveBeenCalled();
+});
+
+it('ignores a return that is not the link this attempt asked for', async () => {
+  jest.mocked(WebBrowser.openAuthSessionAsync).mockResolvedValue({
+    type: 'success',
+    url: `exp://127.0.0.1:8081/--/youtube-return-other?youtube=finish&code=${CODE}`,
+  });
+  await open();
+  await fireEvent.press(await screen.findByRole('button', { name: 'Connect YouTube' }));
+  expect(await screen.findByText(/Could not connect YouTube/)).toBeTruthy();
+  expect(apiSend).not.toHaveBeenCalledWith('/api/youtube/finish', 'POST', expect.anything());
+});
+
+it('shows a result the server gives when finishing', async () => {
+  returns(`youtube=finish&code=${CODE}`);
+  jest
+    .mocked(apiSend)
+    .mockImplementation(async (path: string) =>
+      path === '/api/youtube/connect' ? START : { result: 'busy', connection: notConnected },
+    );
+  await open();
+  await fireEvent.press(await screen.findByRole('button', { name: 'Connect YouTube' }));
+  expect(await screen.findByText(/A video is still processing/)).toBeTruthy();
+  expect(showToast).not.toHaveBeenCalled();
+});
+
 it('keeps a failed return beside the card until the next attempt', async () => {
-  returns('permission');
+  returns('youtube=permission');
   await open();
   await fireEvent.press(await screen.findByRole('button', { name: 'Connect YouTube' }));
   expect(
@@ -102,7 +157,7 @@ it('keeps a failed return beside the card until the next attempt', async () => {
     ),
   ).toBeTruthy();
   expect(showToast).not.toHaveBeenCalled();
-  returns('cancelled');
+  returns('youtube=cancelled');
   await fireEvent.press(screen.getByRole('button', { name: 'Connect YouTube' }));
   await waitFor(() => expect(showToast).toHaveBeenCalled());
   expect(screen.queryByText(/Allow the requested YouTube permission/)).toBeNull();
@@ -137,17 +192,32 @@ it('shows why the server refused to start', async () => {
   expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
 });
 
-it('drops a result that returns after the account changed', async () => {
+it('drops a result that returns after the account changed, without finishing', async () => {
   jest.mocked(WebBrowser.openAuthSessionAsync).mockImplementation(async () => {
     nextSessionEpoch();
-    return { type: 'success', url: `${RETURN}?youtube=connected` };
+    return { type: 'success', url: `${RETURN}?youtube=finish&code=${CODE}` };
   });
   await open();
   await fireEvent.press(await screen.findByRole('button', { name: 'Connect YouTube' }));
   await waitFor(() => expect(WebBrowser.openAuthSessionAsync).toHaveBeenCalled());
   await act(async () => {});
+  expect(apiSend).not.toHaveBeenCalledWith('/api/youtube/finish', 'POST', expect.anything());
   expect(showToast).not.toHaveBeenCalled();
   expect(screen.queryByRole('alert')).toBeNull();
+});
+
+it('opens no browser when the account changes while the start is pending', async () => {
+  jest.mocked(apiSend).mockImplementation(async () => {
+    nextSessionEpoch();
+    return START;
+  });
+  await open();
+  await fireEvent.press(await screen.findByRole('button', { name: 'Connect YouTube' }));
+  await waitFor(() => expect(apiSend).toHaveBeenCalled());
+  await act(async () => {});
+  expect(WebBrowser.openAuthSessionAsync).not.toHaveBeenCalled();
+  expect(showToast).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Connect YouTube' })).toBeEnabled();
 });
 
 it('hands off to the web, naming the account, when the server predates the app sign-in', async () => {
@@ -185,7 +255,16 @@ it('reads the return link in a build and in Expo Go', () => {
   expect(isYouTubeReturn('/youtube-return?youtube=expired')).toBe(true);
   expect(isYouTubeReturn('relay-mobile://youtube-returns')).toBe(false);
   expect(isYouTubeReturn('relay-mobile://videos?youtube=connected')).toBe(false);
-  expect(youtubeReturnResult(`${RETURN}?youtube=no_channel`)).toBe('no_channel');
-  expect(youtubeReturnResult(RETURN)).toBe('failed');
-  expect(youtubeReturnResult(`${RETURN}?youtube=%3Cscript%3E`)).toBe('failed');
+  expect(readYouTubeReturn(`${RETURN}?youtube=no_channel`, RETURN)).toEqual({
+    result: 'no_channel',
+  });
+  expect(readYouTubeReturn(`${RETURN}?youtube=finish&code=${CODE}`, RETURN)).toEqual({
+    result: 'finish',
+    code: CODE,
+  });
+  expect(readYouTubeReturn(RETURN, RETURN)).toBeNull();
+  expect(readYouTubeReturn(`${RETURN}?youtube=finish`, RETURN)).toBeNull();
+  expect(readYouTubeReturn(`${RETURN}?youtube=%3Cscript%3E`, RETURN)).toBeNull();
+  expect(readYouTubeReturn(`${RETURN}?youtube=cancelled#x`, RETURN)).toBeNull();
+  expect(readYouTubeReturn(`${RETURN}x?youtube=cancelled`, RETURN)).toBeNull();
 });

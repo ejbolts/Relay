@@ -22,6 +22,15 @@ it('leaves the config alone without settings, as Expo Go and local runs use it',
   );
 });
 
+it('accepts the identifier characters each platform allows', () => {
+  const config = withNativeConfig(base, {
+    RELAY_IOS_BUNDLE_ID: 'com.example.relay-app',
+    RELAY_ANDROID_PACKAGE: 'com.example.relay_app',
+  });
+  expect(config.ios.bundleIdentifier).toBe('com.example.relay-app');
+  expect(config.android.package).toBe('com.example.relay_app');
+});
+
 it('sets the identifiers and EAS project a build names', () => {
   const config = withNativeConfig(base, {
     RELAY_IOS_BUNDLE_ID: 'com.example.relay',
@@ -106,6 +115,9 @@ it.each([
   [{ RELAY_APP_LINK_HOSTS: 'gym.example.com/path' }],
   [{ RELAY_APP_LINK_HOSTS: 'localhost' }],
   [{ RELAY_IOS_BUNDLE_ID: 'not an id' }],
+  [{ RELAY_IOS_BUNDLE_ID: 'com.example.relay_app' }],
+  [{ RELAY_ANDROID_PACKAGE: 'com.example.relay-app' }],
+  [{ RELAY_ANDROID_PACKAGE: 'com.1example.relay' }],
   [{ RELAY_ANDROID_PACKAGE: 'relay' }],
   [{ RELAY_EAS_PROJECT_ID: 'project' }],
   [{ RELAY_EXPO_OWNER: 'two words' }],

@@ -44,7 +44,7 @@ import { AuthBackdrop, AuthBrand } from './AuthChrome';
 import { queueImportPrompt } from '../features/data/importPrompt';
 import { registerAccount, useRegistrationConfig } from './registration';
 import { useSession } from './SessionProvider';
-import { pendingRegistrationInvite } from './friendInvite';
+import { useRegistrationInvite } from './friendInvite';
 
 /** Shown instead of the app until the account is signed in. */
 export function SignInScreen() {
@@ -59,8 +59,15 @@ export function SignInScreen() {
   const [error, setError] = useState('');
   const [creating, setCreating] = useState(false);
   const [displayName, setDisplayName] = useState('');
-  // A friend's link for a closed server carries its registration code, as on the web.
-  const [inviteCode, setInviteCode] = useState(() => pendingRegistrationInvite() ?? '');
+  // A friend's link for a closed server carries its registration code, as on the web. A new
+  // link replaces the field, even while the form is open; typing is kept until then.
+  const linkInvite = useRegistrationInvite();
+  const [inviteCode, setInviteCode] = useState(() => linkInvite.code ?? '');
+  const [appliedInvite, setAppliedInvite] = useState(linkInvite.version);
+  if (linkInvite.version !== appliedInvite) {
+    setAppliedInvite(linkInvite.version);
+    setInviteCode(linkInvite.code ?? '');
+  }
   const [needsInviteCode, setNeedsInviteCode] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<AuthFieldErrors>({});
   const [sampleOpen, setSampleOpen] = useState(false);
