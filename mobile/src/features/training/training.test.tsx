@@ -311,6 +311,46 @@ test('the calendar swipes between months, landing on the month it settles on', a
   announce.mockRestore();
 });
 
+test('the calendar hides off-screen months from screen readers while keeping the active month reachable', async () => {
+  await open(<TrainingTabScreen />);
+  await screen.findByText('This week');
+  await fireEvent(screen.getByTestId('calendar-pager'), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width: 300, height: 300 } },
+  });
+  const list = screen.getByTestId('calendar-months');
+  const novDay = `View 2 workouts for ${prettyDate('2026-11-21')}`;
+  expect(screen.getByRole('button', { name: novDay })).toBeVisible();
+
+  // Off-screen months are marked hidden from accessibility; the active month stays exposed.
+  const pageProps = (item: string) =>
+    list.props.renderItem({ item, index: 0, separators: {} }).props as {
+      accessibilityElementsHidden: boolean;
+      importantForAccessibility: string;
+    };
+  expect(pageProps('2026-11')).toMatchObject({
+    accessibilityElementsHidden: false,
+    importantForAccessibility: 'auto',
+  });
+  expect(pageProps('2026-10')).toMatchObject({
+    accessibilityElementsHidden: true,
+    importantForAccessibility: 'no-hide-descendants',
+  });
+
+  // Moving to October hides the still-mounted November page from screen readers and exposes October.
+  await fireEvent.press(screen.getByRole('button', { name: 'Previous month' }));
+  expect(screen.getByRole('header', { name: 'October 2026' })).toBeVisible();
+  expect(screen.queryByRole('button', { name: novDay })).toBeNull();
+  expect(screen.queryByLabelText(novDay, { includeHiddenElements: true })).toBeNull();
+  expect(pageProps('2026-10')).toMatchObject({
+    accessibilityElementsHidden: false,
+    importantForAccessibility: 'auto',
+  });
+  expect(pageProps('2026-11')).toMatchObject({
+    accessibilityElementsHidden: true,
+    importantForAccessibility: 'no-hide-descendants',
+  });
+});
+
 test('a right-to-left calendar maps its pages from the right', async () => {
   jest.replaceProperty(I18nManager, 'isRTL', true);
   await open(<TrainingTabScreen />);
