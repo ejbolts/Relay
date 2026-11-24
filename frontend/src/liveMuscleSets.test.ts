@@ -238,11 +238,9 @@ describe('live muscle set credits', () => {
     const resumed = finished('resumed-session', 'workout-7');
     const refused = finished('refused-session');
     expect(
-      finishedMuscleSourcesFor(
-        [{ id: 'workout-3', finished: saved }],
-        [queued, resumed, refused],
-        { 'refused-session': 'Workout name is required.' },
-      ),
+      finishedMuscleSourcesFor([{ id: 'workout-3', finished: saved }], [queued, resumed, refused], {
+        'refused-session': 'Workout name is required.',
+      }),
     ).toEqual([
       { id: 'workout-3', draft: saved },
       { id: 'pending:queued-session', draft: queued },

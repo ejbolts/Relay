@@ -113,7 +113,9 @@ function useLiveSources(userId: string, dashboard: unknown) {
               id: item.id,
               finished: item.finished,
             })),
-            readFinishedWorkouts(deviceStorage).filter((item) => item.pendingSave.userId === userId),
+            readFinishedWorkouts(deviceStorage).filter(
+              (item) => item.pendingSave.userId === userId,
+            ),
             queue.refusals,
           )
         : NO_FINISHED,

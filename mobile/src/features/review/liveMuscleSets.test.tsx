@@ -1,6 +1,6 @@
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
-import type { ReactNode } from 'react';
+import { useLayoutEffect, type ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   addFinishedWorkout,
@@ -17,15 +17,11 @@ import {
   reviewSet,
   reviewWorkout,
 } from '../../../../frontend/src/weeklyReviewFixtures';
-import { apiGet, apiSend } from '../../data/api';
+import { ApiError, apiGet, apiSend } from '../../data/api';
 import { deviceStorage } from '../../data/deviceStorage';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { useLogger, useWorkout, WorkoutProvider } from '../workout/WorkoutProvider';
-import {
-  clearLiveWorkoutSources,
-  publishLiveWorkoutSources,
-  rememberSavedWorkout,
-} from './liveWorkoutSources';
+import { forgetJustSavedWorkouts } from './justSavedWorkouts';
 import { resetNoticeMemory } from './noticeMemory';
 import { WeeklyReviewScreen } from './WeeklyReviewScreen';
 
@@ -208,7 +204,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   memoryKv.clear();
   resetNoticeMemory();
-  clearLiveWorkoutSources();
+  forgetJustSavedWorkouts();
   onlineManager.setOnline(true);
   mockUser = {
     id: 'me',
@@ -258,252 +254,129 @@ beforeEach(() => {
 
 afterEach(() => {
   client.clear();
-  clearLiveWorkoutSources();
+  forgetJustSavedWorkouts();
   onlineManager.setOnline(true);
   memoryKv.clear();
 });
 
-test('includes an unsaved live workout draft in this week and earlier weeks, and drops it on discard', async () => {
-  publishLiveWorkoutSources({
-    owner: 'me',
-    draft: makeDraft(),
-    exercises: [bench],
-    refusals: {},
+/** The server's week once it counts `sets` working sets of Bench Press from `workoutId`. */
+const savedWeek = (start: string, baseChest: number, sets: number, workoutId: string) => {
+  const contribution = (credit: number) => ({
+    workout_id: workoutId,
+    workout_name: 'Push Day',
+    workout_date: today,
+    movement_id: 'm1',
+    exercise_id: 'bench',
+    exercise_name: 'Bench Press',
+    working_sets: sets,
+    credit_per_set: credit,
+    set_credits: sets * credit,
   });
+  return muscleWeek(start, [
+    { muscle_group: 'Chest', raw_sets: baseChest + sets, contributions: [contribution(1)] },
+    { muscle_group: 'Triceps', raw_sets: sets / 2, contributions: [contribution(0.5)] },
+  ]);
+};
 
-  const view = await renderWithClient(<WeeklyReviewScreen />);
-  // Step from Last week to This week.
+const benchMovement = (sets: number) => ({
+  key: 'm-bench',
+  exercise: bench,
+  notes: '',
+  machinePhotosInitialized: true,
+  machinePhotoIds: [],
+  supersetKey: null,
+  isComplete: true,
+  sets: Array.from({ length: sets }, (_, index) => completedSet(`s${index}`)),
+});
+
+let workoutApi: ReturnType<typeof useWorkout>;
+let loggerApi: ReturnType<typeof useLogger>;
+function Harness() {
+  const workout = useWorkout();
+  const logger = useLogger();
+  useLayoutEffect(() => {
+    workoutApi = workout;
+    loggerApi = logger;
+  });
+  return <WeeklyReviewScreen />;
+}
+
+async function renderReview() {
+  const view = await renderWithClient(
+    <WorkoutProvider>
+      <Harness />
+    </WorkoutProvider>,
+  );
   await screen.findByText('Last week');
+  await waitFor(() => expect(loggerApi).not.toBeNull());
+  return view;
+}
+
+const movers = () => within(screen.getByLabelText('Biggest changes on the week before'));
+
+async function showThisWeek() {
   await fireEvent.press(screen.getByRole('button', { name: 'Next week' }));
   expect(screen.getByText('This week')).toBeVisible();
+}
 
-  // Baseline Chest was 2; live draft adds 3 Chest (5 total, -1 vs last week's 6) and 1.5 Triceps (+1.5 vs 0).
-  const movers = () => within(screen.getByLabelText('Biggest changes on the week before'));
+test('counts the workout in progress in its own week and drops it on discard', async () => {
+  const view = await renderReview();
+  await showThisWeek();
+  expect(screen.queryByText('Triceps')).toBeNull();
+
+  await act(async () => workoutApi.start({ kind: 'empty' }));
+  await waitFor(() => expect(loggerApi?.state).not.toBeNull());
+  await act(async () => {
+    loggerApi!.change((current) => ({ ...current, movements: [benchMovement(3)] }));
+  });
+  // Chest 2 + 3 = 5 (one less than last week's 6); Triceps 1.5 from nothing.
   expect(await screen.findByText('Triceps')).toBeVisible();
   expect(movers().getByText(/^1\.5/)).toBeVisible();
   expect(movers().getByText(/^5/)).toBeVisible();
 
-  // Discarding the live workout immediately returns to the dashboard baseline (Chest 2, no Triceps).
+  // Moved to a day last week, it counts there instead: Chest 6 + 3 = 9 against 4.
   await act(async () => {
-    publishLiveWorkoutSources({ owner: 'me', draft: null, exercises: [bench], refusals: {} });
+    loggerApi!.change((current) => ({ ...current, workoutDate: addDays(lastWeek, 3) }));
   });
-  expect(screen.queryByText('Triceps')).toBeNull();
-  expect(movers().getByText(/^2/)).toBeVisible();
-
-  // Logging a live workout on a date in last week updates Last week too.
   await fireEvent.press(screen.getByRole('button', { name: 'Previous week' }));
   expect(screen.getByText('Last week')).toBeVisible();
-  await act(async () => {
-    publishLiveWorkoutSources({
-      owner: 'me',
-      draft: makeDraft({ workoutDate: addDays(lastWeek, 3) }),
-      exercises: [bench],
-      refusals: {},
-    });
-  });
-  // Last week Chest becomes 6 + 3 = 9 (+5 vs weekBefore's 4), Triceps becomes 1.5.
-  expect(await screen.findByText('Triceps')).toBeVisible();
-  expect(movers().getByText(/^9/)).toBeVisible();
+  await waitFor(() => expect(movers().getByText(/^9/)).toBeVisible());
+
+  await act(async () => workoutApi.discard());
+  await waitFor(() => expect(screen.queryByText('Triceps')).toBeNull());
+  expect(movers().getByText(/^6/)).toBeVisible();
 
   await view.unmount();
 });
 
-test('counts a queued finished workout, excludes refused ones, and never double-counts once saved', async () => {
-  const finished = makeFinished('me', { clientSessionId: FINISHED_SESSION_ID });
-  addFinishedWorkout(finished, deviceStorage);
-  publishLiveWorkoutSources({
-    owner: 'me',
-    draft: null,
-    exercises: [bench],
-    refusals: {},
-    waiting: 1,
+test('counts a finished workout waiting to sync, but not a refused one', async () => {
+  const REFUSED_SESSION_ID = '33333333-3333-4333-8333-333333333333';
+  addFinishedWorkout(makeFinished('me', { clientSessionId: REFUSED_SESSION_ID }), deviceStorage);
+  addFinishedWorkout(makeFinished('me', { clientSessionId: FINISHED_SESSION_ID }), deviceStorage);
+  // Another account's queue on this phone never counts.
+  addFinishedWorkout(
+    makeFinished('other', { clientSessionId: '44444444-4444-4444-8444-444444444444' }),
+    deviceStorage,
+  );
+  // The server refuses the first; the second is still sending.
+  jest.mocked(apiSend).mockImplementation((path, method, body) => {
+    if (path === '/api/workouts' && method === 'POST')
+      return (body as { client_session_id: string }).client_session_id === REFUSED_SESSION_ID
+        ? Promise.reject(new ApiError(422, 'Workout name is required.'))
+        : new Promise(() => undefined);
+    return Promise.resolve({});
   });
-
-  const view = await renderWithClient(<WeeklyReviewScreen />);
-  const movers = () => within(screen.getByLabelText('Biggest changes on the week before'));
-  await screen.findByText('Last week');
-  await fireEvent.press(screen.getByRole('button', { name: 'Next week' }));
+  const view = await renderReview();
+  await waitFor(() => expect(workoutApi.queue.refusals).toHaveProperty([REFUSED_SESSION_ID]));
+  await showThisWeek();
+  // Chest 2 + 3 from the one still sending, Triceps 1.5.
   expect(await screen.findByText('Triceps')).toBeVisible();
-  // Chest = 2 baseline + 3 finished = 5.
-  expect(movers().getByText(/^5/)).toBeVisible();
-
-  // A refused workout waits for review and is not counted as saved.
-  await act(async () => {
-    publishLiveWorkoutSources({
-      owner: 'me',
-      draft: null,
-      exercises: [bench],
-      refusals: { [FINISHED_SESSION_ID]: 'Check sets.' },
-      waiting: 1,
-    });
-  });
-  expect(screen.queryByText('Triceps')).toBeNull();
-  expect(movers().getByText(/^2/)).toBeVisible();
-
-  // Once the server confirms the save, keep counting it while dashboard is still stale.
-  memoryKv.clear();
-  const dashboardState = client.getQueryState(['dashboard', today]);
-  await act(async () => {
-    publishLiveWorkoutSources({
-      owner: 'me',
-      draft: null,
-      exercises: [bench],
-      refusals: {},
-      waiting: 0,
-    });
-    rememberSavedWorkout(
-      'me',
-      'saved-w99',
-      finished,
-      serverDashboard,
-      dashboardState?.dataUpdatedAt ?? 0,
-    );
-  });
-  expect(await screen.findByText('Triceps')).toBeVisible();
-  expect(movers().getByText(/^5/)).toBeVisible();
-
-  // When the refreshed dashboard arrives with saved-w99, Chest stays 5 (never 8).
-  serverDashboard = {
-    ...serverDashboard,
-    weekly_sets: muscleWeek(thisWeek, [
-      {
-        muscle_group: 'Chest',
-        raw_sets: 5,
-        contributions: [
-          {
-            workout_id: 'saved-w99',
-            workout_name: 'Push Day',
-            workout_date: today,
-            movement_id: 'm1',
-            exercise_id: 'bench',
-            exercise_name: 'Bench Press',
-            working_sets: 3,
-            credit_per_set: 1,
-            set_credits: 3,
-          },
-        ],
-      },
-      {
-        muscle_group: 'Triceps',
-        raw_sets: 1.5,
-        contributions: [
-          {
-            workout_id: 'saved-w99',
-            workout_name: 'Push Day',
-            workout_date: today,
-            movement_id: 'm1',
-            exercise_id: 'bench',
-            exercise_name: 'Bench Press',
-            working_sets: 3,
-            credit_per_set: 0.5,
-            set_credits: 1.5,
-          },
-        ],
-      },
-    ]),
-  } as unknown as DashboardData;
-  await act(async () => {
-    await client.refetchQueries({ queryKey: ['dashboard'] });
-  });
-  expect(movers().getByText(/^5/)).toBeVisible();
   expect(movers().getByText(/^1\.5/)).toBeVisible();
-
+  expect(movers().getByText(/^5/)).toBeVisible();
   await view.unmount();
 });
 
-test('does not double-count a resumed saved workout or leak another account’s draft', async () => {
-  serverDashboard = {
-    ...serverDashboard,
-    weekly_sets: muscleWeek(thisWeek, [
-      {
-        muscle_group: 'Chest',
-        raw_sets: 5,
-        contributions: [
-          {
-            workout_id: 'w-existing',
-            workout_name: 'Push Day',
-            workout_date: today,
-            movement_id: 'm1',
-            exercise_id: 'bench',
-            exercise_name: 'Bench Press',
-            working_sets: 3,
-            credit_per_set: 1,
-            set_credits: 3,
-          },
-        ],
-      },
-      {
-        muscle_group: 'Triceps',
-        raw_sets: 1.5,
-        contributions: [
-          {
-            workout_id: 'w-existing',
-            workout_name: 'Push Day',
-            workout_date: today,
-            movement_id: 'm1',
-            exercise_id: 'bench',
-            exercise_name: 'Bench Press',
-            working_sets: 3,
-            credit_per_set: 0.5,
-            set_credits: 1.5,
-          },
-        ],
-      },
-    ]),
-  } as unknown as DashboardData;
-
-  // Resuming w-existing with 4 completed sets replaces its 3 sets (Chest becomes 6, not 9).
-  publishLiveWorkoutSources({
-    owner: 'me',
-    draft: makeDraft({
-      resumingWorkoutId: 'w-existing',
-      movements: [
-        {
-          key: 'm-bench',
-          exerciseId: 'bench',
-          notes: '',
-          machinePhotoIds: [],
-          supersetKey: null,
-          sets: [completedSet('s1'), completedSet('s2'), completedSet('s3'), completedSet('s4')],
-        },
-      ],
-    }),
-    exercises: [bench],
-    refusals: {},
-  });
-
-  const view = await renderWithClient(<WeeklyReviewScreen />);
-  const movers = () => within(screen.getByLabelText('Biggest changes on the week before'));
-  await screen.findByText('Last week');
-  await fireEvent.press(screen.getByRole('button', { name: 'Next week' }));
-  // Chest = 6 (same as last week's 6 -> 0 change, not a mover); Triceps = 2 (+2 vs 0).
-  expect(await screen.findByText('Triceps')).toBeVisible();
-  expect(movers().getByText(/^2/)).toBeVisible();
-
-  // Another account's draft is ignored completely.
-  await act(async () => {
-    publishLiveWorkoutSources({
-      owner: 'other-user',
-      draft: makeDraft(),
-      exercises: [bench],
-      refusals: {},
-    });
-  });
-  // Back to baseline Triceps = 1.5.
-  expect(movers().getByText(/^1\.5/)).toBeVisible();
-
-  await view.unmount();
-});
-
-test('updates WeeklyReviewScreen end-to-end through WorkoutProvider from live sets to saved workout', async () => {
-  let workoutApi!: ReturnType<typeof useWorkout>;
-  let loggerApi!: ReturnType<typeof useLogger>;
-  function Harness() {
-    workoutApi = useWorkout();
-    loggerApi = useLogger();
-    return <WeeklyReviewScreen />;
-  }
-
+test('counts a finished workout once while it saves and until the dashboard includes it', async () => {
   let resolveSave!: (workout: TrackedWorkout) => void;
   jest.mocked(apiSend).mockImplementation((path, method, body) => {
     if (path === '/api/active-workout' && method === 'PUT')
@@ -518,105 +391,60 @@ test('updates WeeklyReviewScreen end-to-end through WorkoutProvider from live se
       });
     return Promise.resolve({});
   });
+  const view = await renderReview();
+  await showThisWeek();
 
-  const view = await renderWithClient(
-    <WorkoutProvider>
-      <Harness />
-    </WorkoutProvider>,
-  );
-
-  await screen.findByText('Last week');
-  await waitFor(() => expect(loggerApi).not.toBeNull());
-  await fireEvent.press(screen.getByRole('button', { name: 'Next week' }));
-  expect(screen.getByText('This week')).toBeVisible();
-  expect(screen.queryByText('Triceps')).toBeNull();
-
-  // Start a workout and log 2 working sets of Bench Press.
-  await act(async () => {
-    workoutApi.start({ kind: 'empty' });
-  });
+  await act(async () => workoutApi.start({ kind: 'empty' }));
   await waitFor(() => expect(loggerApi?.state).not.toBeNull());
   await act(async () => {
-    loggerApi!.change((current) => ({
-      ...current,
-      movements: [
-        {
-          key: 'm-bench',
-          exercise: bench,
-          notes: '',
-          machinePhotoIds: [],
-          machinePhotosInitialized: true,
-          supersetKey: null,
-          isComplete: true,
-          sets: [completedSet('s1'), completedSet('s2')],
-        },
-      ],
-    }));
+    loggerApi!.change((current) => ({ ...current, movements: [benchMovement(2)] }));
   });
-
-  // Live sets immediately show in Weekly review: Chest = 2 + 2 = 4, Triceps = 1.
+  // Chest 2 + 2 = 4, Triceps 1.
   expect(await screen.findByText('Triceps')).toBeVisible();
-  expect(screen.getByText(/^4/)).toBeVisible();
+  expect(movers().getByText(/^4/)).toBeVisible();
 
-  // Finish the workout: while POST /api/workouts is in flight, sets stay counted once.
+  // Finished and sending: counted once, from the queue.
   await act(async () => {
-    const result = await loggerApi!.finish();
-    expect(result).toEqual({ ok: true });
+    expect(await loggerApi!.finish()).toEqual({ ok: true });
   });
-  expect(screen.getByText('Triceps')).toBeVisible();
-  expect(screen.getByText(/^4/)).toBeVisible();
+  expect(loggerApi?.state).toBeNull();
+  expect(movers().getByText(/^4/)).toBeVisible();
 
-  // Server confirms the save; before dashboard refreshes, sets stay counted once.
-  serverDashboard = {
-    ...serverDashboard,
-    weekly_sets: muscleWeek(thisWeek, [
-      {
-        muscle_group: 'Chest',
-        raw_sets: 4,
-        contributions: [
-          {
-            workout_id: 'saved-live',
-            workout_name: 'Push Day',
-            workout_date: today,
-            movement_id: 'm1',
-            exercise_id: 'bench',
-            exercise_name: 'Bench Press',
-            working_sets: 2,
-            credit_per_set: 1,
-            set_credits: 2,
-          },
-        ],
-      },
-      {
-        muscle_group: 'Triceps',
-        raw_sets: 1,
-        contributions: [
-          {
-            workout_id: 'saved-live',
-            workout_name: 'Push Day',
-            workout_date: today,
-            movement_id: 'm1',
-            exercise_id: 'bench',
-            exercise_name: 'Bench Press',
-            working_sets: 2,
-            credit_per_set: 0.5,
-            set_credits: 1,
-          },
-        ],
-      },
-    ]),
-  } as unknown as DashboardData;
-  await act(async () => {
-    resolveSave({
-      ...reviewWorkout('saved-live', today, [reviewSet(100, 5), reviewSet(100, 5)]),
-      client_session_id: loggerApi?.finished?.sessionId ?? null,
-    });
-  });
-
-  // Dashboard refetches and still shows Chest 4, Triceps 1 (never 6 / 2).
+  // Saved, with the dashboard's refresh still on its way: still counted once.
+  let resolveDashboard: ((value: DashboardData) => void) | undefined;
+  const fallback = jest.mocked(apiGet).getMockImplementation()!;
+  jest.mocked(apiGet).mockImplementation((path: string, signal?: AbortSignal) =>
+    path.startsWith('/api/dashboard')
+      ? new Promise<DashboardData>((resolve) => {
+          resolveDashboard = resolve;
+        })
+      : fallback(path, signal),
+  );
+  const savedWorkout = {
+    ...reviewWorkout('saved-live', today, [reviewSet(100, 5), reviewSet(100, 5)]),
+    client_session_id: loggerApi?.finished?.sessionId ?? null,
+  };
+  await act(async () => resolveSave(savedWorkout));
   await waitFor(() => expect(loggerApi?.finished?.savedId).toBe('saved-live'));
+  expect(workoutApi.queue.waiting).toBe(0);
   expect(screen.getByText('Triceps')).toBeVisible();
-  expect(screen.getByText(/^4/)).toBeVisible();
+  expect(movers().getByText(/^4/)).toBeVisible();
+
+  // The refreshed dashboard counts it itself: 4, never 6.
+  serverWorkouts = [...serverWorkouts, savedWorkout];
+  await waitFor(() => expect(resolveDashboard).toBeDefined());
+  const refreshed = savedWeek(thisWeek, 2, 2, 'saved-live');
+  await act(async () =>
+    resolveDashboard!({ ...serverDashboard, weekly_sets: refreshed } as DashboardData),
+  );
+  await waitFor(() =>
+    expect(client.getQueryData<DashboardData>(['dashboard', today])?.weekly_sets).toEqual(
+      refreshed,
+    ),
+  );
+  expect(screen.getByText('Triceps')).toBeVisible();
+  expect(movers().getByText(/^4/)).toBeVisible();
+  expect(movers().queryByText(/^6/)).toBeNull();
 
   await view.unmount();
 });

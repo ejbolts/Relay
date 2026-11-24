@@ -36,7 +36,9 @@ export function rememberSavedWorkout(
   const dashboard = client.getQueryData(queryKeys.dashboard(localDate())) ?? null;
   // Entries for another account, or pinned to a dashboard since replaced, are no longer needed.
   saved = [
-    ...saved.filter((item) => item.owner === owner && item.id !== id && item.dashboard === dashboard),
+    ...saved.filter(
+      (item) => item.owner === owner && item.id !== id && item.dashboard === dashboard,
+    ),
     { owner, id, finished, dashboard },
   ];
   for (const listener of listeners) listener();

@@ -972,7 +972,10 @@ function AppContent() {
   const finishedMuscleSources = useMemo(
     () =>
       finishedMuscleSourcesFor(
-        awaitingDashboard.map((preview) => ({ id: preview.workout.id, finished: preview.finished })),
+        awaitingDashboard.map((preview) => ({
+          id: preview.workout.id,
+          finished: preview.finished,
+        })),
         finishedQueue.items,
         finishedQueue.refusals,
       ),
