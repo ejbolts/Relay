@@ -9,6 +9,7 @@ secret, can then save the channel (`POST /api/youtube/finish`).
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import hmac
 import json
@@ -59,6 +60,8 @@ from .models import (
 )
 from .server_settings import load_runtime_settings
 from .youtube import GoogleYouTubeUploader, YouTubeUploadError
+
+logger = logging.getLogger(__name__)
 
 YOUTUBE_SCOPES = [
     "https://www.googleapis.com/auth/youtube.upload",
@@ -452,11 +455,19 @@ def forget_flow(db: Session, state_hash: str) -> None:
 
 
 def may_connect(db: Session, settings: Settings, user_id: str, session_id: str) -> bool:
-    """Whether a sign-in is still open, and its account may still upload videos."""
-    session = db.get(UserSession, session_id)
+    """Whether a sign-in is still open, and its account may still upload videos.
+
+    Reads columns, never ORM objects, so a request's cached `UserSession` or `User` can't answer
+    for rows another request has since changed or deleted.
+    """
+    session = db.execute(
+        select(UserSession.user_id, UserSession.expires_at).where(UserSession.id == session_id)
+    ).first()
     if session is None or session.user_id != user_id or as_utc(session.expires_at) <= utc_now():
         return False
-    user = db.get(User, user_id)
+    user = db.execute(
+        select(User.disabled_at, User.must_change_password, User.is_admin).where(User.id == user_id)
+    ).first()
     if user is None or user.disabled_at is not None or user.must_change_password:
         return False
     return can_upload_videos(user, load_runtime_settings(db, settings).video_uploads)
@@ -487,32 +498,41 @@ def exchange_code(
         return "failed", None, None, None
 
 
-def save_connection(
-    db: Session,
-    user_id: str,
-    encrypted: str,
-    channel_id: str,
-    title: str,
-    allowed: Callable[[], bool] = lambda: True,
-) -> str:
-    """Stores a channel for an account; `allowed` is checked again right before the write."""
+def write_connection(db: Session, user_id: str, encrypted: str, channel_id: str, title: str) -> str:
+    """Stores a channel for an account, unless a video is still processing for another one.
+    The caller commits."""
+    current = db.execute(
+        select(YouTubeConnection.channel_id).where(YouTubeConnection.user_id == user_id)
+    ).first()
+    if current and current.channel_id != channel_id and has_active_job(db, user_id):
+        return "busy"
+    values = {
+        "channel_id": channel_id,
+        "channel_title": title,
+        "encrypted_credentials": encrypted,
+        "needs_reconnect": False,
+    }
+    if current:
+        db.execute(
+            update(YouTubeConnection)
+            .where(YouTubeConnection.user_id == user_id)
+            .values(**values)
+            .execution_options(synchronize_session=False)
+        )
+    else:
+        db.add(YouTubeConnection(user_id=user_id, **values))
+    return "connected"
+
+
+def save_connection(db: Session, user_id: str, encrypted: str, channel_id: str, title: str) -> str:
+    """The web's save, right after its own callback."""
     try:
-        connection = db.get(YouTubeConnection, user_id)
-        if connection and connection.channel_id != channel_id and has_active_job(db, user_id):
-            return "busy"
-        if not allowed():
-            db.rollback()
-            return "expired"
-        if connection is None:
-            connection = YouTubeConnection(user_id=user_id)
-            db.add(connection)
-        connection.channel_id, connection.channel_title = channel_id, title
-        connection.encrypted_credentials, connection.needs_reconnect = encrypted, False
+        result = write_connection(db, user_id, encrypted, channel_id, title)
         db.commit()
     except Exception:
         db.rollback()
         return "failed"
-    return "connected"
+    return result
 
 
 def app_callback(
@@ -525,7 +545,11 @@ def app_callback(
     code: str,
     error: str,
 ) -> RedirectResponse:
-    """Exchanges the code for the app, keeping the result sealed until the app finishes."""
+    """Exchanges the code for the app, keeping the result sealed until the app finishes.
+
+    Every result, failures included, waits under the state for the app's proof, so a link that
+    merely looks like the return can never report one.
+    """
     return_url = flow["return_url"]
     if flow["stage"] != "started" or as_utc(row.expires_at) <= utc_now():
         # Expired, or already returned: a finished flow is left for the app to complete.
@@ -540,27 +564,26 @@ def app_callback(
         forget_flow(db, row.state_hash)
         return app_redirect(return_url, "expired")
     if error or not code or len(code) > 4096:
-        forget_flow(db, row.state_hash)
-        return app_redirect(return_url, "cancelled" if error == "access_denied" else "failed")
-    result, credentials, channel_id, title = exchange_code(settings, state, flow["verifier"], code)
-    if credentials is None:
-        forget_flow(db, row.state_hash)
-        return app_redirect(return_url, result)
-    # Nothing is saved yet. The channel waits, sealed, for the app that holds the secret.
+        outcome: dict = {"result": "cancelled" if error == "access_denied" else "failed"}
+    else:
+        result, credentials, channel_id, title = exchange_code(
+            settings, state, flow["verifier"], code
+        )
+        outcome = {"result": result}
+        if credentials is not None:
+            # Nothing is saved yet. The channel waits, sealed, for the app that holds the secret.
+            outcome |= {
+                "credentials": encrypt_credentials(settings, row.user_id, credentials),
+                "channel_id": channel_id,
+                "channel_title": title,
+            }
     completion = secrets.token_urlsafe(32)
-    exchanged = {
-        **claimed,
-        "stage": "exchanged",
-        "code_hash": hash_token(completion),
-        "credentials": encrypt_credentials(settings, row.user_id, credentials),
-        "channel_id": channel_id,
-        "channel_title": title,
-    }
+    settled = {**claimed, **outcome, "stage": "settled", "code_hash": hash_token(completion)}
     if not replace_flow(
         db,
         row.state_hash,
         claimed_sealed,
-        seal_flow(settings, exchanged),
+        seal_flow(settings, settled),
         expires_at=utc_now() + timedelta(minutes=STATE_MINUTES),
     ):
         return app_redirect(return_url, "expired")
@@ -621,46 +644,112 @@ class FinishRead(BaseModel):
     connection: YouTubeConnectionRead
 
 
-@router.post("/finish", response_model=FinishRead, dependencies=[Depends(require_video_access)])
-def finish(
-    body: FinishRequest, context: AuthContextDependency, db: Db, settings: AppSettings
-) -> FinishRead:
-    """Saves an app flow's channel: only the starting sign-in, with the code and the secret."""
-    result = "expired"
-    row, flow = find_state(db, settings, body.state)
-    proof = hashlib.sha256(body.verifier.encode()).hexdigest()
-    if (
-        row is not None
-        and flow is not None
-        and flow["stage"] == "exchanged"
-        and row.user_id == context.user.id
-        and row.session_id == context.session.id
-        and as_utc(row.expires_at) > utc_now()
-        and hmac.compare_digest(hash_token(body.code), str(flow.get("code_hash", "")))
-        and hmac.compare_digest(proof, flow["challenge"])
-    ):
+def finish_app_flow(
+    db: Session,
+    settings: Settings,
+    row: YouTubeOAuthState,
+    flow: dict,
+    user_id: str,
+    session_id: str,
+) -> str:
+    """Claims a settled flow and saves its channel in one transaction.
+
+    The claim is a write, so SQLite holds its write lock from here to the commit: a sign-out,
+    a lost video permission or a disconnect on another device either lands before the claim
+    (and the reads below see it) or waits until this save is done.
+    """
+    db.commit()  # Start from a clean transaction, so the claim below begins the write.
+    try:
         claimed = db.execute(
             delete(YouTubeOAuthState)
             .where(
                 YouTubeOAuthState.state_hash == row.state_hash,
                 YouTubeOAuthState.encrypted_verifier == row.encrypted_verifier,
+                YouTubeOAuthState.user_id == user_id,
+                YouTubeOAuthState.session_id == session_id,
+                YouTubeOAuthState.expires_at > utc_now(),
             )
             .returning(YouTubeOAuthState.state_hash)
             .execution_options(synchronize_session=False)
         ).scalar_one_or_none()
+        if claimed is None:
+            db.rollback()
+            return "expired"
+        if "credentials" not in flow:
+            # Google's answer was a failure: it is confirmed now, and the attempt is used up.
+            db.commit()
+            return str(flow.get("result", "failed"))
+        if not may_connect(db, settings, user_id, session_id):
+            db.commit()
+            return "expired"
+        result = write_connection(
+            db, user_id, flow["credentials"], flow["channel_id"], flow["channel_title"]
+        )
         db.commit()
-        if claimed is not None:
-            user_id, session_id = context.user.id, context.session.id
-            result = save_connection(
-                db,
-                user_id,
-                flow["credentials"],
-                flow["channel_id"],
-                flow["channel_title"],
-                # Signing out or losing video access meanwhile stops the save.
-                allowed=lambda: may_connect(db, settings, user_id, session_id),
-            )
-    return FinishRead(result=result, connection=read_connection(db, settings, context.user.id))
+        return result
+    except Exception:
+        db.rollback()
+        return "failed"
+
+
+@router.post("/finish", response_model=FinishRead, dependencies=[Depends(require_video_access)])
+def finish(
+    body: FinishRequest, context: AuthContextDependency, db: Db, settings: AppSettings
+) -> FinishRead:
+    """Ends an app flow: only the starting sign-in, with the code and the secret, gets its result,
+    and only then is a channel saved."""
+    result = "expired"
+    user_id, session_id = context.user.id, context.session.id
+    row, flow = find_state(db, settings, body.state)
+    proof = hashlib.sha256(body.verifier.encode()).hexdigest()
+    if (
+        row is not None
+        and flow is not None
+        and flow["stage"] == "settled"
+        and row.user_id == user_id
+        and row.session_id == session_id
+        and hmac.compare_digest(hash_token(body.code), str(flow.get("code_hash", "")))
+        and hmac.compare_digest(proof, flow["challenge"])
+    ):
+        result = finish_app_flow(db, settings, row, flow, user_id, session_id)
+    return FinishRead(result=result, connection=read_connection(db, settings, user_id))
+
+
+def remove_expired_states(session_factory: Callable[[], Session]) -> int:
+    """Deletes expired attempts, with any Google credentials an abandoned one still holds."""
+    with session_factory() as db:
+        removed = db.execute(
+            delete(YouTubeOAuthState).where(YouTubeOAuthState.expires_at <= utc_now())
+        ).rowcount
+        db.commit()
+        return removed
+
+
+class OAuthStateSweeper:
+    """Removes expired connection attempts on startup and every few minutes after."""
+
+    interval_seconds = 300
+
+    def __init__(self, session_factory: Callable[[], Session]) -> None:
+        self.session_factory = session_factory
+        self._task: asyncio.Task[None] | None = None
+
+    def start(self) -> None:
+        self._task = asyncio.create_task(self._run())
+
+    async def stop(self) -> None:
+        if self._task:
+            self._task.cancel()
+            await asyncio.gather(self._task, return_exceptions=True)
+
+    async def _run(self) -> None:
+        while True:
+            try:
+                await asyncio.to_thread(remove_expired_states, self.session_factory)
+            except Exception:
+                # The next sweep tries again; expired attempts can't be used meanwhile.
+                logger.warning("Could not remove expired YouTube connection attempts")
+            await asyncio.sleep(self.interval_seconds)
 
 
 @router.delete("/connection", response_model=YouTubeConnectionRead)

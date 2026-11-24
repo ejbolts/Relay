@@ -121,7 +121,7 @@ describe('system links', () => {
         path: 'relay-mobile://youtube-return?youtube=connected',
         initial: true,
       }),
-    ).toBe('/videos');
+    ).toBe('/settings/youtube?attempt=lost');
     expect(redirectSystemPath({ path: 'https://gym.example.com/#videos', initial: true })).toBe(
       '/videos',
     );

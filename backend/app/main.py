@@ -95,7 +95,12 @@ from .training_metrics import rebuild_personal_records
 from .username_reminder_requests import admin_username_request_router, username_request_router
 from .weight_mapping import router as weight_mapping_router
 from .workout_type_exercises import router as workout_type_exercises_router
-from .youtube_connections import OAuthAccessLogFilter, YouTubeConnectionError, require_connection
+from .youtube_connections import (
+    OAuthAccessLogFilter,
+    OAuthStateSweeper,
+    YouTubeConnectionError,
+    require_connection,
+)
 from .youtube_connections import router as youtube_router
 
 logging.basicConfig(
@@ -184,6 +189,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         workout_reminders = ActiveWorkoutReminderScheduler(SessionLocal, settings)
         app.state.workout_reminders = workout_reminders
         workout_reminders.start()
+        # Expired YouTube connection attempts, with any Google credentials an abandoned one holds.
+        oauth_states = OAuthStateSweeper(SessionLocal)
+        oauth_states.start()
         app.state.processor = processor
         app.state.rest_timer_notifications = rest_timer_notifications
         await processor.start()
@@ -191,6 +199,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             yield
         finally:
             await workout_reminders.stop()
+            await oauth_states.stop()
             await rest_timer_notifications.stop()
             await processor.stop()
 

@@ -17,20 +17,23 @@ import { showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { videoApi, videoKeys, useYouTubeConnection } from './videoData';
 import { useAccountGuard } from '../admin/accountGuard';
-import { connectYouTubeInApp } from './youtubeConnect';
+import { YOUTUBE_INTERRUPTED, connectYouTubeInApp } from './youtubeConnect';
 
 /**
  * The web's YouTube channel panel. Connecting opens Google in a sign-in browser over the app,
  * which returns to the app with the same results the web shows after Google. A server from before
  * the app's sign-in can only connect on the web, so the card hands off there instead.
  * `canConnect` is false in Settings for an account that can't upload videos, as on the web.
+ * `notice` starts the card with a message, such as an attempt lost when Relay was closed.
  */
 export function YouTubeCard({
   disabled = false,
   canConnect = true,
+  notice = null,
 }: {
   disabled?: boolean;
   canConnect?: boolean;
+  notice?: string | null;
 }) {
   const client = useQueryClient();
   const connection = useYouTubeConnection();
@@ -39,7 +42,7 @@ export function YouTubeCard({
   const guard = useAccountGuard();
   const [working, setWorking] = useState(false);
   const [connecting, setConnecting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(notice);
   const data = connection.data ?? null;
 
   useEffect(() => {
@@ -78,6 +81,11 @@ export function YouTubeCard({
       void client.invalidateQueries({ queryKey: videoKeys.youtube });
       if (outcome.kind === 'web') {
         if (check.open()) confirmConnectOnWeb();
+        return;
+      }
+      // An unconfirmed return link says nothing about what happened on Google.
+      if (outcome.kind === 'interrupted') {
+        if (check.open()) setError(YOUTUBE_INTERRUPTED);
         return;
       }
       // Closing the sign-in browser leaves the connection as it was, like declining on Google.

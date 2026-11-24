@@ -8,9 +8,9 @@ import { webLinkRoute } from '../session/webLinks';
  * send a signed-out visitor to Sign in.
  */
 export function redirectSystemPath({ path, initial }: { path: string; initial: boolean }) {
-  // The YouTube sign-in browser's return belongs to the screen that opened it. If the app was
-  // closed meanwhile, open Videos, where the connection shows.
-  if (isYouTubeReturn(path)) return initial ? '/videos' : null;
+  // The YouTube sign-in browser's return belongs to the attempt that opened it. If Relay was
+  // closed meanwhile, that attempt and its secret are gone: say so, so the person tries again.
+  if (isYouTubeReturn(path)) return initial ? '/settings/youtube?attempt=lost' : null;
   const link = webLinkRoute(path);
   const route = link?.route ?? path;
   // Any invite link, with or without a code, replaces an earlier link's code.
