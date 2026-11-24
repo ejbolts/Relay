@@ -498,7 +498,7 @@ test('a trained day or a lift filters the profile’s history on All sessions, a
     'accessibilityState',
     expect.objectContaining({ selected: true }),
   );
-  expect(screen.getByRole('button', { name: 'Filter workouts, 2 set' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Filter workouts, 1 filter on' })).toBeVisible();
   expect(screen.getByRole('button', { name: dayName })).toHaveProp(
     'accessibilityState',
     expect.objectContaining({ selected: true }),
@@ -520,7 +520,7 @@ test('a trained day or a lift filters the profile’s history on All sessions, a
     ),
   );
   expect(await screen.findByText('Heavy Push Session')).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Filter workouts, 1 set' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Filter workouts, 1 filter on' })).toBeVisible();
   expect(screen.getByRole('button', { name: dayName })).toHaveProp(
     'accessibilityState',
     expect.objectContaining({ selected: false }),
@@ -890,4 +890,46 @@ test('head to head handles offline paused lifts, early taps on live loads, and c
     expect(screen.queryByText('Head to head')).toBeNull();
   });
   await view.unmount();
+});
+
+test('head to head shows Try again on network or server errors, while hiding on 403/404', async () => {
+  let outcome: 'network' | 'server' | '403' | '404' | 'ok' = 'network';
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/alex/lifts') {
+      if (outcome === 'network')
+        throw new Error('Could not reach Relay. Check your connection, then try again.');
+      if (outcome === 'server') throw new ApiError(503, 'Relay is temporarily unavailable.');
+      if (outcome === '403') throw new ApiError(403, 'Forbidden');
+      if (outcome === '404') throw new ApiError(404, 'Not found');
+      return { selected: [], lifts: LIFTS } satisfies LiftComparisons;
+    }
+    throw new Error(`Unexpected GET ${path}`);
+  });
+
+  // 1. Network error keeps the card with ErrorState and Try again, and recovers on retry.
+  const netView = await show(<Stats profile={fullProfile} />);
+  expect(
+    await screen.findByText('Could not reach Relay. Check your connection, then try again.'),
+  ).toBeVisible();
+  expect(screen.getByText('Head to head')).toBeVisible();
+  outcome = 'ok';
+  await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  expect(await screen.findByRole('button', { name: 'Choose lifts' })).toBeVisible();
+  await netView.unmount();
+
+  // 2. Other server error (503) also keeps the card with ErrorState.
+  outcome = 'server';
+  const serverView = await show(<Stats profile={fullProfile} />);
+  expect(await screen.findByText('Relay is temporarily unavailable.')).toBeVisible();
+  expect(screen.getByText('Head to head')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
+  await serverView.unmount();
+
+  // 3. Plain 403 refusal and 404 (server without endpoint) still hide the card.
+  for (const hiddenOutcome of ['403', '404'] as const) {
+    outcome = hiddenOutcome;
+    const hiddenView = await show(<Stats profile={fullProfile} />);
+    await waitFor(() => expect(screen.queryByText('Head to head')).toBeNull());
+    await hiddenView.unmount();
+  }
 });

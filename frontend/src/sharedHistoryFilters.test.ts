@@ -9,6 +9,7 @@ import {
   sharedFiltersForTarget,
   sharedFiltersOnDay,
   sharedWorkoutFilterCount,
+  sharedWorkoutFilterLabel,
   sharedWorkoutQuery,
   sharedWorkoutTypeChoices,
   sharedWorkoutTypeValue,
@@ -19,12 +20,32 @@ import type { WorkoutType } from './types';
 const target = { id: 'w1', workout_date: '2026-03-04' };
 
 describe('shared history filters', () => {
-  it('counts the filters set', () => {
+  it('counts the filters set, treating a date range as one filter', () => {
     expect(sharedWorkoutFilterCount(NO_SHARED_WORKOUT_FILTERS)).toBe(0);
-    expect(sharedWorkoutFilterCount(sharedFiltersOnDay('2026-03-04'))).toBe(2);
+    expect(sharedWorkoutFilterCount(sharedFiltersOnDay('2026-03-04'))).toBe(1);
+    expect(
+      sharedWorkoutFilterCount({ ...NO_SHARED_WORKOUT_FILTERS, start_date: '2026-03-01' }),
+    ).toBe(1);
+    expect(sharedWorkoutFilterCount({ ...NO_SHARED_WORKOUT_FILTERS, end_date: '2026-03-31' })).toBe(
+      1,
+    );
+    expect(
+      sharedWorkoutFilterCount({
+        ...NO_SHARED_WORKOUT_FILTERS,
+        start_date: '2026-03-01',
+        end_date: '2026-03-31',
+        exercise_id: 'bench',
+      }),
+    ).toBe(2);
     expect(
       sharedWorkoutFilterCount({ ...sharedFiltersForExercise('bench'), workout_type_id: 't1' }),
     ).toBe(2);
+  });
+
+  it('formats the filter button accessibility label', () => {
+    expect(sharedWorkoutFilterLabel(0)).toBe('Filter workouts');
+    expect(sharedWorkoutFilterLabel(1)).toBe('Filter workouts, 1 filter on');
+    expect(sharedWorkoutFilterLabel(2)).toBe('Filter workouts, 2 filters on');
   });
 
   it('opens on a linked workout’s day, or unfiltered', () => {

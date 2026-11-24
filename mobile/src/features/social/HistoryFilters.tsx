@@ -7,6 +7,7 @@ import {
   SHARED_FILTER_DATES_ERROR,
   sharedFilterDatesInvalid,
   sharedWorkoutFilterCount,
+  sharedWorkoutFilterLabel,
   sharedWorkoutTypeChoices,
   sharedWorkoutTypeValue,
   withSharedWorkoutType,
@@ -39,7 +40,7 @@ export function HistoryFilterButton({
       icon="filter"
       badge={active > 0 ? String(active) : null}
       pressed={active > 0}
-      accessibilityLabel={active > 0 ? `Filter workouts, ${active} set` : 'Filter workouts'}
+      accessibilityLabel={sharedWorkoutFilterLabel(active)}
       onPress={onPress}
     />
   );

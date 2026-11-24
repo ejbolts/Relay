@@ -21,9 +21,20 @@ export const NO_SHARED_WORKOUT_FILTERS: SharedWorkoutFilters = {
   end_date: '',
 };
 
-/** How many workout filters are set. */
+/** How many workout filters are set (a date range counts as one, whether one or both ends are set). */
 export function sharedWorkoutFilterCount(filters: SharedWorkoutFilters): number {
-  return Object.values(filters).filter(Boolean).length;
+  let count = 0;
+  if (filters.category || filters.workout_type_id) count += 1;
+  if (filters.exercise_id) count += 1;
+  if (filters.machine_photo_id) count += 1;
+  if (filters.start_date || filters.end_date) count += 1;
+  return count;
+}
+
+/** Accessible label for the filter button beside a profile's Workouts title. */
+export function sharedWorkoutFilterLabel(count: number): string {
+  if (count <= 0) return 'Filter workouts';
+  return `Filter workouts, ${count} ${count === 1 ? 'filter' : 'filters'} on`;
 }
 
 /** The filters that show one day's workouts, as a calendar day or a linked workout opens them. */
