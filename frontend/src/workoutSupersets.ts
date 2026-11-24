@@ -87,3 +87,11 @@ export function nextInSupersetRound<T extends RoundMovement>(
   const groupKey = movements.find((item) => item.key === movementKey)?.supersetKey;
   return groupKey ? (supersetRoundPending(movements, groupKey)[0] ?? null) : null;
 }
+
+/**
+ * The exercise is the next one owed a set in its group's round in progress: the logger opens a
+ * folded card for it and marks it "Up next".
+ */
+export function isSupersetUpNext<T extends RoundMovement>(movements: T[], movementKey: string) {
+  return nextInSupersetRound(movements, movementKey)?.key === movementKey;
+}

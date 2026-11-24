@@ -54,6 +54,14 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => children,
 }));
+// The set rows' drag gesture needs a gesture root the test doesn't render.
+jest.mock('react-native-gesture-handler', () => ({
+  ...jest.requireActual<typeof import('react-native-gesture-handler')>(
+    'react-native-gesture-handler',
+  ),
+  usePanGesture: (config: unknown) => config,
+  GestureDetector: ({ children }: { children: ReactNode }) => children,
+}));
 jest.mock('./machineMedia', () => ({
   ...jest.requireActual<typeof import('./machineMedia')>('./machineMedia'),
   askForMachinePhoto: jest.fn(),

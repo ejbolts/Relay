@@ -46,6 +46,7 @@ import {
   pauseWorkout,
   resumeWorkout,
   RUNNING,
+  withElapsedSeconds,
   type WorkoutPause,
 } from '../../../../frontend/src/workoutPause';
 import {
@@ -738,17 +739,32 @@ export function restoreSet(
   });
 }
 
+/** Where a set moves: one place up or down, or into another set's place. */
+export type SetMove = { by: -1 | 1 } | { to: string };
+
+/**
+ * Moves a set, found by its key in the workout as it is now, so a menu or drag opened before
+ * the sets changed (a set deleted on another device, say) moves the right set or nothing. Both
+ * places are checked before anything moves.
+ */
 export function moveSet(
   state: LoggerState,
   movementKey: string,
-  from: number,
-  to: number,
+  setKey: string,
+  move: SetMove,
 ): LoggerState {
-  return mapMovement(state, movementKey, (movement) =>
-    to < 0 || to >= movement.sets.length
-      ? movement
-      : { ...movement, sets: reorder(movement.sets, from, to) },
-  );
+  const movement = state.movements.find((item) => item.key === movementKey);
+  if (!movement) return state;
+  const from = movement.sets.findIndex((item) => item.key === setKey);
+  const to =
+    'by' in move ? from + move.by : movement.sets.findIndex((item) => item.key === move.to);
+  if (from < 0 || to < 0 || from >= movement.sets.length || to >= movement.sets.length)
+    return state;
+  if (from === to) return state;
+  return mapMovement(state, movementKey, (current) => ({
+    ...current,
+    sets: reorder(current.sets, from, to),
+  }));
 }
 
 export function moveMovement(state: LoggerState, index: number, direction: -1 | 1): LoggerState {
@@ -818,6 +834,19 @@ export function togglePause(state: LoggerState, now: number): LoggerState {
       state.pause.pausedAt === null
         ? pauseWorkout(state.pause, now)
         : resumeWorkout(state.pause, now),
+  };
+}
+
+/**
+ * Corrects the live clock to read `seconds` now, for a timer started late or left running, as
+ * the web's clock correction does: the session keeps its real start (and its draft identity),
+ * a pause stays as it is, and a fixed total kept from an earlier finish attempt gives way to it.
+ */
+export function correctWorkoutTime(state: LoggerState, seconds: number, now: number): LoggerState {
+  return {
+    ...state,
+    durationOverrideMinutes: null,
+    pause: withElapsedSeconds(state.pause, state.startedAt, seconds, now),
   };
 }
 

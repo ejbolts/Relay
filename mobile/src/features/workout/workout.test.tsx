@@ -33,6 +33,13 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => children,
 }));
+jest.mock('react-native-gesture-handler', () => ({
+  ...jest.requireActual<typeof import('react-native-gesture-handler')>(
+    'react-native-gesture-handler',
+  ),
+  usePanGesture: (config: unknown) => config,
+  GestureDetector: ({ children }: { children: ReactNode }) => children,
+}));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),

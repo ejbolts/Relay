@@ -318,8 +318,8 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         change((latest) => deleteSet(latest, movementKey, setKey));
       },
-      moveSet: (movementKey, from, to) =>
-        change((latest) => moveSet(latest, movementKey, from, to)),
+      moveSet: (movementKey, setKey, move) =>
+        change((latest) => moveSet(latest, movementKey, setKey, move)),
       setKind: (movementKey, setKey, kind: SetKind) =>
         change((latest) => setSetKind(latest, movementKey, setKey, kind)),
       completeExercise: (movementKey, isComplete) =>

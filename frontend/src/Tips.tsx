@@ -14,8 +14,15 @@ import { PopupDialog } from './PopupDialog';
 import { useToast } from './Toast';
 import { openTipTarget } from './tipActions';
 import {
-  canShowTip,
-  countTipEvent,
+  hintMayShow,
+  priorityTipWaiting,
+  shownTipEnds,
+  tipEventRequest,
+  TIP_QUIET_MS,
+  waitingNudge,
+  type TipEnvironment,
+} from './tipScheduling';
+import {
   freshTips,
   isPriorityTip,
   isQuietTip,
@@ -30,7 +37,7 @@ import {
 import { loadTips, saveTips } from './tipsStorage';
 import './tips.css';
 
-type Environment = { page: string; ready: boolean; resting: boolean; workoutCount: number };
+type Environment = TipEnvironment;
 type Candidate = { id: TipId; element: HTMLElement; until: number };
 const noop = () => {};
 interface TipsApi {
@@ -155,10 +162,16 @@ export function TipsProvider({
           completedSetAt.current = Date.now();
           return;
         }
-        const next = countTipEvent(stateRef.current, name);
+        const { state: next, request } = tipEventRequest(
+          stateRef.current,
+          name,
+          tip,
+          threshold,
+          env.current.page,
+          Date.now(),
+        );
         write(next);
-        if (tip && next.counts[name] >= threshold && !next.seen[tip])
-          pending.current.set(tip, { until: Date.now() + 120000, page: env.current.page });
+        if (tip && request) pending.current.set(tip, request);
       },
       learn(id: TipId) {
         if (stateRef.current.seen[id] === 'learned') return;
@@ -226,8 +239,6 @@ export function TipsProvider({
         current = env.current;
       const available =
         !!account && current.ready && stateRef.current.enabled && quiet(toastShowing.current);
-      // Before a first saved workout, only priority tips may appear.
-      const established = current.workoutCount > 0;
       if (!available) {
         quietSince.current = 0;
         if (activeRef.current) api.close();
@@ -237,41 +248,38 @@ export function TipsProvider({
       if (activeRef.current) {
         const id = activeRef.current;
         if (
-          activePage.current !== current.page ||
-          (TIP_DEFINITIONS[id].surface === 'nudge' &&
-            (now - activeSince.current >= 12000 ||
-              (current.page === 'log' &&
-                !current.resting &&
-                now - completedSetAt.current >= 20000)))
+          shownTipEnds(
+            id,
+            { page: activePage.current, at: activeSince.current },
+            current,
+            completedSetAt.current,
+            now,
+          )
         ) {
           api.close();
           return;
         }
         // A waiting priority nudge replaces an ordinary tip that is already showing.
-        const priorityWaiting = [...pending.current].some(
-          ([pendingId, request]) =>
-            isPriorityTip(pendingId) &&
-            request.until > now &&
-            request.page === current.page &&
-            canShowTip(stateRef.current, pendingId, now),
-        );
-        if (isPriorityTip(id) || !priorityWaiting) return;
+        if (
+          isPriorityTip(id) ||
+          !priorityTipWaiting(pending.current, stateRef.current, current.page, now)
+        )
+          return;
         api.close();
       }
-      if (now - quietSince.current < 1500) return;
-      const nudge = [...pending.current].find(
-        ([id, request]) =>
-          request.until > now &&
-          (established || isPriorityTip(id)) &&
-          (id === 'back' || request.page === current.page) &&
-          canShowTip(stateRef.current, id, now) &&
-          (current.page !== 'log' || current.resting || now - completedSetAt.current < 20000),
+      if (now - quietSince.current < TIP_QUIET_MS) return;
+      const nudge = waitingNudge(
+        pending.current,
+        stateRef.current,
+        current,
+        completedSetAt.current,
+        now,
       );
       const candidate = [...candidates.current.entries()].find(
         ([, { id, element }]) =>
-          established && canShowTip(stateRef.current, id, now) && visible(element),
+          hintMayShow(stateRef.current, id, current, now) && visible(element),
       );
-      const id = nudge?.[0] ?? candidate?.[1].id;
+      const id = nudge ?? candidate?.[1].id;
       if (!id) return;
       // Read again before claiming: another tab may have spent today's shared allowance.
       const stored = loadTips(account!);
