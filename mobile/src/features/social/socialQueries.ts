@@ -29,6 +29,7 @@ import type {
   WorkoutReactions,
 } from '../../../../frontend/src/types';
 import { ApiError } from '../../data/api';
+import { sessionEpoch } from '../../session/sessionEpoch';
 import { accessRevoked, socialApi } from './socialApi';
 
 /** Every Social query sits under `social`, so a friendship change refreshes all of them. */
@@ -161,6 +162,7 @@ export function sharedProfileQuery(id: string) {
 }
 
 export function useSharedProfile(id: string) {
+  useMemberAccessWatch();
   return useQuery(sharedProfileQuery(id));
 }
 
@@ -173,17 +175,34 @@ function isMemberData(query: Query) {
 }
 
 /**
- * Whether the server has said this member is off limits: their profile is unavailable, locked or
- * friends-only now, or one of their requests was just refused.
+ * Where a member's refusal is kept: outside `social`, so it outlives their evicted data and a
+ * Social refresh, and in the query cache, which every sign-in and sign-out clears.
+ */
+const memberAccessKey = (id: string) => ['memberAccess', id] as const;
+
+interface MemberRefusal {
+  error: ApiError;
+  /** The session it was recorded in; a refusal never carries over to another session. */
+  epoch: number;
+}
+
+function currentRefusal(value: MemberRefusal | null | undefined) {
+  return value && value.epoch === sessionEpoch() ? value.error : null;
+}
+
+/** The server's refusal of this member's data in this session, until their profile confirms access. */
+export function memberRefusal(client: QueryClient, id: string) {
+  return currentRefusal(client.getQueryData<MemberRefusal | null>(memberAccessKey(id)));
+}
+
+/**
+ * Whether the server has said this member is off limits: a recorded refusal, or a profile that is
+ * friends-only now.
  */
 function memberLocked(client: QueryClient, id: string) {
-  const cache = client.getQueryCache();
-  const profile = cache.find<SharedProfile>({ queryKey: socialKeys.profile(id), exact: true });
-  if (profile && (accessRevoked(profile.state.error) || profile.state.data?.can_view === false))
-    return true;
-  return cache
-    .findAll({ queryKey: socialKeys.profile(id) })
-    .some((query) => isMemberData(query) && accessRevoked(query.state.error));
+  if (memberRefusal(client, id)) return true;
+  const profile = client.getQueryData<SharedProfile>(socialKeys.profile(id));
+  return profile?.can_view === false;
 }
 
 /** Drops a locked member's data that nothing on screen is using. */
@@ -198,27 +217,39 @@ function dropLockedMemberData(client: QueryClient, id: string) {
 const watchedClients = new WeakSet<QueryClient>();
 
 /**
- * When the server refuses a member's lifts or workouts (`403 friend_required`, `404
- * profile_not_found` or `403 sharing_required`), revalidates their profile so its locked or
- * unavailable state takes over, and evicts their cached data as soon as no screen is using it.
- * A screen still showing a refused query hides its data itself (`accessRevoked(query.error)`).
- * Transient failures keep the cache.
+ * When the server refuses a member's profile, lifts or workouts (`403 friend_required`, `404
+ * profile_not_found` or `sharing_required`), records the refusal for this session and member, and
+ * revalidates their profile. While it stands, every view of the member hides their data (read it
+ * with `useMemberRefusal`), and their cached data is evicted as soon as no screen is using it.
+ * Later network errors don't lift it; only a freshly fetched profile that is viewable does, or a
+ * new session. Without a refusal, network errors keep the cache.
  */
 export function watchMemberAccess(client: QueryClient) {
   if (watchedClients.has(client)) return;
   watchedClients.add(client);
+  client.setQueryDefaults(['memberAccess'], { gcTime: Infinity, staleTime: Infinity });
   client.getQueryCache().subscribe((event) => {
     const id = event.query.queryKey[2];
     if (event.query.queryKey[0] !== 'social' || event.query.queryKey[1] !== 'profile') return;
     if (typeof id !== 'string') return;
+    const isProfile = event.query.queryKey.length === 3;
     if (event.type === 'updated') {
-      if (event.action.type !== 'error' && event.action.type !== 'success') return;
-      if (
-        event.action.type === 'error' &&
-        isMemberData(event.query) &&
-        accessRevoked(event.action.error)
-      ) {
-        void client.invalidateQueries({ queryKey: socialKeys.profile(id), exact: true });
+      const { action } = event;
+      if (action.type === 'error') {
+        if (!accessRevoked(action.error)) return;
+        const refusal: MemberRefusal = { error: action.error as ApiError, epoch: sessionEpoch() };
+        client.setQueryData(memberAccessKey(id), refusal);
+        if (!isProfile) {
+          void client.invalidateQueries({ queryKey: socialKeys.profile(id), exact: true });
+        }
+      } else if (action.type === 'success') {
+        // Only the server confirming access lifts a refusal, not data written locally.
+        const viewable = isProfile && !action.manual && (action.data as SharedProfile)?.can_view;
+        if (viewable && memberRefusal(client, id)) {
+          client.setQueryData(memberAccessKey(id), null);
+        }
+      } else {
+        return;
       }
     } else if (event.type !== 'observerRemoved' && event.type !== 'observerOptionsUpdated') {
       return;
@@ -231,6 +262,22 @@ export function watchMemberAccess(client: QueryClient) {
 function useMemberAccessWatch() {
   const client = useQueryClient();
   useEffect(() => watchMemberAccess(client), [client]);
+}
+
+/**
+ * The server's refusal of this member's data in this session, or null. While it's set, hide
+ * everything of theirs, whatever the cache holds and whatever the latest error says.
+ */
+export function useMemberRefusal(id: string) {
+  useMemberAccessWatch();
+  const { data } = useQuery<MemberRefusal | null>({
+    queryKey: memberAccessKey(id),
+    queryFn: () => null,
+    enabled: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+  return currentRefusal(data);
 }
 
 /** Your best lifts beside a member's; fails silently on profiles or servers without it. */

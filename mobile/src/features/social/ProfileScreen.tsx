@@ -58,6 +58,7 @@ import {
   refreshSocial,
   socialKeys,
   sharedWorkoutList,
+  useMemberRefusal,
   useSharedProfile,
   useSharedWorkouts,
 } from './socialQueries';
@@ -77,9 +78,13 @@ export function ProfileScreen({
   const { colors, space } = useTheme();
   const client = useQueryClient();
   const query = useSharedProfile(profileId);
+  // A refusal of this member's data (a 403 or 404 on any of it) locks the profile until it is
+  // confirmed viewable again, even if the cached profile or a later network error says otherwise.
+  const refusal = useMemberRefusal(profileId);
+  const error = refusal ?? query.error;
   const [blocked, setBlocked] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const profile = query.data;
+  const profile = refusal && query.data ? { ...query.data, can_view: false } : query.data;
   const title = profile?.is_you ? 'Profile' : (profile?.display_name ?? '');
   useInvite(profileId, invite, profile);
 
@@ -95,8 +100,8 @@ export function ProfileScreen({
   let body;
   if (blocked && profile)
     body = <BlockedPanel profile={profile} onUnblocked={() => setBlocked(false)} />;
-  else if (sharingRequired(query.error)) body = <LockedPanel invite={invite} />;
-  else if (notFound(query.error)) body = <Unavailable state="missing" name="" invite={invite} />;
+  else if (sharingRequired(error)) body = <LockedPanel invite={invite} />;
+  else if (notFound(error)) body = <Unavailable state="missing" name="" invite={invite} />;
   else if (!profile)
     body = query.error ? (
       <ErrorState message={errorMessage(query.error)} onRetry={() => void query.refetch()} />

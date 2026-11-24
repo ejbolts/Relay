@@ -22,7 +22,7 @@ import { Sheet } from '../../../ui/Sheet';
 import { useTheme } from '../../../ui/theme';
 import { Avatar } from '../Avatar';
 import { accessRevoked } from '../socialApi';
-import { useSharedLifts } from '../socialQueries';
+import { useMemberRefusal, useSharedLifts } from '../socialQueries';
 import { LiftPickerSheet } from './LiftPickerSheet';
 import { ProfileWorkoutsSheet } from './ProfileWorkoutsSheet';
 
@@ -47,8 +47,9 @@ export function HeadToHeadCard({
   const unit = useWeightUnit();
   const user = useUser();
   const query = useSharedLifts(member.id, true);
+  const refusal = useMemberRefusal(member.id);
   // Refused by the server: hide what was cached at once; the profile above locks itself.
-  const revoked = accessRevoked(query.error);
+  const revoked = !!refusal || accessRevoked(query.error);
   const lifts = revoked ? null : (query.data?.lifts ?? null);
   const offline = waitingForNetwork(query);
   const [selected, setSelected] = useState<string[]>([]);

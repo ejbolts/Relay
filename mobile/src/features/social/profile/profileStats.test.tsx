@@ -312,6 +312,11 @@ async function show(children: ReactNode) {
   client = new QueryClient({
     defaultOptions: { queries: { retry: false, gcTime: Infinity } },
   });
+  return show2(children);
+}
+
+/** Renders with the current client, as when a screen is opened again in the same session. */
+async function show2(children: ReactNode) {
   const wrap = (node: ReactNode) => (
     <SafeAreaProvider
       initialMetrics={{
@@ -505,10 +510,12 @@ test('revoked access (403 friend_required) evicts cached workouts, suppresses pr
   await view.unmount();
 });
 
-test('a refused refetch hides the cached day in the open sheet, and evicts it once closed', async () => {
+test('a refused refetch hides the cached day in the open sheet, a failing Try again keeps it hidden, and it is evicted once closed', async () => {
   let refused = false;
+  let unreachable = false;
   const sharedGet = jest.mocked(apiGet).getMockImplementation()!;
   jest.mocked(apiGet).mockImplementation(async (path: string, ...rest) => {
+    if (unreachable) throw new Error('Could not reach Relay.');
     if (refused && path.startsWith('/api/sharing/profiles/alex/workouts')) {
       throw new ApiError(403, 'Alex Morgan shares with friends only.', 'friend_required');
     }
@@ -529,12 +536,124 @@ test('a refused refetch hides the cached day in the open sheet, and evicts it on
   expect(screen.queryByText('Shared bench cues')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Open workout' })).toBeNull();
 
+  // Try again while the connection fails: the network error replaces the refusal on the query,
+  // but the recorded refusal still hides everything from before.
+  unreachable = true;
+  await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  expect(await screen.findByText('Could not reach Relay.')).toBeVisible();
+  expect(screen.queryByText('Heavy Push Session')).toBeNull();
+  expect(screen.queryByText('Shared bench cues')).toBeNull();
+
   await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
   await waitFor(() =>
     expect(
       client.getQueryData(socialKeys.workouts('alex', undefined, trainedInMonth)),
     ).toBeUndefined(),
   );
+  await view.unmount();
+});
+
+/** Alex's API with switches for a refused workouts request and an unreachable server. */
+function refusableAlex() {
+  const state = { refused: false, unreachable: false, profileUnreachable: false };
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (state.unreachable) throw new Error('Could not reach Relay.');
+    if (path === '/api/sharing/profiles/alex') {
+      if (state.profileUnreachable) throw new Error('Could not reach Relay.');
+      return fullProfile;
+    }
+    if (path === '/api/sharing/profiles/alex/lifts') {
+      return { selected: [], lifts: LIFTS } satisfies LiftComparisons;
+    }
+    if (path.startsWith('/api/sharing/profiles/alex/workouts')) {
+      if (state.refused) {
+        throw new ApiError(403, 'Alex Morgan shares with friends only.', 'friend_required');
+      }
+      if (!path.includes('start_date=')) {
+        return { total: 0, workouts: [], personal_records: [], reactions: {} };
+      }
+      return { total: 1, workouts: [sampleWorkout], personal_records: [], reactions: {} };
+    }
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  return state;
+}
+
+test('a refusal outlives a failed profile refresh and leaving the profile, until the profile confirms access', async () => {
+  const alex = refusableAlex();
+  const view = await show(<ProfileScreen profileId="alex" />);
+  const day = await screen.findByRole('button', {
+    name: `View 1 workout for ${prettyDate(trainedInMonth)}`,
+  });
+  await waitFor(() => expect(client.getQueryData(socialKeys.lifts('alex'))).toBeDefined());
+  await fireEvent.press(day);
+  expect(await screen.findByText('Shared bench cues')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+
+  // The day is refused, and the profile refresh that follows fails on the network.
+  alex.refused = true;
+  alex.profileUnreachable = true;
+  await fireEvent.press(day);
+  expect(await screen.findByText('FRIENDS ONLY')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Choose lifts' })).toBeNull();
+  expect(screen.queryByText('Head to head')).toBeNull();
+  expect(screen.queryByText('Shared bench cues')).toBeNull();
+  await waitFor(() => {
+    expect(client.getQueryData(socialKeys.lifts('alex'))).toBeUndefined();
+    expect(
+      client.getQueryData(socialKeys.workouts('alex', undefined, trainedInMonth)),
+    ).toBeUndefined();
+  });
+
+  // Leave and come back while the profile still can't be refreshed: still locked, and the cached
+  // lifts are gone rather than offered again.
+  await view.unmount();
+  const again = await show2(<ProfileScreen profileId="alex" />);
+  expect(await screen.findByText('FRIENDS ONLY')).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Choose lifts' })).toBeNull();
+  expect(jest.mocked(apiGet)).not.toHaveBeenLastCalledWith(
+    '/api/sharing/profiles/alex/lifts',
+    expect.anything(),
+  );
+
+  // A freshly fetched, viewable profile lifts the refusal.
+  alex.refused = false;
+  alex.profileUnreachable = false;
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: socialKeys.profile('alex'), exact: true });
+  });
+  expect(await screen.findByRole('button', { name: 'Choose lifts' })).toBeVisible();
+  expect(screen.queryByText('FRIENDS ONLY')).toBeNull();
+  await again.unmount();
+});
+
+test('after a refusal, a refresh that fails on the network brings none of the earlier workouts back', async () => {
+  const alex = refusableAlex();
+  const view = await show(<ProfileScreen profileId="alex" />);
+  const day = await screen.findByRole('button', {
+    name: `View 1 workout for ${prettyDate(trainedInMonth)}`,
+  });
+  await fireEvent.press(day);
+  expect(await screen.findByText('Shared bench cues')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+
+  alex.refused = true;
+  alex.profileUnreachable = true;
+  await fireEvent.press(day);
+  expect(await screen.findByText('FRIENDS ONLY')).toBeVisible();
+
+  // Every Social query is retried while the server can't be reached.
+  alex.unreachable = true;
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['social'] });
+  });
+  await waitFor(() =>
+    expect(client.getQueryState(socialKeys.profile('alex'))?.fetchStatus).toBe('idle'),
+  );
+  expect(screen.getByText('FRIENDS ONLY')).toBeVisible();
+  expect(screen.queryByText('Heavy Push Session')).toBeNull();
+  expect(screen.queryByText('Shared bench cues')).toBeNull();
+  expect(screen.queryByText('Head to head')).toBeNull();
   await view.unmount();
 });
 

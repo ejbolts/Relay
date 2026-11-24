@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { sharedHistoryEmpty } from '../../../../../frontend/src/sharedProfileDisplay';
@@ -12,7 +13,12 @@ import { workoutColor } from '../../training/useTrainingContext';
 import { WorkoutCard, WorkoutDetails } from '../../training/WorkoutCard';
 import { useSocialNavigation } from '../navigation';
 import { accessRevoked } from '../socialApi';
-import { sharedWorkoutList, useSharedWorkouts } from '../socialQueries';
+import {
+  sharedWorkoutList,
+  socialKeys,
+  useMemberRefusal,
+  useSharedWorkouts,
+} from '../socialQueries';
 
 /**
  * A member's workouts for one calendar day or one head-to-head lift, shown in a sheet so
@@ -43,9 +49,11 @@ export function ProfileWorkoutsSheet({
   const filterKey = `${profileId}:${date ?? ''}:${exerciseId ?? ''}`;
   // A lone workout opens by default for each day or lift; a tap to collapse or open wins.
   const [choice, setChoice] = useState<{ key: string; openId: string | null } | null>(null);
+  const client = useQueryClient();
   const query = useSharedWorkouts(profileId, { date, exerciseId, enabled: visible });
+  const refusal = useMemberRefusal(profileId);
   // Refused by the server: show none of the cached workouts; the profile behind locks itself.
-  const revoked = accessRevoked(query.error);
+  const revoked = !!refusal || accessRevoked(query.error);
   const { workouts, records } = revoked
     ? { workouts: [], records: [] }
     : sharedWorkoutList(query.data);
@@ -72,6 +80,12 @@ export function ProfileWorkoutsSheet({
         <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void query.refetch()} />
       ) : query.isPending ? (
         <Loading label="Loading workouts" />
+      ) : revoked ? (
+        // Try again asks the profile too: only it can lift a refusal.
+        <ErrorState
+          message={errorMessage(query.error ?? refusal)}
+          onRetry={() => void client.invalidateQueries({ queryKey: socialKeys.profile(profileId) })}
+        />
       ) : query.error && !workouts.length ? (
         <ErrorState message={errorMessage(query.error)} onRetry={() => void query.refetch()} />
       ) : workouts.length === 0 ? (
