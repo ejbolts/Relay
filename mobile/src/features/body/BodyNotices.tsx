@@ -138,29 +138,37 @@ function MaintenanceTipVisit({
   useEffect(() => {
     if (shown) return;
     let quietSince = 0;
-    // Where the card would appear is on screen, as the web's check of a tip's slot.
-    let inView = false;
+    let tick = 0;
+    let ended = false;
+    // Each tick measures where the card would appear and decides when that measurement returns,
+    // so a showing is only spent while the place is on screen (as the web's slot check) and the
+    // moment is quiet. An answer that arrives after a newer tick, or after the visit, is ignored.
     const timer = setInterval(() => {
-      const now = Date.now();
       const view = anchor.current;
-      const windowHeight = Dimensions.get('window').height;
-      if (view)
-        tipAnchorLayout.measure(view, ({ y, width }) => {
-          inView = width > 0 && y >= 0 && y < windowHeight - BOTTOM_RESERVED;
-        });
-      if (!quiet() || !inView) {
-        quietSince = 0;
-        return;
-      }
-      quietSince ||= now;
-      if (now - quietSince < TIP_QUIET_MS) return;
-      const environment = { page: 'body', ready: true, resting: false, workoutCount };
-      if (!hintMayShow(get(), 'maintenance', environment, now)) return;
-      // It counts towards its showings and spends the day's tip, as on the web.
-      recordShowing('maintenance', now);
-      setShown(true);
+      if (!view) return;
+      const asked = ++tick;
+      tipAnchorLayout.measure(view, ({ y, width }) => {
+        if (ended || asked !== tick) return;
+        const now = Date.now();
+        const inView = width > 0 && y >= 0 && y < Dimensions.get('window').height - BOTTOM_RESERVED;
+        if (!quiet() || !inView) {
+          quietSince = 0;
+          return;
+        }
+        quietSince ||= now;
+        if (now - quietSince < TIP_QUIET_MS) return;
+        const environment = { page: 'body', ready: true, resting: false, workoutCount };
+        if (!hintMayShow(get(), 'maintenance', environment, now)) return;
+        ended = true;
+        // It counts towards its showings and spends the day's tip, as on the web.
+        recordShowing('maintenance', now);
+        setShown(true);
+      });
     }, TICK_MS);
-    return () => clearInterval(timer);
+    return () => {
+      ended = true;
+      clearInterval(timer);
+    };
   }, [shown, workoutCount, get, recordShowing]);
   const status = tips.state.seen.maintenance;
   if (!shown)
