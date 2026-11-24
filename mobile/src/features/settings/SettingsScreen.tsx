@@ -43,6 +43,7 @@ import { HelpSettings } from '../guides/HelpSettings';
 import { PhoneAlertsRow, TestAlertRow, usePhoneAlerts } from '../push/PhoneAlertsRows';
 // B5 (data): imports, exports and backups.
 import { DataSection } from '../data';
+import { YouTubeSettingsRow } from '../videos/YouTubeSettings';
 import { AdminSettingsSection } from '../admin';
 import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
@@ -261,6 +262,8 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
           </SettingsSection>
           <SettingsSection anchor="data" onPlaced={placed}>
             <DataSection />
+            {/* The web shows its YouTube panel with the data settings. */}
+            <YouTubeSettingsRow />
           </SettingsSection>
           <SettingsSection anchor="account" onPlaced={placed}>
             <AccountSection />

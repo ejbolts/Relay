@@ -28,6 +28,7 @@ from .active_workouts import (
     snapshot,
 )
 from .admin import admin_router
+from .app_links import router as app_links_router
 from .app_notices import router as app_notices_router
 from .auth import (
     CsrfOriginMiddleware,
@@ -97,7 +98,12 @@ from .training_metrics import rebuild_personal_records
 from .username_reminder_requests import admin_username_request_router, username_request_router
 from .weight_mapping import router as weight_mapping_router
 from .workout_type_exercises import router as workout_type_exercises_router
-from .youtube_connections import OAuthAccessLogFilter, YouTubeConnectionError, require_connection
+from .youtube_connections import (
+    OAuthAccessLogFilter,
+    OAuthStateSweeper,
+    YouTubeConnectionError,
+    require_connection,
+)
 from .youtube_connections import router as youtube_router
 
 logging.basicConfig(
@@ -186,6 +192,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         workout_reminders = ActiveWorkoutReminderScheduler(SessionLocal, settings)
         app.state.workout_reminders = workout_reminders
         workout_reminders.start()
+        # Expired YouTube connection attempts, with any Google credentials an abandoned one holds.
+        oauth_states = OAuthStateSweeper(SessionLocal)
+        oauth_states.start()
         app.state.processor = processor
         app.state.rest_timer_notifications = rest_timer_notifications
         # Native alerts are sent only while the app runs, by its own workers. They stop even if
@@ -200,6 +209,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 await rest_timer_notifications.stop()
                 await processor.stop()
         finally:
+            await oauth_states.stop()
             expo_dispatcher.stop()
 
     # The interactive docs describe every endpoint, so a public server keeps them off by default.
@@ -769,6 +779,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(machine_settings_router)
     app.include_router(weight_mapping_router)
     app.include_router(youtube_router)
+    app.include_router(app_links_router)
 
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if frontend_dist.is_dir():

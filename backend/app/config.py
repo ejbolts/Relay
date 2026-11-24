@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -29,6 +30,9 @@ class Settings(BaseSettings):
     youtube_web_client_secret_path: Path = Path("secrets/youtube-web-client-secret.json")
     youtube_credentials_key_path: Path = Path("secrets/youtube-credentials.key")
     youtube_redirect_uri: str | None = None
+    # Development only: comma-separated `host:port` values whose Expo Go links (exp://, exps://)
+    # may receive the app's YouTube return. A release app always returns to relay-mobile://.
+    youtube_app_dev_return_hosts: str | None = None
     youtube_privacy_status: str = "unlisted"
     youtube_mock_mode: bool = True
     youtube_title_template: str = "{session_name} — {workout_date}"
@@ -57,6 +61,15 @@ class Settings(BaseSettings):
     # Starting value for the admin console's video switch; the console overrides it.
     video_uploads: Literal["off", "admin", "everyone"] = "admin"
     api_docs: bool = False
+    # The native app's identity, for the files that let friend links open the installed app.
+    # Each file is served only once its values are set; the defaults serve neither.
+    ios_team_id: str | None = Field(default=None, pattern=r"^[A-Z0-9]{10}$")
+    ios_bundle_id: str | None = Field(default=None, pattern=r"^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$")
+    android_package: str | None = Field(
+        default=None, pattern=r"^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$"
+    )
+    # Comma-separated SHA-256 signing certificate fingerprints, as `AB:CD:...` (32 pairs).
+    android_sha256_fingerprints: str | None = None
 
     @field_validator("youtube_privacy_status")
     @classmethod
@@ -71,6 +84,31 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             value = value.strip()
         return value or None
+
+    @field_validator(
+        "ios_team_id",
+        "ios_bundle_id",
+        "android_package",
+        "android_sha256_fingerprints",
+        mode="before",
+    )
+    @classmethod
+    def blank_app_identity_is_none(cls, value: str | None) -> str | None:
+        if isinstance(value, str):
+            value = value.strip()
+        return value or None
+
+    @field_validator("android_sha256_fingerprints")
+    @classmethod
+    def validate_fingerprints(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        prints = [part.strip().upper() for part in value.split(",") if part.strip()]
+        if not prints or not all(
+            re.fullmatch(r"[0-9A-F]{2}(:[0-9A-F]{2}){31}", part) for part in prints
+        ):
+            raise ValueError("must be SHA-256 fingerprints such as AB:CD:… (32 pairs each)")
+        return ",".join(prints)
 
     @field_validator("youtube_title_template", "youtube_description_template", mode="before")
     @classmethod

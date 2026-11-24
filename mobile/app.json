@@ -19,6 +19,7 @@
       "expo-font",
       "expo-asset",
       "expo-sharing",
+      "expo-web-browser",
       "expo-notifications",
       "expo-video",
       [

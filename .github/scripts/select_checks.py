@@ -18,6 +18,7 @@ DOC_FILES = {"README.md", "CONTRIBUTING.md", "AGENTS.md", "CLAUDE.md", "LICENSE"
 # affect both clients. A repository test below guards new APIRouter modules.
 CONTRACT_MODULES = {
     "account_archive.py",
+    "app_links.py",
     "app_notices.py",
     "accounts.py",
     "admin.py",

@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError, currentUser, request, signIn, signOut } from '../data/api';
-import { friendInviteFromUrl } from './friendInvite';
+import { captureFriendInvite, friendInviteFromUrl } from './friendInvite';
 import { SessionProvider, useSession } from './SessionProvider';
 import { SignInScreen } from './SignInScreen';
 
@@ -218,4 +218,22 @@ test('a session that ends elsewhere returns to sign-in and drops cached data', a
   );
   expect(await screen.findByLabelText('Username')).toBeVisible();
   expect(client.getQueryData(['dashboard', 'today'])).toBeUndefined();
+});
+
+test('an invite link that arrives while Create account is open updates its code', async () => {
+  jest.mocked(currentUser).mockRejectedValue(signedOut());
+  jest.mocked(request).mockResolvedValue({ registration_open: true, invite_code_required: true });
+  await open();
+  await fireEvent.press(await screen.findByRole('tab', { name: 'Create account' }));
+  const field = () => screen.getByLabelText('Invite code');
+  await act(async () =>
+    captureFriendInvite('relay-mobile://social/profile/friend-a?invite=1', 'first-code'),
+  );
+  expect(field()).toHaveDisplayValue('first-code');
+  // Typing is kept until another link arrives.
+  await fireEvent.changeText(field(), 'typed-code');
+  expect(field()).toHaveDisplayValue('typed-code');
+  // A friend's link without a code clears the earlier friend's code, as on the web.
+  await act(async () => captureFriendInvite('relay-mobile://social/profile/friend-b?invite=1'));
+  expect(field()).toHaveDisplayValue('');
 });
