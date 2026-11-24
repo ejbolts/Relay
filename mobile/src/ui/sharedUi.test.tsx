@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { AccessibilityInfo, Platform, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, Keyboard, Platform, StyleSheet, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { COLOUR_THEMES } from '../../../frontend/src/appearanceChoices';
 import { AccountHeaderActions } from './AccountHeaderActions';
@@ -7,6 +7,7 @@ import { Button, IconButton, splitStyle } from './components';
 import { Segmented, Slider, sliderValues, snapToStep, stepSlider } from './controls';
 import { DateField, TimeField } from './DateField';
 import { SheetFrame } from './navigation';
+import { Sheet } from './Sheet';
 import { palettes, themedPalette } from './theme';
 import { ToastHost, showToast, toastAnnouncement } from './Toast';
 
@@ -499,5 +500,57 @@ describe('Slider limits', () => {
       expect.objectContaining({ disabled: true }),
     );
     warn.mockRestore();
+  });
+});
+
+describe('Sheet keyboard avoidance', () => {
+  it('lifts the Android sheet by the keyboard height and resets when it hides, leaving iOS unchanged', async () => {
+    Platform.OS = 'android';
+    const listeners: Record<string, ((event: { endCoordinates: { height: number } }) => void)[]> =
+      {};
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((
+      event: string,
+      cb: (e: { endCoordinates: { height: number } }) => void,
+    ) => {
+      (listeners[event] ??= []).push(cb);
+      return { remove: jest.fn() };
+    }) as unknown as typeof Keyboard.addListener);
+
+    const view = await wrap(
+      <Sheet visible onClose={jest.fn()} title="Workout time so far">
+        <Text>Minutes</Text>
+      </Sheet>,
+    );
+    const modal = () => screen.container.queryAll((node) => node.type === 'Modal')[0];
+    const backdropStyle = () => {
+      const child = modal().children[0];
+      if (!child || typeof child === 'string') throw new Error('Sheet has no backdrop');
+      return StyleSheet.flatten(child.props.style);
+    };
+    expect(backdropStyle()?.paddingBottom).toBeUndefined();
+
+    await act(async () => {
+      listeners.keyboardDidShow?.forEach((cb) => cb({ endCoordinates: { height: 290 } }));
+    });
+    expect(backdropStyle()?.paddingBottom).toBe(290);
+
+    await act(async () => {
+      listeners.keyboardDidHide?.forEach((cb) => cb({ endCoordinates: { height: 0 } }));
+    });
+    expect(backdropStyle()?.paddingBottom).toBeUndefined();
+    await view.unmount();
+
+    // iOS keeps its native pageSheet without keyboard listeners.
+    spy.mockClear();
+    Platform.OS = 'ios';
+    const iosView = await wrap(
+      <Sheet visible onClose={jest.fn()} title="Workout time so far">
+        <Text>Minutes</Text>
+      </Sheet>,
+    );
+    expect(spy).not.toHaveBeenCalled();
+    expect(modal().props.presentationStyle).toBe('pageSheet');
+    await iosView.unmount();
+    spy.mockRestore();
   });
 });
