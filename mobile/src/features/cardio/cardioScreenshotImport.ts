@@ -61,14 +61,14 @@ export async function openCardioImportMenu(
  * multipart upload can stream it on both Android and iOS. Call `cleanup()` after scanning.
  */
 export async function readClipboardScreenshot(): Promise<StagedClipboardImage | null> {
-  const image = await Clipboard.getImageAsync({ format: 'png' });
+  const image = await Clipboard.getImageAsync({ format: 'jpeg', jpegQuality: 0.9 });
   const raw = image?.data?.trim();
   if (!raw) return null;
   const match = DATA_URL_PREFIX.exec(raw);
-  const mimeType = (match?.[1] ?? 'image/png').toLowerCase();
+  const mimeType = (match?.[1] ?? 'image/jpeg').toLowerCase();
   const base64 = (match?.[2] ?? raw).trim();
   if (!base64) return null;
-  const extension = EXTENSIONS[mimeType] ?? 'png';
+  const extension = EXTENSIONS[mimeType] ?? 'jpg';
   const file = new File(Paths.cache, `relay-cardio-paste-${newId()}.${extension}`);
   file.create({ overwrite: true });
   await file.write(base64, { encoding: 'base64' });

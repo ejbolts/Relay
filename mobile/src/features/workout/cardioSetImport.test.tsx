@@ -86,7 +86,7 @@ test('a failed scan says why', async () => {
 test('offers Paste screenshot only when the clipboard has an image, scans it, and cleans up', async () => {
   jest.mocked(Clipboard.hasImageAsync).mockResolvedValue(true);
   jest.mocked(Clipboard.getImageAsync).mockResolvedValue({
-    data: 'data:image/png;base64,aW1hZ2U=',
+    data: 'data:image/jpeg;base64,aW1hZ2U=',
     size: { width: 540, height: 960 },
   });
   jest
@@ -104,13 +104,13 @@ test('offers Paste screenshot only when the clipboard has an image, scans it, an
     'Paste screenshot',
   ]);
   await act(async () => options.find((item) => item.label === 'Paste screenshot')!.onPress());
-  expect(Clipboard.getImageAsync).toHaveBeenCalledWith({ format: 'png' });
+  expect(Clipboard.getImageAsync).toHaveBeenCalledWith({ format: 'jpeg', jpegQuality: 0.9 });
   expect(mockWrite).toHaveBeenCalledWith('aW1hZ2U=', { encoding: 'base64' });
   expect(scanCardioPhoto).toHaveBeenCalledWith(
     expect.objectContaining({
-      uri: 'file:///cache/relay-cardio-paste-paste-1.png',
-      fileName: 'screenshot.png',
-      mimeType: 'image/png',
+      uri: 'file:///cache/relay-cardio-paste-paste-1.jpg',
+      fileName: 'screenshot.jpg',
+      mimeType: 'image/jpeg',
     }),
   );
   expect(mockDelete).toHaveBeenCalledTimes(1);

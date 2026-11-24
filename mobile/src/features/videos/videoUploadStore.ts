@@ -11,7 +11,7 @@ import {
   TERMINAL_SESSION_STATUSES,
 } from '../../../../frontend/src/videoSessions';
 import { ApiError, serverOrigin } from '../../data/api';
-import { sessionToken } from '../../data/session';
+import { forgetSessionTokenIf, sessionToken } from '../../data/session';
 import { UploadStopped } from '../../data/uploadFile';
 import { sessionEpoch } from '../../session/sessionEpoch';
 import { useOptionalSession } from '../../session/SessionProvider';
@@ -245,12 +245,16 @@ function abortAndReset(nextUserId: string | null, nextEpoch: number) {
   emit();
 }
 
+/**
+ * Whether a run's async step may still touch the store: the same run, in the same session. A
+ * stale step never resets the store itself once it has been rebound to the next session (by
+ * VideoUploadSessionSync), so a late reply from one account can't clear the next one's upload.
+ */
 function isRunCurrent(myRun: number, myEpoch: number): boolean {
-  if (sessionEpoch() !== myEpoch) {
-    abortAndReset(null, sessionEpoch());
-    return false;
-  }
-  return myRun === runId;
+  if (sessionEpoch() === myEpoch) return myRun === runId;
+  // The session ended and nothing has rebound the store yet: stop this account's run now.
+  if (ownerEpoch === myEpoch) abortAndReset(null, sessionEpoch());
+  return false;
 }
 
 function hasSessionState(): boolean {
@@ -398,6 +402,10 @@ async function uploadClips(
         }
       } catch (reason) {
         failed = true;
+        // The captured token was refused (signed out elsewhere, or a new password): forget it, so
+        // a retry doesn't keep sending it.
+        if (reason instanceof ApiError && reason.status === 401 && boundToken)
+          void forgetSessionTokenIf(serverOrigin(), boundToken).catch(() => undefined);
         if (stopped || reason instanceof UploadStopped || !isRunCurrent(myRun, myEpoch)) return;
         updateClip(clip.clientId, { status: 'failed', error: errorMessage(reason) });
       } finally {

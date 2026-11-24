@@ -6,6 +6,7 @@ import type { ReactElement } from 'react';
 import { Alert, Linking, type AlertButton } from 'react-native';
 import type { User, WorkoutSession, YouTubeConnection } from '../../../../frontend/src/types';
 import { ApiError, apiGet, apiSend } from '../../data/api';
+import { forgetSessionTokenIf, sessionToken } from '../../data/session';
 import { UploadStopped } from '../../data/uploadFile';
 import { nextSessionEpoch } from '../../session/sessionEpoch';
 import { showMenu } from '../../ui/prompts';
@@ -16,6 +17,7 @@ import { VideosScreen } from './VideosScreen';
 import {
   resetVideoUploadStore,
   syncVideoUploadSession,
+  videoUploadActions,
   VideoUploadSessionSync,
 } from './videoUploadStore';
 
@@ -32,6 +34,11 @@ jest.mock('../../data/api', () => ({
   apiSend: jest.fn(),
 }));
 jest.mock('./clipUpload', () => ({ startClipUpload: jest.fn() }));
+jest.mock('../../data/session', () => ({
+  ...jest.requireActual<typeof import('../../data/session')>('../../data/session'),
+  sessionToken: jest.fn(),
+  forgetSessionTokenIf: jest.fn(),
+}));
 jest.mock('../../ui/prompts', () => ({ showMenu: jest.fn() }));
 jest.mock('../../ui/Toast', () => ({
   showToast: jest.fn(),
@@ -156,6 +163,8 @@ beforeEach(() => {
   mockUser = { ...defaultUser };
   mockSessionStatus = { kind: 'signed-in', user: mockUser };
   resetVideoUploadStore();
+  jest.mocked(sessionToken).mockResolvedValue('tok-A');
+  jest.mocked(forgetSessionTokenIf).mockResolvedValue(undefined);
   mockClipPlayers.length = 0;
   mockNextPlayerStatus = 'idle';
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -976,3 +985,128 @@ it("never lets an earlier upload's late wake-lock activation release a retry's l
   syncVideoUploadSession(null, false);
   expect(releasedTags()).toContain(retry);
 });
+
+it('sends every clip with the token captured when the run started, even if it changes', async () => {
+  const created = deferred<WorkoutSession>();
+  const transfers = controllableTransfers();
+  jest.mocked(apiSend).mockImplementation((() => created.promise) as never);
+  await pickAndUpload(['one.mp4', 'two.mp4', 'three.mp4']);
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/sessions', 'POST', expect.anything()),
+  );
+  // The saved token changes after the run captured its own.
+  jest.mocked(sessionToken).mockResolvedValue('tok-B');
+  await act(async () => created.resolve(session));
+  await waitFor(() => expect(transfers).toHaveLength(2));
+  await act(async () => transfers[0].finish());
+  await waitFor(() => expect(transfers).toHaveLength(3));
+  const tokens = jest.mocked(startClipUpload).mock.calls.map((call) => call[4]);
+  expect(tokens).toEqual(['tok-A', 'tok-A', 'tok-A']);
+});
+
+it('forgets the captured token when a clip upload is refused with 401', async () => {
+  jest.mocked(apiSend).mockResolvedValue(session);
+  jest.mocked(startClipUpload).mockImplementation(() => ({
+    done: Promise.reject(new ApiError(401, 'Sign in again.')),
+    stop: jest.fn(),
+  }));
+  await pickAndUpload(['one.mp4']);
+  expect(await screen.findByText('Sign in again.')).toBeTruthy();
+  expect(forgetSessionTokenIf).toHaveBeenCalledWith('https://relay.test', 'tok-A');
+});
+
+it.each(['create', 'poll', 'cancel', 'delete'] as const)(
+  "never lets a late %s reply from the previous account touch the next account's upload",
+  async (kind) => {
+    const late = deferred<unknown>();
+    const transfers = controllableTransfers();
+    let account: 'A' | 'B' = 'A';
+    const bSession = { ...session, id: 's2', name: 'Leg day' };
+    jest.mocked(apiSend).mockImplementation((async (path: string, method: string) => {
+      if (path === '/api/sessions') {
+        if (account === 'B') return bSession;
+        return kind === 'create' ? late.promise : session;
+      }
+      if (path === '/api/sessions/s1/process')
+        return { ...session, status: kind === 'delete' ? 'complete' : 'queued' };
+      if (
+        path === '/api/sessions/s1/cancel' ||
+        (path === '/api/sessions/s1' && method === 'DELETE')
+      )
+        return late.promise;
+      throw new Error(`Unexpected ${path}`);
+    }) as never);
+    const baseGet = jest.mocked(apiGet).getMockImplementation()!;
+    jest
+      .mocked(apiGet)
+      .mockImplementation((async (path: string) =>
+        path === '/api/sessions/s1' ? late.promise : baseGet(path)) as never);
+
+    // Account A's run, driven through the store, left waiting on one request.
+    videoUploadActions.setName('A day');
+    videoUploadActions.addClips([clipFromAsset(clipAsset('a.mp4'), 0)!]);
+    void videoUploadActions.startUpload(2, true);
+    if (kind === 'create') {
+      await waitFor(() =>
+        expect(apiSend).toHaveBeenCalledWith('/api/sessions', 'POST', expect.anything()),
+      );
+    } else {
+      await waitFor(() => expect(transfers).toHaveLength(1));
+      if (kind === 'cancel') {
+        videoUploadActions.cancelSession();
+        await waitFor(() =>
+          expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/cancel', 'POST'),
+        );
+      } else {
+        await act(async () => transfers[0].finish());
+        if (kind === 'poll') {
+          await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/sessions/s1'));
+        } else {
+          await waitFor(() =>
+            expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/process', 'POST'),
+          );
+          void videoUploadActions.deleteSession({ ...session, status: 'complete' });
+          await waitFor(() => expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1', 'DELETE'));
+        }
+      }
+    }
+
+    // Account B signs in and starts its own upload.
+    account = 'B';
+    nextSessionEpoch();
+    mockUser = { ...defaultUser, id: 'other', username: 'sam', display_name: 'Sam' };
+    mockSessionStatus = { kind: 'signed-in', user: mockUser };
+    syncVideoUploadSession('other', true);
+    const startedBefore = jest.mocked(startClipUpload).mock.calls.length;
+    await pickAndUpload(['b.mp4']);
+    expect(await screen.findByText('UPLOADING SESSION')).toBeTruthy();
+    await waitFor(() => expect(transfers).toHaveLength(startedBefore + 1));
+    const bTransfer = transfers[startedBefore];
+    const bTag = lastActivatedTag();
+
+    // A's reply finally arrives.
+    await act(async () =>
+      late.resolve(
+        kind === 'create'
+          ? session
+          : kind === 'cancel'
+            ? { ...session, status: 'cancelled' }
+            : kind === 'poll'
+              ? { ...session, status: 'complete' }
+              : undefined,
+      ),
+    );
+    await act(async () => bTransfer.progress(40));
+
+    expect(screen.getByText('UPLOADING SESSION')).toBeTruthy();
+    expect(screen.getByText('uploading · 40%')).toBeTruthy();
+    expect(bTransfer.stop).not.toHaveBeenCalled();
+    expect(releasedTags()).not.toContain(bTag);
+    expect(
+      jest
+        .mocked(startClipUpload)
+        .mock.calls.slice(startedBefore)
+        .map((call) => call[0]),
+    ).toEqual(['/api/sessions/s2/clips']);
+  },
+);

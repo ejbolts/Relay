@@ -277,7 +277,7 @@ it('reviews a picked screenshot before writing and prevents an invalid session',
 it('pastes a clipboard screenshot from the import menu and on arrival, and cleans up the temp file', async () => {
   jest.mocked(Clipboard.hasImageAsync).mockResolvedValue(true);
   jest.mocked(Clipboard.getImageAsync).mockResolvedValue({
-    data: 'data:image/png;base64,aW1hZ2U=',
+    data: 'data:image/jpeg;base64,aW1hZ2U=',
     size: { width: 540, height: 960 },
   });
   jest.mocked(uploadFile).mockResolvedValue({
@@ -307,7 +307,7 @@ it('pastes a clipboard screenshot from the import menu and on arrival, and clean
   expect(uploadFile).toHaveBeenCalledWith(
     '/api/cardio/scan',
     'POST',
-    expect.objectContaining({ name: 'screenshot.png', type: 'image/png' }),
+    expect.objectContaining({ name: 'screenshot.jpg', type: 'image/jpeg' }),
     expect.anything(),
   );
   expect(mockDelete).toHaveBeenCalledTimes(1);
@@ -316,7 +316,7 @@ it('pastes a clipboard screenshot from the import menu and on arrival, and clean
 it('pastes a clipboard screenshot automatically on arrival when opened with import=clipboard', async () => {
   mockParams = { import: 'clipboard' };
   jest.mocked(Clipboard.getImageAsync).mockResolvedValue({
-    data: 'data:image/png;base64,aW1hZ2U=',
+    data: 'data:image/jpeg;base64,aW1hZ2U=',
     size: { width: 540, height: 960 },
   });
   jest.mocked(uploadFile).mockResolvedValue({
