@@ -28,6 +28,7 @@ from .active_workouts import (
     snapshot,
 )
 from .admin import admin_router
+from .app_links import router as app_links_router
 from .app_notices import router as app_notices_router
 from .auth import (
     CsrfOriginMiddleware,
@@ -758,6 +759,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(machine_settings_router)
     app.include_router(weight_mapping_router)
     app.include_router(youtube_router)
+    app.include_router(app_links_router)
 
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if frontend_dist.is_dir():

@@ -8,6 +8,7 @@ from unittest.mock import Mock
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from fastapi.testclient import TestClient
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
 
@@ -428,3 +429,225 @@ def test_account_snapshot_excludes_credentials_and_deletion_revokes_them(
     with SessionLocal() as db:
         assert db.get(YouTubeConnection, client.user["id"]) is None
         assert db.query(YouTubeOAuthState).count() == 0
+
+
+# The native app's flow: it starts with its bearer session, its sign-in browser has no Relay
+# sign-in, and the callback returns to the app's link.
+APP_RETURN = "relay-mobile://youtube-return"
+
+
+def bearer_client(client, user_id):
+    """A client holding a bearer token for an account, as the installed app does."""
+    from app.auth import create_user_session
+    from app.models import User
+
+    with SessionLocal() as db:
+        token = create_user_session(db, db.get(User, user_id), client.app.state.settings)
+    phone = TestClient(client.app)
+    phone.headers["Authorization"] = f"Bearer {token}"
+    return phone
+
+
+@pytest.fixture
+def app_session(client):
+    phone = bearer_client(client, client.user["id"])
+    yield phone
+    phone.close()
+
+
+@pytest.fixture
+def browser(client):
+    """The app's sign-in browser: a fresh cookie jar."""
+    sign_in_browser = TestClient(client.app)
+    yield sign_in_browser
+    sign_in_browser.close()
+
+
+def begin_in_app(phone, return_url=APP_RETURN):
+    response = phone.post("/api/youtube/connect", json={"return_url": return_url})
+    assert response.status_code == 200, response.text
+    return response.json()["url"]
+
+
+def open_start(browser, start_url):
+    start = urlsplit(start_url)
+    return browser.get(f"{start.path}?{start.query}", follow_redirects=False)
+
+
+def app_state(start_url):
+    return parse_qs(urlsplit(start_url).query)["state"][0]
+
+
+def test_app_start_link_uses_the_callback_host_and_binds_one_browser(
+    client, real_youtube, app_session, browser
+):
+    start_url = begin_in_app(app_session)
+    start = urlsplit(start_url)
+    assert f"{start.scheme}://{start.netloc}" == "http://127.0.0.1:8001"
+    assert start.path == "/api/youtube/app-start"
+    response = open_start(browser, start_url)
+    assert response.status_code == 303
+    google = parse_qs(urlsplit(response.headers["location"]).query)
+    assert google["state"] == [app_state(start_url)]
+    assert google["redirect_uri"] == [real_youtube.youtube_redirect_uri]
+    assert google["code_challenge_method"] == ["S256"]
+    cookie = response.headers["set-cookie"]
+    assert cookie.startswith(f"{real_youtube.session_cookie}_youtube=")
+    assert "HttpOnly" in cookie and "Path=/api/youtube/" in cookie
+    assert "samesite=lax" in cookie.lower()
+    # A second browser can't take over the started flow.
+    with TestClient(client.app) as other_browser:
+        again = open_start(other_browser, start_url)
+    assert again.headers["location"] == f"{APP_RETURN}?youtube=expired"
+    assert f'{real_youtube.session_cookie}_youtube=""' in again.headers["set-cookie"]
+    # The web's start is unchanged: no body still answers with Google's address.
+    assert begin(client)["redirect_uri"] == [real_youtube.youtube_redirect_uri]
+
+
+def test_app_flow_connects_the_starting_account_and_returns_to_the_app(
+    client, other_client, real_youtube, app_session, monkeypatch
+):
+    client.patch("/api/admin/settings", json={"video_uploads": "everyone"})
+    start_url = begin_in_app(app_session)
+    state = app_state(start_url)
+    # The sign-in browser happens to be signed in to the web as another account.
+    open_start(other_client, start_url)
+    exchange = fake_provider(monkeypatch)
+    response = finish(other_client, state)
+    assert response.status_code == 303
+    assert response.headers["location"] == f"{APP_RETURN}?youtube=connected"
+    assert response.headers["referrer-policy"] == "no-referrer"
+    assert f"{real_youtube.session_cookie}_youtube=" in response.headers["set-cookie"]
+    exchange.assert_called_once_with(code="sample-code", timeout=20)
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]).channel_id == "sample-channel"
+        assert db.get(YouTubeConnection, other_client.user["id"]) is None
+    assert app_session.get("/api/youtube/connection").json()["status"] == "connected"
+    # Consumed once: a replay shows the web's expired page and exchanges nothing.
+    assert finish(other_client, state).headers["location"] == "/?youtube=expired#videos"
+    exchange.assert_called_once()
+
+
+def test_app_flow_needs_the_browser_the_app_opened(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    start_url = begin_in_app(app_session)
+    state = app_state(start_url)
+    exchange = fake_provider(monkeypatch)
+    # Someone sends you a Google link they started: your browser never opened their start link.
+    with TestClient(client.app) as victim:
+        assert finish(victim, state).headers["location"] == "/?youtube=expired#videos"
+        open_start(browser, start_url)
+        victim.cookies.set(f"{real_youtube.session_cookie}_youtube", "guessed-binding")
+        assert finish(victim, state).headers["location"] == "/?youtube=expired#videos"
+    exchange.assert_not_called()
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+    # The app's own browser can still finish.
+    assert finish(browser, state).headers["location"] == f"{APP_RETURN}?youtube=connected"
+
+
+def test_app_flow_ends_with_the_sign_in_that_started_it(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    start_url = begin_in_app(app_session)
+    open_start(browser, start_url)
+    exchange = fake_provider(monkeypatch)
+    assert app_session.post("/api/auth/logout").status_code < 300
+    response = finish(browser, app_state(start_url))
+    assert response.headers["location"] == f"{APP_RETURN}?youtube=expired"
+    exchange.assert_not_called()
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+
+
+def test_app_flow_stops_when_video_access_is_withdrawn(
+    client, other_client, real_youtube, monkeypatch
+):
+    client.patch("/api/admin/settings", json={"video_uploads": "everyone"})
+    with bearer_client(client, other_client.user["id"]) as phone, TestClient(client.app) as web:
+        start_url = begin_in_app(phone)
+        open_start(web, start_url)
+        client.patch("/api/admin/settings", json={"video_uploads": "admin"})
+        exchange = fake_provider(monkeypatch)
+        response = finish(web, app_state(start_url))
+    assert response.headers["location"] == f"{APP_RETURN}?youtube=expired"
+    exchange.assert_not_called()
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, other_client.user["id"]) is None
+
+
+@pytest.mark.parametrize("outcome", ["expired", "cancelled", "failed"])
+def test_app_flow_failures_return_to_the_app_and_keep_the_connection(
+    client, real_youtube, app_session, browser, monkeypatch, outcome
+):
+    save_connection(real_youtube, client.user["id"], "original-channel")
+    start_url = begin_in_app(app_session)
+    state = app_state(start_url)
+    open_start(browser, start_url)
+    exchange = fake_provider(monkeypatch)
+    query = {}
+    if outcome == "expired":
+        with SessionLocal() as db:
+            db.get(YouTubeOAuthState, hash_token(state)).expires_at = datetime.now(UTC) - timedelta(
+                minutes=1
+            )
+            db.commit()
+    elif outcome == "cancelled":
+        query["error"] = "access_denied"
+    else:
+        exchange.side_effect = RuntimeError("sample-client-secret must never reach UI")
+    response = finish(browser, state, **query)
+    assert response.headers["location"] == f"{APP_RETURN}?youtube={outcome}"
+    assert "sample-client-secret" not in response.text
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]).channel_id == "original-channel"
+
+
+def test_expired_or_unknown_start_links(real_youtube, app_session, browser):
+    start_url = begin_in_app(app_session)
+    with SessionLocal() as db:
+        row = db.get(YouTubeOAuthState, hash_token(app_state(start_url)))
+        row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
+        db.commit()
+    assert open_start(browser, start_url).headers["location"] == f"{APP_RETURN}?youtube=expired"
+    unknown = browser.get(
+        "/api/youtube/app-start", params={"state": "unknown"}, follow_redirects=False
+    )
+    assert unknown.headers["location"] == "/?youtube=expired#videos"
+
+
+def test_expo_go_return_links_keep_their_query(real_youtube, app_session, browser, monkeypatch):
+    target = "exp://127.0.0.1:8081/--/youtube-return?from=videos"
+    start_url = begin_in_app(app_session, target)
+    open_start(browser, start_url)
+    fake_provider(monkeypatch)
+    response = finish(browser, app_state(start_url))
+    assert response.headers["location"] == f"{target}&youtube=connected"
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "https://evil.example/steal",
+        "javascript:alert(1)",
+        "//evil.example",
+        "relay-mobile://youtube-return#fragment",
+        "relay-mobile://user:pass@youtube-return",
+        "relay-mobile://youtube return",
+        "relay-mobile:",
+    ],
+)
+def test_app_return_link_must_be_an_app_link(real_youtube, app_session, target):
+    response = app_session.post("/api/youtube/connect", json={"return_url": target})
+    assert response.status_code == 422
+    with SessionLocal() as db:
+        assert db.query(YouTubeOAuthState).count() == 0
+
+
+def test_mock_mode_has_no_app_flow(client, app_session, browser):
+    # Demo mode refuses to start, and a start link never reaches Google.
+    response = app_session.post("/api/youtube/connect", json={"return_url": APP_RETURN})
+    assert response.status_code == 409
+    start = browser.get("/api/youtube/app-start", params={"state": "any"}, follow_redirects=False)
+    assert start.headers["location"] == "/?youtube=expired#videos"

@@ -8,6 +8,7 @@ import {
   FRIEND_INVITE_HASH as INVITE_HASH,
   friendInviteIdFromHash,
   friendInviteLink,
+  registrationInviteFromHash,
 } from './friendInviteLink';
 
 export { friendInviteIdFromHash, friendInviteIdFromScan } from './friendInviteLink';
@@ -37,17 +38,6 @@ export function friendInviteUrl(
   inviteCode?: string | null,
 ): string {
   return friendInviteLink(userId, origin, inviteCode);
-}
-
-function registrationInviteFromHash(hash: string): string | null {
-  const encoded = INVITE_HASH.exec(hash)?.[2];
-  if (!encoded) return null;
-  try {
-    const code = decodeURIComponent(encoded);
-    return code.length <= 200 ? code : null;
-  } catch {
-    return null;
-  }
 }
 
 /**

@@ -1,7 +1,13 @@
-"""Per-user web OAuth. Provider secrets never reach the browser or account backups."""
+"""Per-user web OAuth. Provider secrets never reach the browser or account backups.
+
+The web starts and finishes in one browser sign-in. The native app starts with its bearer
+session and an app return link: its sign-in browser opens `/api/youtube/app-start`, which binds
+the flow to that browser with a short-lived cookie, and the callback then returns to the app.
+"""
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import re
@@ -9,11 +15,11 @@ import secrets
 from collections.abc import Callable
 from datetime import timedelta
 from typing import Annotated, Literal, NoReturn
-from urllib.parse import urlsplit
+from urllib.parse import urlencode, urlsplit
 
 import requests
 from cryptography.fernet import Fernet, InvalidToken
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Body, Depends, Request, Response
 from fastapi.responses import RedirectResponse
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request as GoogleRequest
@@ -21,15 +27,34 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
-from .auth import AppSettings, AuthContextDependency, CurrentUser, hash_token, require_video_access
+from .auth import (
+    AppSettings,
+    AuthContextDependency,
+    CurrentUser,
+    as_utc,
+    can_upload_videos,
+    get_auth_context,
+    get_current_user,
+    hash_token,
+    require_video_access,
+)
 from .config import Settings
 from .database import get_db
 from .errors import api_error
-from .models import SessionStatus, WorkoutSession, YouTubeConnection, YouTubeOAuthState, utc_now
+from .models import (
+    SessionStatus,
+    User,
+    UserSession,
+    WorkoutSession,
+    YouTubeConnection,
+    YouTubeOAuthState,
+    utc_now,
+)
+from .server_settings import load_runtime_settings
 from .youtube import GoogleYouTubeUploader, YouTubeUploadError
 
 YOUTUBE_SCOPES = [
@@ -71,6 +96,18 @@ def granted_permissions(credentials: Credentials) -> bool:
 
 class YouTubeConnectionError(YouTubeUploadError):
     """A safe, actionable error that requires user or operator attention."""
+
+
+# The app's own scheme, and Expo Go's for builds served from a computer. The return link only
+# ever receives a result word, never a code or token.
+APP_RETURN_SCHEMES = {"relay-mobile", "exp", "exps"}
+STATE_MINUTES = 10
+
+
+class ConnectRequest(BaseModel):
+    """Optional: the web posts no body. The app names where its sign-in browser returns."""
+
+    return_url: str | None = Field(default=None, max_length=500)
 
 
 class YouTubeConnectionRead(BaseModel):
@@ -262,10 +299,77 @@ def connection_status(user: CurrentUser, db: Db, settings: AppSettings) -> YouTu
     return read_connection(db, settings, user.id)
 
 
+def is_app_link(value: str) -> bool:
+    """Only an app link, never a web address, so the callback can't redirect elsewhere."""
+    if len(value) > 500 or any(ord(character) < 33 or ord(character) > 126 for character in value):
+        return False
+    try:
+        url = urlsplit(value)
+    except ValueError:
+        return False
+    return (
+        url.scheme in APP_RETURN_SCHEMES
+        and url.username is None
+        and url.password is None
+        and not url.fragment
+        and bool(url.netloc or url.path)
+    )
+
+
+def app_return_url(value: str) -> str:
+    if not is_app_link(value):
+        raise api_error(422, "invalid_return_url", "That app return link is not allowed.")
+    return value
+
+
+def app_cookie_name(settings: Settings) -> str:
+    # Named after the session cookie, so a second instance on the same host keeps its own.
+    return f"{settings.session_cookie}_youtube"
+
+
+def read_app_cookie(request: Request, settings: Settings) -> tuple[str, str | None] | None:
+    """The sign-in browser's binding secret, and the app link to return to if its flow is gone."""
+    value = request.cookies.get(app_cookie_name(settings))
+    if not value:
+        return None
+    binding, _, encoded = value.partition(".")
+    try:
+        return_url = base64.urlsafe_b64decode(encoded.encode()).decode() if encoded else None
+    except (ValueError, UnicodeDecodeError):
+        return_url = None
+    return binding, return_url if return_url and is_app_link(return_url) else None
+
+
+def app_flow(settings: Settings, sealed: str) -> dict | None:
+    """An app flow's details, or None for a web flow, whose row holds only the verifier."""
+    try:
+        plain = token_cipher(settings).decrypt(sealed.encode()).decode()
+        if not plain.startswith("{"):
+            return None
+        flow = json.loads(plain)
+    except (InvalidToken, YouTubeConnectionError, ValueError):
+        return None
+    if not isinstance(flow, dict) or not all(
+        isinstance(flow.get(key), str) for key in ("verifier", "return_url", "url")
+    ):
+        return None
+    return flow
+
+
+def seal_flow(settings: Settings, flow: dict) -> str:
+    return token_cipher(settings).encrypt(json.dumps(flow).encode()).decode()
+
+
 @router.post("/connect", dependencies=[Depends(require_video_access)])
-def connect(context: AuthContextDependency, db: Db, settings: AppSettings) -> dict[str, str]:
+def connect(
+    context: AuthContextDependency,
+    db: Db,
+    settings: AppSettings,
+    body: Annotated[ConnectRequest | None, Body()] = None,
+) -> dict[str, str]:
     if settings.youtube_mock_mode:
         raise api_error(409, "youtube_mock_mode", "Demo mode does not connect Google accounts.")
+    return_url = app_return_url(body.return_url) if body and body.return_url else None
     try:
         web_client_config(settings)
         # Never replace a lost key while other users still have encrypted connections.
@@ -283,36 +387,217 @@ def connect(context: AuthContextDependency, db: Db, settings: AppSettings) -> di
             | (YouTubeOAuthState.expires_at <= utc_now())
         )
     )
+    secret = verifier
+    if return_url:
+        # An app flow seals Google's address and the return link with the verifier. `binding`
+        # stays empty until the app's sign-in browser opens the start link.
+        secret = json.dumps(
+            {"verifier": verifier, "return_url": return_url, "url": url, "binding": None}
+        )
     db.add(
         YouTubeOAuthState(
             state_hash=hash_token(state),
             user_id=context.user.id,
             session_id=context.session.id,
-            encrypted_verifier=cipher.encrypt(verifier.encode()).decode(),
-            expires_at=utc_now() + timedelta(minutes=10),
+            encrypted_verifier=cipher.encrypt(secret.encode()).decode(),
+            expires_at=utc_now() + timedelta(minutes=STATE_MINUTES),
         )
     )
     db.commit()
+    if return_url:
+        # Start on the callback's own host, so the start link's cookie reaches the callback.
+        callback_url = urlsplit(settings.youtube_redirect_uri or "")
+        url = f"{callback_url.scheme}://{callback_url.netloc}/api/youtube/app-start?" + urlencode(
+            {"state": state}
+        )
     return {"url": url}
 
 
+NO_STORE = {"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"}
+
+
 def callback_redirect(result: str) -> RedirectResponse:
-    return RedirectResponse(
-        f"/?youtube={result}#videos",
+    return RedirectResponse(f"/?youtube={result}#videos", status_code=303, headers=NO_STORE)
+
+
+def app_redirect(settings: Settings, return_url: str, result: str) -> RedirectResponse:
+    separator = "&" if "?" in return_url else "?"
+    response = RedirectResponse(
+        f"{return_url}{separator}{urlencode({'youtube': result})}",
         status_code=303,
-        headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer"},
+        headers=NO_STORE,
     )
+    response.delete_cookie(
+        app_cookie_name(settings),
+        path="/api/youtube/",
+        httponly=True,
+        samesite="lax",
+        secure=settings.cookie_secure,
+    )
+    return response
 
 
-@router.get("/callback", dependencies=[Depends(require_video_access)])
+def find_state(
+    db: Session, settings: Settings, state: str
+) -> tuple[YouTubeOAuthState | None, dict | None]:
+    """A state's row, expired or not, and its app flow; a web state has no app flow."""
+    if not state or len(state) > 200 or settings.youtube_mock_mode:
+        return None, None
+    row = db.get(YouTubeOAuthState, hash_token(state))
+    if row is None:
+        return None, None
+    # A snapshot: the claims below delete or replace the row with their own conditions.
+    db.expunge(row)
+    return row, app_flow(settings, row.encrypted_verifier)
+
+
+@router.get("/app-start")
+def app_start(db: Db, settings: AppSettings, state: str = "") -> RedirectResponse:
+    """The app's sign-in browser starts here: bind the flow to this browser, then go to Google.
+
+    Only the browser holding this cookie can finish the flow, so a Google link that someone else
+    started can't connect your channel to their account.
+    """
+    row, flow = find_state(db, settings, state)
+    if row is None or flow is None:
+        return callback_redirect("expired")
+    if as_utc(row.expires_at) <= utc_now() or flow.get("binding") is not None:
+        # A start link opens Google once; another browser can't take over a started flow.
+        return app_redirect(settings, flow["return_url"], "expired")
+    binding = secrets.token_urlsafe(32)
+    bound = db.execute(
+        update(YouTubeOAuthState)
+        .where(
+            YouTubeOAuthState.state_hash == row.state_hash,
+            YouTubeOAuthState.encrypted_verifier == row.encrypted_verifier,
+        )
+        .values(encrypted_verifier=seal_flow(settings, {**flow, "binding": hash_token(binding)}))
+        .execution_options(synchronize_session=False)
+    ).rowcount
+    db.commit()
+    if not bound:
+        return app_redirect(settings, flow["return_url"], "expired")
+    response = RedirectResponse(flow["url"], status_code=303, headers=NO_STORE)
+    # The cookie also names the app link, to return there if the flow ends before the callback.
+    encoded = base64.urlsafe_b64encode(flow["return_url"].encode()).decode()
+    response.set_cookie(
+        app_cookie_name(settings),
+        f"{binding}.{encoded}",
+        max_age=STATE_MINUTES * 60,
+        httponly=True,
+        # Lax still reaches the callback: Google returns with a top-level navigation.
+        samesite="lax",
+        secure=settings.cookie_secure,
+        path="/api/youtube/",
+    )
+    return response
+
+
+def app_flow_user(db: Session, settings: Settings, user_id: str, session_id: str) -> User | None:
+    """The account that started an app flow, while that sign-in is open and may upload videos."""
+    session = db.get(UserSession, session_id)
+    if session is None or session.user_id != user_id or as_utc(session.expires_at) <= utc_now():
+        return None
+    user = db.get(User, user_id)
+    if user is None or user.disabled_at is not None or user.must_change_password:
+        return None
+    if not can_upload_videos(user, load_runtime_settings(db, settings).video_uploads):
+        return None
+    return user
+
+
+def finish_connection(
+    db: Session, settings: Settings, user_id: str, state: str, verifier: str, code: str
+) -> str:
+    """Exchange a claimed state's code and save its owner's channel; returns the result."""
+    try:
+        flow = oauth_flow(settings, state=state, verifier=verifier)
+        # Passing only the code avoids trusting proxy headers or exposing it in other resources.
+        flow.fetch_token(code=code, timeout=20)
+        credentials = flow.credentials
+        if not credentials.refresh_token or not granted_permissions(credentials):
+            return "permission"
+        channel_id, title = authorized_channel(credentials)
+        connection = db.get(YouTubeConnection, user_id)
+        if connection and connection.channel_id != channel_id and has_active_job(db, user_id):
+            return "busy"
+        encrypted = encrypt_credentials(settings, user_id, credentials)
+        if connection is None:
+            connection = YouTubeConnection(user_id=user_id)
+            db.add(connection)
+        connection.channel_id, connection.channel_title = channel_id, title
+        connection.encrypted_credentials, connection.needs_reconnect = encrypted, False
+        db.commit()
+    except YouTubeConnectionError as connection_error:
+        return "no_channel" if "No YouTube channel" in str(connection_error) else "failed"
+    except Exception:
+        # Google exceptions can contain codes, tokens, or client secrets. Never log their text.
+        db.rollback()
+        return "failed"
+    return "connected"
+
+
+def finish_app_flow(
+    request: Request,
+    db: Session,
+    settings: Settings,
+    row: YouTubeOAuthState,
+    flow: dict,
+    *,
+    state: str,
+    code: str,
+    error: str,
+) -> RedirectResponse:
+    cookie = read_app_cookie(request, settings)
+    if not cookie or not flow.get("binding") or hash_token(cookie[0]) != flow["binding"]:
+        # Not the browser the app opened: leave the app's flow alone and show the web's page.
+        return callback_redirect("expired")
+    user_id, session_id = row.user_id, row.session_id
+    # Claim once, atomically, before a network request. A replay cannot exchange the code again.
+    claimed = db.execute(
+        delete(YouTubeOAuthState)
+        .where(
+            YouTubeOAuthState.state_hash == row.state_hash,
+            YouTubeOAuthState.encrypted_verifier == row.encrypted_verifier,
+            YouTubeOAuthState.expires_at > utc_now(),
+        )
+        .returning(YouTubeOAuthState.user_id)
+        .execution_options(synchronize_session=False)
+    ).scalar_one_or_none()
+    db.commit()
+    if claimed is None or app_flow_user(db, settings, user_id, session_id) is None:
+        # Expired, already used, or the app's sign-in has since ended or lost video access.
+        return app_redirect(settings, flow["return_url"], "expired")
+    if error or not code or len(code) > 4096:
+        result = "cancelled" if error == "access_denied" else "failed"
+    else:
+        result = finish_connection(db, settings, user_id, state, flow["verifier"], code)
+    return app_redirect(settings, flow["return_url"], result)
+
+
+@router.get("/callback")
 def callback(
-    context: AuthContextDependency,
+    request: Request,
+    response: Response,
     db: Db,
     settings: AppSettings,
     state: str = "",
     code: str = "",
     error: str = "",
 ) -> RedirectResponse:
+    # The app's sign-in browser has no Relay sign-in: its state and cookie identify the flow.
+    row, flow = find_state(db, settings, state)
+    if row is not None and flow is not None:
+        return finish_app_flow(
+            request, db, settings, row, flow, state=state, code=code, error=error
+        )
+    cookie = read_app_cookie(request, settings)
+    if row is None and cookie and cookie[1]:
+        # The app's sign-in browser after its flow was removed, as signing out does.
+        return app_redirect(settings, cookie[1], "expired")
+    # The web's flow, unchanged: it needs the browser sign-in that started it.
+    context = get_auth_context(request, response, settings, db)
+    require_video_access(get_current_user(context), settings, db)
     if not state or len(state) > 200 or settings.youtube_mock_mode:
         return callback_redirect("expired")
     # Claim once, atomically, before a network request. A replay cannot exchange the code again.
@@ -333,36 +618,11 @@ def callback(
         return callback_redirect("cancelled" if error == "access_denied" else "failed")
     try:
         verifier = token_cipher(settings).decrypt(claimed.encode()).decode()
-        flow = oauth_flow(settings, state=state, verifier=verifier)
-        # Passing only the code avoids trusting proxy headers or exposing it in other resources.
-        flow.fetch_token(code=code, timeout=20)
-        credentials = flow.credentials
-        if not credentials.refresh_token or not granted_permissions(credentials):
-            return callback_redirect("permission")
-        channel_id, title = authorized_channel(credentials)
-        connection = db.get(YouTubeConnection, context.user.id)
-        if (
-            connection
-            and connection.channel_id != channel_id
-            and has_active_job(db, context.user.id)
-        ):
-            return callback_redirect("busy")
-        encrypted = encrypt_credentials(settings, context.user.id, credentials)
-        if connection is None:
-            connection = YouTubeConnection(user_id=context.user.id)
-            db.add(connection)
-        connection.channel_id, connection.channel_title = channel_id, title
-        connection.encrypted_credentials, connection.needs_reconnect = encrypted, False
-        db.commit()
-    except YouTubeConnectionError as connection_error:
-        return callback_redirect(
-            "no_channel" if "No YouTube channel" in str(connection_error) else "failed"
-        )
-    except Exception:
-        # Google exceptions can contain codes, tokens, or client secrets. Never log their text.
-        db.rollback()
+    except (YouTubeConnectionError, InvalidToken):
         return callback_redirect("failed")
-    return callback_redirect("connected")
+    return callback_redirect(
+        finish_connection(db, settings, context.user.id, state, verifier, code)
+    )
 
 
 @router.delete("/connection", response_model=YouTubeConnectionRead)
