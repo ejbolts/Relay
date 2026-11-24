@@ -19,7 +19,9 @@ Expo Go can't load local native code, so there the module is missing and the res
 
 Expo Go can't show any of this. You need an EAS development build on an iPhone with iOS 16.4 or later; the Dynamic Island needs an iPhone 14 Pro or later.
 
-1. Give the app a bundle identifier. `mobile/app.config.ts` sets `ios.bundleIdentifier` from `RELAY_IOS_BUNDLE_ID`, so it stays out of Git. The plugin names the widget extension `<bundle identifier>.RestWidget`; without a bundle identifier it adds only the Info.plist key. A later prebuild with a different bundle identifier renames the extension to match.
+1. Give the app a bundle identifier. The plugin reads `ios.bundleIdentifier` from the app config, and names the widget extension `<bundle identifier>.RestWidget`. Without one it adds only the Info.plist key, with **no widget target**. A later prebuild with a different bundle identifier renames the extension to match.
+   - **With the app links work (branch `feature/mobile-complete-links`) merged:** its `mobile/app.config.ts` sets `ios.bundleIdentifier` from the `RELAY_IOS_BUNDLE_ID` environment variable, so the value stays out of Git.
+   - **On this branch alone:** there is no `app.config.ts` reading that variable, so `RELAY_IOS_BUNDLE_ID` does nothing. Set `ios.bundleIdentifier` directly in `mobile/app.json` for the build, and don't commit it.
 2. Add a development profile to `mobile/eas.json`:
 
    ```json
