@@ -89,11 +89,8 @@ export interface MovementActions {
   openMachines: (movementKey: string) => void;
   /** Pins the machines the exercise's last session used, for a movement that has none yet. */
   restoreMachines: (movementKey: string, machinePhotoIds: string[]) => void;
-  /**
-   * Brings the exercise into view: its header, after folding it from the bottom of its card, or
-   * the card, when it becomes next in a superset round.
-   */
-  revealMovement?: (movementKey: string, part?: 'header' | 'card') => void;
+  /** Brings the exercise's header back into view, after folding it from the bottom of its card. */
+  revealMovement?: (movementKey: string) => void;
 }
 
 const NO_BADGES: ReadonlyMap<string, string[]> = new Map();
@@ -232,9 +229,6 @@ export const MovementCard = memo(function MovementCard({
     setExpanded((current) => !current);
   };
   const { revealMovement } = actions;
-  useEffect(() => {
-    if (supersetUpNext) revealMovement?.(movement.key, 'card');
-  }, [supersetUpNext, revealMovement, movement.key]);
   const collapseFromFooter = () => {
     haptics.selection();
     setExpanded(false);

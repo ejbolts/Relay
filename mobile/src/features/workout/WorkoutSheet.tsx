@@ -34,7 +34,7 @@ import {
   type PrCelebrations,
 } from '../../../../frontend/src/workoutPr';
 import { activeElapsedSeconds } from '../../../../frontend/src/workoutPause';
-import { isSupersetUpNext } from '../../../../frontend/src/workoutSupersets';
+import { isSupersetUpNext, nextInSupersetRound } from '../../../../frontend/src/workoutSupersets';
 import {
   machineTipEligible,
   readdsRemovedSet,
@@ -411,17 +411,44 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const cardTops = useRef(new Map<string, number>());
   const reducedMotion = useReduceMotion();
   const viewportHeight = useRef(0);
+  const cardHeights = useRef(new Map<string, number>());
   const revealMovement = useCallback(
-    (movementKey: string, part: 'header' | 'card' = 'header') => {
+    (movementKey: string) => {
       requestAnimationFrame(() => {
         const top = cardTops.current.get(movementKey);
         if (top === undefined) return;
         const target = Math.max(0, top - space.gutter);
-        // A card becoming next in a superset also comes up when it sits below the screen.
-        const below = part === 'card' && top + 120 > scrollY.current + viewportHeight.current;
-        if (target < scrollY.current || below)
+        if (target < scrollY.current)
           scrollRef.current?.scrollTo({ y: target, animated: !reducedMotion });
       });
+    },
+    [space.gutter, reducedMotion],
+  );
+  /**
+   * Scrolls the next card in a superset round into view only as far as needed, as the web's
+   * `scrollIntoView({ block: 'nearest' })` after logging a set. Two frames let a card that has
+   * just opened report its new height first.
+   */
+  const revealNearest = useCallback(
+    (movementKey: string) => {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const top = cardTops.current.get(movementKey);
+          const height = cardHeights.current.get(movementKey);
+          if (top === undefined || height === undefined) return;
+          const viewTop = scrollY.current;
+          const viewBottom = viewTop + viewportHeight.current;
+          let target: number | null = null;
+          if (top - space.gutter < viewTop) target = top - space.gutter;
+          else if (top + height + space.gutter > viewBottom)
+            target = Math.min(
+              top - space.gutter,
+              top + height + space.gutter - viewportHeight.current,
+            );
+          if (target !== null)
+            scrollRef.current?.scrollTo({ y: Math.max(0, target), animated: !reducedMotion });
+        }),
+      );
     },
     [space.gutter, reducedMotion],
   );
@@ -453,6 +480,11 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
             )
           : null;
         applySetUpdate(movementKey, setKey, update, bodyweightRef.current);
+        // Logging a set here brings the next exercise in its superset round into view.
+        if (before && update.completed === true && !before.completed) {
+          const next = nextInSupersetRound(getState()?.movements ?? [], movementKey);
+          if (next) revealNearest(next.key);
+        }
         if (next === 'hide') setShelf(null);
         else if (next) setShelf({ id: ++shelfId.current, gains: next });
       },
@@ -533,6 +565,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       openMachines,
       context,
       revealMovement,
+      revealNearest,
       loggerTips,
     ],
   );
@@ -813,7 +846,10 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         {state.movements.map((movement, index) => (
           <View
             key={movement.key}
-            onLayout={(event) => cardTops.current.set(movement.key, event.nativeEvent.layout.y)}
+            onLayout={(event) => {
+              cardTops.current.set(movement.key, event.nativeEvent.layout.y);
+              cardHeights.current.set(movement.key, event.nativeEvent.layout.height);
+            }}
           >
             <MovementCard
               number={index + 1}

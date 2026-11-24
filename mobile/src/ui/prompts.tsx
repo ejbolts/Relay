@@ -45,12 +45,12 @@ type Host = (request: Request | null) => void;
 const hosts: Host[] = [];
 /** iOS's own action sheet or text prompt is up (they answer through a callback). */
 let nativeShowing = false;
-/** The prompt host's menu sheet or text dialog is up. */
-let hostShowing = false;
+/** The prompt hosts whose menu sheet or text dialog is up (several hosts can be mounted). */
+const showingHosts = new Set<Host>();
 
 /** A menu or text prompt is on screen, so the logger's tips wait for it, as the web's do. */
 export function promptShowing() {
-  return nativeShowing || hostShowing;
+  return nativeShowing || showingHosts.size > 0;
 }
 
 /** A list of actions, with Cancel. */
@@ -116,9 +116,10 @@ export function PromptHost() {
     };
   }, []);
   useEffect(() => {
-    hostShowing = !!request;
+    if (request) showingHosts.add(setRequest);
+    else showingHosts.delete(setRequest);
     return () => {
-      hostShowing = false;
+      showingHosts.delete(setRequest);
     };
   }, [request]);
   const close = () => setRequest(null);

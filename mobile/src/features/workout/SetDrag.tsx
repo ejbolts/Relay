@@ -41,6 +41,10 @@ export function setDropIndex(blocks: (SetBlock | undefined)[], from: number, dy:
  */
 export function useSetDrag(setKeys: string[], onDrop: (setKey: string, targetKey: string) => void) {
   const [drag, setDrag] = useState<{ key: string; target: number } | null>(null);
+  // The set being dragged was deleted (on another device, say): its row and gesture went with it,
+  // so no release will come. The drag ends here, which also lets the tips go again; the ref's
+  // leftover entry is ignored, as move and release check the set is still there.
+  if (drag && !setKeys.includes(drag.key)) setDrag(null);
   const [offset] = useState(() => new Animated.Value(0));
   const layouts = useRef(new Map<string, SetBlock>());
   const active = useRef<{ key: string; target: number; targetKey: string } | null>(null);

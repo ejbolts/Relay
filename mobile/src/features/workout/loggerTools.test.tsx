@@ -571,6 +571,17 @@ describe('tips beside the logger', () => {
     expect(storedTips().counts['replace-exercise']).toBe(1);
   });
 
+  test('a drag whose set is deleted mid-drag ends, and the tips go again', async () => {
+    await openLogger();
+    await logWarmup();
+    await layOutSets();
+    await act(async () => dragOf(1).onActivate());
+    // Set 2 goes while it is held (deleted elsewhere); no release ever arrives.
+    await fireEvent.press(screen.getAllByLabelText(/^Set 2 type: /)[0]);
+    await act(async () => option(menuCall('Set 2'), 'Delete set').onPress());
+    expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
+  }, 30000);
+
   test('a pending tip waits while a set is dragged or a menu is open', async () => {
     await openLogger();
     await logWarmup();

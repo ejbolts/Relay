@@ -55,6 +55,18 @@ const TICK_MS = 500;
 const BOTTOM_RESERVED = 75;
 
 type Hint = { id: TipId; view: ComponentRef<typeof View> | null; visible: boolean };
+type AnchorView = ComponentRef<typeof View>;
+
+/**
+ * Where a hint's control sits in the window. Tests replace `measure`, since the test renderer
+ * draws no layout.
+ */
+export const tipAnchorLayout = {
+  measure: (
+    view: AnchorView,
+    done: (frame: { y: number; width: number; height: number }) => void,
+  ) => view.measureInWindow((_x, y, width, height) => done({ y, width, height })),
+};
 
 /** What the logger tells the tips: whether a tip may show now, and where the nudge sits. */
 export type LoggerTipsEnvironment = {
@@ -204,9 +216,10 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
       // Hints remember whether they were on screen at the last tick.
       const height = Dimensions.get('window').height;
       for (const hint of hints.current.values())
-        hint.view?.measureInWindow((_x, y, width, h) => {
-          hint.visible = width > 0 && y >= 0 && y + h < height - BOTTOM_RESERVED;
-        });
+        if (hint.view)
+          tipAnchorLayout.measure(hint.view, ({ y, width, height: h }) => {
+            hint.visible = width > 0 && y >= 0 && y + h < height - BOTTOM_RESERVED;
+          });
       const tipState = tips.get();
       if (!current.ready || !tipState.enabled || !quiet(holds.current)) {
         quietSince.current = 0;
@@ -336,8 +349,10 @@ export function LoggerTipSlot({
   const active = eligible && tips.hintSlot === key;
   const tip = TIP_DEFINITIONS[id];
   return (
-    <View ref={anchor} collapsable={false}>
-      <View style={styles.slotRow}>
+    <View>
+      {/* Only the control's row is measured: the open tip below it never counts, so opening it
+          low on the screen doesn't put it away. */}
+      <View ref={anchor} collapsable={false} testID="logger-tip-anchor" style={styles.slotRow}>
         <View style={styles.slotControl}>{children}</View>
         {active && (
           <Pressable

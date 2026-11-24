@@ -370,12 +370,17 @@ test('a clock correction opened for one workout never reaches the workout that r
   // The web finishes that workout and starts another before Set time is tapped.
   server = {
     revision: 4,
-    draft: remoteDraft({ clientSessionId: '2c5f39cb-3fb0-42e3-9e4a-1f7d2a6b8c01', notes: 'Workout B' }),
+    draft: remoteDraft({
+      clientSessionId: '2c5f39cb-3fb0-42e3-9e4a-1f7d2a6b8c01',
+      notes: 'Workout B',
+    }),
     refuseNextEdit: false,
   };
   await reconnect();
   await waitFor(() =>
-    expect(readActiveWorkoutDraft(deviceStorage)?.clientSessionId).toBe('2c5f39cb-3fb0-42e3-9e4a-1f7d2a6b8c01'),
+    expect(readActiveWorkoutDraft(deviceStorage)?.clientSessionId).toBe(
+      '2c5f39cb-3fb0-42e3-9e4a-1f7d2a6b8c01',
+    ),
   );
   // The editor closed with the workout it was opened for.
   expect(screen.queryByText('Workout time so far')).toBeNull();
