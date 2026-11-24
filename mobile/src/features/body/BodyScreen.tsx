@@ -22,7 +22,8 @@ import { useTheme } from '../../ui/theme';
 import { NotificationsBell, socialRoutes } from '../social';
 import { BodyHistory } from './BodyHistory';
 import { syncBodyCheckIns } from './bodyCheckInQueue';
-import { CheckInSyncCard, MaintenanceTip } from './BodyNotices';
+import { CheckInSyncCard } from './BodyCheckInSync';
+import { MaintenanceTip } from './BodyNotices';
 import {
   bodyCheckInApi,
   bodyGoalApi,
@@ -193,6 +194,7 @@ export function BodyScreen() {
         refreshing={refreshing}
         onRefresh={() => void refresh()}
       >
+        <CheckInSyncCard />
         {measurementsQuery.isPending ? (
           <Loading label="Loading body check-ins" />
         ) : !measurementsQuery.data ? (
@@ -202,7 +204,6 @@ export function BodyScreen() {
           />
         ) : (
           <>
-            <CheckInSyncCard />
             <MaintenanceTip
               goals={goals}
               latest={latest}

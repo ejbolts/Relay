@@ -6,59 +6,14 @@ import {
 } from '../../../../frontend/src/bodyMeasurementHistory';
 import { TIP_DEFINITIONS } from '../../../../frontend/src/tipDefinitions';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
-import { Button, Card } from '../../ui/components';
+import { Button } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { useTips } from '../guides/tips';
-import { useBodyCheckInStatus } from './BodyCheckInSync';
-import { syncBodyCheckIns } from './bodyCheckInQueue';
 import { bodyIcons } from './bodyIcons';
 
-/** Check-ins saved on this phone that the server hasn't confirmed, as the web's sync card. */
-export function CheckInSyncCard() {
-  const { colors, type, radius } = useTheme();
-  const { pending, error } = useBodyCheckInStatus();
-  if (pending === 0) return null;
-  return (
-    <Card accessibilityLabel="Check-in sync" style={{ gap: 8 }}>
-      <View style={styles.row}>
-        <Icon name={bodyIcons.cloud} size={18} color={colors.secondary} />
-        <Text style={[type.callout, { color: colors.text, fontWeight: '600', flex: 1 }]}>
-          {pending} {pending === 1 ? 'check-in' : 'check-ins'} saved on this phone
-        </Text>
-        {!error && (
-          <Text
-            style={[
-              type.caption,
-              styles.badge,
-              {
-                color: colors.secondary,
-                backgroundColor: colors.surface2,
-                borderRadius: radius.pill,
-              },
-            ]}
-          >
-            Waiting to sync
-          </Text>
-        )}
-      </View>
-      {error && (
-        <>
-          <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
-            {error}
-          </Text>
-          <Button
-            label="Retry sync"
-            variant="secondary"
-            size="small"
-            onPress={() => void syncBodyCheckIns(true).catch(() => undefined)}
-          />
-        </>
-      )}
-    </Card>
-  );
-}
+export { CheckInSyncCard } from './BodyCheckInSync';
 
 /**
  * The web's maintenance tip: once the latest weigh-in reaches a loss or gain goal, and no goal
@@ -132,7 +87,5 @@ export function MaintenanceTip({
 }
 
 const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  badge: { paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
   tip: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, padding: 14 },
 });

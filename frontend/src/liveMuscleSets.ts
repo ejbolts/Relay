@@ -10,6 +10,34 @@ export type MuscleSetsWeek = Pick<WeeklySets, 'week_start' | 'week_end'> & {
   muscle_groups: MuscleSets[];
 };
 
+/** A finished workout counted before the dashboard includes it, with its own contribution id. */
+export interface FinishedMuscleSource {
+  id: string;
+  draft: ActiveWorkoutDraft;
+}
+
+/** Projects finished and in-progress workouts onto a week of muscle set credits. */
+export function liveMuscleSetsWithFinished(
+  week: MuscleSetsWeek,
+  draft: ActiveWorkoutDraft | null,
+  exercises: Exercise[],
+  workouts: TrackedWorkout[],
+  today: string,
+  finished: readonly FinishedMuscleSource[] = [],
+): MuscleSetsWeek {
+  return liveMuscleSets(
+    finished.reduce(
+      (current, source) =>
+        liveMuscleSets(current, source.draft, exercises, workouts, today, source.id),
+      week,
+    ),
+    draft,
+    exercises,
+    workouts,
+    today,
+  );
+}
+
 export function liveMuscleSets(
   week: MuscleSetsWeek,
   draft: ActiveWorkoutDraft | null,

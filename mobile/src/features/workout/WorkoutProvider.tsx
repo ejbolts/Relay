@@ -86,6 +86,12 @@ import {
 import { useOptionalSession } from '../../session/SessionProvider';
 import { isToastAccountCurrent, showToast, toastAccountFor, ToastHost } from '../../ui/Toast';
 import { restTimerPreference } from '../settings/devicePreferences';
+import {
+  clearLiveWorkoutSources,
+  pruneSavedWorkouts,
+  publishLiveWorkoutSources,
+  rememberSavedWorkout,
+} from '../review/liveWorkoutSources';
 import { refreshFriendPresence, socialKeys, updateFriendPresence } from '../social/socialQueries';
 import { FinishedQueueSender, type QueueStatus } from './finishedQueueSender';
 import {
@@ -440,6 +446,13 @@ const WorkoutEngine = memo(function WorkoutEngine({
   useEffect(() => saveOfflineQueries(client, user.id), [client, user.id]);
 
   const dashboard = useDashboard();
+  const dashboardRef = useRef(dashboard.data);
+  const dashboardUpdatedAtRef = useRef(dashboard.dataUpdatedAt);
+  useLayoutEffect(() => {
+    dashboardRef.current = dashboard.data;
+    dashboardUpdatedAtRef.current = dashboard.dataUpdatedAt;
+    pruneSavedWorkouts(user.id, dashboard.data ?? null, dashboard.dataUpdatedAt);
+  }, [user.id, dashboard.data, dashboard.dataUpdatedAt]);
   const historyQuery = useWorkoutHistory();
   const typesQuery = useWorkoutTypes();
   const saved = useSavedExercises();
@@ -666,6 +679,13 @@ const WorkoutEngine = memo(function WorkoutEngine({
           error instanceof ApiError && error.status === 409 && error.code === 'workout_conflict',
       }),
       onSaved: (workout, item, remaining) => {
+        rememberSavedWorkout(
+          user.id,
+          workout.id,
+          item,
+          dashboardRef.current ?? null,
+          dashboardUpdatedAtRef.current,
+        );
         if (remaining === 0) void refreshTraining(client);
         // The queue no longer owns this session's shared copy.
         void syncRef.current?.sync();
@@ -1498,6 +1518,21 @@ const WorkoutEngine = memo(function WorkoutEngine({
       closeFinished,
     ],
   );
+
+  const liveDraft = useMemo(
+    () => (logger ? loggerToDraft(logger, logger.lastActiveAt) : null),
+    [logger],
+  );
+  useLayoutEffect(() => {
+    publishLiveWorkoutSources({
+      owner: user.id,
+      draft: liveDraft,
+      exercises: allExercises,
+      refusals: queue.refusals,
+      waiting: queue.waiting,
+    });
+  }, [user.id, liveDraft, allExercises, queue.refusals, queue.waiting]);
+  useEffect(() => () => clearLiveWorkoutSources(user.id), [user.id]);
 
   useLayoutEffect(() => {
     publish({ workout: workoutApi, logger: loggerApi });

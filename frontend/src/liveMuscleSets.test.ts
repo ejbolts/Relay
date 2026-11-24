@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { liveMuscleSets, type MuscleSetsWeek } from './liveMuscleSets';
+import { liveMuscleSets, liveMuscleSetsWithFinished, type MuscleSetsWeek } from './liveMuscleSets';
 import { createWorkoutSet } from './workoutSets';
 import type { ActiveWorkoutDraft } from './workoutDraft';
 import type { Exercise, TrackedWorkout } from './types';
@@ -180,5 +180,39 @@ describe('live muscle set credits', () => {
         ),
       ),
     ).toEqual({ Pectorals: 2, Triceps: 1 });
+  });
+  it('combines finished and active workouts without double-counting once saved', () => {
+    const finishedDraft: ActiveWorkoutDraft = {
+      ...draft,
+      clientSessionId: 'finished-session',
+      name: 'Earlier push',
+    };
+    const combined = liveMuscleSetsWithFinished(
+      week,
+      { ...draft, clientSessionId: 'live-session' },
+      [exercise],
+      [],
+      '2026-11-05',
+      [{ id: 'pending:finished-session', draft: finishedDraft }],
+    );
+    expect(totals(combined)).toEqual({ Pectorals: 4, Triceps: 1 });
+
+    // Once the finished workout reaches the dashboard, its contribution replaces rather than doubles.
+    const withSaved = liveMuscleSets(week, finishedDraft, [exercise], [], '2026-11-05', 'saved-1');
+    const afterSave = liveMuscleSetsWithFinished(
+      withSaved,
+      null,
+      [exercise],
+      [
+        {
+          id: 'saved-1',
+          client_session_id: 'finished-session',
+          movements: [],
+        } as unknown as TrackedWorkout,
+      ],
+      '2026-11-05',
+      [{ id: 'saved-1', draft: finishedDraft }],
+    );
+    expect(totals(afterSave)).toEqual({ Pectorals: 3, Triceps: 0.5 });
   });
 });
