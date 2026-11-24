@@ -1,13 +1,27 @@
-import { useEffect, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
+import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { usePlayerError } from './usePlayerError';
 
 /**
- * Native preview of a picked workout clip before uploading, matching the web's muted inline
- * `<video controls muted playsInline preload="metadata">` element without autoplaying.
+ * Preview of a picked workout clip before uploading, like the web's muted inline
+ * `<video controls muted playsInline>`. A batch can hold many clips and each native player
+ * prepares its video as soon as it exists, so a clip gets a player only once its preview is
+ * opened, and the screen keeps one open at a time (`active`).
  */
-export function ClipPreview({ uri, name }: { uri: string; name: string }) {
+export function ClipPreview({
+  uri,
+  name,
+  active,
+  onOpen,
+}: {
+  uri: string;
+  name: string;
+  active: boolean;
+  onOpen: () => void;
+}) {
   const { colors, type, radius } = useTheme();
   const [failed, setFailed] = useState(false);
 
@@ -18,6 +32,27 @@ export function ClipPreview({ uri, name }: { uri: string; name: string }) {
       >
         <Text style={[type.footnote, { color: colors.muted }]}>Preview unavailable</Text>
       </View>
+    );
+  }
+
+  if (!active) {
+    return (
+      <Pressable
+        testID={`clip-preview-open-${name}`}
+        accessibilityRole="button"
+        accessibilityLabel={`Preview ${name}`}
+        onPress={onOpen}
+        style={({ pressed }) => [
+          styles.frame,
+          styles.closed,
+          { borderRadius: radius.md },
+          pressed && { opacity: 0.8 },
+        ]}
+      >
+        <View style={styles.playCircle}>
+          <Icon name="play" size={24} color="#ffffff" />
+        </View>
+      </Pressable>
     );
   }
 
@@ -37,17 +72,13 @@ function ClipVideoPlayer({
   name: string;
   onError: () => void;
 }) {
+  // Opened by a tap, so it starts playing, muted as on the web.
   const player = useVideoPlayer(uri, (instance) => {
     instance.muted = true;
     instance.loop = false;
+    instance.play();
   });
-
-  useEffect(() => {
-    const subscription = player.addListener('statusChange', ({ status }) => {
-      if (status === 'error') onError();
-    });
-    return () => subscription.remove();
-  }, [player, onError]);
+  usePlayerError(player, onError);
 
   return (
     <VideoView
@@ -69,6 +100,18 @@ const styles = StyleSheet.create({
     aspectRatio: 16 / 9,
     overflow: 'hidden',
     backgroundColor: '#05070b',
+  },
+  closed: { alignItems: 'center', justifyContent: 'center' },
+  playCircle: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: 'rgba(255, 255, 255, 0.16)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255, 255, 255, 0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingLeft: 3,
   },
   fallback: {
     paddingVertical: 12,

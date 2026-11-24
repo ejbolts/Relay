@@ -61,6 +61,7 @@ const HOLD_REASONS: Partial<Record<Phase, string>> = {
 };
 const STILL_UPLOADABLE: WorkoutSession['status'][] = ['draft', 'uploading', 'upload_failed'];
 const UPLOAD_WAKE_LOCK_TAG = 'relay-video-upload';
+let wakeLockRuns = 0;
 /** The server has started work on the batch (or finished it), so it can't be cancelled. */
 const processingBegan = (status: WorkoutSession['status']) =>
   PROCESSING_SESSION_STATUSES.includes(status) || status === 'complete' || status === 'failed';
@@ -69,17 +70,21 @@ const processingBegan = (status: WorkoutSession['status']) =>
 function useUploadWakeLock(active: boolean) {
   useEffect(() => {
     if (!active) return;
+    // Each run holds its own tag, so a late activation or release from an earlier run can never
+    // drop the lock a retry holds.
+    wakeLockRuns += 1;
+    const tag = `${UPLOAD_WAKE_LOCK_TAG}-${wakeLockRuns}`;
     let released = false;
-    void activateKeepAwakeAsync(UPLOAD_WAKE_LOCK_TAG)
+    void activateKeepAwakeAsync(tag)
       .then(() => {
-        if (released) return deactivateKeepAwake(UPLOAD_WAKE_LOCK_TAG);
+        if (released) return deactivateKeepAwake(tag);
       })
       .catch(() => {
         // Upload still works; wake locks are a best-effort guard only.
       });
     return () => {
       released = true;
-      void deactivateKeepAwake(UPLOAD_WAKE_LOCK_TAG).catch(() => undefined);
+      void deactivateKeepAwake(tag).catch(() => undefined);
     };
   }, [active]);
 }
@@ -111,6 +116,8 @@ function VideoUploader() {
   const [date, setDate] = useState(localDate);
   const [notes, setNotes] = useState('');
   const [clips, setClips] = useState<PhoneClip[]>([]);
+  // The one clip whose preview is open; the others have no player.
+  const [previewing, setPreviewing] = useState<string | null>(null);
   const [session, setSession] = useState<WorkoutSession | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -749,6 +756,8 @@ function VideoUploader() {
               clip={clip}
               index={index}
               last={index === clips.length - 1}
+              previewing={previewing === clip.clientId}
+              onPreview={() => setPreviewing(clip.clientId)}
               onLabel={(label) => updateClip(clip.clientId, { exerciseLabel: label })}
               onMove={(to) => setClips((current) => moveItem(current, index, to))}
               onRemove={() =>
@@ -771,6 +780,8 @@ function ClipCard({
   clip,
   index,
   last,
+  previewing,
+  onPreview,
   onLabel,
   onMove,
   onRemove,
@@ -778,6 +789,8 @@ function ClipCard({
   clip: PhoneClip;
   index: number;
   last: boolean;
+  previewing: boolean;
+  onPreview: () => void;
   onLabel: (label: string) => void;
   onMove: (to: number) => void;
   onRemove: () => void;
@@ -812,7 +825,7 @@ function ClipCard({
       <Text numberOfLines={1} style={[type.callout, { color: colors.text, fontWeight: '600' }]}>
         {clip.name}
       </Text>
-      <ClipPreview uri={clip.uri} name={clip.name} />
+      <ClipPreview uri={clip.uri} name={clip.name} active={previewing} onOpen={onPreview} />
       <TextInput
         accessibilityLabel={`Set ${set} exercise`}
         value={clip.exerciseLabel}
