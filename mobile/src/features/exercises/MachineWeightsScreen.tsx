@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   Alert,
   Image,
@@ -38,6 +38,11 @@ import {
   withSuggestions,
   type PairText,
 } from '../../../../frontend/src/machineWeightsForm';
+import {
+  normaliseCoachSteps,
+  normaliseFirstStep,
+  normaliseStepAfterToggle,
+} from '../../../../frontend/src/setupGuideCoach';
 import type {
   ExerciseProgress,
   MachineWeight,
@@ -56,6 +61,13 @@ import { ProgressChart, type ChartPoint } from '../training/ProgressChart';
 import { useScopedExerciseProgress, useWeightMapping, saveWeightMapping } from './exerciseQueries';
 import { FactorSlider } from './FactorSlider';
 import { haptics } from '../../ui/haptics';
+import { CoachSpacer, CoachTarget, GuideCoach } from '../guides/GuideCoach';
+import {
+  exitSetupGuide,
+  finishSetupGuide,
+  useExitGuideOnLeave,
+  useSetupGuide,
+} from '../guides/setupGuides';
 
 const HELP = [
   'All machines shows every session in the reference machine’s weights. Each pair shows what your weight on a machine equals on the reference. Drag the slider, or change either weight, and watch the preview.',
@@ -117,6 +129,11 @@ function MachineWeightsEditor({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // The machine weights guide coaches this screen, as the web's.
+  const guide = useSetupGuide('normalise');
+  const [guideStep, setGuideStep] = useState(() => normaliseFirstStep(mapping.enabled));
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  useExitGuideOnLeave('normalise');
   const { reference, tree, ordered } = machineWeightsLayout(draft);
   const recent = useMemo(() => recentSessionCounts(progress, localDate()), [progress]);
   const recommendedId = recommendedReferenceId(draft, recent);
@@ -134,6 +151,15 @@ function MachineWeightsEditor({
         detail: 'est. 1RM',
       }))
     : [];
+
+  const firstSpoke = ordered.find((machine) => machine.id !== draft.reference_machine_id)?.id;
+  const coachSteps = normaliseCoachSteps({
+    exerciseName: progress.exercise.name,
+    enabled: draft.enabled,
+    referenceId: draft.reference_machine_id,
+    machines: live.machines,
+    suggested: (machineId) => suggestions.has(machineId),
+  });
 
   function setPair(machineId: string, text: PairText) {
     setTexts((current) => ({ ...current, [machineId]: text }));
@@ -156,6 +182,7 @@ function MachineWeightsEditor({
   function toggle() {
     const next = toggledNormalise(draft, recommendedId);
     setDraft(next);
+    if (guide) setGuideStep((step) => normaliseStepAfterToggle(step, next.enabled));
     if (next.enabled) setTexts((current) => withSuggestions(current, next, progress, unit));
   }
 
@@ -166,7 +193,8 @@ function MachineWeightsEditor({
     setSaving(true);
     setSaveError(null);
     try {
-      await saveWeightMapping(client, exerciseId, parsed.mapping);
+      const saved = await saveWeightMapping(client, exerciseId, parsed.mapping);
+      if (saved.enabled) finishSetupGuide('normalise');
       haptics.success();
       showToast('Machine weights saved');
       router.back();
@@ -184,16 +212,19 @@ function MachineWeightsEditor({
       <Stack.Screen
         options={{
           headerRight: () => (
-            <HeaderTextButton
-              label="Save"
-              accessibilityLabel="Save machine weights"
-              busy={saving}
-              onPress={() => void save()}
-            />
+            <CoachTarget id="normalise.save" header radius={10}>
+              <HeaderTextButton
+                label="Save"
+                accessibilityLabel="Save machine weights"
+                busy={saving}
+                onPress={() => void save()}
+              />
+            </CoachTarget>
           ),
         }}
       />
       <ScrollView
+        ref={scroll}
         style={{ flex: 1, backgroundColor: colors.page }}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
@@ -213,12 +244,14 @@ function MachineWeightsEditor({
           >
             <Text style={[type.caption, { color: colors.secondary, fontWeight: '700' }]}>?</Text>
           </Pressable>
-          <Switch
-            accessibilityLabel="Normalise weights"
-            value={draft.enabled}
-            onValueChange={toggle}
-            trackColor={{ true: colors.accent, false: colors.surface3 }}
-          />
+          <CoachTarget id="normalise.switch" radius={16}>
+            <Switch
+              accessibilityLabel="Normalise weights"
+              value={draft.enabled}
+              onValueChange={toggle}
+              trackColor={{ true: colors.accent, false: colors.surface3 }}
+            />
+          </CoachTarget>
         </View>
         {showPreview && reference && (
           <Card accessibilityLabel="Preview">
@@ -242,108 +275,120 @@ function MachineWeightsEditor({
           const factor = pairFactor(liveMachine);
           const suggestion = suggestions.get(machine.id);
           const base = baseWeight(progress, machine.id, unit);
+          // The coach points at the reference machine, then the first machine matched to it.
+          const coachTarget = isReference
+            ? 'normalise.reference'
+            : tree && machine.id === firstSpoke && 'normalise.match';
           return (
-            <Card key={machine.id} accessibilityLabel={machine.caption}>
-              <View style={styles.machine}>
-                <MachineThumb machine={machine} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  {isReference && (
-                    <Text style={[type.caption, { color: colors.gold, fontWeight: '700' }]}>
-                      ★ Reference
-                    </Text>
-                  )}
-                  <Text style={[type.headline, { color: colors.text }]} numberOfLines={1}>
-                    {machine.caption}
-                  </Text>
-                  <Text style={[type.caption, { color: colors.secondary }]}>
-                    {machine.workout_count} {machine.workout_count === 1 ? 'workout' : 'workouts'} ·{' '}
-                    {recent.get(machine.id) ?? 0} in 3 months
-                  </Text>
-                  {tree && !isReference && machine.id === recommendedId && (
-                    <Text style={[type.caption, { color: colors.accentText, fontWeight: '600' }]}>
-                      Recommended reference
-                    </Text>
-                  )}
-                </View>
-                {tree && !isReference && (
-                  <Button
-                    label="Make reference"
-                    variant="link"
-                    accessibilityLabel={`Make ${machine.caption} the reference`}
-                    onPress={() => chooseReference(machine.id)}
-                  />
-                )}
-              </View>
-              {tree && reference && !isReference && (
-                <View style={{ gap: 10 }}>
-                  <View style={styles.equation}>
-                    <WeightBox
-                      caption="This machine"
-                      value={text.machine}
-                      unit={unit}
-                      label={`Weight on ${machine.caption}`}
-                      invalid={!!errors[machine.id]}
-                      onChange={(value) => setPair(machine.id, pairWithMachineWeight(text, value))}
-                    />
-                    <Text style={[type.title, { color: colors.muted }]}>=</Text>
-                    <WeightBox
-                      caption={`★ ${reference.caption}`}
-                      value={text.reference}
-                      unit={unit}
-                      label={`Matching weight on ${reference.caption} for ${machine.caption}`}
-                      invalid={!!errors[machine.id]}
-                      onChange={(value) => setPair(machine.id, { ...text, reference: value })}
-                    />
-                  </View>
-                  <View style={styles.slider}>
-                    <FactorSlider
-                      value={factor}
-                      label={`Conversion for ${machine.caption}`}
-                      onChange={(next) => setPair(machine.id, pairForFactor(text, next, base))}
-                    />
-                    <Text
-                      style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}
-                    >
-                      ×{factor.toFixed(2)}
-                    </Text>
-                  </View>
-                  {suggestion && (
-                    <View style={styles.suggestion}>
-                      <Text style={[type.footnote, { color: colors.secondary, flex: 1 }]}>
-                        {suggestionLabel(suggestion)} ×{suggestion.factor.toFixed(2)} ·{' '}
-                        {sessionCount(suggestion.sessions)} ·{' '}
-                        <Text
-                          style={{
-                            color: inLikelyRange(factor, suggestion) ? colors.good : colors.gold,
-                            fontWeight: '600',
-                          }}
-                        >
-                          {inLikelyRange(factor, suggestion) ? 'In range' : 'Outside range'}
-                        </Text>
+            <CoachTarget key={machine.id} id={coachTarget} radius={20}>
+              <Card accessibilityLabel={machine.caption}>
+                <View style={styles.machine}>
+                  <MachineThumb machine={machine} />
+                  <View style={{ flex: 1, gap: 2 }}>
+                    {isReference && (
+                      <Text style={[type.caption, { color: colors.gold, fontWeight: '700' }]}>
+                        ★ Reference
                       </Text>
-                      {Math.abs(factor - suggestion.factor) >= 0.005 && (
-                        <Button
-                          label="Use"
-                          variant="link"
-                          accessibilityLabel={`Use ${suggestionLabel(suggestion).toLowerCase()} ×${suggestion.factor.toFixed(2)} for ${machine.caption}`}
-                          onPress={() =>
-                            setPair(machine.id, pairForFactor(text, suggestion.factor, base))
-                          }
-                        />
-                      )}
-                    </View>
-                  )}
-                  {!!errors[machine.id] && (
-                    <Text
-                      accessibilityRole="alert"
-                      style={[type.footnote, { color: colors.danger }]}
-                    >
-                      {errors[machine.id]}
+                    )}
+                    <Text style={[type.headline, { color: colors.text }]} numberOfLines={1}>
+                      {machine.caption}
                     </Text>
+                    <Text style={[type.caption, { color: colors.secondary }]}>
+                      {machine.workout_count} {machine.workout_count === 1 ? 'workout' : 'workouts'}{' '}
+                      · {recent.get(machine.id) ?? 0} in 3 months
+                    </Text>
+                    {tree && !isReference && machine.id === recommendedId && (
+                      <Text style={[type.caption, { color: colors.accentText, fontWeight: '600' }]}>
+                        Recommended reference
+                      </Text>
+                    )}
+                  </View>
+                  {tree && !isReference && (
+                    <Button
+                      label="Make reference"
+                      variant="link"
+                      accessibilityLabel={`Make ${machine.caption} the reference`}
+                      onPress={() => chooseReference(machine.id)}
+                    />
                   )}
                 </View>
-              )}
-            </Card>
+                {tree && reference && !isReference && (
+                  <View style={{ gap: 10 }}>
+                    <View style={styles.equation}>
+                      <WeightBox
+                        caption="This machine"
+                        value={text.machine}
+                        unit={unit}
+                        label={`Weight on ${machine.caption}`}
+                        invalid={!!errors[machine.id]}
+                        onChange={(value) =>
+                          setPair(machine.id, pairWithMachineWeight(text, value))
+                        }
+                      />
+                      <Text style={[type.title, { color: colors.muted }]}>=</Text>
+                      <WeightBox
+                        caption={`★ ${reference.caption}`}
+                        value={text.reference}
+                        unit={unit}
+                        label={`Matching weight on ${reference.caption} for ${machine.caption}`}
+                        invalid={!!errors[machine.id]}
+                        onChange={(value) => setPair(machine.id, { ...text, reference: value })}
+                      />
+                    </View>
+                    <View style={styles.slider}>
+                      <FactorSlider
+                        value={factor}
+                        label={`Conversion for ${machine.caption}`}
+                        onChange={(next) => setPair(machine.id, pairForFactor(text, next, base))}
+                      />
+                      <Text
+                        style={[
+                          type.callout,
+                          type.number,
+                          { color: colors.text, fontWeight: '700' },
+                        ]}
+                      >
+                        ×{factor.toFixed(2)}
+                      </Text>
+                    </View>
+                    {suggestion && (
+                      <View style={styles.suggestion}>
+                        <Text style={[type.footnote, { color: colors.secondary, flex: 1 }]}>
+                          {suggestionLabel(suggestion)} ×{suggestion.factor.toFixed(2)} ·{' '}
+                          {sessionCount(suggestion.sessions)} ·{' '}
+                          <Text
+                            style={{
+                              color: inLikelyRange(factor, suggestion) ? colors.good : colors.gold,
+                              fontWeight: '600',
+                            }}
+                          >
+                            {inLikelyRange(factor, suggestion) ? 'In range' : 'Outside range'}
+                          </Text>
+                        </Text>
+                        {Math.abs(factor - suggestion.factor) >= 0.005 && (
+                          <Button
+                            label="Use"
+                            variant="link"
+                            accessibilityLabel={`Use ${suggestionLabel(suggestion).toLowerCase()} ×${suggestion.factor.toFixed(2)} for ${machine.caption}`}
+                            onPress={() =>
+                              setPair(machine.id, pairForFactor(text, suggestion.factor, base))
+                            }
+                          />
+                        )}
+                      </View>
+                    )}
+                    {!!errors[machine.id] && (
+                      <Text
+                        accessibilityRole="alert"
+                        style={[type.footnote, { color: colors.danger }]}
+                      >
+                        {errors[machine.id]}
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </Card>
+            </CoachTarget>
           );
         })}
         {!!saveError && (
@@ -351,7 +396,19 @@ function MachineWeightsEditor({
             {saveError}
           </Text>
         )}
+        <CoachSpacer />
       </ScrollView>
+      {guide && (
+        <GuideCoach
+          step={coachSteps[guideStep]}
+          index={guideStep}
+          total={coachSteps.length}
+          scroll={scroll}
+          onNext={() => setGuideStep(guideStep + 1)}
+          onBack={guideStep > 0 ? () => setGuideStep(guideStep - 1) : undefined}
+          onExit={() => exitSetupGuide('normalise')}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }

@@ -10,6 +10,12 @@ import { HelpSettings } from './HelpSettings';
 import { AppTourHost } from './AppTourHost';
 import { HomeGuides } from './HomeGuides';
 import { ShareReminderAction } from './ShareReminderAction';
+import {
+  activeSetupGuide,
+  exitSetupGuide,
+  finishSetupGuide,
+  resetSetupGuideForTests,
+} from './setupGuides';
 import { resetTipsForTests, tipsFor } from './tips';
 import { launchPromptOpened, resetNoticeMemory } from '../review/noticeMemory';
 import { appTourWaiting, closeAppTour, queueAppTour, startAppTour } from './tourProgress';
@@ -65,6 +71,7 @@ const stored = () => JSON.parse(memoryKv.get(tipStorageKey('u1')) ?? '{}');
 beforeEach(() => {
   memoryKv.clear();
   resetTipsForTests();
+  resetSetupGuideForTests();
   resetNoticeMemory();
   mockUser.id = 'u1';
   closeAppTour();
@@ -96,7 +103,7 @@ test('hides the bulb while tips are off on this device', async () => {
   expect(screen.queryByRole('button', { name: /^Tips/ })).toBeNull();
 });
 
-test('a split tip steps through its setup guide with your own training, then opens Splits', async () => {
+test('a split tip starts its setup guide with your own training and opens Splits to coach it', async () => {
   mockWorkouts.current = [workout('2026-02-01'), workout('2026-02-03'), workout('2026-02-05')];
   jest.useFakeTimers();
   try {
@@ -110,16 +117,26 @@ test('a split tip steps through its setup guide with your own training, then ope
   } finally {
     jest.useRealTimers();
   }
-  expect(screen.getByText('Setup guide · 1 of 6')).toBeVisible();
-  expect(screen.getByText(/went Push, Push, Push/)).toBeVisible();
-  for (let step = 0; step < 2; step++)
-    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
-  expect(screen.getByText(/stay at 80 kg on Bench press/)).toBeVisible();
-  for (let step = 0; step < 3; step++)
-    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Set up a split' }));
   expect(mockRouter.push).toHaveBeenCalledWith('/split');
+  expect(activeSetupGuide()).toMatchObject({
+    id: 'split',
+    facts: { rotation: ['Push', 'Push', 'Push'], lift: { name: 'Bench press', latestTopKg: 80 } },
+  });
+  // Opening the guide engages its tip; only saving the split teaches it.
+  expect(stored().seen).toEqual({ split: 'seen' });
+  finishSetupGuide('split');
   expect(stored().seen).toMatchObject({ split: 'learned', repRange: 'learned' });
+});
+
+test('Settings starts each setup guide in its feature', async () => {
+  mockWorkouts.current = [workout('2026-02-01')];
+  await show(<GuidesScreen />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Training blocks' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/blocks/edit');
+  expect(activeSetupGuide()?.id).toBe('blocks');
+  // Leaving part way marks nothing.
+  exitSetupGuide();
+  expect(stored().seen).toEqual({ blocks: 'seen' });
 });
 
 test('Settings lists the guides, says why Compare machines must wait, and replays the tour', async () => {

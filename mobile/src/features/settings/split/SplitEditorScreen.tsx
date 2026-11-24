@@ -56,6 +56,7 @@ import { NEW_WORKOUT_TYPE_COLOR } from '../../../../../frontend/src/workoutTypes
 import {
   useExercises,
   useTrainingPreferences,
+  useWeightUnit,
   useWorkoutHistory,
   useWorkoutTypes,
 } from '../../../data/queries';
@@ -84,6 +85,25 @@ import {
 } from '../settingsData';
 import { PlannedExercise } from './PlannedExercise';
 import { SplitGuide } from './SplitGuide';
+import {
+  splitEditorCoach,
+  splitEditorFirstStage,
+  splitEditorGuide,
+  splitEditorIndex,
+  splitEditorNextStage,
+  splitEditorPreviousStage,
+  splitGuideFlow,
+  splitSavedOutcome,
+  type SplitEditorStage,
+} from '../../../../../frontend/src/setupGuideCoach';
+import { formatWeight } from '../../../../../frontend/src/weightUnits';
+import { CoachSpacer, CoachTarget, GuideCoach } from '../../guides/GuideCoach';
+import {
+  exitSetupGuide,
+  finishSetupGuide,
+  updateSetupGuide,
+  useSetupGuide,
+} from '../../guides/setupGuides';
 import { DateStepper, StepButton } from './SplitParts';
 
 /**
@@ -134,6 +154,7 @@ export function SplitEditorScreen() {
       routine={JSON.parse(JSON.stringify(routine)) as Routine}
       schedule={schedule}
       types={allTypes}
+      activeId={current?.enabled ? (current.routine_id ?? 'current-split') : null}
     />
   );
 }
@@ -144,10 +165,13 @@ function Editor({
   routine,
   schedule,
   types,
+  activeId,
 }: {
   routine: Routine;
   schedule?: TrainingSplit;
   types: WorkoutType[];
+  /** The active split, which the splits guide adds rep ranges to. */
+  activeId: string | null;
 }) {
   const router = useRouter();
   const client = useQueryClient();
@@ -171,6 +195,15 @@ function Editor({
   const [validation, setValidation] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [picking, setPicking] = useState<Picking | null>(null);
+  // The splits guide coaches the editor while it runs, as the web's.
+  const running = useSetupGuide('split');
+  const [guide] = useState(() =>
+    running ? splitEditorGuide(splitGuideFlow(activeId), routine) : undefined,
+  );
+  const [guideStage, setGuideStage] = useState<SplitEditorStage>(() =>
+    splitEditorFirstStage(guide),
+  );
+  const unit = useWeightUnit();
 
   const library = useMemo(() => exercises.data ?? [], [exercises.data]);
   // The library's copies carry the latest muscle credits.
@@ -227,19 +260,32 @@ function Editor({
     setValidation(null);
     setSaving(true);
     try {
-      await saveRoutine(
+      const saved = await saveRoutine(
         value,
         schedule
           ? { start_date: startDate, enabled, progression: schedule.progression ?? 'workouts' }
           : undefined,
       );
       void refreshSplits(client);
+      if (running) {
+        // Saving the active split finishes the guide; a new one still needs starting.
+        const outcome = splitSavedOutcome(saved.id, activeId, value.id === 'current-split');
+        if (outcome.finish) finishSetupGuide('split');
+        else updateSetupGuide('split', { useRoutineId: outcome.useRoutineId });
+      }
       showToast('Split saved.');
       router.back();
     } catch (reason) {
       setSaving(false);
       fail(splitFailure(reason));
     }
+  }
+
+  /** Back to the previous step, or out of an unchanged editor on its first step, as the web's. */
+  function coachBack(): (() => void) | undefined {
+    const previous = splitEditorPreviousStage(guide, guideStage);
+    if (previous) return () => setGuideStage(previous);
+    return JSON.stringify(value) === JSON.stringify(routine) ? () => router.back() : undefined;
   }
 
   function newType() {
@@ -306,23 +352,25 @@ function Editor({
               {saving ? (
                 <ActivityIndicator color={colors.accentText} />
               ) : (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Save split"
-                  accessibilityState={{ disabled: !canSave }}
-                  disabled={!canSave}
-                  hitSlop={8}
-                  onPress={() => void save()}
-                >
-                  <Text
-                    style={[
-                      type.body,
-                      { color: colors.accentText, fontWeight: '600', opacity: canSave ? 1 : 0.4 },
-                    ]}
+                <CoachTarget id="split.save" header radius={8}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Save split"
+                    accessibilityState={{ disabled: !canSave }}
+                    disabled={!canSave}
+                    hitSlop={8}
+                    onPress={() => void save()}
                   >
-                    Save
-                  </Text>
-                </Pressable>
+                    <Text
+                      style={[
+                        type.body,
+                        { color: colors.accentText, fontWeight: '600', opacity: canSave ? 1 : 0.4 },
+                      ]}
+                    >
+                      Save
+                    </Text>
+                  </Pressable>
+                </CoachTarget>
               )}
             </View>
           ),
@@ -395,32 +443,35 @@ function Editor({
         <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
           Cycle · {splitDayCount(value.days)}
         </Text>
-        {value.days.map((item, index) => (
-          <DayCard
-            key={index}
-            index={index}
-            day={item}
-            creditDay={creditDays[index]}
-            count={value.days.length}
-            open={openDay === index}
-            selected={selected}
-            types={types}
-            disabled={saving}
-            onToggle={() => setOpenDay(openDay === index ? null : index)}
-            onChange={(next) => setDay(index, next)}
-            onMove={(direction) => move(index, direction)}
-            onRemove={() => {
-              setValue((current) => ({
-                ...current,
-                days: current.days.filter((_, i) => i !== index),
-              }));
-              setOpenDay(null);
-            }}
-            onAddExercises={() => setPicking({ day: index })}
-            onReplace={(movement) => setPicking({ day: index, replace: movement })}
-            canAddExercises={library.length > 0}
-          />
-        ))}
+        <CoachTarget id="split.days" radius={20} style={styles.page}>
+          {value.days.map((item, index) => (
+            <DayCard
+              key={index}
+              index={index}
+              day={item}
+              creditDay={creditDays[index]}
+              count={value.days.length}
+              open={openDay === index}
+              selected={selected}
+              types={types}
+              disabled={saving}
+              onToggle={() => setOpenDay(openDay === index ? null : index)}
+              onChange={(next) => setDay(index, next)}
+              onMove={(direction) => move(index, direction)}
+              onRemove={() => {
+                setValue((current) => ({
+                  ...current,
+                  days: current.days.filter((_, i) => i !== index),
+                }));
+                setOpenDay(null);
+              }}
+              onAddExercises={() => setPicking({ day: index })}
+              onReplace={(movement) => setPicking({ day: index, replace: movement })}
+              canAddExercises={library.length > 0}
+              coachReps={!!running && guideStage === 'reps'}
+            />
+          ))}
+        </CoachTarget>
         <View style={styles.addDays}>
           <Button
             label="Add workout day"
@@ -450,7 +501,21 @@ function Editor({
           disabled={saving || typeActions.create.isPending}
           onPress={newType}
         />
+        <CoachSpacer />
       </ScrollView>
+      {running && guide && (
+        <GuideCoach
+          step={splitEditorCoach(guideStage, guide, value, running.facts.lift, (kg) =>
+            formatWeight(kg, unit, 1),
+          )}
+          index={splitEditorIndex(guide, guideStage)}
+          total={guide.total}
+          scroll={scroll}
+          onNext={() => setGuideStage(splitEditorNextStage(guideStage))}
+          onBack={coachBack()}
+          onExit={() => exitSetupGuide('split')}
+        />
+      )}
       <ExercisePicker
         visible={!!picking}
         exercises={library}
@@ -576,6 +641,7 @@ function DayCard({
   onRemove,
   onAddExercises,
   onReplace,
+  coachReps = false,
 }: {
   index: number;
   day: RoutineDay;
@@ -592,8 +658,11 @@ function DayCard({
   onRemove: () => void;
   onAddExercises: () => void;
   onReplace: (movement: number) => void;
+  /** The splits guide's rep range step points at this day's first Reps, when the day is open. */
+  coachReps?: boolean;
 }) {
   const { colors, type, radius } = useTheme();
+  const firstReps = day.movements.findIndex((item) => item.exercise.kind !== 'cardio');
   const contribution = splitDayContribution(creditDay, selected);
   const label = `Day ${index + 1}`;
   const name = splitDayName(day, types);
@@ -757,6 +826,7 @@ function DayCard({
               disabled={disabled}
               onChange={(next) => movement(i, next)}
               onReplace={() => onReplace(i)}
+              coachReps={coachReps && i === firstReps}
             />
           ))}
           {!!day.workout_type_id && (

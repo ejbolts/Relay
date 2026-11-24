@@ -26,6 +26,7 @@ let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
+  useIsFocused: () => true,
   // Header buttons render in place, so tests can press them.
   Stack: {
     Screen: ({ options }: { options?: { headerRight?: () => ReactElement } }) =>

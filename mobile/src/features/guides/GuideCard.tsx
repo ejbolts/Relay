@@ -7,6 +7,7 @@ import { guideIcons } from './icons';
 
 export interface GuideNext {
   label?: string;
+  disabled?: boolean;
   onPress: () => void;
 }
 
@@ -22,6 +23,8 @@ export function GuideCard({
   onBack,
   next,
   onLeave,
+  folded = false,
+  handle,
   children,
 }: {
   /** The guide's name in the kicker, such as "Quick tour". */
@@ -32,11 +35,16 @@ export function GuideCard({
   onBack?: () => void;
   next?: GuideNext;
   onLeave: () => void;
+  /** Folded away to the kicker, title, Next and progress, to see more of the screen. */
+  folded?: boolean;
+  /** A grabber above the kicker, for a card that folds. */
+  handle?: ReactNode;
   children: ReactNode;
 }) {
   const { colors, type } = useTheme();
   return (
     <View style={styles.card}>
+      {handle}
       <View style={styles.header}>
         <View style={styles.kicker}>
           <Icon name={guideIcons.sparkle} size={14} color={colors.accentText} />
@@ -57,11 +65,11 @@ export function GuideCard({
       >
         {title}
       </Text>
-      {children}
-      {(onBack || next) && (
+      {!folded && children}
+      {((onBack && !folded) || next) && (
         <View style={styles.actions}>
           {/* Next stays in one place, so a quick second tap never lands on Back. */}
-          {onBack ? (
+          {onBack && !folded ? (
             <Button
               label="Back"
               variant="secondary"
@@ -73,7 +81,12 @@ export function GuideCard({
             <View style={{ flex: 1 }} />
           )}
           {next && (
-            <Button label={next.label ?? 'Next'} style={{ flex: 1 }} onPress={next.onPress} />
+            <Button
+              label={next.label ?? 'Next'}
+              disabled={next.disabled}
+              style={{ flex: 1 }}
+              onPress={next.onPress}
+            />
           )}
         </View>
       )}
