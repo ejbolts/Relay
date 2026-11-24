@@ -30,6 +30,12 @@ export const socialRoutes = {
       pathname: '/social/profile/[id]',
       params: { id, workout: workout.id, date: workout.workout_date },
     }) as const,
+  /** A member's profile filtered to workouts on one machine, scrolled to its history. */
+  profileMachine: (id: string, machinePhotoId: string) =>
+    ({
+      pathname: '/social/profile/[id]',
+      params: { id, machine: machinePhotoId },
+    }) as const,
   workout: (workout: WorkoutTarget) =>
     ({
       pathname: '/social/workout/[id]',
@@ -62,13 +68,26 @@ export function useSocialNavigation() {
       router.push(socialRoutes.profileAt(person.id, workout)),
     [router],
   );
+  const openProfileMachine = useCallback(
+    (person: { id: string }, machinePhotoId: string) =>
+      router.push(socialRoutes.profileMachine(person.id, machinePhotoId)),
+    [router],
+  );
   const openSharing = useCallback(() => router.push(socialRoutes.sharing), [router]);
   const openInvite = useCallback(
     (id: string) => router.push(socialRoutes.profile(id, true)),
     [router],
   );
   return useMemo(
-    () => ({ me, openProfile, openProfileAt, openWorkout, openSharing, openInvite }),
-    [me, openProfile, openProfileAt, openWorkout, openSharing, openInvite],
+    () => ({
+      me,
+      openProfile,
+      openProfileAt,
+      openProfileMachine,
+      openWorkout,
+      openSharing,
+      openInvite,
+    }),
+    [me, openProfile, openProfileAt, openProfileMachine, openWorkout, openSharing, openInvite],
   );
 }

@@ -66,6 +66,17 @@ export function sharedFiltersForExercise(exerciseId: string): SharedWorkoutFilte
 }
 
 /**
+ * The filters with a machine added, as a machine photo's All workouts on this machine sets it,
+ * keeping the others chosen. With no filters, every workout on that machine.
+ */
+export function sharedFiltersWithMachine(
+  filters: SharedWorkoutFilters,
+  machinePhotoId: string,
+): SharedWorkoutFilters {
+  return { ...filters, machine_photo_id: machinePhotoId };
+}
+
+/**
  * The linked workout to open and scroll to, while the filters still show only its day. Choosing
  * any other filter lets the link go.
  */
