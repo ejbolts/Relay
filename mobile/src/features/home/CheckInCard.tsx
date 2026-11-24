@@ -30,6 +30,7 @@ import { haptics } from '../../ui/haptics';
 import { bodyCheckInApi, refreshBodyMeasurements, useBodyMeasurements } from '../body/bodyQueries';
 import { BodyFatStepper, WeightStepper } from '../body/NumberStepper';
 import { bodyIcons } from '../body/bodyIcons';
+import { HomeHoldExempt } from './homeHold';
 import { useWeekStartDay } from './StatCards';
 
 /**
@@ -167,19 +168,21 @@ function CheckInForm({
               unit={unit}
             />
           </View>
-          <WeightStepper
-            weightKg={weight}
-            unit={unit}
-            disabled={saving}
-            onChange={(kg) => {
-              setWeight(kg);
-              setError(null);
-            }}
-            onStep={(delta) => {
-              setWeight(nudgedBodyweightKg(weight, latestKg, delta, unit));
-              setError(null);
-            }}
-          />
+          <HomeHoldExempt>
+            <WeightStepper
+              weightKg={weight}
+              unit={unit}
+              disabled={saving}
+              onChange={(kg) => {
+                setWeight(kg);
+                setError(null);
+              }}
+              onStep={(delta) => {
+                setWeight(nudgedBodyweightKg(weight, latestKg, delta, unit));
+                setError(null);
+              }}
+            />
+          </HomeHoldExempt>
         </View>
       )}
       {view.showFat && (
@@ -190,20 +193,24 @@ function CheckInForm({
             </Text>
             <Status prior={stats.priorBodyFat} today={todayEntry?.body_fat_pct ?? null} unit="%" />
           </View>
-          <BodyFatStepper
-            value={fat}
-            disabled={saving}
-            onChange={(value) => {
-              setFat(value);
-              setError(null);
-            }}
-            onStep={(delta) => {
-              setFat(
-                Number(nudgedBodyFat(fat === null ? '' : String(fat), stats.latestBodyFat, delta)),
-              );
-              setError(null);
-            }}
-          />
+          <HomeHoldExempt>
+            <BodyFatStepper
+              value={fat}
+              disabled={saving}
+              onChange={(value) => {
+                setFat(value);
+                setError(null);
+              }}
+              onStep={(delta) => {
+                setFat(
+                  Number(
+                    nudgedBodyFat(fat === null ? '' : String(fat), stats.latestBodyFat, delta),
+                  ),
+                );
+                setError(null);
+              }}
+            />
+          </HomeHoldExempt>
         </View>
       )}
       {error && (

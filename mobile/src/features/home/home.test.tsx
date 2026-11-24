@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
-import { Alert, Platform, StyleSheet } from 'react-native';
+import { Alert, Platform, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import {
@@ -40,6 +40,32 @@ jest.mock('../../data/api', () => ({
 jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: jest.fn() }));
 const mockRouter = { navigate: jest.fn(), push: jest.fn() };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useIsFocused: () => true }));
+interface MockLongPressConfig {
+  enabled?: boolean;
+  minDuration?: number;
+  maxDistance?: number;
+  numberOfPointers?: number;
+  cancelsTouchesInView?: boolean;
+  onTouchesDown?: (event: { handlerTag: number; allTouches: { x: number; y: number }[] }) => void;
+  onActivate?: () => void;
+}
+// Each card's hold config reaches its view as `holdGesture`, so a test reads one card's hold.
+jest.mock('react-native-gesture-handler', () => {
+  const { cloneElement } = jest.requireActual<typeof import('react')>('react');
+  return {
+    GestureDetector: ({
+      gesture,
+      children,
+    }: {
+      gesture: MockLongPressConfig;
+      children: React.ReactElement;
+    }) => cloneElement(children, { holdGesture: gesture } as never),
+    GestureStateManager: { fail: jest.fn() },
+    useLongPressGesture: (config: MockLongPressConfig) => config,
+  };
+});
+const holdOn = (id: string) =>
+  screen.getByTestId(`home-card-${id}`).props.holdGesture as MockLongPressConfig;
 const mockUser = {
   id: 'u1',
   username: 'preview',
@@ -1049,4 +1075,54 @@ test('the check-in follows its saved mode: Weight only saves just the weight', a
     }),
   );
   expect(await screen.findByText('Body weight saved')).toBeOnTheScreen();
+});
+
+test('holding a Home card for 500 ms opens Edit Home once the layout is confirmed', async () => {
+  let resolveLayout!: (value: HomeLayout) => void;
+  responses['/api/home-layout'] = new Promise<HomeLayout>((resolve) => {
+    resolveLayout = resolve;
+  });
+  await renderHome();
+  await screen.findByText('Upper body day');
+  // Before the server confirms the saved layout, holding is disabled.
+  expect(holdOn('next-workout').enabled).toBe(false);
+  expect(holdOn('next-workout')).toMatchObject({
+    minDuration: 500,
+    maxDistance: 10,
+    numberOfPointers: 1,
+    cancelsTouchesInView: true,
+  });
+
+  await act(async () => resolveLayout(defaultHomeLayout()));
+  await waitFor(() => expect(holdOn('next-workout').enabled).toBe(true));
+  // Every card holds; there is no hold outside a card.
+  expect(holdOn('profile').enabled).toBe(true);
+
+  // A stationary hold on a card opens Edit Home.
+  await act(async () => holdOn('next-workout').onActivate?.());
+  expect(mockRouter.push).toHaveBeenCalledWith('/home-layout');
+});
+
+test('a hold that starts while a text field is focused fails before it can activate', async () => {
+  const { GestureStateManager } = jest.requireMock<{
+    GestureStateManager: { fail: jest.Mock };
+  }>('react-native-gesture-handler');
+  responses['/api/home-layout'] = defaultHomeLayout();
+  await renderHome();
+  await screen.findByText('Upper body day');
+  await waitFor(() => expect(holdOn('next-workout').enabled).toBe(true));
+  const focusedSpy = jest
+    .spyOn(TextInput.State, 'currentlyFocusedInput')
+    .mockReturnValue({} as never);
+  try {
+    await act(async () =>
+      holdOn('next-workout').onTouchesDown?.({ handlerTag: 7, allTouches: [{ x: 20, y: 20 }] }),
+    );
+    expect(GestureStateManager.fail).toHaveBeenCalledWith(7);
+    // Even if it got as far as activating, a focused field keeps Edit Home closed.
+    await act(async () => holdOn('next-workout').onActivate?.());
+    expect(mockRouter.push).not.toHaveBeenCalledWith('/home-layout');
+  } finally {
+    focusedSpy.mockRestore();
+  }
 });

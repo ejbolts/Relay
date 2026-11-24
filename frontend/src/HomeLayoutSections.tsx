@@ -3,6 +3,8 @@ import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import {
   HOME_SECTIONS,
+  canDropHomeSectionInGap,
+  dropHomeSection,
   fillHomeSectionGap,
   homeSectionGaps,
   homeSectionSpans,
@@ -11,6 +13,7 @@ import {
   showHomeSectionAfter,
   toggleHomeSection,
   toggleHomeSectionWidth,
+  type HomeDropTarget,
   type HomeLayout,
   type HomeSectionId,
 } from './homeLayout';
@@ -33,7 +36,7 @@ interface CardDrag {
   clientY: number;
   card: HTMLElement;
   handle: HTMLButtonElement;
-  target: { id: HomeSectionId; empty: boolean } | null;
+  target: HomeDropTarget | null;
 }
 
 export function HomeLayoutSections({
@@ -90,16 +93,21 @@ export function HomeLayoutSections({
       ?.closest<HTMLElement>('[data-home-section], [data-home-drop-after]');
     const after = target?.dataset.homeDropAfter as HomeSectionId | undefined;
     const card = target?.dataset.homeSection as HomeSectionId | undefined;
-    const compactSpan = homeSectionSpans([drag.id], { [drag.id]: 'third' })[0];
-    const fits = compactSpan <= Number(target?.dataset.homeDropSpan);
+    const span = Number(target?.dataset.homeDropSpan);
     drag.target = after
-      ? fits && after !== drag.id
-        ? { id: after, empty: true }
+      ? canDropHomeSectionInGap(drag.id, after, span)
+        ? { kind: 'gap', after, span }
         : null
       : card && card !== drag.id
-        ? { id: card, empty: false }
+        ? { kind: 'card', id: card }
         : null;
-    setOver(drag.target ? `${drag.target.empty ? 'space:' : ''}${drag.target.id}` : null);
+    setOver(
+      drag.target
+        ? drag.target.kind === 'gap'
+          ? `space:${drag.target.after}`
+          : drag.target.id
+        : null,
+    );
   }
   useEffect(() => {
     if (!dragging) return;
@@ -290,19 +298,12 @@ export function HomeLayoutSections({
                       }}
                       onPointerUp={() => {
                         const drag = dragRef.current;
-                        if (drag?.target?.empty && edit && !edit.saving) {
-                          edit.onChange(
-                            fillHomeSectionGap(
-                              layout,
-                              drag.id,
-                              drag.target.id,
-                              gaps.get(drag.target.id),
-                            ),
-                          );
+                        if (drag?.target?.kind === 'gap' && edit && !edit.saving) {
+                          edit.onChange(dropHomeSection(layout, drag.id, drag.target));
                           setAnnouncement(
-                            `${titleFor(drag.id)} moved into the space after ${titleFor(drag.target.id)}.`,
+                            `${titleFor(drag.id)} moved into the space after ${titleFor(drag.target.after)}.`,
                           );
-                        } else if (drag?.target) move(drag.id, drag.target.id);
+                        } else if (drag?.target?.kind === 'card') move(drag.id, drag.target.id);
                         stopDrag();
                       }}
                       onPointerCancel={stopDrag}

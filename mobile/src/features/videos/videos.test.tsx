@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, configure, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import type { ReactElement } from 'react';
 import { Alert, Linking, type AlertButton } from 'react-native';
 import type { User, WorkoutSession, YouTubeConnection } from '../../../../frontend/src/types';
@@ -42,6 +43,64 @@ jest.mock('expo-image-picker', () => ({
   requestCameraPermissionsAsync: jest.fn(async () => ({ granted: true })),
   VideoExportPreset: { Passthrough: 0 },
 }));
+jest.mock('expo-keep-awake', () => ({
+  activateKeepAwakeAsync: jest.fn(async () => undefined),
+  deactivateKeepAwake: jest.fn(async () => undefined),
+}));
+interface MockClipPlayer {
+  source: unknown;
+  status: string;
+  released: boolean;
+  muted: boolean;
+  loop: boolean;
+  play: jest.Mock;
+  emit: (event: string, payload: unknown) => void;
+  addListener: jest.Mock;
+}
+const mockClipPlayers: MockClipPlayer[] = [];
+// The status the next player starts in, as a player that failed before the screen subscribed.
+let mockNextPlayerStatus = 'idle';
+jest.mock('expo-video', () => {
+  const { createElement } = jest.requireActual<typeof import('react')>('react');
+  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    useVideoPlayer: (source: unknown, setup?: (player: MockClipPlayer) => void) => {
+      const { useEffect, useRef } = jest.requireActual<typeof import('react')>('react');
+      const ref = useRef(null as MockClipPlayer | null);
+      if (!ref.current) {
+        const listeners = new Map<string, Set<(payload: unknown) => void>>();
+        const player: MockClipPlayer = {
+          source,
+          status: mockNextPlayerStatus,
+          released: false,
+          muted: false,
+          loop: false,
+          play: jest.fn(),
+          emit(event: string, payload: unknown) {
+            listeners.get(event)?.forEach((cb) => cb(payload));
+          },
+          addListener: jest.fn((event: string, cb: (payload: unknown) => void) => {
+            if (!listeners.has(event)) listeners.set(event, new Set());
+            listeners.get(event)!.add(cb);
+            return { remove: () => listeners.get(event)?.delete(cb) };
+          }),
+        };
+        setup?.(player);
+        mockClipPlayers.push(player);
+        ref.current = player;
+      }
+      const current = ref.current;
+      useEffect(
+        () => () => {
+          current.released = true;
+        },
+        [current],
+      );
+      return current;
+    },
+    VideoView: (props: Record<string, unknown>) => createElement(View, props),
+  };
+});
 const mockUser: User = {
   id: 'owner',
   username: 'preview',
@@ -84,6 +143,8 @@ let client: QueryClient;
 let youtube: YouTubeConnection;
 beforeEach(() => {
   jest.clearAllMocks();
+  mockClipPlayers.length = 0;
+  mockNextPlayerStatus = 'idle';
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   youtube = connected;
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
@@ -647,4 +708,136 @@ it('names a cancelled session in its kicker', async () => {
   expect(await screen.findByText('CANCELLED SESSION')).toBeTruthy();
   expect(screen.queryByText('PROCESSING SESSION')).toBeNull();
   expect(screen.getByText('Cancelled')).toBeTruthy();
+});
+
+async function pickClips(names: string[]) {
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: names.map(clipAsset),
+  } as ImagePicker.ImagePickerResult);
+  await open(<VideosScreen />);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText(`${names.length} ${names.length === 1 ? 'clip' : 'clips'}`);
+}
+
+const live = () => mockClipPlayers.filter((player) => !player.released);
+
+it('opens one clip preview at a time, so a batch of a dozen clips prepares one player', async () => {
+  const names = Array.from({ length: 12 }, (_, index) => `set-${index + 1}.mp4`);
+  await pickClips(names);
+  // Nothing is prepared until a preview is opened.
+  expect(mockClipPlayers).toHaveLength(0);
+  expect(screen.queryByTestId('clip-preview-set-3.mp4')).toBeNull();
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Preview set-3.mp4' }));
+  const preview = await screen.findByTestId('clip-preview-set-3.mp4');
+  expect(preview.props.nativeControls).toBe(true);
+  expect(preview.props.allowsPictureInPicture).toBe(false);
+  expect(live()).toHaveLength(1);
+  expect(live()[0]).toMatchObject({ source: 'file:///set-3.mp4', muted: true, loop: false });
+  // Opened by a tap, so it plays, muted.
+  expect(live()[0].play).toHaveBeenCalledTimes(1);
+
+  // Opening another closes the first and releases its player.
+  await fireEvent.press(screen.getByRole('button', { name: 'Preview set-9.mp4' }));
+  await screen.findByTestId('clip-preview-set-9.mp4');
+  expect(screen.queryByTestId('clip-preview-set-3.mp4')).toBeNull();
+  expect(mockClipPlayers).toHaveLength(2);
+  expect(live()).toHaveLength(1);
+  expect(live()[0].source).toBe('file:///set-9.mp4');
+});
+
+it('falls back when an open preview fails after mounting', async () => {
+  await pickClips(['squat.mp4']);
+  await fireEvent.press(screen.getByRole('button', { name: 'Preview squat.mp4' }));
+  await screen.findByTestId('clip-preview-squat.mp4');
+  await act(async () => {
+    mockClipPlayers[0].emit('statusChange', { status: 'error' });
+  });
+  expect(screen.queryByTestId('clip-preview-squat.mp4')).toBeNull();
+  expect(screen.getByText('Preview unavailable')).toBeTruthy();
+  expect(live()).toHaveLength(0);
+});
+
+it('falls back when the preview player failed before the screen subscribed', async () => {
+  await pickClips(['missing.mp4']);
+  mockNextPlayerStatus = 'error';
+  await fireEvent.press(screen.getByRole('button', { name: 'Preview missing.mp4' }));
+  expect(await screen.findByText('Preview unavailable')).toBeTruthy();
+  expect(screen.queryByTestId('clip-preview-missing.mp4')).toBeNull();
+});
+
+const WAKE_TAG = /^relay-video-upload-\d+$/;
+const lastActivatedTag = () => jest.mocked(activateKeepAwakeAsync).mock.lastCall![0] as string;
+const releasedTags = () => jest.mocked(deactivateKeepAwake).mock.calls.map(([tag]) => tag);
+
+it('keeps the screen awake while uploading and releases on finish, cancel or unmount', async () => {
+  const finishers = finishableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/process') return { ...session, status: 'queued' };
+    if (path === '/api/sessions/s1/cancel') return { ...session, status: 'cancelled' };
+    throw new Error(`Unexpected ${path}`);
+  });
+  await pickAndUpload(['one.mp4']);
+  await screen.findByText('UPLOADING SESSION');
+  const first = lastActivatedTag();
+  expect(first).toMatch(WAKE_TAG);
+  expect(deactivateKeepAwake).not.toHaveBeenCalled();
+
+  // Finishing the upload releases the wake lock.
+  await act(async () => finishers.forEach((finish) => finish()));
+  expect(await screen.findByText('Queued')).toBeTruthy();
+  await waitFor(() => expect(releasedTags()).toContain(first));
+  await act(async () => screen.unmount());
+
+  // Cancelling mid-upload releases the wake lock immediately.
+  jest.clearAllMocks();
+  stoppableTransfers();
+  await pickAndUpload(['one.mp4']);
+  await screen.findByText('UPLOADING SESSION');
+  const second = lastActivatedTag();
+  expect(second).toMatch(WAKE_TAG);
+  expect(second).not.toBe(first);
+  await fireEvent.press(screen.getByRole('button', { name: 'Cancel session' }));
+  await waitFor(() => expect(releasedTags()).toContain(second));
+  await act(async () => screen.unmount());
+
+  // Closing the screen mid-upload releases the wake lock too.
+  jest.clearAllMocks();
+  stoppableTransfers();
+  await pickAndUpload(['one.mp4']);
+  await screen.findByText('UPLOADING SESSION');
+  const third = lastActivatedTag();
+  await act(async () => screen.unmount());
+  expect(releasedTags()).toContain(third);
+});
+
+it("never lets an earlier upload's late wake-lock activation release a retry's lock", async () => {
+  // The first run's activation stays pending until after the retry holds its own lock.
+  let settleFirst!: () => void;
+  jest
+    .mocked(activateKeepAwakeAsync)
+    .mockImplementationOnce(() => new Promise<void>((resolve) => (settleFirst = resolve)));
+  stoppableTransfers();
+  await pickAndUpload(['one.mp4']);
+  await screen.findByText('UPLOADING SESSION');
+  const first = lastActivatedTag();
+  await act(async () => screen.unmount());
+
+  stoppableTransfers();
+  await pickAndUpload(['one.mp4']);
+  await screen.findByText('UPLOADING SESSION');
+  const retry = lastActivatedTag();
+  expect(retry).not.toBe(first);
+
+  // The old activation resolves now and releases only its own tag.
+  await act(async () => settleFirst());
+  await waitFor(() => expect(releasedTags().filter((tag) => tag === first)).toHaveLength(2));
+  expect(releasedTags()).not.toContain(retry);
+  await act(async () => screen.unmount());
+  expect(releasedTags()).toContain(retry);
 });

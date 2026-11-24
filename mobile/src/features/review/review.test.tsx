@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { useState, type ReactNode } from 'react';
 import { Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import releaseHistory from '../../../../frontend/release-history.json';
 import releaseMetadata from '../../../../frontend/release.json';
 import { releaseSeenKey, weeklyReviewShownKey } from '../../../../frontend/src/appNoticeRules';
 import { announcedRelease, parseRelease } from '../../../../frontend/src/releaseMetadata';
@@ -20,9 +21,11 @@ import { recordAppNotices, resetAppNoticeSending, useAppNotices } from './appNot
 import { NotificationsBell } from '../social/NotificationsBell';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { finishAppTour, queueAppTour } from '../guides/tourProgress';
+import { reduceMotion } from '../settings/devicePreferences';
 import { LaunchNotices } from './LaunchNotices';
 import { launchPromptOpened, openLaunchPrompt, resetNoticeMemory } from './noticeMemory';
 import { ReleaseNotesScreen } from './ReleaseNotesScreen';
+import { ReleaseTrailer } from './ReleaseTrailer';
 import { WeeklyReviewScreen } from './WeeklyReviewScreen';
 
 const mockRouter = {
@@ -51,6 +54,57 @@ jest.mock('../../data/authorisedImage', () => ({ useAuthorisedImage: () => null 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 let mockUser: User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
+interface MockVideoPlayer {
+  source: unknown;
+  status: string;
+  listeners: Map<string, Set<(payload: unknown) => void>>;
+  volume: number;
+  muted: boolean;
+  loop: boolean;
+  play: jest.Mock;
+  pause: jest.Mock;
+  emit: (event: string, payload: unknown) => void;
+  addListener: jest.Mock;
+}
+const mockVideoPlayers: MockVideoPlayer[] = [];
+// The status the next player starts in, as a player that failed before the trailer subscribed.
+let mockNextPlayerStatus = 'idle';
+jest.mock('expo-video', () => {
+  const { createElement } = jest.requireActual<typeof import('react')>('react');
+  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    useVideoPlayer: (source: unknown, setup?: (player: MockVideoPlayer) => void) => {
+      const { useRef } = jest.requireActual<typeof import('react')>('react');
+      const ref = useRef(null as MockVideoPlayer | null);
+      if (!ref.current) {
+        const listeners = new Map<string, Set<(payload: unknown) => void>>();
+        const player: MockVideoPlayer = {
+          source,
+          status: mockNextPlayerStatus,
+          listeners,
+          volume: 1,
+          muted: false,
+          loop: false,
+          play: jest.fn(),
+          pause: jest.fn(),
+          emit(event: string, payload: unknown) {
+            listeners.get(event)?.forEach((cb) => cb(payload));
+          },
+          addListener: jest.fn((event: string, cb: (payload: unknown) => void) => {
+            if (!listeners.has(event)) listeners.set(event, new Set());
+            listeners.get(event)!.add(cb);
+            return { remove: () => listeners.get(event)?.delete(cb) };
+          }),
+        };
+        setup?.(player);
+        mockVideoPlayers.push(player);
+        ref.current = player;
+      }
+      return ref.current;
+    },
+    VideoView: (props: Record<string, unknown>) => createElement(View, props),
+  };
+});
 
 const version = announcedRelease(parseRelease(releaseMetadata)!).version;
 const today = localDate();
@@ -107,6 +161,8 @@ async function show(ui: ReactNode) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockVideoPlayers.length = 0;
+  mockNextPlayerStatus = 'idle';
   memoryKv.clear();
   resetNoticeMemory();
   resetAppNoticeSending();
@@ -349,4 +405,83 @@ it('keeps each account’s launch prompt for the visit when switching accounts',
   openLaunchPrompt('b', 'weekly-review');
   expect(launchPromptOpened('a')).toBe('release');
   expect(launchPromptOpened('b')).toBe('weekly-review');
+});
+
+// Keep testing a shipped trailer when a later announcement has no video, as the web test does.
+const trailer = parseRelease(releaseHistory.find((release) => release.version === '1.0.0'))!.video!;
+const listening = (player: MockVideoPlayer) => player.listeners.get('statusChange')?.size ?? 0;
+
+it('shows the release trailer poster without playing, plays at half volume on tap, and removes its listener on unmount', async () => {
+  const view = await show(<ReleaseTrailer video={trailer} />);
+  const playButton = await screen.findByRole('button', { name: `Play trailer: ${trailer.alt}` });
+  expect(playButton).toBeVisible();
+  // Nothing is created or played on open.
+  expect(mockVideoPlayers).toHaveLength(0);
+  expect(screen.queryByTestId('release-trailer-video')).toBeNull();
+
+  await fireEvent.press(playButton);
+  const videoView = await screen.findByTestId('release-trailer-video');
+  expect(videoView.props.nativeControls).toBe(true);
+  expect(videoView.props.allowsPictureInPicture).toBe(false);
+  expect(mockVideoPlayers).toHaveLength(1);
+  expect(mockVideoPlayers[0]).toMatchObject({
+    source: `https://relay.test${trailer.url}`,
+    volume: 0.5,
+    muted: false,
+    loop: true,
+  });
+  expect(mockVideoPlayers[0].play).toHaveBeenCalledTimes(1);
+  expect(listening(mockVideoPlayers[0])).toBe(1);
+
+  await view.unmount();
+  expect(listening(mockVideoPlayers[0])).toBe(0);
+});
+
+it('falls back to the poster when playback fails after mounting', async () => {
+  await show(<ReleaseTrailer video={trailer} />);
+  await fireEvent.press(
+    await screen.findByRole('button', { name: `Play trailer: ${trailer.alt}` }),
+  );
+  await screen.findByTestId('release-trailer-video');
+  await act(async () => {
+    mockVideoPlayers[0].emit('statusChange', { status: 'error' });
+  });
+  expect(screen.queryByTestId('release-trailer-video')).toBeNull();
+  expect(screen.queryByRole('button', { name: `Play trailer: ${trailer.alt}` })).toBeNull();
+  expect(screen.getByLabelText(trailer.alt)).toBeVisible();
+});
+
+it('falls back to the poster when the player failed before the trailer subscribed', async () => {
+  mockNextPlayerStatus = 'error';
+  await show(<ReleaseTrailer video={trailer} />);
+  await fireEvent.press(
+    await screen.findByRole('button', { name: `Play trailer: ${trailer.alt}` }),
+  );
+  await waitFor(() => expect(screen.queryByTestId('release-trailer-video')).toBeNull());
+  expect(screen.getByLabelText(trailer.alt)).toBeVisible();
+});
+
+it('waits for Play and skips the poster fades with reduced motion enabled', async () => {
+  reduceMotion.set(true);
+  try {
+    const view = await show(<ReleaseTrailer video={trailer} />);
+    expect(screen.getByLabelText(trailer.alt).props.fadeDuration).toBe(0);
+    await fireEvent.press(
+      await screen.findByRole('button', { name: `Play trailer: ${trailer.alt}` }),
+    );
+    await screen.findByTestId('release-trailer-video');
+    // The loading overlay poster, hidden from screen readers, doesn't fade either.
+    expect(
+      screen.getByTestId('release-trailer-loading-poster', { includeHiddenElements: true }).props
+        .fadeDuration,
+    ).toBe(0);
+    // And after a failure, the fallback poster.
+    await act(async () => {
+      mockVideoPlayers[0].emit('statusChange', { status: 'error' });
+    });
+    expect(screen.getByLabelText(trailer.alt).props.fadeDuration).toBe(0);
+    await view.unmount();
+  } finally {
+    reduceMotion.set(false);
+  }
 });

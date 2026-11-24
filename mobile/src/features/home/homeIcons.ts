@@ -12,4 +12,5 @@ export const homeIcons = {
   remove: { sf: 'minus.circle.fill', md: 'remove-circle' },
   add: { sf: 'plus.circle.fill', md: 'add-circle' },
   reset: { sf: 'arrow.counterclockwise', md: 'restart-alt' },
+  grip: { sf: 'line.3.horizontal', md: 'drag-indicator' },
 } satisfies Record<string, IconPair>;

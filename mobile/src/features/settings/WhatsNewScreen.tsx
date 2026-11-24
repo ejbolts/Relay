@@ -11,9 +11,9 @@ import {
   type Release,
   type ReleaseImage,
 } from '../../../../frontend/src/releaseMetadata';
-import { apiOrigin } from '../../data/api';
 import { Button, Card, errorMessage, ErrorState, Loading } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
+import { ReleaseTrailer } from '../review/ReleaseTrailer';
 import { useServerRelease } from './settingsData';
 import { Row, Section, SettingsPage } from './SettingsList';
 
@@ -78,18 +78,7 @@ function ReleaseDetails({ release }: { release: Release }) {
       }))
     : release.image
       ? [{ title: null, caption: null, image: release.image }]
-      : release.video && apiOrigin
-        ? [
-            {
-              title: null,
-              caption: null,
-              image: {
-                url: `${apiOrigin.replace(/\/$/, '')}${release.video.poster}`,
-                alt: release.video.alt,
-              },
-            },
-          ]
-        : [];
+      : [];
   return (
     <>
       <View style={{ gap: 4 }}>
@@ -100,10 +89,9 @@ function ReleaseDetails({ release }: { release: Release }) {
         <Text accessibilityRole="header" style={[type.largeTitle, { color: colors.text }]}>
           {release.title}
         </Text>
-        <Text style={[type.body, { color: colors.secondary, marginTop: 4 }]}>
-          {release.summary}
-        </Text>
       </View>
+      {release.video && <ReleaseTrailer video={release.video} />}
+      <Text style={[type.body, { color: colors.secondary }]}>{release.summary}</Text>
       {media.map((item) => (
         <Card key={item.image.url} style={{ padding: 0, gap: 0, overflow: 'hidden' }}>
           <ReleasePicture image={item.image} />
