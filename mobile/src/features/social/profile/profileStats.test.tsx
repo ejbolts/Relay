@@ -22,6 +22,7 @@ import { OFFLINE_MESSAGE } from '../../../data/offline';
 import { ToastHost } from '../../../ui/Toast';
 import { ProfileScreen } from '../ProfileScreen';
 import { socialKeys } from '../socialQueries';
+import { TrendPlot } from '../../body/BodyTrendChart';
 import { ProfileStats } from './ProfileStats';
 
 const mockRouter = { push: jest.fn(), navigate: jest.fn(), setParams: jest.fn(), back: jest.fn() };
@@ -951,4 +952,116 @@ test('head to head shows Try again on network or server errors, while hiding on 
     await waitFor(() => expect(screen.queryByText('Head to head')).toBeNull());
     await hiddenView.unmount();
   }
+});
+
+test('head to head hides cached lifts and closes an open picker on 403/404/405/501, while keeping them on transient errors', async () => {
+  // 1. All four unavailable statuses hide cached lifts and close the open picker at once.
+  for (const status of [403, 404, 405, 501] as const) {
+    let fail: Error | null = null;
+    jest.mocked(apiGet).mockImplementation(async (path: string) => {
+      if (path === '/api/sharing/profiles/alex/lifts') {
+        if (fail) throw fail;
+        return { selected: [], lifts: LIFTS } satisfies LiftComparisons;
+      }
+      throw new Error(`Unexpected GET ${path}`);
+    });
+    const view = await show(<Stats profile={fullProfile} />);
+    await fireEvent.press(screen.getByRole('button', { name: 'Choose lifts' }));
+    expect(await screen.findByText('Lifts to compare')).toBeVisible();
+
+    fail = new ApiError(status, `HTTP ${status}`);
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: socialKeys.lifts('alex') });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('Lifts to compare')).toBeNull();
+      expect(screen.queryByText('Head to head')).toBeNull();
+    });
+    await view.unmount();
+  }
+
+  // 2. Transient network and 503 errors keep cached lifts and the open picker intact.
+  let transient: Error | null = null;
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/alex/lifts') {
+      if (transient) throw transient;
+      return { selected: [], lifts: LIFTS } satisfies LiftComparisons;
+    }
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  const view = await show(<Stats profile={fullProfile} />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Choose lifts' }));
+  expect(await screen.findByText('Lifts to compare')).toBeVisible();
+
+  for (const err of [
+    new Error('Could not reach Relay. Check your connection, then try again.'),
+    new ApiError(503, 'Relay is temporarily unavailable.'),
+  ]) {
+    transient = err;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: socialKeys.lifts('alex') });
+    });
+    await waitFor(() =>
+      expect(client.getQueryState(socialKeys.lifts('alex'))?.fetchStatus).toBe('idle'),
+    );
+    expect(screen.getByText('Lifts to compare')).toBeVisible();
+    expect(screen.getByText('Head to head')).toBeVisible();
+  }
+  await view.unmount();
+});
+
+test('TrendPlot keeps default goal label placement for Body unless avoidLineOverlap is opted in', async () => {
+  const points = [
+    { date: '2026-10-01', value: 78.0 },
+    { date: '2026-10-20', value: 75.5 },
+    { date: '2026-11-10', value: 76.0 },
+    { date: '2026-11-23', value: 76.0 },
+  ];
+  const goal = {
+    startDate: '2026-10-15',
+    startValue: 77.5,
+    endDate: '2026-11-23',
+    endValue: 76.3,
+    label: 'Goal 75 kg',
+  };
+  const drawn = { includeHiddenElements: true };
+
+  // Default (Body screen): label stays below the falling goal line.
+  const bodyView = await show(
+    <TrendPlot
+      points={points}
+      goal={goal}
+      unit="kg"
+      height={170}
+      active={null}
+      onSelect={jest.fn()}
+      accessibilityLabel="Body chart"
+    />,
+  );
+  await fireEvent(screen.getByLabelText('Body chart'), 'layout', {
+    nativeEvent: { layout: { width: 320, height: 170 } },
+  });
+  const bodyY = Number(screen.getByLabelText('Goal 75 kg', drawn).props.y);
+  await bodyView.unmount();
+
+  // Opt-in (friend profile): label flips above the falling goal line to clear the plotted series.
+  const profileView = await show(
+    <TrendPlot
+      points={points}
+      goal={goal}
+      unit="kg"
+      height={170}
+      active={null}
+      onSelect={jest.fn()}
+      accessibilityLabel="Profile chart"
+      avoidLineOverlap
+    />,
+  );
+  await fireEvent(screen.getByLabelText('Profile chart'), 'layout', {
+    nativeEvent: { layout: { width: 320, height: 170 } },
+  });
+  const profileY = Number(screen.getByLabelText('Goal 75 kg', drawn).props.y);
+  await profileView.unmount();
+
+  expect(profileY).toBeLessThan(bodyY);
 });

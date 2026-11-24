@@ -645,18 +645,26 @@ describe('tips beside the logger', () => {
     expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
   }, 30000);
 
-  test('a nudge interrupted soon after appearing goes back to pending without spending its slot', async () => {
+  test('a nudge interrupted soon after appearing rolls back at most once without replaying indefinitely', async () => {
     await openLogger();
     await logWarmup();
     expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
-    // A menu opens right away before the reader could take in the tip.
+    // First interruption: a menu opens right away before the reader could take in the tip.
     mockPromptOpen.value = true;
     await waitFor(() => expect(screen.queryByText('Warm-up or working set?')).toBeNull(), TIP_WAIT);
     expect(storedTips().shows?.setType).toBeUndefined();
     expect(storedTips().lastShown).toBe(0);
-    // Once the menu closes and things are quiet again, the nudge comes back.
+    // Once the menu closes and things are quiet again, the nudge comes back once.
     mockPromptOpen.value = false;
     expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
     expect(storedTips().shows?.setType).toBe(1);
+    // Second interruption of the same request counts as a normal showing and does not replay.
+    mockPromptOpen.value = true;
+    await waitFor(() => expect(screen.queryByText('Warm-up or working set?')).toBeNull(), TIP_WAIT);
+    expect(storedTips().shows?.setType).toBe(1);
+    expect(storedTips().lastShown).toBeGreaterThan(0);
+    mockPromptOpen.value = false;
+    await pause(3000);
+    expect(screen.queryByText('Warm-up or working set?')).toBeNull();
   }, 30000);
 });

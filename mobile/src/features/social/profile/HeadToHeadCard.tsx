@@ -44,8 +44,16 @@ export function HeadToHeadCard({
   const user = useUser();
   const query = useSharedLifts(member.id, true);
   const refusal = useMemberRefusal(member.id);
-  // Refused by the server: hide what was cached at once; the profile above locks itself.
-  const revoked = !!refusal || accessRevoked(query.error);
+  // Hide whenever access is refused (403/404 or a recorded refusal) or the server lacks this
+  // endpoint (404/405/501), even if lifts were cached from an earlier load. Keep cached lifts
+  // and Try again only for transient network or 5xx server failures.
+  const unavailable =
+    query.error instanceof ApiError &&
+    (query.error.status === 403 ||
+      query.error.status === 404 ||
+      query.error.status === 405 ||
+      query.error.status === 501);
+  const revoked = !!refusal || accessRevoked(query.error) || unavailable;
   const lifts = revoked ? null : (query.data?.lifts ?? null);
   const offline = waitingForNetwork(query);
   const [selected, setSelected] = useState<string[]>([]);
@@ -63,15 +71,7 @@ export function HeadToHeadCard({
     [chosen, member.display_name],
   );
 
-  // Hide when access was refused (403/404 or a recorded refusal) or the server lacks this
-  // endpoint; keep the card with Try again for network or other server errors.
-  const unavailable =
-    query.error instanceof ApiError &&
-    (query.error.status === 403 ||
-      query.error.status === 404 ||
-      query.error.status === 405 ||
-      query.error.status === 501);
-  if (revoked || (unavailable && !lifts)) return null;
+  if (revoked) return null;
 
   return (
     <Card accessibilityLabel="Head to head">

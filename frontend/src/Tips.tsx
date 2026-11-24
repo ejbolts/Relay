@@ -240,14 +240,24 @@ export function TipsProvider({
     };
     const interrupt = (now: number) => {
       const currentNudge = activeNudge.current;
-      if (currentNudge) {
-        const reverted = interruptedNudge(stateRef.current, currentNudge, now);
-        if (reverted) {
-          const next = withTipReminders(reverted.state, now);
-          stateRef.current = next;
-          setState(next);
-          if (account) saveTips(account, next);
-          pending.current.set(currentNudge.id, reverted.request);
+      if (currentNudge && account) {
+        // Read the latest stored state before rolling back: another tab may have saved a newer
+        // showing or change before its storage event arrived. Leave newer stored state untouched.
+        const stored = loadTips(account);
+        const stillOurs =
+          stored.enabled &&
+          stored.lastShown === currentNudge.at &&
+          (stored.shows?.[currentNudge.id] ?? 0) === currentNudge.shownCount &&
+          stored.seen[currentNudge.id] === currentNudge.seenAfter;
+        if (stillOurs) {
+          const reverted = interruptedNudge(stored, currentNudge, now);
+          if (reverted) {
+            const next = withTipReminders(reverted.state, now);
+            stateRef.current = next;
+            setState(next);
+            saveTips(account, next);
+            pending.current.set(currentNudge.id, reverted.request);
+          }
         }
       }
       api.close();
@@ -320,7 +330,16 @@ export function TipsProvider({
       activeSince.current = now;
       activePage.current = current.page;
       activeNudge.current =
-        nudge && request ? { id: nudge, at: now, previousLastShown, request } : null;
+        nudge && request
+          ? {
+              id: nudge,
+              at: now,
+              previousLastShown,
+              request,
+              shownCount: next.shows?.[nudge] ?? 0,
+              seenAfter: next.seen[nudge],
+            }
+          : null;
       setActive(id);
       pending.current.delete(id);
     };

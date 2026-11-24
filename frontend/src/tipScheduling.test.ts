@@ -94,8 +94,9 @@ describe('tip scheduling', () => {
     );
   });
 
-  it('reverts and re-queues a nudge interrupted shortly after appearing', () => {
-    const request: TipRequest = { page: 'log', until: NOW + TIP_REQUEST_MS };
+  it('reverts and re-queues a nudge interrupted shortly after appearing, at most once without extending its deadline', () => {
+    const deadline = NOW + TIP_REQUEST_MS;
+    const request: TipRequest = { page: 'log', until: deadline };
     const before = { ...freshTips(), lastShown: 500 };
     const afterShow = tipShown(before, 'setType', NOW);
     const shown = { id: 'setType' as const, at: NOW, previousLastShown: 500, request };
@@ -104,8 +105,26 @@ describe('tip scheduling', () => {
     expect(reverted).not.toBeNull();
     expect(reverted!.state.lastShown).toBe(500);
     expect(reverted!.state.shows?.setType).toBeUndefined();
-    expect(reverted!.request.page).toBe('log');
-    expect(reverted!.request.until).toBeGreaterThanOrEqual(NOW + TIP_REQUEST_MS);
+    expect(reverted!.request).toEqual({ page: 'log', until: deadline, retried: true });
+
+    // A second interruption of the retried request counts as a normal showing (no infinite replay).
+    const afterSecondShow = tipShown(reverted!.state, 'setType', NOW + 5000);
+    expect(
+      interruptedNudge(
+        afterSecondShow,
+        { id: 'setType', at: NOW + 5000, previousLastShown: 500, request: reverted!.request },
+        NOW + 5500,
+      ),
+    ).toBeNull();
+
+    // An already-expired request is never revived by an interruption.
+    expect(
+      interruptedNudge(
+        tipShown(before, 'setType', deadline - 500),
+        { id: 'setType', at: deadline - 500, previousLastShown: 500, request },
+        deadline,
+      ),
+    ).toBeNull();
 
     // On the final showing (which auto-marks 'seen'), an early interruption also undoes 'seen'.
     const beforeLast = { ...freshTips(), shows: { swipe: TIP_MAX_SHOWS - 1 } };
