@@ -7,6 +7,8 @@ import {
   sameSharedFilters,
   SHARED_FILTER_DATES_ERROR,
   sharedFilterDatesInvalid,
+  NO_SHARED_WORKOUT_FILTERS,
+  sharedFiltersWithMachine,
   sharedFiltersForTarget,
   sharedWorkoutFilterCount,
 } from '../../../../frontend/src/sharedHistoryFilters';
@@ -31,6 +33,7 @@ import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../
 import { Segmented } from '../../ui/controls';
 import { useTheme } from '../../ui/theme';
 import { workoutColor } from '../training/useTrainingContext';
+import type { MachineFilter } from '../training/MachinePhotos';
 import { WorkoutCard, WorkoutDetails } from '../training/WorkoutCard';
 import { HistoryFilterButton, HistoryFilterSheet } from './HistoryFilters';
 import type { LinkedRow } from './linkedScroll';
@@ -44,13 +47,17 @@ const NO_REACTIONS: WorkoutReactions = { counts: [], yours: null, comment_count:
 const NO_OPTIONS = { exercises: [], machines: [] };
 
 /**
- * The history's tab, filters and open workout. The profile holds them, so its calendar days and
- * head-to-head lifts can filter the history, as on the web.
+ * The history's tab, filters and open workout. The profile holds them, so its calendar days,
+ * head-to-head lifts and machine photos can filter the history, as on the web.
  */
-export function useProfileHistoryState(targetWorkout?: LinkedWorkout) {
+export function useProfileHistoryState(targetWorkout?: LinkedWorkout, targetMachine?: string) {
   const [tab, setTab] = useState<SharedHistoryTab>('all');
   const [filters, setFilters] = useState<SharedWorkoutFilters>(() =>
-    sharedFiltersForTarget(targetWorkout),
+    targetWorkout
+      ? sharedFiltersForTarget(targetWorkout)
+      : targetMachine
+        ? sharedFiltersWithMachine(NO_SHARED_WORKOUT_FILTERS, targetMachine)
+        : NO_SHARED_WORKOUT_FILTERS,
   );
   const [openId, setOpenId] = useState<string | null>(targetWorkout?.id ?? null);
   return {
@@ -64,13 +71,24 @@ export function useProfileHistoryState(targetWorkout?: LinkedWorkout) {
       setOpenId(null);
     },
     /**
-     * Every workout matching a calendar day or a lift, on the All tab: either can be cardio. Asking
-     * again for what is already shown keeps the open workout, as the web does. Says whether
-     * anything changed.
+     * Every workout matching a calendar day, lift or machine, on the All tab: any of them can be
+     * cardio or lifting. Asking again for what is already shown keeps the open workout, as the web
+     * does. Says whether anything changed.
      */
     showMatching(next: SharedWorkoutFilters) {
       if (tab === 'all' && sameSharedFilters(filters, next)) return false;
       setTab('all');
+      setFilters(next);
+      setOpenId(null);
+      return true;
+    },
+    /**
+     * Adds a machine photo's filter to those chosen, on the same tab, as the web's All workouts
+     * on this machine does. Says whether anything changed.
+     */
+    showMachine(machinePhotoId: string) {
+      const next = sharedFiltersWithMachine(filters, machinePhotoId);
+      if (sameSharedFilters(filters, next)) return false;
       setFilters(next);
       setOpenId(null);
       return true;
@@ -95,6 +113,7 @@ export function ProfileHistory({
   linkedRef,
   onLinkedLayout,
   onSettled,
+  onFilterMachine,
 }: {
   profile: SharedProfile;
   /** From `useProfileHistoryState`, held by the profile. */
@@ -105,6 +124,8 @@ export function ProfileHistory({
   /** The linked workout's row, which the profile keeps in view until the reader scrolls. */
   linkedRef: LinkedRow['targetRef'];
   onLinkedLayout: () => void;
+  /** A machine photo's All workouts on this machine, which filters the history by it. */
+  onFilterMachine?: (filter: MachineFilter) => void;
 }) {
   const { colors, type } = useTheme();
   const nav = useSocialNavigation();
@@ -217,6 +238,8 @@ export function ProfileHistory({
                   personalRecords={records}
                   bodyweight={null}
                   unit={unit}
+                  onFilterMachine={onFilterMachine}
+                  machineFilterId={filters.machine_photo_id || null}
                 />
               </WorkoutCard>
               <View style={{ paddingBottom: 10 }}>

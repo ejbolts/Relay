@@ -7,6 +7,7 @@ import {
   sharedFilterDatesInvalid,
   sharedFiltersDay,
   sharedFiltersForExercise,
+  sharedFiltersWithMachine,
   sharedFiltersForTarget,
   sharedFiltersOnDay,
   sharedWorkoutFilterCount,
@@ -56,6 +57,16 @@ describe('shared history filters', () => {
       end_date: '2026-03-04',
     });
     expect(sharedFiltersForTarget(undefined)).toBe(NO_SHARED_WORKOUT_FILTERS);
+  });
+
+  it('adds a machine to the filters chosen, keeping the others', () => {
+    const machine = sharedFiltersWithMachine(NO_SHARED_WORKOUT_FILTERS, 'm1');
+    expect(machine).toEqual({ ...NO_SHARED_WORKOUT_FILTERS, machine_photo_id: 'm1' });
+    expect(sharedWorkoutFilterCount(machine)).toBe(1);
+    const day = sharedFiltersOnDay('2026-03-04');
+    expect(sharedFiltersWithMachine(day, 'm2')).toEqual({ ...day, machine_photo_id: 'm2' });
+    expect(sharedFiltersWithMachine(machine, 'm2').machine_photo_id).toBe('m2');
+    expect(day.machine_photo_id).toBe('');
   });
 
   it('tells filters asking for the same workouts apart from different ones', () => {

@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
-import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from 'react';
 import { Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { formatMemberSince } from '../../../../frontend/src/profileDisplay';
 import {
@@ -26,8 +26,10 @@ import type {
   FriendStatus,
   SharedProfile,
   SharedWorkoutFilters,
+  User,
 } from '../../../../frontend/src/types';
 import { useWeightUnit } from '../../data/queries';
+import { useOptionalSession } from '../../session/SessionProvider';
 import {
   Button,
   Card,
@@ -49,10 +51,13 @@ import { PhotoViewer } from './PhotoViewer';
 import { FriendQrSheet } from './FriendQrSheet';
 import { FriendSplits } from './FriendSplits';
 import { socialIcons } from './icons';
+import type { MachineFilter } from '../training/MachinePhotos';
 import { useLinkedScroll, type LinkedRow } from './linkedScroll';
 import { useSocialNavigation, type LinkedWorkout } from './navigation';
 import { ProfileHistory, useProfileHistoryState } from './ProfileHistory';
 import { SharingLocked, SmallButton } from './parts';
+import { ProfileAccountId } from './profile/ProfileAccountId';
+import { ProfileEditor } from './profile/ProfileEditor';
 import { ProfileStats } from './profile/ProfileStats';
 import { notFound, sharingRequired, socialApi } from './socialApi';
 import { refreshSocial, socialKeys, useMemberRefusal, useSharedProfile } from './socialQueries';
@@ -67,10 +72,13 @@ export function ProfileScreen({
   profileId,
   invite = false,
   targetWorkout,
+  targetMachine,
 }: {
   profileId: string;
   invite?: boolean;
   targetWorkout?: LinkedWorkout;
+  /** Shared machine photo id to filter the history by on arrival. */
+  targetMachine?: string;
 }) {
   const { colors, space } = useTheme();
   const {
@@ -121,6 +129,7 @@ export function ProfileScreen({
         profile={profile}
         onBlocked={() => setBlocked(true)}
         targetWorkout={targetWorkout}
+        targetMachine={targetMachine}
         linkedRef={targetRef}
         onLinkedLayout={reveal}
         scrollToSection={scrollToSection}
@@ -136,6 +145,8 @@ export function ProfileScreen({
         onScrollBeginDrag={onScrollBeginDrag}
         onContentSizeChange={onContentSizeChange}
         onLayout={onLayout}
+        keyboardShouldPersistTaps="handled"
+        automaticallyAdjustKeyboardInsets
         style={{ flex: 1, backgroundColor: colors.page }}
         contentContainerStyle={{
           padding: space.gutter,
@@ -213,6 +224,7 @@ function ProfileBody({
   profile,
   onBlocked,
   targetWorkout,
+  targetMachine,
   linkedRef,
   onLinkedLayout,
   scrollToSection,
@@ -221,18 +233,46 @@ function ProfileBody({
   profile: SharedProfile;
   onBlocked: () => void;
   targetWorkout?: LinkedWorkout;
+  targetMachine?: string;
   linkedRef: LinkedRow['targetRef'];
   onLinkedLayout: () => void;
   scrollToSection: ReturnType<typeof useLinkedScroll>['scrollToSection'];
   onHistorySettled: () => void;
 }) {
-  const history = useProfileHistoryState(targetWorkout);
+  const history = useProfileHistoryState(targetWorkout, targetMachine);
   const historyRef = useRef<ComponentRef<typeof View>>(null);
+  // Whether the history has settled since it was last shown, for a jump asked for as it appears.
+  const historySettledRef = useRef(false);
+  // Opened from a shared workout's machine photo: jump to the filtered history once, when it is
+  // first shown. A cached friends-only profile can grant access only after a refresh.
+  const machineJumpRef = useRef(Boolean(targetMachine && !targetWorkout));
   const reduceMotion = useReduceMotion();
+  const handleHistorySettled = useCallback(() => {
+    historySettledRef.current = true;
+    onHistorySettled();
+  }, [onHistorySettled]);
+  const historyShown = profile.can_view;
+  useEffect(() => {
+    if (!historyShown) {
+      historySettledRef.current = false;
+      return;
+    }
+    if (!machineJumpRef.current || !historyRef.current) return;
+    machineJumpRef.current = false;
+    // The history's own settle effect has run by now when its results were already loaded;
+    // otherwise `onHistorySettled` finishes the jump once they load.
+    scrollToSection(historyRef.current, false, historySettledRef.current);
+  }, [historyShown, scrollToSection]);
   // As on the web, a calendar day or a lift filters the history below and brings it into view.
   const showMatching = (filters: SharedWorkoutFilters) => {
     // Nothing to load when it already shows them; otherwise the jump finishes once they load.
     const changed = history.showMatching(filters);
+    scrollToSection(historyRef.current, !reduceMotion, !changed);
+  };
+  // A machine photo adds its machine to the filters. The workout it was in closes and the list
+  // shrinks, so the history is brought back into view rather than left scrolled past its end.
+  const showMachine = ({ photo }: MachineFilter) => {
+    const changed = history.showMachine(photo.id);
     scrollToSection(historyRef.current, !reduceMotion, !changed);
   };
   return (
@@ -257,7 +297,8 @@ function ProfileBody({
               targetWorkout={targetWorkout}
               linkedRef={linkedRef}
               onLinkedLayout={onLinkedLayout}
-              onSettled={onHistorySettled}
+              onSettled={handleHistorySettled}
+              onFilterMachine={showMachine}
             />
           </View>
         </>
@@ -268,87 +309,121 @@ function ProfileBody({
 
 function ProfileHeader({ profile, onBlocked }: { profile: SharedProfile; onBlocked: () => void }) {
   const { colors, type, radius } = useTheme();
-  const router = useRouter();
+  const client = useQueryClient();
+  const session = useOptionalSession();
   const nav = useSocialNavigation();
   const [qrOpen, setQrOpen] = useState(false);
   const [viewing, setViewing] = useState(false);
+  // The editor belongs to the account that opened it: another account signing in closes it and
+  // drops its draft, rather than showing it to (or saving it as) the new account.
+  const signedInId = session?.status.kind === 'signed-in' ? session.status.user.id : null;
+  const [editingFor, setEditingFor] = useState<string | null>(null);
+  if (editingFor !== null && editingFor !== signedInId) setEditingFor(null);
+  const editing = editingFor !== null;
   const memberSince = formatMemberSince(profile.member_since);
   const photo = profile.profile_photo_url;
+
+  function handleSaved(saved: User) {
+    session?.updateUser(saved);
+    client.setQueryData<SharedProfile>(socialKeys.profile(profile.id), (cached) =>
+      cached
+        ? {
+            ...cached,
+            display_name: saved.display_name,
+            profile_photo_url: saved.profile_photo_url ?? null,
+            sex: saved.sex ?? cached.sex,
+          }
+        : cached,
+    );
+    void refreshSocial(client);
+  }
+
   return (
     <Card>
-      <View style={styles.headerRow}>
-        {photo ? (
-          <Pressable
-            accessibilityRole="imagebutton"
-            accessibilityLabel={`View ${profile.display_name}'s profile photo`}
-            onPress={() => setViewing(true)}
-            style={({ pressed }) => pressed && { opacity: 0.7 }}
-          >
-            <Avatar person={profile} size={72} />
-          </Pressable>
-        ) : (
-          <Avatar person={profile} size={72} />
-        )}
-        {viewing && photo && (
-          <PhotoViewer
-            photos={[{ id: photo, url: photo, label: `${profile.display_name}'s profile photo` }]}
-            title={() => 'Profile photo'}
-            onClose={() => setViewing(false)}
-          />
-        )}
-        <View style={{ flex: 1, gap: 4 }}>
-          <View style={styles.nameRow}>
-            <Text
-              accessibilityRole="header"
-              style={[type.title, { color: colors.text, flexShrink: 1 }]}
-              numberOfLines={2}
-            >
-              {profile.display_name}
-            </Text>
-            {profile.is_you && (
-              <View
-                style={[
-                  styles.badge,
-                  { backgroundColor: colors.accentSoft, borderRadius: radius.pill },
-                ]}
+      {profile.is_you && editing ? (
+        <ProfileEditor onSaved={handleSaved} onClose={() => setEditingFor(null)} />
+      ) : (
+        <>
+          <View style={styles.headerRow}>
+            {photo ? (
+              <Pressable
+                accessibilityRole="imagebutton"
+                accessibilityLabel={`View ${profile.display_name}'s profile photo`}
+                onPress={() => setViewing(true)}
+                style={({ pressed }) => pressed && { opacity: 0.7 }}
               >
-                <Text style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}>
-                  You
+                <Avatar person={profile} size={72} />
+              </Pressable>
+            ) : (
+              <Avatar person={profile} size={72} />
+            )}
+            {viewing && photo && (
+              <PhotoViewer
+                photos={[
+                  { id: photo, url: photo, label: `${profile.display_name}'s profile photo` },
+                ]}
+                title={() => 'Profile photo'}
+                onClose={() => setViewing(false)}
+              />
+            )}
+            <View style={{ flex: 1, gap: 4 }}>
+              <View style={styles.nameRow}>
+                <Text
+                  accessibilityRole="header"
+                  style={[type.title, { color: colors.text, flexShrink: 1 }]}
+                  numberOfLines={2}
+                >
+                  {profile.display_name}
                 </Text>
+                {profile.is_you && (
+                  <View
+                    style={[
+                      styles.badge,
+                      { backgroundColor: colors.accentSoft, borderRadius: radius.pill },
+                    ]}
+                  >
+                    <Text style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}>
+                      You
+                    </Text>
+                  </View>
+                )}
+              </View>
+              {!!memberSince && (
+                <Text style={[type.footnote, { color: colors.secondary }]}>
+                  Joined {memberSince}
+                </Text>
+              )}
+            </View>
+            {profile.is_you && (
+              <View style={styles.ownActions}>
+                <IconButton
+                  icon={socialIcons.qr}
+                  accessibilityLabel="QR code"
+                  onPress={() => setQrOpen(true)}
+                  style={{ borderColor: colors.lineStrong }}
+                />
+                <IconButton
+                  icon={socialIcons.edit}
+                  accessibilityLabel="Edit profile"
+                  onPress={() => setEditingFor(signedInId)}
+                  style={{ borderColor: colors.lineStrong }}
+                />
               </View>
             )}
           </View>
-          {!!memberSince && (
-            <Text style={[type.footnote, { color: colors.secondary }]}>Joined {memberSince}</Text>
+          {profile.is_you ? (
+            <View style={styles.controls}>
+              <SmallButton
+                label={`Sharing: ${VISIBILITY_LABELS[profile.visibility]}`}
+                icon={socialIcons.people}
+                onPress={nav.openSharing}
+              />
+            </View>
+          ) : (
+            <FriendControl profile={profile} onBlocked={onBlocked} />
           )}
-        </View>
-        {profile.is_you && (
-          <View style={styles.ownActions}>
-            <IconButton
-              icon={socialIcons.qr}
-              accessibilityLabel="QR code"
-              onPress={() => setQrOpen(true)}
-              style={{ borderColor: colors.lineStrong }}
-            />
-            <IconButton
-              icon={socialIcons.edit}
-              accessibilityLabel="Edit profile"
-              onPress={() => router.push('/settings/profile')}
-              style={{ borderColor: colors.lineStrong }}
-            />
-          </View>
-        )}
-      </View>
-      {profile.is_you ? (
-        <View style={styles.controls}>
-          <SmallButton
-            label={`Sharing: ${VISIBILITY_LABELS[profile.visibility]}`}
-            icon={socialIcons.people}
-            onPress={nav.openSharing}
-          />
-        </View>
-      ) : (
-        <FriendControl profile={profile} onBlocked={onBlocked} />
+          <ProfileAccountId accountId={profile.id} />
+        </>
       )}
       {profile.can_view && <StatRow boxed stats={profileStats(profile)} />}
       {profile.is_you && (
