@@ -58,28 +58,17 @@ export const videoApi = {
     onProgress: (percent: number) => void,
     token?: string,
   ) =>
-    token !== undefined
-      ? startClipUpload(
-          `${session(sessionId)}/clips`,
-          { uri: clip.uri, name: clip.name, type: clip.type },
-          {
-            client_clip_id: clip.clientId,
-            order_index: String(orderIndex),
-            exercise_label: clip.exerciseLabel,
-          },
-          onProgress,
-          token,
-        )
-      : startClipUpload(
-          `${session(sessionId)}/clips`,
-          { uri: clip.uri, name: clip.name, type: clip.type },
-          {
-            client_clip_id: clip.clientId,
-            order_index: String(orderIndex),
-            exercise_label: clip.exerciseLabel,
-          },
-          onProgress,
-        ),
+    startClipUpload(
+      `${session(sessionId)}/clips`,
+      { uri: clip.uri, name: clip.name, type: clip.type },
+      {
+        client_clip_id: clip.clientId,
+        order_index: String(orderIndex),
+        exercise_label: clip.exerciseLabel,
+      },
+      onProgress,
+      token,
+    ),
 };
 
 export function useYouTubeConnection() {
