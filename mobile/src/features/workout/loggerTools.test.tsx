@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useEffect, type ReactNode } from 'react';
-import { Alert, Platform, StyleSheet } from 'react-native';
+import { Alert, Keyboard, Platform, StyleSheet, TextInput } from 'react-native';
 import { readActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
 import { freshTips, parseTips, tipStorageKey } from '../../../../frontend/src/tipsState';
 import { resetTipsForTests } from '../guides/tips';
@@ -478,6 +478,26 @@ describe('dragging to reorder sets', () => {
     await act(async () => option(menuCall('Set 2'), 'Delete set').onPress());
     expect(dragOf(0).enabled).toBe(false);
   });
+
+  test('starting a drag blurs any focused input and dismisses the keyboard', async () => {
+    const blur = jest.fn();
+    const focused = jest
+      .spyOn(TextInput.State, 'currentlyFocusedInput')
+      .mockReturnValue({ blur } as unknown as ReturnType<
+        typeof TextInput.State.currentlyFocusedInput
+      >);
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => undefined);
+    try {
+      await openLogger();
+      await layOutSets();
+      await act(async () => dragOf(0).onActivate());
+      expect(blur).toHaveBeenCalledTimes(1);
+      expect(dismiss).toHaveBeenCalledTimes(1);
+    } finally {
+      focused.mockRestore();
+      dismiss.mockRestore();
+    }
+  });
 });
 
 const storedTips = () => parseTips(deviceStorage.getItem(tipStorageKey('u1')));
@@ -623,5 +643,20 @@ describe('tips beside the logger', () => {
     // Once nothing is in the way, the quiet moment starts again and the tip shows.
     mockPromptOpen.value = false;
     expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
+  }, 30000);
+
+  test('a nudge interrupted soon after appearing goes back to pending without spending its slot', async () => {
+    await openLogger();
+    await logWarmup();
+    expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
+    // A menu opens right away before the reader could take in the tip.
+    mockPromptOpen.value = true;
+    await waitFor(() => expect(screen.queryByText('Warm-up or working set?')).toBeNull(), TIP_WAIT);
+    expect(storedTips().shows?.setType).toBeUndefined();
+    expect(storedTips().lastShown).toBe(0);
+    // Once the menu closes and things are quiet again, the nudge comes back.
+    mockPromptOpen.value = false;
+    expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
+    expect(storedTips().shows?.setType).toBe(1);
   }, 30000);
 });

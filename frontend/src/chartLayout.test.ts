@@ -104,4 +104,19 @@ describe('goal label placement', () => {
     expect(band.y - 9).toBeGreaterThanOrEqual(0);
     expect(band.y).toBeLessThanOrEqual(chart.plotBottom);
   });
+
+  it('moves the label to the opposite side of the goal line when the plotted series runs through it', () => {
+    const falling = { x1: 180, y1: 50, x2: 330, y2: 100, label: 'Goal 75 kg' };
+    // Plotted line below the falling goal passes right through the default below-line label.
+    const series = [
+      { x: 250, y: 112 },
+      { x: 300, y: 108 },
+      { x: 330, y: 120 },
+    ];
+    const withoutSeries = goalLabelPlacement(falling, chart);
+    expect(withoutSeries.y).toBeGreaterThan(falling.y2);
+    const withSeries = goalLabelPlacement(falling, chart, null, series);
+    expect(withSeries.y).toBeLessThan(falling.y2);
+    expect(withSeries.y - 9).toBeGreaterThanOrEqual(0);
+  });
 });

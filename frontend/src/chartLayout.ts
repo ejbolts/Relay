@@ -128,16 +128,74 @@ export function chartLabelWidth(label: string): number {
   return label.length * 6 + 4;
 }
 
+function goalLabelAbove(line: {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  label: string;
+}): number {
+  if (line.y2 <= line.y1) return line.y2 - 6;
+  const reach = Math.min(1, chartLabelWidth(line.label) / Math.max(line.x2 - line.x1, 1));
+  return line.y2 - (line.y2 - line.y1) * reach - 5;
+}
+
+function goalLabelBelow(line: {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  label: string;
+}): number {
+  if (line.y2 >= line.y1) return line.y2 + 14;
+  const reach = Math.min(1, chartLabelWidth(line.label) / Math.max(line.x2 - line.x1, 1));
+  return line.y2 + (line.y1 - line.y2) * reach + 13;
+}
+
+/** Whether a plotted polyline passes through the horizontal/vertical box of a chart label. */
+function seriesOverlapsBox(
+  series: readonly { x: number; y: number }[],
+  xLeft: number,
+  xRight: number,
+  yTop: number,
+  yBottom: number,
+): boolean {
+  for (let index = 0; index < series.length; index += 1) {
+    const a = series[index];
+    if (a.x >= xLeft && a.x <= xRight && a.y >= yTop && a.y <= yBottom) return true;
+    if (index === 0) continue;
+    const prev = series[index - 1];
+    const minX = Math.min(prev.x, a.x);
+    const maxX = Math.max(prev.x, a.x);
+    if (maxX < xLeft || minX > xRight) continue;
+    const dx = a.x - prev.x;
+    if (dx === 0) {
+      if (Math.max(prev.y, a.y) >= yTop && Math.min(prev.y, a.y) <= yBottom) return true;
+      continue;
+    }
+    const t0 = Math.max(0, Math.min(1, (xLeft - prev.x) / dx));
+    const t1 = Math.max(0, Math.min(1, (xRight - prev.x) / dx));
+    const lo = Math.min(t0, t1);
+    const hi = Math.max(t0, t1);
+    const ya = prev.y + (a.y - prev.y) * lo;
+    const yb = prev.y + (a.y - prev.y) * hi;
+    if (Math.max(ya, yb) >= yTop && Math.min(ya, yb) <= yBottom) return true;
+  }
+  return false;
+}
+
 /**
  * Where a goal line's end label goes so the whole label stays inside a chart `width` × `height`.
  * It starts from the web's rule (`goalLabelY`, or above a maintenance band's top edge, ending at
  * the line's end), then moves below or above when the text would cross the top or bottom, and
- * starts the label at the end instead when it would run off the left edge.
+ * starts the label at the end instead when it would run off the left edge. When `series` is given
+ * and the default side overlaps the plotted line, it flips to the opposite side if that is clear.
  */
 export function goalLabelPlacement(
   line: { x1: number; y1: number; x2: number; y2: number; label: string },
   chart: { width: number; height: number; plotRight: number; plotBottom: number },
   bandTop?: number | null,
+  series?: readonly { x: number; y: number }[],
 ): { x: number; y: number; anchor: 'start' | 'end' } {
   const ascent = 9; // cap height of 10.5px text, above its baseline
   const descent = 3;
@@ -149,7 +207,36 @@ export function goalLabelPlacement(
   }
   y = Math.min(y, chart.plotBottom - descent);
   const end = Math.min(line.x2, chart.plotRight) - 4;
-  if (end - labelWidth >= 0) return { x: end, y, anchor: 'end' };
-  const start = Math.max(Math.min(line.x2, chart.plotRight) + 4, 0);
-  return { x: Math.min(start, chart.width - labelWidth), y, anchor: 'start' };
+  let x: number;
+  let anchor: 'start' | 'end';
+  if (end - labelWidth >= 0) {
+    x = end;
+    anchor = 'end';
+  } else {
+    const start = Math.max(Math.min(line.x2, chart.plotRight) + 4, 0);
+    x = Math.min(start, chart.width - labelWidth);
+    anchor = 'start';
+  }
+  if (bandTop == null && series && series.length > 0) {
+    const xLeft = anchor === 'end' ? x - labelWidth : x;
+    const xRight = anchor === 'end' ? x : x + labelWidth;
+    const margin = 2;
+    if (seriesOverlapsBox(series, xLeft, xRight, y - ascent - margin, y + descent + margin)) {
+      const opposite = y > line.y2 ? goalLabelAbove(line) : goalLabelBelow(line);
+      if (
+        opposite - ascent >= 0 &&
+        opposite + descent <= chart.plotBottom &&
+        !seriesOverlapsBox(
+          series,
+          xLeft,
+          xRight,
+          opposite - ascent - margin,
+          opposite + descent + margin,
+        )
+      ) {
+        y = opposite;
+      }
+    }
+  }
+  return { x, y, anchor };
 }

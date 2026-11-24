@@ -423,7 +423,7 @@ describe('history filters', () => {
     await act(async () => choices[2].onPress());
     await waitFor(() => expect(workoutReads().at(-1)).toMatchObject({ exercise_id: 'squat' }));
     expect(screen.getByRole('button', { name: 'Exercise, Back squat' })).toBeVisible();
-    expect(screen.getByRole('button', { name: 'Filter workouts, 1 set' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Filter workouts, 1 filter on' })).toBeVisible();
 
     await fireEvent.press(screen.getByRole('button', { name: 'Reset filters' }));
     expect(screen.getByRole('button', { name: 'Filter workouts' })).toBeVisible();
@@ -561,8 +561,8 @@ describe('opening a profile at a linked workout', () => {
         expect.objectContaining({ offset, start_date: older, end_date: older }),
       ),
     );
-    // Its day is set as two filters.
-    expect(screen.getByRole('button', { name: 'Filter workouts, 2 set' })).toBeVisible();
+    // Its day range counts as one filter.
+    expect(screen.getByRole('button', { name: 'Filter workouts, 1 filter on' })).toBeVisible();
     expect(screen.queryByText(LINKED_WORKOUT_MISSING)).toBeNull();
     // The fourth page waits for Show older workouts.
     expect(screen.getByRole('button', { name: 'Show older workouts' })).toBeVisible();
@@ -601,7 +601,7 @@ describe('opening a profile at a linked workout', () => {
       <ProfileScreen profileId="alex" targetWorkout={{ id: 'gone', workout_date: older }} />,
     );
     expect(await screen.findByText(LINKED_WORKOUT_MISSING)).toBeVisible();
-    await fireEvent.press(screen.getByRole('button', { name: 'Filter workouts, 2 set' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Filter workouts, 1 filter on' }));
     await fireEvent.press(await screen.findByRole('button', { name: 'Clear From date' }));
     await waitFor(() => expect(screen.queryByText(LINKED_WORKOUT_MISSING)).toBeNull());
   });

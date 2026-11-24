@@ -1,5 +1,14 @@
-import type { ReactNode } from 'react';
-import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  Keyboard,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useReduceMotion } from '../features/settings/devicePreferences';
 import { Icon } from './Icon';
@@ -32,6 +41,23 @@ export function Sheet({
   const reduced = useReduceMotion();
   const insets = useSafeAreaInsets();
   const ios = Platform.OS === 'ios';
+  const [keyboardHeight, setKeyboardHeight] = useState(() =>
+    ios || typeof Keyboard.metrics !== 'function' ? 0 : (Keyboard.metrics()?.height ?? 0),
+  );
+  useEffect(() => {
+    if (ios) return;
+    const show = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardHeight(event.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => {
+      show.remove();
+      hide.remove();
+    };
+  }, [ios]);
+  const keyboardLift = !ios && visible ? keyboardHeight : 0;
   const header = (
     <View style={styles.header}>
       <View style={{ flex: 1, gap: 2 }}>
@@ -63,7 +89,10 @@ export function Sheet({
   );
   const body = (
     <ScrollView
-      contentContainerStyle={[styles.body, { paddingBottom: Math.max(insets.bottom, 16) + 20 }]}
+      contentContainerStyle={[
+        styles.body,
+        { paddingBottom: keyboardLift > 0 ? 20 : Math.max(insets.bottom, 16) + 20 },
+      ]}
       showsVerticalScrollIndicator={false}
       keyboardShouldPersistTaps={keyboardShouldPersistTaps}
     >
@@ -85,11 +114,23 @@ export function Sheet({
       {ios ? (
         <View style={{ flex: 1, backgroundColor: colors.surface }}>{body}</View>
       ) : (
-        <View style={styles.backdrop}>
+        <View
+          style={[
+            styles.backdrop,
+            keyboardLift > 0 && { paddingTop: insets.top + 48, paddingBottom: keyboardLift },
+          ]}
+        >
           {/* Screen readers close with the Close button or Back, so the backdrop stays hidden. */}
           <Pressable style={StyleSheet.absoluteFill} accessible={false} onPress={onClose} />
           <View
-            style={[styles.card, { backgroundColor: colors.surface, marginTop: insets.top + 48 }]}
+            style={[
+              styles.card,
+              {
+                backgroundColor: colors.surface,
+                marginTop: keyboardLift > 0 ? 0 : insets.top + 48,
+              },
+              keyboardLift > 0 && styles.cardAboveKeyboard,
+            ]}
           >
             <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
             {body}
@@ -107,6 +148,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.45)',
   },
   card: { borderTopLeftRadius: 28, borderTopRightRadius: 28, maxHeight: '88%' },
+  cardAboveKeyboard: { maxHeight: '100%', flexShrink: 1 },
   grabber: {
     alignSelf: 'center',
     width: 36,

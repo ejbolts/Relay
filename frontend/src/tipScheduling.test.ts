@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   hintMayShow,
+  interruptedNudge,
   LOG_NUDGE_WINDOW_MS,
+  NUDGE_MIN_VISIBLE_MS,
   NUDGE_VISIBLE_MS,
   priorityTipWaiting,
   shownTipEnds,
@@ -11,7 +13,7 @@ import {
   type TipEnvironment,
   type TipRequest,
 } from './tipScheduling';
-import { freshTips, TIP_COOLDOWN, type TipId } from './tipsState';
+import { freshTips, TIP_COOLDOWN, TIP_MAX_SHOWS, tipShown, type TipId } from './tipsState';
 
 const NOW = 10_000_000;
 const log: TipEnvironment = { page: 'log', ready: true, resting: false, workoutCount: 5 };
@@ -90,5 +92,44 @@ describe('tip scheduling', () => {
     expect(hintMayShow({ ...freshTips(), seen: { machine: 'learned' } }, 'machine', log, NOW)).toBe(
       false,
     );
+  });
+
+  it('reverts and re-queues a nudge interrupted shortly after appearing', () => {
+    const request: TipRequest = { page: 'log', until: NOW + TIP_REQUEST_MS };
+    const before = { ...freshTips(), lastShown: 500 };
+    const afterShow = tipShown(before, 'setType', NOW);
+    const shown = { id: 'setType' as const, at: NOW, previousLastShown: 500, request };
+
+    const reverted = interruptedNudge(afterShow, shown, NOW + NUDGE_MIN_VISIBLE_MS - 1);
+    expect(reverted).not.toBeNull();
+    expect(reverted!.state.lastShown).toBe(500);
+    expect(reverted!.state.shows?.setType).toBeUndefined();
+    expect(reverted!.request.page).toBe('log');
+    expect(reverted!.request.until).toBeGreaterThanOrEqual(NOW + TIP_REQUEST_MS);
+
+    // On the final showing (which auto-marks 'seen'), an early interruption also undoes 'seen'.
+    const beforeLast = { ...freshTips(), shows: { swipe: TIP_MAX_SHOWS - 1 } };
+    const afterLast = tipShown(beforeLast, 'swipe', NOW);
+    expect(afterLast.seen.swipe).toBe('seen');
+    const revertedLast = interruptedNudge(
+      afterLast,
+      { id: 'swipe', at: NOW, previousLastShown: 0, request },
+      NOW + 500,
+    );
+    expect(revertedLast!.state.shows?.swipe).toBe(TIP_MAX_SHOWS - 1);
+    expect(revertedLast!.state.seen.swipe).toBeUndefined();
+
+    // Once visible long enough, or for a hint, or after explicit dismiss, it is not reverted.
+    expect(interruptedNudge(afterShow, shown, NOW + NUDGE_MIN_VISIBLE_MS)).toBeNull();
+    expect(
+      interruptedNudge({ ...afterShow, seen: { setType: 'dismissed' } }, shown, NOW + 500),
+    ).toBeNull();
+    expect(
+      interruptedNudge(
+        tipShown(freshTips(), 'machine', NOW),
+        { id: 'machine', at: NOW, previousLastShown: 0, request },
+        NOW + 500,
+      ),
+    ).toBeNull();
   });
 });

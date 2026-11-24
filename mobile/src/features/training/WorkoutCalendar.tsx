@@ -90,11 +90,13 @@ const DayCell = memo(function DayCell({
   day,
   selected,
   readOnly,
+  hidden = false,
   onPress,
 }: {
   day: CalendarDay;
   selected: boolean;
   readOnly: boolean;
+  hidden?: boolean;
   onPress: (day: CalendarDay) => void;
 }) {
   const { colors } = useTheme();
@@ -104,13 +106,19 @@ const DayCell = memo(function DayCell({
   const disabled = readOnly && !trained;
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityState={{ selected, disabled }}
-      disabled={disabled}
+      accessible={!hidden}
+      accessibilityElementsHidden={hidden}
+      importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
+      focusable={!hidden}
+      accessibilityRole={hidden ? undefined : 'button'}
+      accessibilityState={hidden ? undefined : { selected, disabled }}
+      disabled={disabled || hidden}
       accessibilityLabel={
-        trained
-          ? `View ${count} ${count === 1 ? 'workout' : 'workouts'} for ${prettyDate(day.date)}`
-          : `${readOnly ? 'No workouts for ' : ''}${prettyDate(day.date)}${day.scheduledNote ? `, ${day.scheduledNote}` : ''}`
+        hidden
+          ? ''
+          : trained
+            ? `View ${count} ${count === 1 ? 'workout' : 'workouts'} for ${prettyDate(day.date)}`
+            : `${readOnly ? 'No workouts for ' : ''}${prettyDate(day.date)}${day.scheduledNote ? `, ${day.scheduledNote}` : ''}`
       }
       onPress={() => {
         haptics.selection();
@@ -207,11 +215,12 @@ export function WorkoutCalendar({
     settle(next);
     pager.current?.scrollToIndex({ index: index + delta, animated: true });
   };
-  const page = (key: MonthKey) => (
+  const page = (key: MonthKey, hidden = false) => (
     <MonthPage
       view={viewFor(key)}
       selectedDate={selectedDate}
       readOnly={readOnly}
+      hidden={hidden}
       onSelectDay={onSelectDay}
     />
   );
@@ -270,13 +279,25 @@ export function WorkoutCalendar({
             getItemLayout={(_, item) => ({ length: width, offset: width * item, index: item })}
             initialNumToRender={1}
             windowSize={3}
-            extraData={[selectedDate, viewFor]}
+            extraData={[month, selectedDate, viewFor]}
             onMomentumScrollEnd={(event) => {
               const shown =
                 months[settledPage(event.nativeEvent, I18nManager.isRTL, months.length)];
               if (shown) settle(shown);
             }}
-            renderItem={({ item }) => <View style={{ width }}>{page(item)}</View>}
+            renderItem={({ item }) => {
+              const current = item === month;
+              return (
+                <View
+                  collapsable={false}
+                  style={{ width }}
+                  accessibilityElementsHidden={!current}
+                  importantForAccessibility={current ? 'auto' : 'no-hide-descendants'}
+                >
+                  {page(item, !current)}
+                </View>
+              );
+            }}
           />
         ) : (
           page(month)
@@ -290,16 +311,24 @@ const MonthPage = memo(function MonthPage({
   view,
   selectedDate,
   readOnly,
+  hidden = false,
   onSelectDay,
 }: {
   view: CalendarMonthView;
   selectedDate: string | null;
   readOnly: boolean;
+  hidden?: boolean;
   onSelectDay: (day: CalendarDay) => void;
 }) {
   const { colors, type } = useTheme();
   return (
-    <View style={{ gap: 8 }} accessibilityLabel={view.title}>
+    <View
+      collapsable={false}
+      style={{ gap: 8 }}
+      accessibilityLabel={hidden ? '' : view.title}
+      accessibilityElementsHidden={hidden}
+      importantForAccessibility={hidden ? 'no-hide-descendants' : 'auto'}
+    >
       <View style={styles.week} importantForAccessibility="no-hide-descendants">
         {view.weekdays.map((weekday, index) => (
           <Text key={index} style={[styles.weekday, type.caption, { color: colors.muted }]}>
@@ -316,6 +345,7 @@ const MonthPage = memo(function MonthPage({
                 day={day}
                 selected={day.date === selectedDate}
                 readOnly={readOnly}
+                hidden={hidden}
                 onPress={onSelectDay}
               />
             ) : (

@@ -2,6 +2,7 @@ import { Icon } from './Icon';
 import {
   NO_SHARED_WORKOUT_FILTERS,
   sharedWorkoutFilterCount as activeFilterCount,
+  sharedWorkoutFilterLabel,
   sharedWorkoutTypeChoices,
   sharedWorkoutTypeValue,
   withSharedWorkoutType,
@@ -25,7 +26,7 @@ export function SharedWorkoutFilterToggle({
     <button
       type="button"
       className={`shared-workout-filter-toggle${active > 0 ? ' is-filtered' : ''}`}
-      aria-label={active > 0 ? `Filter workouts, ${active} set` : 'Filter workouts'}
+      aria-label={sharedWorkoutFilterLabel(active)}
       aria-expanded={open}
       aria-controls={controls}
       onClick={() => onToggle(!open)}

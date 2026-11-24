@@ -3,6 +3,7 @@ import {
   countTipEvent,
   isPriorityTip,
   TIP_DEFINITIONS,
+  TIP_MAX_SHOWS,
   type TipId,
   type TipState,
 } from './tipsState';
@@ -26,12 +27,22 @@ export type TipEnvironment = {
 /** A nudge an event asked for, waiting to show on `page` until `until`. */
 export type TipRequest = { until: number; page: string };
 
+/** A showing nudge's record, so an early interruption can put it back untouched. */
+export type ShownNudge = {
+  id: TipId;
+  at: number;
+  previousLastShown: number;
+  request: TipRequest;
+};
+
 /** How long an event's nudge waits for a quiet moment. */
 export const TIP_REQUEST_MS = 120_000;
 /** How long the app must be quiet before a tip appears. */
 export const TIP_QUIET_MS = 1500;
 /** How long a nudge stays up by itself. */
 export const NUDGE_VISIBLE_MS = 12_000;
+/** How long a nudge must stay visible before an interruption counts as a showing. */
+export const NUDGE_MIN_VISIBLE_MS = 3000;
 /** In the logger, a nudge shows while resting or this soon after a logged set. */
 export const LOG_NUDGE_WINDOW_MS = 20_000;
 
@@ -132,4 +143,36 @@ export function hintMayShow(
   now: number,
 ): boolean {
   return environment.workoutCount > 0 && !!canShowTip(state, id, now);
+}
+
+/**
+ * When a nudge is closed by an interruption (a menu, sheet, prompt, dialog or backgrounding)
+ * before the reader could see it, returns the state with that showing and `lastShown` undone and
+ * a pending request so it can appear again once things are quiet; otherwise returns null.
+ */
+export function interruptedNudge(
+  state: TipState,
+  shown: ShownNudge,
+  now: number,
+): { state: TipState; request: TipRequest } | null {
+  if (TIP_DEFINITIONS[shown.id].surface !== 'nudge') return null;
+  if (now - shown.at >= NUDGE_MIN_VISIBLE_MS) return null;
+  if (state.seen[shown.id] === 'dismissed' || state.seen[shown.id] === 'learned') return null;
+  const currentShows = state.shows?.[shown.id] ?? 0;
+  const nextShows = Math.max(0, currentShows - 1);
+  const shows = { ...state.shows };
+  if (nextShows > 0) shows[shown.id] = nextShows;
+  else delete shows[shown.id];
+  const seen = { ...state.seen };
+  if (seen[shown.id] === 'seen' && currentShows >= TIP_MAX_SHOWS && nextShows < TIP_MAX_SHOWS) {
+    delete seen[shown.id];
+  }
+  const lastShown = state.lastShown === shown.at ? shown.previousLastShown : state.lastShown;
+  return {
+    state: { ...state, lastShown, shows, seen },
+    request: {
+      page: shown.request.page,
+      until: Math.max(shown.request.until, now + TIP_REQUEST_MS),
+    },
+  };
 }
