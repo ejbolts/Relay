@@ -390,18 +390,23 @@ def test_transient_refresh_failure_does_not_revoke_working_connection(
     assert client.get("/api/youtube/connection").json()["status"] == "connected"
 
 
-def test_callback_codes_are_removed_from_access_logs():
+@pytest.mark.parametrize(
+    "path",
+    ["/api/youtube/callback?code=secret&state=secret", "/api/youtube/app-start?state=secret"],
+)
+def test_callback_codes_are_removed_from_access_logs(path):
     record = logging.LogRecord(
         "uvicorn.access",
         logging.INFO,
         "",
         1,
         "%s %s %s %s %s",
-        ("browser", "GET", "/api/youtube/callback?code=secret&state=secret", "1.1", 303),
+        ("browser", "GET", path, "1.1", 303),
         None,
     )
     assert OAuthAccessLogFilter().filter(record)
     assert "secret" not in record.getMessage()
+    assert path.split("?")[0] in record.getMessage()
 
 
 def test_account_snapshot_excludes_credentials_and_deletion_revokes_them(

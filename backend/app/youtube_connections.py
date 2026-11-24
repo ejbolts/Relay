@@ -74,14 +74,17 @@ RECONNECT_MESSAGE = "Reconnect your YouTube channel in Video logger, then retry.
 SETUP_MESSAGE = "YouTube connections are not ready. Ask the app administrator to finish setup."
 
 
+OAUTH_PATHS = {"/api/youtube/callback", "/api/youtube/app-start"}
+
+
 class OAuthAccessLogFilter(logging.Filter):
-    """Keep Google's one-use authorization code out of Uvicorn access logs."""
+    """Keep Google's one-use authorization code and the state out of Uvicorn access logs."""
 
     def filter(self, record: logging.LogRecord) -> bool:
         if isinstance(record.args, tuple) and len(record.args) == 5:
             client, method, path, protocol, status = record.args
-            if isinstance(path, str) and path.split("?", 1)[0] == "/api/youtube/callback":
-                record.args = (client, method, "/api/youtube/callback", protocol, status)
+            if isinstance(path, str) and path.split("?", 1)[0] in OAUTH_PATHS:
+                record.args = (client, method, path.split("?", 1)[0], protocol, status)
         return True
 
 
