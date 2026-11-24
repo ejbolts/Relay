@@ -53,6 +53,8 @@ import { tipsFor, useTips } from './tips';
  */
 
 const PAGE = 'log';
+/** A tip that is done with: dismissed or learned. */
+const retired = (status: string | undefined) => status === 'dismissed' || status === 'learned';
 const TICK_MS = 500;
 /** As the web's, the bottom of the screen is kept for the tab bar and docks. */
 const BOTTOM_RESERVED = 75;
@@ -235,6 +237,9 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
         if (shown.current) close();
         return;
       }
+      // Retired elsewhere (a synced dismissal, or a restore the sync adopted): it goes, and there
+      // is nothing to roll back.
+      if (shown.current && retired(tipState.seen[shown.current.id])) close();
       if (!current.ready || !quiet(holds.current)) {
         quietSince.current = 0;
         if (shown.current) {
@@ -311,9 +316,10 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [account, close]);
 
-  // Show tips turned off (on the Tips page or the web) puts the showing tip away.
+  // Show tips turned off, or the showing tip dismissed or learned (on the Tips page, the web or
+  // another device), puts it away at once.
   const enabled = state.enabled;
-  const visibleActive = enabled ? active : null;
+  const visibleActive = enabled && active && !retired(state.seen[active.id]) ? active : null;
   const nudge =
     visibleActive && TIP_DEFINITIONS[visibleActive.id].surface === 'nudge'
       ? visibleActive.id
