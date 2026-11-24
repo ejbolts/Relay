@@ -78,6 +78,7 @@ export function ProfileScreen({
     targetRef,
     reveal,
     scrollToSection,
+    sectionReady,
     onScrollBeginDrag,
     onContentSizeChange,
     onLayout,
@@ -123,6 +124,7 @@ export function ProfileScreen({
         linkedRef={targetRef}
         onLinkedLayout={reveal}
         scrollToSection={scrollToSection}
+        onHistorySettled={sectionReady}
       />
     );
 
@@ -214,6 +216,7 @@ function ProfileBody({
   linkedRef,
   onLinkedLayout,
   scrollToSection,
+  onHistorySettled,
 }: {
   profile: SharedProfile;
   onBlocked: () => void;
@@ -221,14 +224,16 @@ function ProfileBody({
   linkedRef: LinkedRow['targetRef'];
   onLinkedLayout: () => void;
   scrollToSection: ReturnType<typeof useLinkedScroll>['scrollToSection'];
+  onHistorySettled: () => void;
 }) {
   const history = useProfileHistoryState(targetWorkout);
   const historyRef = useRef<ComponentRef<typeof View>>(null);
   const reduceMotion = useReduceMotion();
   // As on the web, a calendar day or a lift filters the history below and brings it into view.
   const showMatching = (filters: SharedWorkoutFilters) => {
-    history.showMatching(filters);
-    scrollToSection(historyRef.current, !reduceMotion);
+    // Nothing to load when it already shows them; otherwise the jump finishes once they load.
+    const changed = history.showMatching(filters);
+    scrollToSection(historyRef.current, !reduceMotion, !changed);
   };
   return (
     <>
@@ -252,6 +257,7 @@ function ProfileBody({
               targetWorkout={targetWorkout}
               linkedRef={linkedRef}
               onLinkedLayout={onLinkedLayout}
+              onSettled={onHistorySettled}
             />
           </View>
         </>

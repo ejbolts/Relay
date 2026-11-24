@@ -29,19 +29,48 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-test('a section jump repeats as the page grows, until the section can reach the top', async () => {
+test('a jump repeats as the page changes size until its results settle and it can reach the top', async () => {
+  const { hook, scrollTo, section, layout } = await setup();
+  await act(async () => {
+    layout(400);
+    hook.current.onContentSizeChange(390, 2000);
+    hook.current.scrollToSection(section(500) as never, true);
+  });
+  // Reachable on the old page, but the results asked for haven't loaded: still pending.
+  expect(scrollTo).toHaveBeenLastCalledWith({ y: 488, animated: true });
+  // Their loading placeholder shortens the page, then they settle while it's still short.
+  await act(async () => hook.current.onContentSizeChange(390, 700));
+  await act(async () => hook.current.sectionReady());
+  expect(scrollTo).toHaveBeenCalledTimes(3);
+  // The results lay out and lengthen the page: the jump lands and is done.
+  await act(async () => hook.current.onContentSizeChange(390, 1400));
+  expect(scrollTo).toHaveBeenCalledTimes(4);
+  await act(async () => hook.current.onContentSizeChange(390, 2000));
+  expect(scrollTo).toHaveBeenCalledTimes(4);
+});
+
+test('a jump whose results are already shown is done as soon as it lands', async () => {
+  const { hook, scrollTo, section, layout } = await setup();
+  await act(async () => {
+    layout(400);
+    hook.current.onContentSizeChange(390, 2000);
+    hook.current.scrollToSection(section(500) as never, true, true);
+  });
+  await act(async () => hook.current.onContentSizeChange(390, 2500));
+  expect(scrollTo.mock.calls).toEqual([[{ y: 488, animated: true }]]);
+});
+
+test('a screen size change retries a pending jump', async () => {
   const { hook, scrollTo, section, layout } = await setup();
   await act(async () => {
     layout(400);
     hook.current.onContentSizeChange(390, 700);
-    hook.current.scrollToSection(section(500) as never, true);
+    hook.current.scrollToSection(section(500) as never, true, true);
   });
-  // The page can scroll only 300 of the 488 needed while the results load: still pending.
-  expect(scrollTo).toHaveBeenLastCalledWith({ y: 488, animated: true });
-  await act(async () => hook.current.onContentSizeChange(390, 1400));
+  // Too short for 488 with a 400 pt screen, so it waits; a smaller screen can reach it.
+  await act(async () => layout(200));
   expect(scrollTo).toHaveBeenCalledTimes(2);
-  // Reached now, so later growth leaves the page where the reader is.
-  await act(async () => hook.current.onContentSizeChange(390, 2000));
+  await act(async () => hook.current.onContentSizeChange(390, 900));
   expect(scrollTo).toHaveBeenCalledTimes(2);
 });
 

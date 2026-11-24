@@ -65,13 +65,15 @@ export function useProfileHistoryState(targetWorkout?: LinkedWorkout) {
     },
     /**
      * Every workout matching a calendar day or a lift, on the All tab: either can be cardio. Asking
-     * again for what is already shown keeps the open workout, as the web does.
+     * again for what is already shown keeps the open workout, as the web does. Says whether
+     * anything changed.
      */
     showMatching(next: SharedWorkoutFilters) {
-      if (tab === 'all' && sameSharedFilters(filters, next)) return;
+      if (tab === 'all' && sameSharedFilters(filters, next)) return false;
       setTab('all');
       setFilters(next);
       setOpenId(null);
+      return true;
     },
   };
 }
@@ -92,10 +94,13 @@ export function ProfileHistory({
   targetWorkout,
   linkedRef,
   onLinkedLayout,
+  onSettled,
 }: {
   profile: SharedProfile;
   /** From `useProfileHistoryState`, held by the profile. */
   state: ProfileHistoryState;
+  /** The workouts for the current tab and filters have finished loading. */
+  onSettled?: () => void;
   targetWorkout?: LinkedWorkout;
   /** The linked workout's row, which the profile keeps in view until the reader scrolls. */
   linkedRef: LinkedRow['targetRef'];
@@ -136,6 +141,10 @@ export function ProfileHistory({
   const paused = query.fetchStatus === 'paused';
   const offline = paused && (query.isPending || needsMore);
   const options = useSharedWorkoutFilters(profile.id, profile.can_view);
+  const settled = query.fetchStatus === 'idle' && !query.isPending;
+  useEffect(() => {
+    if (settled) onSettled?.();
+  }, [settled, filters, kind, onSettled]);
   const missing =
     !!linkedId &&
     !!query.data &&

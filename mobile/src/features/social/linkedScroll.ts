@@ -4,7 +4,8 @@ import type { LayoutChangeEvent, ScrollView, View } from 'react-native';
 /** Room left above a linked workout, so it doesn't sit flush against the header. */
 const ABOVE = 12;
 
-type Section = { view: ComponentRef<typeof View>; animated: boolean };
+/** A section jump; `ready` once the content it was asked for (filtered results) has settled. */
+type Section = { view: ComponentRef<typeof View>; animated: boolean; ready: boolean };
 
 /**
  * Keeps a linked workout in view while the profile above it settles: cards that finish loading
@@ -33,8 +34,9 @@ export function useLinkedScroll() {
     });
   }, []);
   /**
-   * Scrolls to the section asked for. While the page is too short to bring it to the top (its
-   * results are still loading, say), the jump stays pending, and the page growing jumps again.
+   * Scrolls to the section asked for. It stays pending, jumping again as the page or the screen
+   * changes size, until its content has settled and the page is long enough to bring it to the
+   * top: results still loading can shorten the page, then lengthen it.
    */
   const jumpToSection = useCallback(() => {
     const pending = sectionRef.current;
@@ -46,7 +48,8 @@ export function useLinkedScroll() {
         if (sectionRef.current !== pending) return;
         const target = Math.max(0, y - ABOVE);
         scrollRef.current?.scrollTo({ y: target, animated: pending.animated });
-        if (target <= contentHeight.current - viewportHeight.current) sectionRef.current = null;
+        if (pending.ready && target <= contentHeight.current - viewportHeight.current)
+          sectionRef.current = null;
       });
     });
   }, []);
@@ -57,17 +60,25 @@ export function useLinkedScroll() {
   /**
    * Scrolls the profile to a section the reader asked for, as the web's calendar and lift taps
    * bring its history into view. The linked row stops being followed from then on, and a newer
-   * request or a drag replaces it.
+   * request or a drag replaces it. `ready` says its content is already settled (nothing changed);
+   * otherwise `sectionReady` says so once it has.
    */
   const scrollToSection = useCallback(
-    (section: ComponentRef<typeof View> | null, animated: boolean) => {
+    (section: ComponentRef<typeof View> | null, animated: boolean, ready = false) => {
       if (!section) return;
       movedRef.current = true;
-      sectionRef.current = { view: section, animated };
+      sectionRef.current = { view: section, animated, ready };
       jumpToSection();
     },
     [jumpToSection],
   );
+  /** The section's content has settled, such as the filtered workouts it was asked for. */
+  const sectionReady = useCallback(() => {
+    const pending = sectionRef.current;
+    if (!pending || pending.ready) return;
+    sectionRef.current = { ...pending, ready: true };
+    jumpToSection();
+  }, [jumpToSection]);
   const onContentSizeChange = useCallback(
     (_width: number, height: number) => {
       contentHeight.current = height;
@@ -76,14 +87,19 @@ export function useLinkedScroll() {
     },
     [reveal, jumpToSection],
   );
-  const onLayout = useCallback((event: LayoutChangeEvent) => {
-    viewportHeight.current = event.nativeEvent.layout.height;
-  }, []);
+  const onLayout = useCallback(
+    (event: LayoutChangeEvent) => {
+      viewportHeight.current = event.nativeEvent.layout.height;
+      jumpToSection();
+    },
+    [jumpToSection],
+  );
   return {
     scrollRef,
     targetRef,
     reveal,
     scrollToSection,
+    sectionReady,
     onScrollBeginDrag,
     onContentSizeChange,
     onLayout,
