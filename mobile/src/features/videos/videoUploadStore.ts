@@ -49,6 +49,19 @@ const UPLOAD_WAKE_LOCK_TAG = 'relay-video-upload';
 export const processingBegan = (status: WorkoutSession['status']) =>
   PROCESSING_SESSION_STATUSES.includes(status) || status === 'complete' || status === 'failed';
 
+/**
+ * A batch is uploading or waiting to start processing. Its session belongs to the connected
+ * channel, and the server only refuses a channel change once processing has begun, so changing
+ * or disconnecting the channel now would leave the clips unable to start.
+ */
+export function channelChangeBlocked(current: VideoUploadState): boolean {
+  return (
+    current.busy ||
+    current.phase !== 'idle' ||
+    (current.session !== null && STILL_UPLOADABLE.includes(current.session.status))
+  );
+}
+
 function initialState(): VideoUploadState {
   return {
     step: 'upload',
@@ -320,6 +333,13 @@ const currentPhase = (): VideoPhase => state.phase;
 
 export function useVideoUploadState(): VideoUploadState {
   return useSyncExternalStore(subscribe, getSnapshot);
+}
+
+const channelBlockedSnapshot = () => channelChangeBlocked(state);
+
+/** Whether the YouTube channel must stay as it is for the batch in progress, wherever it's shown. */
+export function useChannelChangeBlocked(): boolean {
+  return useSyncExternalStore(subscribe, channelBlockedSnapshot);
 }
 
 /**

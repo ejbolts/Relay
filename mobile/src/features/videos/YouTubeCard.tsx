@@ -16,6 +16,7 @@ import { Icon } from '../../ui/Icon';
 import { showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { videoApi, videoKeys, useYouTubeConnection } from './videoData';
+import { useChannelChangeBlocked } from './videoUploadStore';
 import { useAccountGuard } from '../admin/accountGuard';
 import { YOUTUBE_INTERRUPTED, connectYouTubeInApp } from './youtubeConnect';
 
@@ -44,6 +45,9 @@ export function YouTubeCard({
   const [connecting, setConnecting] = useState(false);
   const [error, setError] = useState<string | null>(notice);
   const data = connection.data ?? null;
+  // Settings shows this card too, so a batch uploading from Videos locks it there as well.
+  const uploadPending = useChannelChangeBlocked();
+  const locked = disabled || uploadPending;
 
   useEffect(() => {
     const app = AppState.addEventListener('change', (state) => {
@@ -190,7 +194,7 @@ export function YouTubeCard({
           <Button
             label={connecting ? 'Working…' : youtubeConnectLabel(data)}
             variant={connected ? 'secondary' : 'primary'}
-            disabled={disabled || working || connecting}
+            disabled={locked || working || connecting}
             onPress={() => void connect()}
           />
         )}
@@ -198,7 +202,7 @@ export function YouTubeCard({
           <Button
             label={working ? 'Disconnecting…' : 'Disconnect'}
             variant="secondary"
-            disabled={disabled || working || connecting || !data.can_disconnect}
+            disabled={locked || working || connecting || !data.can_disconnect}
             onPress={confirmDisconnect}
           />
         )}
@@ -209,6 +213,11 @@ export function YouTubeCard({
       {data && !data.can_disconnect && (
         <Text style={[type.footnote, { color: colors.muted }]}>
           Disconnect is available after video processing finishes.
+        </Text>
+      )}
+      {data?.channel_id && data.can_disconnect && uploadPending && (
+        <Text style={[type.footnote, { color: colors.muted }]}>
+          The channel can change once the video upload finishes or is discarded.
         </Text>
       )}
       {available && !canConnect && (

@@ -14,6 +14,7 @@ import { showToast } from '../../ui/Toast';
 import { startClipUpload } from './clipUpload';
 import { clipFromAsset } from './videoData';
 import { VideosScreen } from './VideosScreen';
+import { YouTubeSettingsScreen } from './YouTubeSettings';
 import {
   resetVideoUploadStore,
   syncVideoUploadSession,
@@ -26,6 +27,7 @@ configure({ asyncUtilTimeout: 8000 });
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
+  useLocalSearchParams: () => ({}),
 }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
@@ -418,6 +420,65 @@ it('keeps uploading and holds the wake lock after leaving Videos, and shows prog
   // Returning now shows the processing screen directly.
   await open(<VideosScreen />);
   expect(await screen.findByText('Queued')).toBeTruthy();
+});
+
+it("locks Settings' YouTube channel while a batch waits to start, until processing begins", async () => {
+  const transfers = controllableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/process') return { ...session, status: 'queued' };
+    throw new Error(`Unexpected ${path}`);
+  });
+  const view = await pickAndUpload(['one.mp4']);
+  await screen.findByText('UPLOADING SESSION');
+  await act(async () => view.unmount());
+
+  // Settings' channel panel, opened while the clip is still transferring.
+  await open(<YouTubeSettingsScreen />);
+  const locked = 'The channel can change once the video upload finishes or is discarded.';
+  expect(await screen.findByText(locked)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Disconnect' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Reconnect YouTube' })).toBeDisabled();
+
+  // Once processing begins, the server's own busy check takes over and the panel unlocks.
+  await act(async () => transfers[0].finish());
+  await waitFor(() => expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/process', 'POST'));
+  await waitFor(() => expect(screen.queryByText(locked)).toBeNull());
+  expect(screen.getByRole('button', { name: 'Disconnect' })).toBeEnabled();
+});
+
+it('keeps the channel locked after a failed clip until the batch is discarded', async () => {
+  jest.spyOn(Alert, 'alert');
+  jest.mocked(startClipUpload).mockImplementation(() => ({
+    done: Promise.reject(new Error('Network request failed')),
+    stop: jest.fn(),
+  }));
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/cancel') return { ...session, status: 'cancelled' };
+    if (path === '/api/sessions/s1') return undefined;
+    throw new Error(`Unexpected ${path}`);
+  });
+  const videos = await pickAndUpload(['one.mp4']);
+  await screen.findByRole('button', { name: 'Retry failed uploads' });
+  await act(async () => videos.unmount());
+
+  // The clip needs retrying, so the batch still waits on this channel.
+  const settings = await open(<YouTubeSettingsScreen />);
+  const locked = 'The channel can change once the video upload finishes or is discarded.';
+  expect(await screen.findByText(locked)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Disconnect' })).toBeDisabled();
+  await act(async () => settings.unmount());
+
+  const back = await open(<VideosScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Stop and discard' }));
+  await alertButton('Stop and discard');
+  expect(await screen.findByText('Upload your sets')).toBeTruthy();
+  await act(async () => back.unmount());
+
+  await open(<YouTubeSettingsScreen />);
+  expect(await screen.findByRole('button', { name: 'Disconnect' })).toBeEnabled();
+  expect(screen.queryByText(locked)).toBeNull();
 });
 
 it('keeps creating a session and starts clip uploads even after leaving Videos', async () => {
