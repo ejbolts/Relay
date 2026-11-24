@@ -1,4 +1,5 @@
-import Constants, { ExecutionEnvironment } from 'expo-constants';
+import { isRunningInExpoGo } from 'expo';
+import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { apiSend } from '../../data/api';
@@ -35,10 +36,8 @@ export type RemotePushAvailability =
 export function remotePushAvailability(): RemotePushAvailability {
   if (Platform.OS !== 'ios' && Platform.OS !== 'android')
     return { available: false, reason: 'unsupported' };
-  if (
-    Platform.OS === 'android' &&
-    Constants.executionEnvironment === ExecutionEnvironment.StoreClient
-  )
+  // Not `executionEnvironment`: development builds report `storeClient` too, and they have push.
+  if (Platform.OS === 'android' && isRunningInExpoGo())
     return { available: false, reason: 'expo-go-android' };
   const extra = Constants.expoConfig?.extra as { eas?: { projectId?: unknown } } | undefined;
   const projectId = extra?.eas?.projectId ?? Constants.easConfig?.projectId;

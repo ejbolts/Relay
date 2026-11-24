@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { isRunningInExpoGo } from 'expo';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Alert, Platform } from 'react-native';
@@ -12,13 +13,16 @@ import { resetRemotePushForTests, setRemotePushAccount, syncRemotePush } from '.
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 jest.mock('../../data/api', () => ({ apiSend: jest.fn(async () => undefined) }));
 jest.mock('../../ui/Toast', () => ({ showToast: jest.fn(), toastAccount: () => 'user:alice' }));
+jest.mock('expo', () => ({
+  ...jest.requireActual('expo'),
+  isRunningInExpoGo: jest.fn(() => false),
+}));
 jest.mock('expo-constants', () => {
   const actual = jest.requireActual('expo-constants');
   return { ...actual, __esModule: true, default: { ...actual.default } };
 });
 // The mocked constants, changed by each test.
 const mockConstants = Constants as unknown as {
-  executionEnvironment: string;
   expoConfig: { extra?: { eas?: { projectId?: string } } } | null;
   easConfig: { projectId?: string } | null;
 };
@@ -49,7 +53,7 @@ beforeEach(() => {
   send.mockReset().mockResolvedValue(undefined);
   jest.mocked(showToast).mockClear();
   jest.replaceProperty(Platform, 'OS', 'ios');
-  mockConstants.executionEnvironment = 'standalone';
+  jest.mocked(isRunningInExpoGo).mockReturnValue(false);
   mockConstants.expoConfig = { extra: { eas: { projectId: 'project-1' } } };
   mockConstants.easConfig = null;
   setRemotePushAccount('alice');
@@ -59,7 +63,7 @@ afterEach(() => jest.restoreAllMocks());
 
 test('in Expo Go on Android the switch is off and disabled, and (?) says why', async () => {
   jest.replaceProperty(Platform, 'OS', 'android');
-  mockConstants.executionEnvironment = 'storeClient';
+  jest.mocked(isRunningInExpoGo).mockReturnValue(true);
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   await render(<Notifications_ />);
   await act(() => syncRemotePush(true));

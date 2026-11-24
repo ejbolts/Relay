@@ -1,3 +1,4 @@
+import { isRunningInExpoGo } from 'expo';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
@@ -21,13 +22,16 @@ import {
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 jest.mock('../../data/api', () => ({ apiSend: jest.fn(async () => undefined) }));
 
+jest.mock('expo', () => ({
+  ...jest.requireActual('expo'),
+  isRunningInExpoGo: jest.fn(() => false),
+}));
 jest.mock('expo-constants', () => {
   const actual = jest.requireActual('expo-constants');
   return { ...actual, __esModule: true, default: { ...actual.default } };
 });
 // The mocked constants, changed by each test.
 const mockConstants = Constants as unknown as {
-  executionEnvironment: string;
   expoConfig: { extra?: { eas?: { projectId?: string } } } | null;
   easConfig: { projectId?: string } | null;
 };
@@ -57,7 +61,7 @@ beforeEach(() => {
   send.mockReset().mockResolvedValue(undefined);
   request.mockReset();
   jest.replaceProperty(Platform, 'OS', 'ios');
-  mockConstants.executionEnvironment = 'standalone';
+  jest.mocked(isRunningInExpoGo).mockReturnValue(false);
   mockConstants.expoConfig = { extra: { eas: { projectId: 'project-1' } } };
   mockConstants.easConfig = null;
   allow(true);
@@ -72,13 +76,20 @@ afterEach(() => {
 describe('availability', () => {
   test('Expo Go on Android has no remote push, and nothing is registered', async () => {
     jest.replaceProperty(Platform, 'OS', 'android');
-    mockConstants.executionEnvironment = 'storeClient';
+    jest.mocked(isRunningInExpoGo).mockReturnValue(true);
     expect(remotePushAvailability()).toEqual({ available: false, reason: 'expo-go-android' });
     await syncRemotePush(true);
     expect(remotePushStatus()).toEqual({ kind: 'unavailable', reason: 'expo-go-android' });
     expect(Notifications.getExpoPushTokenAsync).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
     await expect(enableRemotePush()).rejects.toThrow("Expo Go on Android can't receive alerts");
+  });
+
+  test('a development build on Android has remote push', () => {
+    jest.replaceProperty(Platform, 'OS', 'android');
+    // Development builds report the same execution environment as Expo Go.
+    (mockConstants as { executionEnvironment?: string }).executionEnvironment = 'storeClient';
+    expect(remotePushAvailability()).toEqual({ available: true, projectId: 'project-1' });
   });
 
   test('a build without an EAS project id is unavailable', () => {
