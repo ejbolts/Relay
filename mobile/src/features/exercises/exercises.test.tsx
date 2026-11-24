@@ -21,7 +21,13 @@ import { exercise, preferences, TODAY } from '../training/trainingFixtures';
 import { ExerciseEditScreen } from './ExerciseEditScreen';
 import { ExerciseMergeScreen } from './ExerciseMergeScreen';
 import { coachHighlight } from '../guides/GuideCoach';
-import { activeSetupGuide, resetSetupGuideForTests, startSetupGuide } from '../guides/setupGuides';
+import {
+  activeSetupGuide,
+  exitSetupGuide,
+  resetSetupGuideForTests,
+  startSetupGuide,
+} from '../guides/setupGuides';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
 import { resetTipsForTests, tipsFor } from '../guides/tips';
 import { MachineWeightsScreen } from './MachineWeightsScreen';
 
@@ -32,8 +38,10 @@ const mockRouter = {
   dismiss: jest.fn(),
   replace: jest.fn(),
 };
+const mockFocus = { current: true };
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
+  useIsFocused: () => mockFocus.current,
   // The header's buttons render with the screen, so a test can press them.
   Stack: {
     Screen: ({ options }: { options?: { headerRight?: () => ReactNode } }) =>
@@ -494,6 +502,77 @@ describe('machine weights', () => {
     await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
     expect(activeSetupGuide()).toBeNull();
     expect(tipsFor('u1').get().seen.normalise).toBe('learned');
+  });
+
+  test('a late save finishes only its own guide, in this session or after an account switch', async () => {
+    const pending = () => {
+      let resolve!: (value: unknown) => void;
+      const promise = new Promise((done) => (resolve = done));
+      return { promise, resolve };
+    };
+    for (const replace of ['same session', 'other account'] as const) {
+      resetSetupGuideForTests();
+      resetTipsForTests();
+      const save = pending();
+      jest.mocked(apiSend).mockReturnValueOnce(save.promise as never);
+      startSetupGuide('normalise', 'u1', []);
+      const view = await open(<MachineWeightsScreen exerciseId="press" />);
+      await fireEvent(
+        await screen.findByRole('switch', { name: 'Normalise weights' }),
+        'valueChange',
+        true,
+      );
+      await fireEvent.press(screen.getByRole('button', { name: 'Save machine weights' }));
+      if (replace === 'other account') nextSessionEpoch();
+      else exitSetupGuide('normalise');
+      startSetupGuide('normalise', replace === 'other account' ? 'u2' : 'u1', []);
+      const replacement = activeSetupGuide();
+      await act(async () =>
+        save.resolve({ enabled: true, reference_machine_id: 'hammer', machines: [] }),
+      );
+      expect(activeSetupGuide()).toBe(replacement);
+      expect(tipsFor('u1').get().seen.normalise).toBeUndefined();
+      expect(tipsFor('u2').get().seen.normalise).toBeUndefined();
+      await view.unmount();
+    }
+  });
+
+  test('switching to another tab ends the guide even though the screen stays mounted', async () => {
+    resetSetupGuideForTests();
+    const pause = (ms: number) => act(() => new Promise<void>((done) => setTimeout(done, ms)));
+    const screenAt = () => (
+      <SafeAreaProvider
+        initialMetrics={{
+          frame: { x: 0, y: 0, width: 390, height: 844 },
+          insets: { top: 0, left: 0, right: 0, bottom: 0 },
+        }}
+      >
+        <QueryClientProvider client={client}>
+          <MachineWeightsScreen exerciseId="press" />
+        </QueryClientProvider>
+      </SafeAreaProvider>
+    );
+    try {
+      startSetupGuide('normalise', 'u1', []);
+      const view = await open(<MachineWeightsScreen exerciseId="press" />);
+      expect(await screen.findByText('Switch on Normalise weights')).toBeVisible();
+      // Briefly covered and back (as when the screen is replaced by itself): the guide stays.
+      mockFocus.current = false;
+      await view.rerender(screenAt());
+      mockFocus.current = true;
+      await view.rerender(screenAt());
+      await pause(800);
+      expect(activeSetupGuide()?.id).toBe('normalise');
+      // Another tab: the Training stack keeps the screen mounted, out of sight.
+      mockFocus.current = false;
+      await view.rerender(screenAt());
+      await pause(800);
+      expect(activeSetupGuide()).toBeNull();
+      expect(screen.queryByText(/Setup guide/)).toBeNull();
+      expect(tipsFor('u1').get().seen.normalise).toBeUndefined();
+    } finally {
+      mockFocus.current = true;
+    }
   });
 
   test('switching normalising off again returns the guide to its first step', async () => {

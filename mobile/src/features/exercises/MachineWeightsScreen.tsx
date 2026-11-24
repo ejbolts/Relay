@@ -65,6 +65,7 @@ import { CoachSpacer, CoachTarget, GuideCoach } from '../guides/GuideCoach';
 import {
   exitSetupGuide,
   finishSetupGuide,
+  setupGuideTicket,
   useExitGuideOnLeave,
   useSetupGuide,
 } from '../guides/setupGuides';
@@ -190,11 +191,13 @@ function MachineWeightsEditor({
     const parsed = parsedMapping(draft, texts, unit);
     setErrors(parsed.errors);
     if (!parsed.mapping || saving) return;
+    // Only the guide running when the save starts can be finished by it.
+    const ticket = setupGuideTicket('normalise');
     setSaving(true);
     setSaveError(null);
     try {
       const saved = await saveWeightMapping(client, exerciseId, parsed.mapping);
-      if (saved.enabled) finishSetupGuide('normalise');
+      if (saved.enabled) finishSetupGuide(ticket);
       haptics.success();
       showToast('Machine weights saved');
       router.back();

@@ -101,7 +101,9 @@ import { CoachSpacer, CoachTarget, GuideCoach } from '../../guides/GuideCoach';
 import {
   exitSetupGuide,
   finishSetupGuide,
+  setupGuideTicket,
   updateSetupGuide,
+  useExitGuideOnLeave,
   useSetupGuide,
 } from '../../guides/setupGuides';
 import { DateStepper, StepButton } from './SplitParts';
@@ -197,6 +199,8 @@ function Editor({
   const [picking, setPicking] = useState<Picking | null>(null);
   // The splits guide coaches the editor while it runs, as the web's.
   const running = useSetupGuide('split');
+  // The editor is part of the splits guide's feature, with the splits page under it.
+  useExitGuideOnLeave('split');
   const [guide] = useState(() =>
     running ? splitEditorGuide(splitGuideFlow(activeId), routine) : undefined,
   );
@@ -259,6 +263,8 @@ function Editor({
     }
     setValidation(null);
     setSaving(true);
+    // Only the guide running when the save starts can be moved on or finished by it.
+    const ticket = setupGuideTicket('split');
     try {
       const saved = await saveRoutine(
         value,
@@ -267,11 +273,11 @@ function Editor({
           : undefined,
       );
       void refreshSplits(client);
-      if (running) {
+      if (ticket) {
         // Saving the active split finishes the guide; a new one still needs starting.
         const outcome = splitSavedOutcome(saved.id, activeId, value.id === 'current-split');
-        if (outcome.finish) finishSetupGuide('split');
-        else updateSetupGuide('split', { useRoutineId: outcome.useRoutineId });
+        if (outcome.finish) finishSetupGuide(ticket);
+        else updateSetupGuide(ticket, { useRoutineId: outcome.useRoutineId });
       }
       showToast('Split saved.');
       router.back();

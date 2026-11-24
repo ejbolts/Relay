@@ -54,6 +54,8 @@ import { CoachSpacer, CoachTarget, GuideCoach } from '../../guides/GuideCoach';
 import {
   exitSetupGuide,
   finishSetupGuide,
+  setupGuideTicket,
+  ticketGuide,
   useExitGuideOnLeave,
   useSetupGuide,
 } from '../../guides/setupGuides';
@@ -442,6 +444,8 @@ function Library({
         onClose={() => setUsing(null)}
         onUse={(startDate) => {
           const routine = using!;
+          // Only the guide running now, waiting on this split, can be finished by this save.
+          const ticket = guide?.useRoutineId === routine.id ? setupGuideTicket('split') : null;
           void run(async () => {
             if (routine.id === 'current-split')
               await saveTrainingSplit({
@@ -454,7 +458,7 @@ function Library({
             else await startRoutine(routine.id, startDate);
             setUsing(null);
             setExpanded(routine.id);
-            if (guide?.useRoutineId === routine.id) finishSetupGuide('split');
+            if (ticketGuide(ticket)?.useRoutineId === routine.id) finishSetupGuide(ticket);
             showToast(`Using ${routine.name}`);
           });
         }}

@@ -13,6 +13,7 @@ import {
   Animated,
   Keyboard,
   Platform,
+  Pressable,
   ScrollView,
   StyleSheet,
   View,
@@ -43,6 +44,12 @@ let highlighted: { owner: object; target: CoachTargetId } | null = null;
 let docked: { owner: object; height: number } | null = null;
 const listeners = new Set<() => void>();
 const targets = new Map<CoachTargetId, { view: ComponentRef<typeof View>; header: boolean }>();
+
+// Asks the coach to bring the highlighted control into view, such as when it appears late.
+const revealListeners = new Set<(target: CoachTargetId) => void>();
+function requestReveal(target: CoachTargetId) {
+  if (highlighted?.target === target) for (const listener of revealListeners) listener(target);
+}
 
 function emit() {
   for (const listener of listeners) listener();
@@ -81,12 +88,18 @@ export function CoachTarget({
     const view = ref.current;
     if (!id || !view) return;
     targets.set(id, { view, header });
+    requestReveal(id);
     return () => {
       if (targets.get(id)?.view === view) targets.delete(id);
     };
   }, [id, header]);
   return (
-    <View ref={ref} collapsable={false} style={[header && styles.header, style]}>
+    <View
+      ref={ref}
+      collapsable={false}
+      style={[header && styles.header, style]}
+      onLayout={id ? () => requestReveal(id) : undefined}
+    >
       {children}
       {on && <TargetRing radius={radius} inset={header ? 0 : 3} />}
     </View>
@@ -161,11 +174,19 @@ export function CoachSpacer() {
 type Measurable = {
   measureInWindow?: (done: (x: number, y: number, width: number, height: number) => void) => void;
 };
-const measure = (view: Measurable | null | undefined) =>
-  new Promise<{ y: number; height: number } | null>((resolve) => {
-    if (!view || typeof view.measureInWindow !== 'function') return resolve(null);
-    view.measureInWindow((_x, y, _width, height) => resolve({ y, height }));
-  });
+type Box = { y: number; height: number } | null;
+/** Window measurements for bringing a control into view; replaceable in tests. */
+export const coachLayout = {
+  measure: (
+    view: Measurable | null | undefined,
+    // What is measured, for tests.
+    _part: 'frame' | 'content' | 'control' | 'coach',
+  ) =>
+    new Promise<Box>((resolve) => {
+      if (!view || typeof view.measureInWindow !== 'function') return resolve(null);
+      view.measureInWindow((_x, y, _width, height) => resolve({ y, height }));
+    }),
+};
 
 export function GuideCoach({
   step,
@@ -244,22 +265,27 @@ export function GuideCoach({
     [me],
   );
 
-  // Brings the control into view above the coach once the screen has laid out, and again a
-  // moment later in case loading content moved it (a pass with nothing to move does nothing).
+  // Brings the control into view above the coach once the screen has laid out, again a moment
+  // later in case loading content moved it, and whenever the control itself appears or moves.
+  // Each pass measures afresh, a newer pass cancels an older one still measuring, and a pass
+  // with nothing to move does nothing.
   useEffect(() => {
     if (inline || !scroll) return;
     let live = true;
+    let latest = 0;
+    let soon: ReturnType<typeof setTimeout> | undefined;
     const reveal = async () => {
+      const pass = ++latest;
       const marked = targets.get(target);
       const scroller = scroll.current;
       if (!marked || marked.header || !scroller) return;
       const [frame, content, control, coach] = await Promise.all([
-        measure(scroller as Measurable),
-        measure(scroller.getInnerViewRef?.() as Measurable | null),
-        measure(marked.view),
-        measure(card.current),
+        coachLayout.measure(scroller as Measurable, 'frame'),
+        coachLayout.measure(scroller.getInnerViewRef?.() as Measurable | null, 'content'),
+        coachLayout.measure(marked.view, 'control'),
+        coachLayout.measure(card.current, 'coach'),
       ]);
-      if (!live || !frame || !content || !control) return;
+      if (!live || pass !== latest || !frame || !content || !control) return;
       const top = frame.y + 8;
       const bottom = Math.min(frame.y + frame.height, coach?.y ?? Infinity) - 16;
       const end = control.y + control.height;
@@ -270,39 +296,53 @@ export function GuideCoach({
       scroller.scrollTo({ y: Math.max(0, frame.y - content.y + delta), animated: !reduced });
     };
     const timers = [350, 1100].map((delay) => setTimeout(() => void reveal(), delay));
+    const listener = (asked: CoachTargetId) => {
+      if (asked !== target) return;
+      clearTimeout(soon);
+      soon = setTimeout(() => void reveal(), 120);
+    };
+    revealListeners.add(listener);
     return () => {
       live = false;
       timers.forEach(clearTimeout);
+      clearTimeout(soon);
+      revealListeners.delete(listener);
     };
   }, [inline, scroll, target, reduced]);
 
-  // Tapping the grabber folds or opens the card; swiping it down folds it and up opens it.
-  const touchY = useRef<number | null>(null);
+  // Tapping the grabber folds or opens the card; swiping it down folds it and up opens it. The
+  // 40 x 5 pt bar sits in a 44 pt band that answers touches, and screen readers activate it.
+  const pressY = useRef<number | null>(null);
+  const swiped = useRef(false);
   const toggle = () => setFoldedAt(folded ? null : index);
   const handle = inline ? undefined : (
-    <View
-      accessible
+    <Pressable
       accessibilityRole="button"
       accessibilityLabel={folded ? 'Show guide' : 'Minimise guide'}
       accessibilityState={{ expanded: !folded }}
-      accessibilityActions={[{ name: 'activate' }]}
-      onAccessibilityAction={toggle}
-      onTouchStart={(event) => {
-        touchY.current = event.nativeEvent.pageY;
+      pressRetentionOffset={{ top: 80, bottom: 80, left: 40, right: 40 }}
+      onPressIn={(event) => {
+        pressY.current = event.nativeEvent.pageY;
+        swiped.current = false;
       }}
-      onTouchEnd={(event) => {
-        const start = touchY.current;
-        touchY.current = null;
+      onPressOut={(event) => {
+        const start = pressY.current;
+        pressY.current = null;
         if (start === null) return;
         const moved = event.nativeEvent.pageY - start;
         if (moved > 16) setFoldedAt(index);
         else if (moved < -16) setFoldedAt(null);
-        else if (Math.abs(moved) < 8) toggle();
+        else return;
+        swiped.current = true;
+      }}
+      onPress={() => {
+        if (swiped.current) swiped.current = false;
+        else toggle();
       }}
       style={styles.handle}
     >
       <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
-    </View>
+    </Pressable>
   );
 
   const body = (
@@ -382,8 +422,9 @@ const styles = StyleSheet.create({
     alignSelf: 'stretch',
     alignItems: 'center',
     justifyContent: 'center',
-    height: 24,
-    marginBottom: -6,
+    height: 44,
+    // The band takes the place of the card's gap below it.
+    marginBottom: -12,
   },
   grabber: { width: 40, height: 5, borderRadius: 3 },
 });

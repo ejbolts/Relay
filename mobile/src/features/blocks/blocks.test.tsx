@@ -16,7 +16,13 @@ import { showToast } from '../../ui/Toast';
 import { preferences, TODAY } from '../training/trainingFixtures';
 import { selectBlock, useBlockScope } from './blockQueries';
 import { coachHighlight } from '../guides/GuideCoach';
-import { activeSetupGuide, resetSetupGuideForTests, startSetupGuide } from '../guides/setupGuides';
+import {
+  activeSetupGuide,
+  exitSetupGuide,
+  resetSetupGuideForTests,
+  startSetupGuide,
+} from '../guides/setupGuides';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
 import { resetTipsForTests, tipsFor } from '../guides/tips';
 import { BlockFormScreen } from './BlockFormScreen';
 import { BlocksScreen } from './BlocksScreen';
@@ -24,8 +30,10 @@ import { BlockSummaryScreen } from './BlockSummaryScreen';
 import { HomeTrainingBlockCard } from './index';
 
 const mockRouter = { push: jest.fn(), back: jest.fn(), navigate: jest.fn() };
+const mockFocus = { current: true };
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
+  useIsFocused: () => mockFocus.current,
   Stack: {
     Screen: ({ options }: { options?: { headerRight?: () => ReactNode } }) =>
       options?.headerRight?.() ?? null,
@@ -362,6 +370,52 @@ describe('the block form', () => {
     const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)![2] as AlertButton[];
     await act(async () => buttons.find((button) => button.text === 'Remove block')!.onPress!());
     expect(apiSend).toHaveBeenLastCalledWith('/api/training-blocks/Peak', 'DELETE');
+  });
+});
+
+describe('the training blocks guide and late saves', () => {
+  const pending = <T,>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => (resolve = done));
+    return { promise, resolve };
+  };
+  beforeEach(() => {
+    resetSetupGuideForTests();
+    resetTipsForTests();
+    mockFocus.current = true;
+  });
+
+  async function startSlowSave() {
+    const save = pending<TrainingBlocks>();
+    jest.mocked(apiSend).mockReturnValueOnce(save.promise as never);
+    startSetupGuide('blocks', 'u1', []);
+    await open(<BlockFormScreen />);
+    await fireEvent.changeText(await screen.findByLabelText('Block name'), 'Winter');
+    await fireEvent.press(screen.getByRole('button', { name: 'Start block' }));
+    return save;
+  }
+
+  test('a save that answers after a new guide started leaves the new guide running', async () => {
+    const save = await startSlowSave();
+    exitSetupGuide('blocks');
+    startSetupGuide('blocks', 'u1', []);
+    const replacement = activeSetupGuide();
+    await act(async () => save.resolve({ blocks: [base, peak, block('Winter', today)] }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(activeSetupGuide()).toBe(replacement);
+    expect(tipsFor('u1').get().seen.blocks).toBeUndefined();
+  });
+
+  test('a save that answers after another account started a guide leaves that guide alone', async () => {
+    const save = await startSlowSave();
+    nextSessionEpoch();
+    startSetupGuide('blocks', 'u2', []);
+    const replacement = activeSetupGuide();
+    await act(async () => save.resolve({ blocks: [base, peak, block('Winter', today)] }));
+    await waitFor(() => expect(apiSend).toHaveBeenCalled());
+    expect(activeSetupGuide()).toBe(replacement);
+    expect(tipsFor('u1').get().seen.blocks).toBeUndefined();
+    expect(tipsFor('u2').get().seen.blocks).toBeUndefined();
   });
 });
 

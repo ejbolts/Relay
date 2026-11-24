@@ -1,11 +1,12 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 import { AppState, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { tipStorageKey } from '../../../../frontend/src/tipsState';
+import { OFFLINE_MESSAGE } from '../../data/offline';
 import type { TrackedWorkout, User } from '../../../../frontend/src/types';
 import { memoryKv } from '../../testing/memoryKvStore';
-import { CoachTarget, coachHighlight, GuideCoach } from './GuideCoach';
+import { CoachTarget, coachHighlight, coachLayout, GuideCoach } from './GuideCoach';
 import { GuidesScreen } from './GuidesScreen';
 import { HelpSettings } from './HelpSettings';
 import { AppTourHost } from './AppTourHost';
@@ -16,6 +17,7 @@ import {
   exitSetupGuide,
   finishSetupGuide,
   resetSetupGuideForTests,
+  setupGuideTicket,
 } from './setupGuides';
 import { resetTipsForTests, tipsFor } from './tips';
 import { launchPromptOpened, resetNoticeMemory } from '../review/noticeMemory';
@@ -27,8 +29,20 @@ jest.mock('expo-router', () => ({ useRouter: () => mockRouter }));
 const mockUser = { id: 'u1', username: 'sam', created_at: '2026-01-01T09:00:00Z' } as User;
 jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
 const mockWorkouts: { current: TrackedWorkout[] } = { current: [] };
+// What the history query says beyond its data, such as still loading or failed.
+const mockHistory: { state: Record<string, unknown>; refetch: jest.Mock } = {
+  state: {},
+  refetch: jest.fn(),
+};
 jest.mock('../../data/queries', () => ({
-  useWorkoutHistory: () => ({ data: mockWorkouts.current }),
+  useWorkoutHistory: () => ({
+    data: mockWorkouts.current,
+    isPending: false,
+    fetchStatus: 'idle',
+    error: null,
+    refetch: mockHistory.refetch,
+    ...mockHistory.state,
+  }),
   useDashboard: () => ({ data: undefined }),
   useWeightUnit: () => 'kg',
 }));
@@ -77,6 +91,7 @@ beforeEach(() => {
   mockUser.id = 'u1';
   closeAppTour();
   mockWorkouts.current = [];
+  mockHistory.state = {};
   jest.clearAllMocks();
 });
 
@@ -125,7 +140,7 @@ test('a split tip starts its setup guide with your own training and opens Splits
   });
   // Opening the guide engages its tip; only saving the split teaches it.
   expect(stored().seen).toEqual({ split: 'seen' });
-  finishSetupGuide('split');
+  finishSetupGuide(setupGuideTicket('split'));
   expect(stored().seen).toMatchObject({ split: 'learned', repRange: 'learned' });
 });
 
@@ -157,18 +172,20 @@ test('the coach highlights its control, folds from its grabber and opens again o
   expect(screen.getByText('Setup guide · 1 of 4')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
   // A tap (or a screen reader's activation) folds it; swiping down folds and up opens it.
-  await fireEvent(screen.getByRole('button', { name: 'Minimise guide' }), 'accessibilityAction', {
-    nativeEvent: { actionName: 'activate' },
-  });
+  await fireEvent.press(screen.getByRole('button', { name: 'Minimise guide' }));
   expect(screen.queryByText('Name this phase body')).toBeNull();
   expect(screen.getByText('Name this phase')).toBeVisible();
   const grabber = screen.getByRole('button', { name: 'Show guide' });
-  await fireEvent(grabber, 'touchStart', { nativeEvent: { pageY: 500 } });
-  await fireEvent(grabber, 'touchEnd', { nativeEvent: { pageY: 460 } });
+  await fireEvent(grabber, 'pressIn', { nativeEvent: { pageY: 500 } });
+  await fireEvent(grabber, 'pressOut', { nativeEvent: { pageY: 460 } });
+  await fireEvent.press(grabber);
   expect(screen.getByText('Name this phase body')).toBeVisible();
   const open = screen.getByRole('button', { name: 'Minimise guide' });
-  await fireEvent(open, 'touchStart', { nativeEvent: { pageY: 500 } });
-  await fireEvent(open, 'touchEnd', { nativeEvent: { pageY: 540 } });
+  // The 40 x 5 pt bar sits in a 44 pt touch band.
+  expect(open).toHaveStyle({ height: 44 });
+  await fireEvent(open, 'pressIn', { nativeEvent: { pageY: 500 } });
+  await fireEvent(open, 'pressOut', { nativeEvent: { pageY: 540 } });
+  await fireEvent.press(open);
   expect(screen.queryByText('Name this phase body')).toBeNull();
   await view.rerender(
     <GuideCoach
@@ -187,6 +204,79 @@ test('the coach highlights its control, folds from its grabber and opens again o
   expect(onExit).toHaveBeenCalledTimes(1);
   await view.unmount();
   expect(coachHighlight()).toBeNull();
+});
+
+test('the coach scrolls to a control that appears after it opened', async () => {
+  const scrollTo = jest.fn();
+  const scroll = { current: { scrollTo, getInnerViewRef: () => ({}) } };
+  const boxes = {
+    frame: { y: 0, height: 800 },
+    content: { y: 0, height: 2000 },
+    control: { y: 900, height: 40 },
+    coach: { y: 600, height: 240 },
+  };
+  const measure = jest
+    .spyOn(coachLayout, 'measure')
+    .mockImplementation(async (_view, part) => boxes[part]);
+  const step = {
+    title: 'Give an exercise a rep range',
+    body: 'Body',
+    target: 'split.reps' as const,
+  };
+  const coach = (
+    <GuideCoach step={step} index={1} total={3} scroll={scroll as never} onExit={jest.fn()} />
+  );
+  try {
+    const view = await show(coach);
+    // Both of the coach's own passes find no control yet.
+    await act(() => new Promise<void>((done) => setTimeout(done, 1300)));
+    expect(scrollTo).not.toHaveBeenCalled();
+    // The control appears later, such as when another day is opened.
+    await view.rerender(
+      <>
+        <CoachTarget id="split.reps">
+          <Text>Reps</Text>
+        </CoachTarget>
+        {coach}
+      </>,
+    );
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ y: 356, animated: true }));
+    await view.unmount();
+  } finally {
+    measure.mockRestore();
+  }
+});
+
+test('Compare machines waits for unknown history instead of saying what it needs', async () => {
+  await show(<GuidesScreen />);
+  // Still loading: a spinner, not the two-machines message.
+  mockWorkouts.current = undefined as never;
+  mockHistory.state = { isPending: true, fetchStatus: 'fetching' };
+  await fireEvent.press(screen.getByRole('button', { name: 'Compare machines' }));
+  expect(screen.getByLabelText('Loading your workouts')).toBeTruthy();
+  expect(screen.queryByText(/one exercise logged on two saved machines/)).toBeNull();
+  expect(mockRouter.push).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole('button', { name: /close/i }));
+
+  // Failed: says so, with Try again.
+  mockHistory.state = { isPending: false, error: new Error('Server unavailable') };
+  await fireEvent.press(screen.getByRole('button', { name: 'Compare machines' }));
+  expect(screen.getByText('Server unavailable')).toBeTruthy();
+  expect(screen.queryByText(/one exercise logged on two saved machines/)).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  expect(mockHistory.refetch).toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole('button', { name: /close/i }));
+
+  // Offline with nothing saved: the offline message.
+  mockHistory.state = { isPending: true, fetchStatus: 'paused' };
+  await fireEvent.press(screen.getByRole('button', { name: 'Compare machines' }));
+  expect(screen.getByText(OFFLINE_MESSAGE)).toBeTruthy();
+  await fireEvent.press(screen.getByRole('button', { name: /close/i }));
+
+  // Training blocks starts at once, without waiting for the history.
+  mockHistory.state = { isPending: true, fetchStatus: 'fetching' };
+  await fireEvent.press(screen.getByRole('button', { name: 'Training blocks' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith('/blocks/edit');
 });
 
 test('Settings starts each setup guide in its feature', async () => {

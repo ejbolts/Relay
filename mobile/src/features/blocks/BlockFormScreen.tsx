@@ -37,6 +37,7 @@ import { CoachSpacer, CoachTarget, GuideCoach } from '../guides/GuideCoach';
 import {
   exitSetupGuide,
   finishSetupGuide,
+  setupGuideTicket,
   useExitGuideOnLeave,
   useSetupGuide,
 } from '../guides/setupGuides';
@@ -91,8 +92,10 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
     }
   }
 
-  const save = () =>
-    run(async () => {
+  const save = () => {
+    // Only the guide running when the save starts can be finished by it.
+    const ticket = editing ? null : setupGuideTicket('blocks');
+    return run(async () => {
       const input = blockFormInput(draft);
       if (editing) {
         await updateBlock(client, editing.id, input);
@@ -101,12 +104,13 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
         const next = await createBlock(client, input);
         const selection = createdBlockSelection(next, draft.start, today);
         if (selection) selectBlock(selection);
-        finishSetupGuide('blocks');
+        finishSetupGuide(ticket);
         showToast('Training block started');
       }
       haptics.success();
       router.back();
     });
+  };
 
   const remove = () => {
     if (!editing) return;
