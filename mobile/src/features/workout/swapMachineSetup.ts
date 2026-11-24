@@ -205,9 +205,9 @@ export function machineLastSets(
 
 /**
  * Applies a machine's setup to the row a swap made, if it is still as the swap left it: the same
- * exercise pinned to the same machine. Loads change only while its sets are untouched and the
- * workout keeps the date the session was chosen for, keeping each carried row's key; settings
- * only while the draft has none.
+ * exercise pinned to the same machine. Loads change only while its sets are untouched (moving
+ * them around is fine; they keep the order they were moved to) and the workout keeps the date the
+ * session was chosen for, keeping each carried row's key; settings only while the draft has none.
  */
 export function withMachineSetup(
   current: LoggerState,
@@ -228,14 +228,14 @@ export function withMachineSetup(
   if (
     setup.history &&
     setup.history.kind !== 'failed' &&
-    movement.sets === swap.plannedSets &&
+    untouchedSets(movement.sets, swap.plannedSets) &&
     current.workoutDate === swap.workoutDate
   ) {
     const sets =
       setup.history.kind === 'found'
         ? replannedSets(swap, setup.history.sets, newKey)
         : swap.fallbackSets;
-    if (sets) next = { ...next, sets };
+    if (sets) next = { ...next, sets: inCurrentOrder(sets, movement.sets) };
   }
   if (setup.settings && movement.machineSettings === undefined)
     next = { ...next, machineSettings: setup.settings };
@@ -243,6 +243,21 @@ export function withMachineSetup(
   const movements = [...current.movements];
   movements[index] = next;
   return { ...current, movements };
+}
+
+/** Whether a row still holds exactly the sets the swap planned, in any order. */
+function untouchedSets(sets: WorkoutDraftSet[], planned: WorkoutDraftSet[]) {
+  return sets.length === planned.length && sets.every((item) => planned.includes(item));
+}
+
+/** `sets` in the order the row's sets are in now, matched by key; any new ones go last. */
+function inCurrentOrder(sets: WorkoutDraftSet[], current: WorkoutDraftSet[]) {
+  const byKey = new Map(sets.map((item) => [item.key, item]));
+  const shown = new Set(current.map((item) => item.key));
+  return [
+    ...current.flatMap((item) => byKey.get(item.key) ?? []),
+    ...sets.filter((item) => !shown.has(item.key)),
+  ];
 }
 
 /** The swap planned again from the machine's session, each carried row keeping its key. */

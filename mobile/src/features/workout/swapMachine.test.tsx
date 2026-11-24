@@ -16,6 +16,7 @@ import { ExercisePicker } from './ExercisePicker';
 import {
   checkFinish,
   finishInput,
+  moveSet,
   startLogger,
   swapExercise,
   updateSet,
@@ -477,6 +478,20 @@ describe("the chosen machine's setup, once loaded", () => {
       machineSettings: hammerSettings,
     });
     expect(live.get().movements[0].sets.map((item) => item.weight_kg)).toEqual([40, 40]);
+  });
+
+  it('still plans the loads after a planned set was moved, in the order it was moved to', async () => {
+    routes = hammerRoutes();
+    const live = logger([lastPush, pressOnCybex]);
+    const key = live.get().movements[0].key;
+    const settled = swapOntoMachine(live.change, key, press, live.context, { press: 'hammer' });
+    const [first, second] = live.get().movements[0].sets.map((item) => item.key);
+    live.change((current) => moveSet(current, key, first, { by: 1 }));
+    expect(live.get().movements[0].sets.map((item) => item.key)).toEqual([second, first]);
+    await act(async () => settled);
+    expect(live.get().movements[0].sets.map((item) => item.key)).toEqual([second, first]);
+    expect(live.get().movements[0].sets.map((item) => item.weight_kg)).toEqual([40, 40]);
+    expect(live.get().movements[0].machineSettings).toEqual(hammerSettings);
   });
 
   it('keeps sets edited and settings recorded before it arrives', async () => {
