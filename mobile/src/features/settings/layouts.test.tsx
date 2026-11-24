@@ -1,10 +1,10 @@
 import { render, screen } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
-import type { User } from '../../../frontend/src/types';
-import AdminLayout from './admin/_layout';
-import BlocksLayout from './blocks/_layout';
-import DataLayout from './data/_layout';
-import { unstable_settings as trainingSettings } from './(tabs)/training/_layout';
+import type { User } from '../../../../frontend/src/types';
+import AdminLayout from '../../app/admin/_layout';
+import BlocksLayout from '../../app/blocks/_layout';
+import DataLayout from '../../app/data/_layout';
+import { unstable_settings as trainingSettings } from '../../app/(tabs)/training/_layout';
 
 type HeaderLeft = (props: { canGoBack?: boolean }) => ReactNode;
 const captured: { screenOptions?: unknown } = {};
@@ -24,7 +24,7 @@ jest.mock('expo-router', () => ({
 }));
 
 const adminUser = { id: 'u1', is_admin: true } as User;
-jest.mock('../session/SessionProvider', () => ({ useUser: () => adminUser }));
+jest.mock('../../session/SessionProvider', () => ({ useUser: () => adminUser }));
 
 beforeEach(() => {
   captured.screenOptions = undefined;
