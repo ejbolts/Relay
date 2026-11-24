@@ -3,6 +3,7 @@ import {
   linkedSharedWorkoutId,
   linkedWorkoutNeedsMore,
   NO_SHARED_WORKOUT_FILTERS,
+  sameSharedFilters,
   sharedFilterDatesInvalid,
   sharedFiltersDay,
   sharedFiltersForExercise,
@@ -34,6 +35,17 @@ describe('shared history filters', () => {
       end_date: '2026-03-04',
     });
     expect(sharedFiltersForTarget(undefined)).toBe(NO_SHARED_WORKOUT_FILTERS);
+  });
+
+  it('tells filters asking for the same workouts apart from different ones', () => {
+    const day = sharedFiltersOnDay('2026-03-04');
+    expect(sameSharedFilters(day, sharedFiltersForTarget(target))).toBe(true);
+    expect(sameSharedFilters(day, { ...day, end_date: '2026-03-05' })).toBe(false);
+    expect(sameSharedFilters(day, { ...day, workout_type_id: 't1' })).toBe(false);
+    expect(sameSharedFilters({ ...day, workout_type_id: '' }, day)).toBe(true);
+    expect(sameSharedFilters(NO_SHARED_WORKOUT_FILTERS, sharedFiltersForExercise('bench'))).toBe(
+      false,
+    );
   });
 
   it('reads the one day a calendar tap or link shows, and no day for a range', () => {

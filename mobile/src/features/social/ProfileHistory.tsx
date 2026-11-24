@@ -4,6 +4,7 @@ import {
   LINKED_WORKOUT_MISSING,
   linkedSharedWorkoutId,
   linkedWorkoutNeedsMore,
+  sameSharedFilters,
   SHARED_FILTER_DATES_ERROR,
   sharedFilterDatesInvalid,
   sharedFiltersForTarget,
@@ -62,8 +63,12 @@ export function useProfileHistoryState(targetWorkout?: LinkedWorkout) {
       setFilters(next);
       setOpenId(null);
     },
-    /** Every workout matching a calendar day or a lift, on the All tab: either can be cardio. */
+    /**
+     * Every workout matching a calendar day or a lift, on the All tab: either can be cardio. Asking
+     * again for what is already shown keeps the open workout, as the web does.
+     */
     showMatching(next: SharedWorkoutFilters) {
+      if (tab === 'all' && sameSharedFilters(filters, next)) return;
       setTab('all');
       setFilters(next);
       setOpenId(null);

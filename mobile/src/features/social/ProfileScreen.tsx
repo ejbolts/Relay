@@ -73,8 +73,15 @@ export function ProfileScreen({
   targetWorkout?: LinkedWorkout;
 }) {
   const { colors, space } = useTheme();
-  const { scrollRef, targetRef, reveal, scrollToSection, onScrollBeginDrag, onContentSizeChange } =
-    useLinkedScroll();
+  const {
+    scrollRef,
+    targetRef,
+    reveal,
+    scrollToSection,
+    onScrollBeginDrag,
+    onContentSizeChange,
+    onLayout,
+  } = useLinkedScroll();
   const client = useQueryClient();
   const query = useSharedProfile(profileId);
   // A refusal of this member's data (a 403 or 404 on any of it) locks the profile until it is
@@ -126,6 +133,7 @@ export function ProfileScreen({
         ref={scrollRef}
         onScrollBeginDrag={onScrollBeginDrag}
         onContentSizeChange={onContentSizeChange}
+        onLayout={onLayout}
         style={{ flex: 1, backgroundColor: colors.page }}
         contentContainerStyle={{
           padding: space.gutter,

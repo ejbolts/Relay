@@ -528,6 +528,25 @@ test('a trained day or a lift filters the profile’s history on All sessions, a
   await view.unmount();
 });
 
+test('tapping the day a linked workout is on keeps that workout open, as on the web', async () => {
+  const view = await show(
+    <ProfileScreen
+      profileId="alex"
+      targetWorkout={{ id: 'w-alex-1', workout_date: trainedInMonth }}
+    />,
+  );
+  // The link opens the workout's day with the workout open.
+  expect(await screen.findByText('Shared bench cues')).toBeVisible();
+  const dayName = `View 1 workout for ${prettyDate(trainedInMonth)}`;
+  expect(screen.getByRole('button', { name: dayName })).toHaveProp(
+    'accessibilityState',
+    expect.objectContaining({ selected: true }),
+  );
+  await fireEvent.press(screen.getByRole('button', { name: dayName }));
+  expect(screen.getByText('Shared bench cues')).toBeVisible();
+  await view.unmount();
+});
+
 test('revoked access (403 friend_required) evicts cached workouts, suppresses prior data, and revalidates ProfileScreen', async () => {
   let accessState: 'ok' | 'network-error' | 'revoked' = 'ok';
   jest.mocked(apiGet).mockImplementation(async (path: string) => {

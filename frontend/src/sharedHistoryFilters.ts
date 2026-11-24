@@ -31,6 +31,12 @@ export function sharedFiltersOnDay(date: string): SharedWorkoutFilters {
   return { ...NO_SHARED_WORKOUT_FILTERS, start_date: date, end_date: date };
 }
 
+/** Whether two sets of filters ask for the same workouts. */
+export function sameSharedFilters(a: SharedWorkoutFilters, b: SharedWorkoutFilters): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]) as Set<keyof SharedWorkoutFilters>;
+  return [...keys].every((key) => (a[key] ?? '') === (b[key] ?? ''));
+}
+
 /** The one day the filters show, which the calendar marks, or null for a range or no dates. */
 export function sharedFiltersDay(filters: SharedWorkoutFilters): string | null {
   return filters.start_date && filters.start_date === filters.end_date ? filters.start_date : null;
