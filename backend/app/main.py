@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -190,27 +190,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         processor = SessionProcessor(SessionLocal, settings)
         rest_timer_notifications = RestTimerNotificationScheduler(SessionLocal, settings)
         workout_reminders = ActiveWorkoutReminderScheduler(SessionLocal, settings)
-        app.state.workout_reminders = workout_reminders
-        workout_reminders.start()
         # Expired YouTube connection attempts, with any Google credentials an abandoned one holds.
         oauth_states = OAuthStateSweeper(SessionLocal)
-        oauth_states.start()
+        app.state.workout_reminders = workout_reminders
         app.state.processor = processor
         app.state.rest_timer_notifications = rest_timer_notifications
-        # Native alerts are sent only while the app runs, by its own workers. They stop even if
-        # the processor fails to start.
-        expo_dispatcher.start()
-        try:
+        async with AsyncExitStack() as cleanup:
+            # Each service's stop is registered before it starts, so a failed or partial startup
+            # still stops whatever is running. They unwind in reverse, each even if an earlier
+            # stop fails or is cancelled: the alert producers first, then the sweeper, and the
+            # native alert workers last, so they outlive anything that could still queue an alert.
+            cleanup.callback(expo_dispatcher.stop)
+            expo_dispatcher.start()
+            cleanup.push_async_callback(oauth_states.stop)
+            oauth_states.start()
+            cleanup.push_async_callback(processor.stop)
+            cleanup.push_async_callback(rest_timer_notifications.stop)
+            cleanup.push_async_callback(workout_reminders.stop)
+            workout_reminders.start()
             await processor.start()
-            try:
-                yield
-            finally:
-                await workout_reminders.stop()
-                await rest_timer_notifications.stop()
-                await processor.stop()
-        finally:
-            await oauth_states.stop()
-            expo_dispatcher.stop()
+            yield
 
     # The interactive docs describe every endpoint, so a public server keeps them off by default.
     docs = settings.api_docs

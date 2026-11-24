@@ -20,23 +20,8 @@ Expo Go can't load local native code, so there the module is missing and the res
 Expo Go can't show any of this. You need an EAS development build on an iPhone with iOS 16.4 or later; the Dynamic Island needs an iPhone 14 Pro or later.
 
 1. Give the app a bundle identifier. The plugin reads `ios.bundleIdentifier` from the app config, and names the widget extension `<bundle identifier>.RestWidget`. Without one it adds only the Info.plist key, with **no widget target**. A later prebuild with a different bundle identifier renames the extension to match.
-   - **With the app links work (branch `feature/mobile-complete-links`) merged:** its `mobile/app.config.ts` sets `ios.bundleIdentifier` from the `RELAY_IOS_BUNDLE_ID` environment variable, so the value stays out of Git.
-   - **On this branch alone:** there is no `app.config.ts` reading that variable, so `RELAY_IOS_BUNDLE_ID` does nothing. Set `ios.bundleIdentifier` directly in `mobile/app.json` for the build, and don't commit it.
-2. Add a development profile to `mobile/eas.json`:
-
-   ```json
-   {
-     "build": {
-       "development": {
-         "developmentClient": true,
-         "distribution": "internal",
-         "ios": { "resourceClass": "m-medium" }
-       }
-     }
-   }
-   ```
-
-   Then `npx expo install expo-dev-client` and `eas build --profile development --platform ios`. EAS reads the extension from `extra.eas.build.experimental.ios.appExtensions`, which the plugin sets, and asks to create its provisioning profile.
+   Set the `RELAY_IOS_BUNDLE_ID` environment variable (an EAS environment variable, or in the shell for a local build). `app.config.js` sets `ios.bundleIdentifier` from it, so the value stays out of Git; `mobile/README.md` ("Native builds") lists the other variables. Don't edit `app.json` for it.
+2. Build the `development` profile that `mobile/eas.json` already has (a development client, distributed internally; `expo-dev-client` is already installed): `eas build --profile development --platform ios`. EAS reads the extension from `extra.eas.build.experimental.ios.appExtensions`, which the plugin sets, and asks to create its provisioning profile.
 
 3. Optional local check on a Mac: `npx expo prebuild --platform ios --clean`, then open `ios/Relay.xcworkspace`. Expect a **RelayRestWidget** target (WidgetKit extension, iOS 16.4, bundle `<bundle identifier>.RestWidget`) embedded in the app, and `NSSupportsLiveActivities` set to YES in `ios/Relay/Info.plist`. Build both targets.
 4. On the iPhone, in Settings › Relay, check that **Live Activities** is on.

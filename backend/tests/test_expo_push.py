@@ -5,6 +5,7 @@ Expo's push service is always faked; these tests never send a request to it.
 
 from __future__ import annotations
 
+import threading
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -783,6 +784,71 @@ def test_the_dispatcher_stops_when_the_processor_fails_to_start(monkeypatch):
         raise RuntimeError("processor could not start")
 
     monkeypatch.setattr(SessionProcessor, "start", fail)
+    stopped = _record_stops(monkeypatch)
     with pytest.raises(RuntimeError), TestClient(create_app()):
         pass
+    assert not expo_dispatcher.running
+    # The services started before the processor stop too, producers before the sweeper.
+    assert stopped == ["workout reminders", "rest timers", "processor", "sweeper"]
+
+
+def _record_stops(monkeypatch, fail: str | None = None) -> list[str]:
+    """Records each lifespan service's stop in order; ``fail`` raises after that one stops."""
+    from app.notifications import ActiveWorkoutReminderScheduler, RestTimerNotificationScheduler
+    from app.processing import SessionProcessor
+    from app.youtube_connections import OAuthStateSweeper
+
+    stopped: list[str] = []
+    for name, cls in (
+        ("workout reminders", ActiveWorkoutReminderScheduler),
+        ("rest timers", RestTimerNotificationScheduler),
+        ("processor", SessionProcessor),
+        ("sweeper", OAuthStateSweeper),
+    ):
+        original = cls.stop
+
+        async def stop(self, _name=name, _original=original):
+            await _original(self)
+            stopped.append(_name)
+            if _name == fail:
+                raise RuntimeError(f"{_name} failed to stop")
+
+        monkeypatch.setattr(cls, "stop", stop)
+    return stopped
+
+
+def test_a_dispatcher_that_fails_partway_through_starting_stops_its_threads(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    started: list[threading.Thread] = []
+
+    class FailingThread(threading.Thread):
+        def start(self):
+            if started:
+                raise RuntimeError("can't start new thread")
+            super().start()
+            started.append(self)
+
+    monkeypatch.setattr(expo_delivery.threading, "Thread", FailingThread)
+    stopped = _record_stops(monkeypatch)
+    with pytest.raises(RuntimeError), TestClient(create_app()):
+        pass
+    assert not expo_dispatcher.running
+    assert len(started) == 1 and not started[0].is_alive()
+    # Nothing after the dispatcher had started yet.
+    assert stopped == []
+
+
+def test_a_service_that_fails_to_stop_doesnt_keep_the_others_running(monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from app.main import create_app
+
+    stopped = _record_stops(monkeypatch, fail="rest timers")
+    with pytest.raises(RuntimeError, match="rest timers failed to stop"):
+        with TestClient(create_app()):
+            assert expo_dispatcher.running
+    assert stopped == ["workout reminders", "rest timers", "processor", "sweeper"]
     assert not expo_dispatcher.running

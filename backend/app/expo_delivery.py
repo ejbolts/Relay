@@ -338,7 +338,9 @@ class ExpoPushDispatcher:
                 break
         deadline = time.monotonic() + timeout
         for thread in threads:
-            thread.join(max(0.0, deadline - time.monotonic()))
+            # A start that failed partway leaves threads that never ran.
+            if thread.is_alive():
+                thread.join(max(0.0, deadline - time.monotonic()))
 
     @property
     def running(self) -> bool:

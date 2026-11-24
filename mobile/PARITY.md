@@ -54,15 +54,15 @@ What the native app covers compared with the web app, which it will replace. Upd
 - **Videos uploads:** an upload keeps going when you leave Videos; Stop and discard is its own button (the web has Cancel session).
 - **Guides:** a setup guide coaches each step in a docked card with a fold grabber, rings the control it's about and scrolls it into view.
 - **Phone alerts:** Settings › Notifications registers this phone for remote push. Rest alerts and "Still working out?" for a workout on this phone stay local notifications, and alerts shown by the phone use neutral text without names. Send test alert is app-only.
-- **Rest timer on iPhone:** it also shows as a Live Activity on the Lock Screen and in the Dynamic Island, beside the rest pill and the rest alert.
+- **Rest timer on iPhone:** in an installed build on iOS 16.4 or later, it also shows as a Live Activity on the Lock Screen, and in the Dynamic Island on iPhones that have one, beside the rest pill and the rest alert.
 
 ## Known platform gaps
 
-- **Built, but needs a development build to confirm.** Expo Go can't run these, and this PC can't build iOS:
-  - opening friend links from the camera or browser (universal links and App Links, from `RELAY_APP_LINK_HOSTS` and the server's well-known settings);
+- **Built, but needs a development build to confirm.** Expo Go can't run most of these, and this PC can't build iOS:
+  - opening friend links from the camera or browser (universal links and App Links, from `RELAY_APP_LINK_HOSTS` and the server's well-known settings). Android's App Links can't match the `#friend=` fragment, so they match the server's whole root address: on a configured Android phone, any link to Relay's web address opens the app, which then reads the fragment itself;
   - remote push delivery (an EAS project, FCM and APNs credentials, `RELAY_GOOGLE_SERVICES_FILE`);
   - the rest timer's Live Activity (its Swift has not been compiled here);
-  - YouTube sign-in returning to the app over HTTPS;
+  - YouTube sign-in returning to the app. Google returns to the server over HTTPS, and the server then sends the browser to `relay-mobile://youtube-return`. Expo Go can try it only for a Metro host listed in the server's `GYM_YOUTUBE_APP_DEV_RETURN_HOSTS`, and on the Android emulator Chrome didn't follow that redirect from a plain-HTTP test server;
   - the upload wake lock (Expo Go keeps the screen on anyway).
 
   See `mobile/README.md` ("Native builds") for the variables and steps.
