@@ -22,6 +22,7 @@ CONTRACT_MODULES = {
     "accounts.py",
     "admin.py",
     "client_versions.py",
+    "expo_push.py",
     "feedback.py",
     "frontend.py",
     "home_layout.py",

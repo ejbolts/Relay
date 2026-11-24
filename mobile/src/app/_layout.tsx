@@ -13,6 +13,7 @@ import { CardioShareHost } from '../features/cardio/CardioShareSheet';
 import { useImportPrompt } from '../features/data';
 import { AppTourHost } from '../features/guides/AppTourHost';
 import { TipSyncHost } from '../features/guides/TipSyncHost';
+import { RemotePushSync } from '../features/push/RemotePushSync';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { VideoUploadSessionSync } from '../features/videos';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
@@ -72,6 +73,8 @@ function Navigation() {
         <WorkoutLinkOpener />
         {/* Keeps app-level video uploads bound to the active account across navigation. */}
         <VideoUploadSessionSync />
+        {/* Remote push (C5): registers this phone for Phone alerts and opens tapped alerts. */}
+        {signedIn && !mustChangePassword && <RemotePushSync userId={status.user.id} />}
         <Stack
           screenOptions={{
             headerShown: false,

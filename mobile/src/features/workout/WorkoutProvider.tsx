@@ -114,9 +114,11 @@ import { forgetOfflineQueries, saveOfflineQueries, seedOfflineQueries } from './
 import { askForRestAlerts, syncRestAlert } from './restAlerts';
 import { syncRestActivity, useRestActivity } from './restActivity';
 import {
+  holdReminder,
   onWorkoutReminderOpened,
   remindAboutRestAlerts,
   syncInactiveReminder,
+  takeHeldReminder,
   takeLaunchReminder,
 } from './workoutReminders';
 import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
@@ -633,17 +635,30 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const openFromReminder = useCallback(
     (startedAt: number | null) => {
       const live = loggerRef.current;
-      if (live && (startedAt === null || startedAt === live.startedAt)) router.push('/workout');
+      if (!live || (startedAt !== null && startedAt !== live.startedAt)) return false;
+      router.push('/workout');
+      return true;
     },
     [router],
   );
-  useEffect(() => onWorkoutReminderOpened(openFromReminder), [openFromReminder]);
+  // A reminder tapped before its workout has loaded here (such as one started on the web) waits
+  // for it, for this account only.
+  useEffect(
+    () =>
+      onWorkoutReminderOpened((startedAt) => {
+        if (!openFromReminder(startedAt)) holdReminder(startedAt);
+      }),
+    [openFromReminder],
+  );
   // A tap that cold-launched Relay came before the listener: take it once the workout is back.
   useEffect(() => {
     if (liveStartedAt === null) return;
     let active = true;
     void takeLaunchReminder().then((startedAt) => {
-      if (active && startedAt !== undefined) openFromReminder(startedAt);
+      if (!active) return;
+      if (startedAt !== undefined) holdReminder(startedAt);
+      const held = takeHeldReminder(liveStartedAt);
+      if (held !== undefined) openFromReminder(held);
     });
     return () => {
       active = false;

@@ -40,6 +40,7 @@ import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { HelpSettings } from '../guides/HelpSettings';
+import { PhoneAlertsRow, TestAlertRow, usePhoneAlerts } from '../push/PhoneAlertsRows';
 // B5 (data): imports, exports and backups.
 import { DataSection } from '../data';
 import { AdminSettingsSection } from '../admin';
@@ -448,6 +449,7 @@ function useNotificationPermission() {
 
 function NotificationsSection() {
   const { permission, setPermission } = useNotificationPermission();
+  const alerts = usePhoneAlerts();
   async function press() {
     if (permission !== 'undetermined') {
       void Linking.openSettings();
@@ -459,24 +461,29 @@ function NotificationsSection() {
     if (status.granted) showToast('Notifications on');
   }
   return (
-    <Section title="Notifications">
-      <Row
-        label="Notifications"
-        icon={settingsIcons.bell}
-        value={
-          permission === 'checking'
-            ? null
-            : permission === 'granted'
-              ? 'On'
-              : permission === 'denied'
-                ? 'Off'
-                : 'Allow'
-        }
-        external={permission === 'granted' || permission === 'denied'}
-        disabled={permission === 'checking'}
-        onPress={() => void press()}
-      />
-    </Section>
+    <>
+      <Section title="Notifications">
+        <Row
+          label="Notifications"
+          icon={settingsIcons.bell}
+          value={
+            permission === 'checking'
+              ? null
+              : permission === 'granted'
+                ? 'On'
+                : permission === 'denied'
+                  ? 'Off'
+                  : 'Allow'
+          }
+          external={permission === 'granted' || permission === 'denied'}
+          disabled={permission === 'checking'}
+          onPress={() => void press()}
+        />
+        <PhoneAlertsRow alerts={alerts} />
+        {alerts.enabled && <TestAlertRow alerts={alerts} />}
+      </Section>
+      <SectionError message={alerts.error} />
+    </>
   );
 }
 

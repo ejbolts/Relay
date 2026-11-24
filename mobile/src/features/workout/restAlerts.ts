@@ -16,8 +16,11 @@ let allowed: boolean | null = null;
 let channelReady: boolean | null = null;
 let handlerReady = false;
 
-/** While Relay is open its own rest bar says the rest is over, so the alert stays hidden. */
-function setUpHandler() {
+/**
+ * While Relay is open its own rest bar says the rest is over, so the alert stays hidden; other
+ * alerts, such as the server's (features/push), show as usual.
+ */
+export function setUpHandler() {
   if (handlerReady) return;
   handlerReady = true;
   Notifications.setNotificationHandler({

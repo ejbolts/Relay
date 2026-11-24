@@ -98,6 +98,7 @@ def notify_admins(
     title: str,
     body: str,
     tag: str,
+    native_body: str | None = None,
 ) -> None:
     """Alert every active admin's phones about a new request, except the account it is for."""
     with session_factory() as db:
@@ -117,6 +118,7 @@ def notify_admins(
                 body=body,
                 user_id=admin_id,
                 url=admin_account_url(user_id),
+                native_body=native_body,
                 # A later alert of the same kind about the same person replaces this one.
                 tag=tag,
             )
@@ -162,6 +164,7 @@ def request_password_reset(
             user_id=user.id,
             title="Password reset request",
             body=f"{user.display_name} (@{user.username}) asked for a temporary password.",
+            native_body="Someone asked for a temporary password.",
             tag=f"password-reset-{user.id}",
         )
 

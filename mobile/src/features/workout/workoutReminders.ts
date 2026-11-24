@@ -1,15 +1,18 @@
 import * as Notifications from 'expo-notifications';
 import { Alert, Linking } from 'react-native';
 import { readJson, writeJson } from '../../data/deviceStorage';
+import { sessionEpoch } from '../../session/sessionEpoch';
 import { showToast } from '../../ui/Toast';
+import { reportLocalReminder } from '../push/remotePush';
 import { restTimerPreference } from '../settings/devicePreferences';
 
 // The web's two workout reminders, adapted to the app's own local notifications:
 // - "Turn on rest alerts?" when a workout starts and rest alerts are off (RestAlertReminder.tsx);
 // - "Still working out?" when the live workout has had no activity for a while. On the web the
 //   server pushes it (backend/app/notifications.py, deliver_inactive, which replaced the elapsed
-//   time reminder in activeWorkoutReminder.ts for clients that share their live workout). The app
-//   has no push subscription, so the phone schedules it itself.
+//   time reminder in activeWorkoutReminder.ts for clients that share their live workout). The
+//   phone schedules it itself, so it works offline too, and tells the server (features/push) so
+//   the server's push skips this phone.
 
 /** Set once the app has asked for notification permission at the first rest (restAlerts.ts). */
 export const REST_ALERTS_ASKED_KEY = 'relay.mobile.rest-alert-asked.v1';
@@ -86,6 +89,7 @@ async function applyInactiveReminder() {
   if (target === scheduledAt) return;
   await Notifications.cancelScheduledNotificationAsync(INACTIVE_ID).catch(() => undefined);
   scheduledAt = null;
+  reportLocalReminder(null, null);
   if (target === null) {
     await Notifications.dismissNotificationAsync(INACTIVE_ID).catch(() => undefined);
     return;
@@ -103,6 +107,7 @@ async function applyInactiveReminder() {
     trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: target },
   });
   scheduledAt = target;
+  reportLocalReminder(wantedWorkout, target);
 }
 
 /**
@@ -162,8 +167,32 @@ export function onWorkoutReminderOpened(onOpen: (startedAt: number | null) => vo
   }
 }
 
+let held: { startedAt: number | null; epoch: number } | null = null;
+
+/** Keeps a tapped reminder whose workout hasn't loaded yet, for this session only. */
+export function holdReminder(startedAt: number | null) {
+  held = { startedAt, epoch: sessionEpoch() };
+}
+
+/**
+ * The held reminder, once the live workout it is about (`liveStartedAt`) has loaded: its start
+ * time (null when unknown), or undefined while there is none for this workout and session.
+ */
+export function takeHeldReminder(liveStartedAt: number): number | null | undefined {
+  if (!held) return undefined;
+  if (held.epoch !== sessionEpoch()) {
+    held = null;
+    return undefined;
+  }
+  if (held.startedAt !== null && held.startedAt !== liveStartedAt) return undefined;
+  const { startedAt } = held;
+  held = null;
+  return startedAt;
+}
+
 /** For tests: forget what was scheduled. */
 export function resetWorkoutRemindersForTests() {
+  held = null;
   wantedAt = null;
   wantedWorkout = null;
   scheduledAt = null;

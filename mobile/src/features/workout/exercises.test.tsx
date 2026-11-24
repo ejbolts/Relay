@@ -30,7 +30,11 @@ import {
   startedAt,
   types,
 } from './testFixtures';
-import { takeLaunchReminder, syncInactiveReminder } from './workoutReminders';
+import {
+  onWorkoutReminderOpened,
+  syncInactiveReminder,
+  takeLaunchReminder,
+} from './workoutReminders';
 import { useWorkout, WorkoutProvider } from './WorkoutProvider';
 import { WorkoutSheet } from './WorkoutSheet';
 
@@ -68,6 +72,8 @@ jest.mock('./workoutReminders', () => ({
   syncInactiveReminder: jest.fn(async () => undefined),
   takeLaunchReminder: jest.fn(async () => undefined),
   onWorkoutReminderOpened: jest.fn(() => () => undefined),
+  holdReminder: jest.requireActual('./workoutReminders').holdReminder,
+  takeHeldReminder: jest.requireActual('./workoutReminders').takeHeldReminder,
 }));
 jest.mock('../../ui/prompts', () => ({
   promptText: jest.fn(),
@@ -138,7 +144,7 @@ beforeEach(() => {
 });
 afterEach(() => client?.clear());
 
-async function openLogger() {
+async function openLogger(beforeStart?: () => void) {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const captured: { start?: ReturnType<typeof useWorkout>['start'] } = {};
   function Probe() {
@@ -161,6 +167,7 @@ async function openLogger() {
   );
   await waitFor(() => expect(currentUser).toHaveBeenCalled());
   await waitFor(() => expect(captured.start).toBeDefined());
+  if (beforeStart) await act(async () => beforeStart());
   await act(async () => captured.start!({ kind: 'up-next' }));
   expect(await screen.findByText('Bench Press')).toBeVisible();
 }
@@ -592,6 +599,18 @@ describe('the Still working out? reminder', () => {
   it('opens the logger when it launched the app for this workout', async () => {
     jest.mocked(takeLaunchReminder).mockResolvedValue(null);
     await openLogger();
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledTimes(2));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/workout');
+  });
+
+  it('opens a reminder tapped before its workout had loaded once it loads', async () => {
+    await openLogger(() => {
+      // Relay was running but had no workout yet, as when it was started on the web.
+      const opened = jest.mocked(onWorkoutReminderOpened).mock.calls.at(-1)![0];
+      opened(null);
+      expect(mockRouter.push).not.toHaveBeenCalledWith('/workout');
+    });
+    // Once by starting the workout, once more by the held reminder.
     await waitFor(() => expect(mockRouter.push).toHaveBeenCalledTimes(2));
     expect(mockRouter.push).toHaveBeenLastCalledWith('/workout');
   });

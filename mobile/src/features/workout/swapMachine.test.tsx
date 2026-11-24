@@ -77,6 +77,8 @@ jest.mock('./workoutReminders', () => ({
   syncInactiveReminder: jest.fn(async () => undefined),
   takeLaunchReminder: jest.fn(async () => undefined),
   onWorkoutReminderOpened: jest.fn(() => () => undefined),
+  holdReminder: jest.requireActual('./workoutReminders').holdReminder,
+  takeHeldReminder: jest.requireActual('./workoutReminders').takeHeldReminder,
 }));
 jest.mock('../../ui/prompts', () => ({
   promptText: jest.fn(),

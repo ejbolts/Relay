@@ -40,6 +40,8 @@ from .client_versions import ClientVersion, ClientVersionGateMiddleware, normali
 from .config import Settings, get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import api_error
+from .expo_delivery import expo_dispatcher
+from .expo_push import expo_push_router
 from .feedback import admin_feedback_router, feedback_router
 from .frontend import FrontendFiles
 from .home_layout import router as home_layout_router
@@ -186,13 +188,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         workout_reminders.start()
         app.state.processor = processor
         app.state.rest_timer_notifications = rest_timer_notifications
-        await processor.start()
+        # Native alerts are sent only while the app runs, by its own workers. They stop even if
+        # the processor fails to start.
+        expo_dispatcher.start()
         try:
-            yield
+            await processor.start()
+            try:
+                yield
+            finally:
+                await workout_reminders.stop()
+                await rest_timer_notifications.stop()
+                await processor.stop()
         finally:
-            await workout_reminders.stop()
-            await rest_timer_notifications.stop()
-            await processor.stop()
+            expo_dispatcher.stop()
 
     # The interactive docs describe every endpoint, so a public server keeps them off by default.
     docs = settings.api_docs
@@ -748,6 +756,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sharing_router)
     app.include_router(presence_router)
     app.include_router(protected)
+    app.include_router(expo_push_router)
     app.include_router(video)
     app.include_router(tracker_router)
     app.include_router(training_blocks_router)

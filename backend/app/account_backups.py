@@ -72,6 +72,7 @@ ACCOUNT_ROWS: dict[str, str | None] = {
     "personal_records": _OWNED,
     "cardio_sessions": _OWNED,
     "push_subscriptions": None,
+    "expo_push_tokens": None,
     "active_workout_reminders": None,
     "active_workout_sync": None,
     # A workout in progress is shown to friends live; it is not part of the training archive.
