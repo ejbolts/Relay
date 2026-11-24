@@ -70,6 +70,7 @@ from .database import get_db
 from .errors import api_error
 from .models import AccountBackup, AccountBackupKind, User, new_uuid, utc_now
 from .photo_storage import PhotoValidationError, _write_machine_variants
+from .tip_state import TIP_STATE_GENERATION_KEY, start_tip_state_generation
 from .training_metrics import rebuild_personal_records, set_setting
 
 logger = logging.getLogger(__name__)
@@ -90,7 +91,7 @@ NOT_RESTORED = frozenset(
 )
 # Settings this server manages for the account. Mirrors tracker.WORKOUT_CACHE_REVISION_KEY.
 CACHE_REVISION_KEY = "workout_cache_revision"
-SERVER_MANAGED_SETTINGS = frozenset({CACHE_REVISION_KEY})
+SERVER_MANAGED_SETTINGS = frozenset({CACHE_REVISION_KEY, TIP_STATE_GENERATION_KEY})
 SAFETY_LABEL = "Before restore"
 KEPT_SAFETY_SNAPSHOTS = 2
 
@@ -808,6 +809,8 @@ def restore_archive(
     rebuild_personal_records(db, user_id)
     # A new revision tells this account's other devices to reload their training data.
     set_setting(db, user_id, CACHE_REVISION_KEY, str(uuid.uuid4()))
+    # Devices adopt the restored tips instead of merging their older copies back in.
+    start_tip_state_generation(db, user_id)
     db.commit()
     logger.info("Restored an account archive for %s.", user.username)
     return ArchiveRestored(restored=restored, photos_skipped=len(skipped))

@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import io
 import json
+import threading
+import time
 import zipfile
 from pathlib import Path
 
@@ -9,6 +11,7 @@ import pytest
 from sqlalchemy import delete, select
 from test_account_archive import download, send
 
+from app import tip_state
 from app.database import SessionLocal
 from app.models import User, UserSetting
 from app.tip_state import MAX_TIP_STATE_BYTES, TIP_STATE_KEY, merge_tip_states
@@ -25,7 +28,7 @@ def test_merge_matches_the_shared_cases(case):
 
 
 def test_tips_start_empty(client):
-    assert client.get("/api/tips").json() == {}
+    assert client.get("/api/tips").json() == {"generation": "0"}
 
 
 def test_tips_need_sign_in(anonymous_client):
@@ -44,6 +47,7 @@ def test_saves_merge_so_devices_cannot_erase_each_other(client):
     assert merged["seen"] == {"swap": "dismissed", "plates": "learned"}
     assert merged["shows"] == {"reorder": 2}
     assert merged["lastShown"] == 5000
+    assert merged["generation"] == "0"
     assert client.get("/api/tips").json() == merged
 
 
@@ -66,7 +70,7 @@ def test_unknown_tips_and_fields_are_kept(client):
 
 def test_tips_are_scoped_to_the_account(client, other_client):
     client.put("/api/tips", json={"seen": {"swap": "dismissed"}})
-    assert other_client.get("/api/tips").json() == {}
+    assert other_client.get("/api/tips").json() == {"generation": "0"}
     other_client.put("/api/tips", json={"seen": {"plates": "learned"}, "enabled": False})
     assert client.get("/api/tips").json()["seen"] == {"swap": "dismissed"}
     assert client.get("/api/tips").json()["enabled"] is True
@@ -87,7 +91,7 @@ def test_unreadable_stored_tips_start_again(client):
     with SessionLocal() as db:
         db.add(UserSetting(user_id=client.user["id"], key=TIP_STATE_KEY, value="{broken"))
         db.commit()
-    assert client.get("/api/tips").json() == {}
+    assert client.get("/api/tips").json() == {"generation": "0"}
     assert client.put("/api/tips", json={"seen": {"swap": "seen"}}).json()["seen"] == {
         "swap": "seen"
     }
@@ -118,3 +122,70 @@ def test_tips_go_with_the_account_archive_and_deletion(client, other_client):
             ).first()
             is None
         )
+
+
+def test_a_client_holding_another_accounts_tips_is_refused(client, other_client):
+    """A stale browser tab whose cookie now belongs to another account."""
+    client.put("/api/tips", json={"seen": {"swap": "dismissed"}})
+    other = other_client.user["id"]
+    response = client.put(f"/api/tips?account={other}", json={"seen": {"plates": "learned"}})
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "tip_account_mismatch"
+    assert client.get(f"/api/tips?account={other}").status_code == 409
+    # Nothing was merged into either account.
+    assert client.get("/api/tips").json()["seen"] == {"swap": "dismissed"}
+    assert "seen" not in other_client.get("/api/tips").json()
+    mine = client.user["id"]
+    assert client.put(f"/api/tips?account={mine}", json={}).status_code == 200
+
+
+@pytest.mark.parametrize("existing", [False, True], ids=["first save", "later save"])
+def test_saves_at_the_same_moment_keep_both(client, monkeypatch, existing):
+    if existing:
+        client.put("/api/tips", json={"seen": {"back": "seen"}})
+    merge = tip_state.merge_tip_states
+
+    def slow_merge(stored, incoming):
+        # Both requests would read the same row here without the write lock.
+        time.sleep(0.3)
+        return merge(stored, incoming)
+
+    monkeypatch.setattr(tip_state, "merge_tip_states", slow_merge)
+    responses = []
+
+    def save(tip):
+        responses.append(client.put("/api/tips", json={"seen": {tip: "dismissed"}}))
+
+    threads = [threading.Thread(target=save, args=(tip,)) for tip in ("swap", "plates")]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert [response.status_code for response in responses] == [200, 200]
+    seen = client.get("/api/tips").json()["seen"]
+    assert seen["swap"] == seen["plates"] == "dismissed"
+
+
+def test_devices_adopt_restored_tips_instead_of_merging_older_copies(client):
+    client.put("/api/tips", json={"seen": {"swap": "dismissed"}, "enabled": True, "enabledAt": 10})
+    archive = download(client)
+    phone = client.put("/api/tips?generation=0", json={"enabled": False, "enabledAt": 20}).json()
+    assert phone["enabled"] is False
+    assert send(client, archive).status_code == 200
+    restored = client.get("/api/tips").json()
+    assert restored["enabled"] is True
+    generation = restored["generation"]
+    assert generation != "0"
+    # The device that synced before the restore sends its older copy: it gets the restored tips
+    # back to adopt, and nothing is merged.
+    stale = {"enabled": False, "enabledAt": 20, "seen": {"plates": "learned"}}
+    reply = client.put("/api/tips?generation=0", json=stale).json()
+    assert reply == restored
+    # A second device that reconnects later is refused the same way.
+    assert client.put("/api/tips?generation=0", json=stale).json() == restored
+    # Once adopted, the device syncs as usual.
+    merged = client.put(
+        f"/api/tips?generation={generation}", json={"seen": {"back": "seen"}}
+    ).json()
+    assert merged["seen"] == {"swap": "dismissed", "back": "seen"}
+    assert merged["enabled"] is True

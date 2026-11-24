@@ -7,7 +7,9 @@ import {
   sameTips,
   TIP_SYNC_DEBOUNCE_MS,
   TIP_SYNC_REFRESH_MS,
+  tipsAfterReply,
   tipSyncHoldUntil,
+  tipSyncPath,
 } from './tipSync';
 import cases from './tipSyncCases.json';
 import { freshTips, parseTips, tipShown, withTipsEnabled, type TipState } from './tipsState';
@@ -81,7 +83,8 @@ describe('createTipSync', () => {
   let server: Record<string, unknown>;
   let writes: TipState[];
   let current: boolean;
-  let send: ReturnType<typeof vi.fn<(state: TipState) => Promise<unknown>>>;
+  let send: ReturnType<typeof vi.fn<(state: TipState, generation?: string) => Promise<unknown>>>;
+  let sharedHold = 0;
   const make = () =>
     createTipSync({
       read: () => local,
@@ -91,6 +94,7 @@ describe('createTipSync', () => {
       },
       send,
       current: () => current,
+      sharedHold: () => sharedHold,
     });
 
   beforeEach(() => {
@@ -100,6 +104,7 @@ describe('createTipSync', () => {
     server = {};
     writes = [];
     current = true;
+    sharedHold = 0;
     send = vi.fn(async (state: TipState) => {
       server = mergeTipStates(server, state);
       return server;
@@ -234,4 +239,130 @@ describe('createTipSync', () => {
     expect(server.lastShown).toBe(0);
     expect(local.shows?.reorder).toBeUndefined();
   });
+
+  it('restarts the pause on every change', async () => {
+    const sync = make();
+    sync.changed();
+    await vi.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS - 100);
+    local = { ...local, seen: { swap: 'dismissed' } };
+    sync.changed();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(send).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS - 100);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(server.seen).toEqual({ swap: 'dismissed' });
+  });
+
+  it('a sync asked for now isn’t put off by a change', async () => {
+    const sync = make();
+    sync.syncNow();
+    sync.changed();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  it('waits for another tab’s nudge hold, and saves what that tab settled on', async () => {
+    const sync = make();
+    const now = Date.now();
+    // Another tab showed a nudge: its hold and its showing are in the shared tips.
+    sharedHold = tipSyncHoldUntil(now);
+    local = tipShown(local, 'reorder', now);
+    sync.refresh();
+    await vi.advanceTimersByTimeAsync(NUDGE_MIN_VISIBLE_MS);
+    expect(send).not.toHaveBeenCalled();
+    // That tab put the nudge back after an early interruption.
+    local = freshTips();
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(server.shows).toEqual({});
+    expect(server.lastShown).toBe(0);
+  });
+
+  it('merges a reply into what another tab saved meanwhile', async () => {
+    let release: (value: unknown) => void = () => {};
+    send.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)));
+    const sync = make();
+    sync.syncNow();
+    await vi.advanceTimersByTimeAsync(0);
+    // Another tab switched tips off while the reply was on its way.
+    local = withTipsEnabled(local, false, Date.now());
+    release({ enabled: true, enabledAt: 5, seen: { plates: 'learned' }, generation: '0' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(local).toMatchObject({ enabled: false, seen: { plates: 'learned' } });
+  });
+
+  it('sends the generation it last synced, and adopts the tips of a restore', async () => {
+    server = { seen: { plates: 'learned' } };
+    send.mockImplementation(async (state, generation) => {
+      if (generation !== undefined && generation !== 'restored')
+        return { ...server, generation: 'restored' };
+      server = mergeTipStates(server, state);
+      return { ...server, generation: 'restored' };
+    });
+    local = { ...local, syncGeneration: 'before', seen: { swap: 'dismissed' }, enabled: false };
+    const sync = make();
+    sync.syncNow();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ syncGeneration: 'before' }),
+      'before',
+    );
+    // The older copy was replaced, not merged back in.
+    expect(local).toMatchObject({
+      seen: { plates: 'learned' },
+      enabled: true,
+      syncGeneration: 'restored',
+    });
+    expect(server.seen).toEqual({ plates: 'learned' });
+    // From then on it syncs as usual.
+    local = { ...local, seen: { ...local.seen, back: 'seen' } };
+    sync.changed();
+    await vi.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS);
+    expect(send).toHaveBeenLastCalledWith(expect.anything(), 'restored');
+    expect(server.seen).toEqual({ plates: 'learned', back: 'seen' });
+  });
+});
+
+describe('tipsAfterReply', () => {
+  const reply = { seen: { plates: 'learned' }, generation: 'g2' };
+  it('merges and records the generation on a first sync', () => {
+    const local = { ...freshTips(), seen: { swap: 'dismissed' as const } };
+    expect(tipsAfterReply(local, reply, undefined, 0)).toMatchObject({
+      seen: { swap: 'dismissed', plates: 'learned' },
+      syncGeneration: 'g2',
+    });
+  });
+  it('replaces a copy from before a restore, on any device that reconnects', () => {
+    const local = { ...freshTips(), seen: { swap: 'dismissed' as const }, syncGeneration: 'g1' };
+    const next = tipsAfterReply(local, reply, 'g1', 0);
+    expect(next.seen).toEqual({ plates: 'learned' });
+    expect(next.syncGeneration).toBe('g2');
+  });
+  it('merges when another tab has already adopted the restore', () => {
+    const local = { ...freshTips(), seen: { swap: 'dismissed' as const }, syncGeneration: 'g2' };
+    expect(tipsAfterReply(local, reply, 'g1', 0).seen).toEqual({
+      swap: 'dismissed',
+      plates: 'learned',
+    });
+  });
+});
+
+describe('tipSyncPath', () => {
+  it('names the account and the generation', () => {
+    expect(tipSyncPath('u 1', undefined)).toBe('/api/tips?account=u+1');
+    expect(tipSyncPath('u1', 'g2')).toBe('/api/tips?account=u1&generation=g2');
+  });
+});
+
+it('keeps __proto__ as an ordinary tip id and event', () => {
+  const merged = mergeTipStates(
+    JSON.parse('{"counts":{"__proto__":2},"seen":{"__proto__":"dismissed"}}'),
+    JSON.parse('{"counts":{"__proto__":3}}'),
+  );
+  expect(Object.hasOwn(merged.counts as object, '__proto__')).toBe(true);
+  expect(JSON.parse(JSON.stringify(merged))).toEqual(
+    JSON.parse(
+      '{"enabled":true,"lastShown":0,"seen":{"__proto__":"dismissed"},"counts":{"__proto__":3},"shows":{}}',
+    ),
+  );
 });

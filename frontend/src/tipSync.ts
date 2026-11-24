@@ -37,61 +37,74 @@ const KNOWN_FIELDS = new Set([
   'homeDone',
   'reminders',
 ]);
-const RANK: Record<string, number> = { seen: 1, dismissed: 2, learned: 3 };
+/** Sync bookkeeping, never merged or stored with the tips: the server's generation and ours. */
+const IGNORED_FIELDS = new Set(['generation', 'syncGeneration']);
+const RANK = new Map([
+  ['seen', 1],
+  ['dismissed', 2],
+  ['learned', 3],
+]);
+const rank = (status: string | undefined) => (status === undefined ? 0 : (RANK.get(status) ?? 0));
 
 type Reminder = { count: number; at?: number };
+// Maps, not objects: tip ids and event names arrive from other clients, and a name such as
+// "constructor" or "__proto__" must be an ordinary key, never an inherited property.
 type Clean = {
   enabled: boolean;
   enabledAt: number;
   lastShown: number;
-  seen: Record<string, string>;
-  counts: Record<string, number>;
-  shows: Record<string, number>;
+  seen: Map<string, string>;
+  counts: Map<string, number>;
+  shows: Map<string, number>;
   homeRead: string[];
   homeDone: string[];
-  reminders: Record<string, Reminder>;
-  extra: Record<string, unknown>;
+  reminders: Map<string, Reminder>;
+  extra: [string, unknown][];
 };
 
-const record = (value: unknown): Record<string, unknown> =>
-  value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+/** A JSON object's own entries; anything else has none. */
+const entries = (value: unknown): [string, unknown][] =>
+  value && typeof value === 'object' && !Array.isArray(value) ? Object.entries(value) : [];
+/** One own field of a JSON object. */
+const field = (value: unknown, key: string): unknown =>
+  value && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, key)
+    ? (value as Record<string, unknown>)[key]
+    : undefined;
 const amount = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : undefined;
 const amounts = (value: unknown) =>
-  Object.fromEntries(
-    Object.entries(record(value)).flatMap(([key, count]) => {
+  new Map(
+    entries(value).flatMap(([key, count]): [string, number][] => {
       const valid = amount(count);
       return valid === undefined ? [] : [[key, valid]];
     }),
-  ) as Record<string, number>;
+  );
 const ids = (value: unknown) =>
   Array.isArray(value) ? [...new Set(value.filter((id) => typeof id === 'string'))] : [];
 
 function clean(value: unknown): Clean {
-  const raw = record(value);
-  const reminders: Record<string, Reminder> = {};
-  for (const [id, reminder] of Object.entries(record(raw.reminders))) {
-    const { count, at } = record(reminder);
+  const reminders = new Map<string, Reminder>();
+  for (const [id, reminder] of entries(field(value, 'reminders'))) {
+    const count = field(reminder, 'count');
+    const at = field(reminder, 'at');
     if (typeof count !== 'number' || !Number.isInteger(count) || count < 0) continue;
-    reminders[id] = typeof at === 'number' && Number.isFinite(at) ? { count, at } : { count };
+    reminders.set(id, typeof at === 'number' && Number.isFinite(at) ? { count, at } : { count });
   }
   return {
-    enabled: raw.enabled !== false,
-    enabledAt: amount(raw.enabledAt) ?? 0,
-    lastShown: amount(raw.lastShown) ?? 0,
-    seen: Object.fromEntries(
-      Object.entries(record(raw.seen)).filter(
-        ([, status]) => typeof status === 'string' && RANK[status],
+    enabled: field(value, 'enabled') !== false,
+    enabledAt: amount(field(value, 'enabledAt')) ?? 0,
+    lastShown: amount(field(value, 'lastShown')) ?? 0,
+    seen: new Map(
+      entries(field(value, 'seen')).filter(
+        (entry): entry is [string, string] => typeof entry[1] === 'string' && RANK.has(entry[1]),
       ),
-    ) as Record<string, string>,
-    counts: amounts(raw.counts),
-    shows: amounts(raw.shows),
-    homeRead: ids(raw.homeRead),
-    homeDone: ids(raw.homeDone),
+    ),
+    counts: amounts(field(value, 'counts')),
+    shows: amounts(field(value, 'shows')),
+    homeRead: ids(field(value, 'homeRead')),
+    homeDone: ids(field(value, 'homeDone')),
     reminders,
-    extra: Object.fromEntries(Object.entries(raw).filter(([key]) => !KNOWN_FIELDS.has(key))),
+    extra: entries(value).filter(([key]) => !KNOWN_FIELDS.has(key) && !IGNORED_FIELDS.has(key)),
   };
 }
 
@@ -105,41 +118,41 @@ const larger = (a: number | undefined, b: number | undefined) =>
 export function mergeTipStates(stored: unknown, incoming: unknown): SyncedTips {
   const a = clean(stored);
   const b = clean(incoming);
-  const seen: Record<string, string> = {};
-  const shows: Record<string, number> = {};
-  const reminders: Record<string, Reminder> = {};
+  const seen: [string, string][] = [];
+  const shows: [string, number][] = [];
+  const reminders: [string, Reminder][] = [];
   const read = new Set<string>();
   const done = new Set<string>();
   const tipIds = new Set(
     [a, b].flatMap((side) => [
-      ...Object.keys(side.seen),
-      ...Object.keys(side.shows),
-      ...Object.keys(side.reminders),
+      ...side.seen.keys(),
+      ...side.shows.keys(),
+      ...side.reminders.keys(),
       ...side.homeRead,
       ...side.homeDone,
     ]),
   );
   for (const id of tipIds) {
-    const generationA = a.reminders[id]?.count ?? 0;
-    const generationB = b.reminders[id]?.count ?? 0;
+    const generationA = a.reminders.get(id)?.count ?? 0;
+    const generationB = b.reminders.get(id)?.count ?? 0;
     let status: string | undefined;
     let showings: number | undefined;
     let reminder: Reminder | undefined;
     if (generationA !== generationB) {
       // The tip came back on one side: its newer generation replaces the older one's progress.
       const [newer, older] = generationA > generationB ? [a, b] : [b, a];
-      status = older.seen[id] === 'learned' ? 'learned' : newer.seen[id];
-      showings = newer.shows[id];
-      reminder = newer.reminders[id];
+      status = older.seen.get(id) === 'learned' ? 'learned' : newer.seen.get(id);
+      showings = newer.shows.get(id);
+      reminder = newer.reminders.get(id);
       if (newer.homeRead.includes(id)) read.add(id);
       if (newer.homeDone.includes(id)) done.add(id);
     } else {
-      const statusA = a.seen[id];
-      const statusB = b.seen[id];
-      status = (RANK[statusA] ?? 0) >= (RANK[statusB] ?? 0) ? (statusA ?? statusB) : statusB;
-      showings = larger(a.shows[id], b.shows[id]);
-      const reminderA = a.reminders[id];
-      const reminderB = b.reminders[id];
+      const statusA = a.seen.get(id);
+      const statusB = b.seen.get(id);
+      status = rank(statusA) >= rank(statusB) ? (statusA ?? statusB) : statusB;
+      showings = larger(a.shows.get(id), b.shows.get(id));
+      const reminderA = a.reminders.get(id);
+      const reminderB = b.reminders.get(id);
       if (reminderA || reminderB) {
         const at =
           reminderA?.at === undefined
@@ -152,13 +165,12 @@ export function mergeTipStates(stored: unknown, incoming: unknown): SyncedTips {
       if (a.homeRead.includes(id) || b.homeRead.includes(id)) read.add(id);
       if (a.homeDone.includes(id) || b.homeDone.includes(id)) done.add(id);
     }
-    if (status) seen[id] = status;
-    if (showings !== undefined) shows[id] = showings;
-    if (reminder) reminders[id] = reminder;
+    if (status) seen.push([id, status]);
+    if (showings !== undefined) shows.push([id, showings]);
+    if (reminder) reminders.push([id, reminder]);
   }
-  const counts = { ...a.counts };
-  for (const [event, count] of Object.entries(b.counts))
-    counts[event] = larger(counts[event], count)!;
+  const counts = new Map(a.counts);
+  for (const [event, count] of b.counts) counts.set(event, larger(counts.get(event), count)!);
   const enabled =
     a.enabledAt === b.enabledAt
       ? a.enabled && b.enabled
@@ -171,19 +183,20 @@ export function mergeTipStates(stored: unknown, incoming: unknown): SyncedTips {
     [...new Set([...first, ...second])].filter((id) => set.has(id));
   const homeRead = ordered(read, a.homeRead, b.homeRead);
   const homeDone = ordered(done, a.homeDone, b.homeDone);
-  return {
-    ...a.extra,
-    ...b.extra,
-    enabled,
-    ...(enabledAt ? { enabledAt } : {}),
-    lastShown: Math.max(a.lastShown, b.lastShown),
-    seen,
-    counts,
-    shows,
-    ...(homeRead.length ? { homeRead } : {}),
-    ...(homeDone.length ? { homeDone } : {}),
-    ...(Object.keys(reminders).length ? { reminders } : {}),
-  };
+  // Object.fromEntries defines every key as an own property, "__proto__" included.
+  const extra = new Map([...a.extra, ...b.extra]);
+  return Object.fromEntries([
+    ...extra,
+    ['enabled', enabled],
+    ...(enabledAt ? [['enabledAt', enabledAt]] : []),
+    ['lastShown', Math.max(a.lastShown, b.lastShown)],
+    ['seen', Object.fromEntries(seen)],
+    ['counts', Object.fromEntries(counts)],
+    ['shows', Object.fromEntries(shows)],
+    ...(homeRead.length ? [['homeRead', homeRead]] : []),
+    ...(homeDone.length ? [['homeDone', homeDone]] : []),
+    ...(reminders.length ? [['reminders', Object.fromEntries(reminders)]] : []),
+  ]);
 }
 
 /**
@@ -216,30 +229,73 @@ export function sameTips(a: unknown, b: unknown): boolean {
  */
 export const tipSyncHoldUntil = (shownAt: number) => shownAt + NUDGE_MIN_VISIBLE_MS + 1000;
 
+/**
+ * This client's tips after the server's reply, which carries the server's `generation`. A reply
+ * from a later generation than this copy last synced (the account was restored from an archive)
+ * replaces the tips; otherwise it merges into them. Either way the copy records the generation.
+ */
+export function tipsAfterReply(
+  local: TipState,
+  reply: unknown,
+  sentGeneration: string | undefined,
+  now: number,
+): TipState {
+  const generation =
+    reply && typeof reply === 'object' && Object.hasOwn(reply, 'generation')
+      ? (reply as { generation?: unknown }).generation
+      : undefined;
+  const replyGeneration = typeof generation === 'string' ? generation : undefined;
+  const restored =
+    replyGeneration !== undefined &&
+    sentGeneration !== undefined &&
+    replyGeneration !== sentGeneration &&
+    local.syncGeneration !== replyGeneration;
+  const next = restored
+    ? withTipReminders(parseTips(JSON.stringify(reply)), now)
+    : mergeServerTips(local, reply, now);
+  const syncGeneration = replyGeneration ?? local.syncGeneration;
+  return syncGeneration === undefined ? next : { ...next, syncGeneration };
+}
+
 export interface TipSyncOptions {
-  /** This device's tips now. */
+  /**
+   * This device's latest saved tips. Read afresh for every request and reply, so a reply merges
+   * into what another tab saved meanwhile rather than into an older copy.
+   */
   read: () => TipState;
   /** Saves merged tips on this device, without asking for another sync. */
   write: (state: TipState) => void;
   /**
-   * Saves the tips to the server and resolves with its merged copy, or with `null` when the
-   * server has no tip store (an older Relay), which stops syncing for this session.
+   * Saves the tips to the server, with the generation this copy last synced, and resolves with
+   * its reply, or with `null` when the server can't take them (an older Relay without the tip
+   * store, or a reply for another account), which stops syncing for this session.
    */
-  send: (state: TipState) => Promise<unknown>;
+  send: (state: TipState, generation: string | undefined) => Promise<unknown>;
   /** False once the account or session has changed, so a late reply is dropped. */
   current: () => boolean;
+  /** A hold other copies of the app on this device have placed (another tab's nudge). */
+  sharedHold?: () => number;
   now?: () => number;
 }
 
 /**
- * Keeps one account's tips in step with the server: `changed()` after a local change (saved
- * after a pause), `refresh()` on returning to the app or tab, `syncNow()` on sign-in. One request
- * runs at a time; a reply merges into whatever this device holds by then. Failures leave the
- * local tips as they are, for the next attempt.
+ * Keeps one account's tips in step with the server: `changed()` after a local change (saved once
+ * changes pause for TIP_SYNC_DEBOUNCE_MS), `refresh()` on returning to the app or tab,
+ * `syncNow()` on sign-in, and `hold()` while a nudge's showing may still be undone. One request
+ * runs at a time; failures leave the local tips as they are, for the next attempt.
  */
-export function createTipSync({ read, write, send, current, now = Date.now }: TipSyncOptions) {
+export function createTipSync({
+  read,
+  write,
+  send,
+  current,
+  sharedHold,
+  now = Date.now,
+}: TipSyncOptions) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let due = 0;
+  /** The pending timer is a sync asked for now (sign-in, return or a hold ending), not a pause. */
+  let soon = false;
   let running = false;
   let again = false;
   let dirty = false;
@@ -248,12 +304,11 @@ export function createTipSync({ read, write, send, current, now = Date.now }: Ti
   let holdUntil = 0;
   let lastSynced = 0;
 
-  function schedule(delay: number) {
+  function arm(at: number, asked: boolean) {
     if (stopped || unsupported) return;
-    const at = now() + Math.max(delay, holdUntil - now(), 0);
-    if (timer !== undefined && due <= at) return;
     if (timer !== undefined) clearTimeout(timer);
     due = at;
+    soon = asked;
     timer = setTimeout(
       () => {
         timer = undefined;
@@ -263,20 +318,29 @@ export function createTipSync({ read, write, send, current, now = Date.now }: Ti
     );
   }
 
+  function syncSoon() {
+    if (timer !== undefined && soon && due <= now()) return;
+    arm(now(), true);
+  }
+
   async function run() {
     if (stopped || unsupported) return;
-    if (now() < holdUntil) {
-      schedule(0);
-      return;
-    }
     if (running) {
       again = true;
+      return;
+    }
+    // Read the tips before the hold: a tab that shows a nudge places its hold before saving the
+    // showing, so tips that include it are always seen with the hold.
+    const { syncGeneration, ...tips } = read();
+    const held = Math.max(holdUntil, sharedHold?.() ?? 0);
+    if (now() < held) {
+      arm(held, true);
       return;
     }
     running = true;
     dirty = false;
     try {
-      const reply = await send(read());
+      const reply = await send(tips, syncGeneration);
       if (stopped || !current()) return;
       if (reply === null) {
         unsupported = true;
@@ -284,8 +348,8 @@ export function createTipSync({ read, write, send, current, now = Date.now }: Ti
       }
       lastSynced = now();
       const local = read();
-      const merged = mergeServerTips(local, reply, now());
-      if (!sameTips(merged, local)) write(merged);
+      const next = tipsAfterReply(local, reply, syncGeneration, now());
+      if (!sameTips(next, local)) write(next);
     } catch {
       // Offline or refused: this device's tips stand, and the next change or return retries.
       dirty = true;
@@ -293,24 +357,24 @@ export function createTipSync({ read, write, send, current, now = Date.now }: Ti
       running = false;
       if (again) {
         again = false;
-        schedule(TIP_SYNC_DEBOUNCE_MS);
+        arm(now() + TIP_SYNC_DEBOUNCE_MS, false);
       }
     }
   }
 
   return {
-    /** A local change: saved to the server after a pause. */
+    /** A local change: saved to the server once changes pause. Each change restarts the pause. */
     changed() {
       dirty = true;
-      schedule(TIP_SYNC_DEBOUNCE_MS);
+      // A sync already asked for will carry this change.
+      if (timer !== undefined && soon) return;
+      arm(now() + TIP_SYNC_DEBOUNCE_MS, false);
     },
     /** Sign-in: fetch and merge now. */
-    syncNow() {
-      schedule(0);
-    },
+    syncNow: syncSoon,
     /** Back in the app or tab: fetch now, unless it was fetched moments ago with nothing new. */
     refresh() {
-      if (dirty || now() - lastSynced >= TIP_SYNC_REFRESH_MS) schedule(0);
+      if (dirty || now() - lastSynced >= TIP_SYNC_REFRESH_MS) syncSoon();
     },
     /** Keeps this device's tips off the server until `until` (a nudge's rollback window). */
     hold(until: number) {
@@ -326,3 +390,16 @@ export function createTipSync({ read, write, send, current, now = Date.now }: Ti
 }
 
 export type TipSync = ReturnType<typeof createTipSync>;
+
+/**
+ * Where a client saves its tips: it names the account they belong to, which the server checks
+ * against the signed-in one, and the generation this copy last synced.
+ */
+export function tipSyncPath(account: string, generation: string | undefined): string {
+  const query = new URLSearchParams({ account });
+  if (generation !== undefined) query.set('generation', generation);
+  return `/api/tips?${query}`;
+}
+
+/** The server's refusal of tips held for an account other than the signed-in one. */
+export const TIP_ACCOUNT_MISMATCH = 'tip_account_mismatch';

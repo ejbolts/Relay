@@ -19,6 +19,7 @@ import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { apiGet, apiSend } from '../../data/api';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { ToastHost } from '../../ui/Toast';
+import { tipAnchorLayout } from '../guides/LoggerTips';
 import { resetTipsForTests } from '../guides/tips';
 import { bodyTrendPreference } from '../settings/devicePreferences';
 import { bodyCheckInStatus, setBodyCheckInOwner, syncBodyCheckIns } from './bodyCheckInQueue';
@@ -161,11 +162,17 @@ const goal: BodyWeightGoal = {
 const preferences = { preferred_weight_unit: 'kg', week_start: 'monday' } as TrainingPreferences;
 
 let responses: Record<string, unknown>;
+const mockTipPlace = { y: 200 };
 beforeEach(() => {
   jest.clearAllMocks();
   memoryKv.delete(tipStorageKey(mockUser.id));
   clearMaintainGoalRequest();
   resetTipsForTests();
+  // The test renderer draws no layout: the maintenance tip's place is on screen unless a test says.
+  mockTipPlace.y = 200;
+  jest
+    .spyOn(tipAnchorLayout, 'measure')
+    .mockImplementation((_view, done) => done({ y: mockTipPlace.y, width: 360, height: 0 }));
   jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   responses = {
     '/api/body-measurements': measurements,
@@ -503,6 +510,28 @@ test('the maintenance tip comes back the next day, up to three showings', async 
   expect(await findTip()).toBeVisible();
   expect(storedTips().seen.maintenance).toBe('seen');
   expect(storedTips().shows.maintenance).toBe(3);
+});
+
+test('the maintenance tip waits while a sheet is open, without spending a showing', async () => {
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
+  await renderBody('79.6 kg');
+  await fireEvent.press(await screen.findByText('Log weigh-in'));
+  await quietMoment();
+  expect(screen.queryByLabelText('Quick tip')).toBeNull();
+  expect(storedTips().shows?.maintenance).toBeUndefined();
+});
+
+test('the maintenance tip waits until its place is on screen', async () => {
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
+  mockTipPlace.y = -400;
+  await renderBody('79.6 kg');
+  expect(await screen.findByText('Log weigh-in')).toBeVisible();
+  await quietMoment();
+  expect(storedTips().shows?.maintenance).toBeUndefined();
+  // Scrolled back to the top of Body, it appears.
+  mockTipPlace.y = 200;
+  expect(await findTip()).toBeVisible();
+  expect(storedTips().shows.maintenance).toBe(1);
 });
 
 test('the maintenance tip waits for a first saved workout', async () => {

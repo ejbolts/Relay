@@ -37,7 +37,14 @@ import {
   type TipId,
   type TipState,
 } from './tipsState';
-import { loadTips, saveTips, sendTips } from './tipsStorage';
+import {
+  holdTipSync,
+  loadSavedTips,
+  loadTips,
+  loadTipSyncHold,
+  saveTips,
+  sendTips,
+} from './tipsStorage';
 import { createTipSync, tipSyncHoldUntil, type TipSync } from './tipSync';
 import './tips.css';
 
@@ -238,14 +245,17 @@ export function TipsProvider({
       saveTips(account, stateRef.current);
     const tipSync: TipSync | null = account
       ? createTipSync({
-          read: () => stateRef.current,
+          // Another tab may have saved since this one last heard: replies merge into that.
+          read: () => loadSavedTips(account) ?? stateRef.current,
           write: (next) => {
             stateRef.current = next;
             setState(next);
             saveTips(account, next);
           },
-          send: sendTips,
+          // The server refuses the tips if this browser is now signed in to another account.
+          send: (tips, generation) => sendTips(account, tips, generation),
           current: () => syncRef.current === tipSync,
+          sharedHold: () => loadTipSyncHold(account),
         })
       : null;
     syncRef.current = tipSync;
@@ -342,11 +352,15 @@ export function TipsProvider({
       const previousLastShown = stateRef.current.lastShown;
       const request = nudge ? pending.current.get(nudge) : undefined;
       const next = withTipReminders(tipShown(stateRef.current, id, now), now);
+      // An interrupted nudge may be put back, so its showing waits before reaching the server,
+      // from this tab or any other: the hold is saved before the showing.
+      if (nudge) {
+        holdTipSync(account!, tipSyncHoldUntil(now));
+        tipSync?.hold(tipSyncHoldUntil(now));
+      }
       stateRef.current = next;
       setState(next);
       saveTips(account!, next);
-      // An interrupted nudge may be put back, so its showing waits before reaching the server.
-      if (nudge) tipSync?.hold(tipSyncHoldUntil(now));
       tipSync?.changed();
       setSlot(nudge ? null : (candidate?.[0] ?? null));
       activeRef.current = id;

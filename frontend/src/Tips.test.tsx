@@ -9,9 +9,9 @@ import { SetupGuideHost } from './SetupGuide';
 import { activeGuide, exitGuide } from './setupGuides';
 import { onTipTarget, type TipAction } from './tipActions';
 import { Toast, ToastProvider } from './Toast';
-import { freshTips, TIP_COOLDOWN } from './tipsState';
-import { loadTips, saveTips } from './tipsStorage';
-import { mergeTipStates } from './tipSync';
+import { freshTips, TIP_COOLDOWN, tipShown, withTipsEnabled } from './tipsState';
+import { holdTipSync, loadTips, saveTips } from './tipsStorage';
+import { mergeTipStates, TIP_SYNC_REFRESH_MS, tipSyncHoldUntil } from './tipSync';
 
 let root: Root, container: HTMLDivElement;
 let controller: ReturnType<typeof useTips>;
@@ -707,5 +707,58 @@ describe('tips that follow the account', () => {
     await advance(10_000);
     expect(api.saveTipState).toHaveBeenCalledTimes(1);
     expect(loadTips('alice').enabled).toBe(false);
+  });
+
+  it('names its account, and a stale tab now signed in to another account stops syncing', async () => {
+    await render('alice');
+    await advance(0);
+    expect(vi.mocked(api.saveTipState).mock.calls[0][1]).toBe('alice');
+    // Another tab signed in to bob: the server refuses alice's tips under bob's cookie.
+    vi.mocked(api.saveTipState).mockRejectedValue(
+      new ApiError('Not this account', 'tip_account_mismatch', 409),
+    );
+    await act(async () => controller.dismissTip('swap'));
+    await advance(10_000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(2);
+    await act(async () => controller.dismissTip('plates'));
+    await advance(10_000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(2);
+    expect(loadTips('alice').seen).toMatchObject({ swap: 'dismissed', plates: 'dismissed' });
+  });
+
+  it('merges a reply into what another tab saved before its storage event arrived', async () => {
+    let reply: (value: Record<string, unknown>) => void = () => {};
+    vi.mocked(api.saveTipState).mockImplementationOnce(
+      () => new Promise((resolve) => (reply = resolve)),
+    );
+    await render();
+    await advance(0);
+    // Another tab turns tips off; this tab hasn't heard yet.
+    saveTips('alice', withTipsEnabled(loadTips('alice'), false, Date.now()));
+    await act(async () => reply({ enabled: true, enabledAt: 1, seen: { back: 'seen' } }));
+    await advance(0);
+    expect(loadTips('alice')).toMatchObject({ enabled: false, seen: { back: 'seen' } });
+    expect(button('Show tips').getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('leaves another tab’s nudge showing off the account until that tab settles it', async () => {
+    await render('alice', <TipsSettings />);
+    await advance(0);
+    await advance(TIP_SYNC_REFRESH_MS);
+    vi.mocked(api.saveTipState).mockClear();
+    // Another tab shows a nudge: it places the shared hold, then saves the showing.
+    const now = Date.now();
+    holdTipSync('alice', tipSyncHoldUntil(now));
+    saveTips('alice', tipShown(loadTips('alice'), 'reorder', now));
+    // Coming back to this tab asks for a sync, which waits for the hold.
+    window.dispatchEvent(new Event('focus'));
+    await advance(3000);
+    expect(api.saveTipState).not.toHaveBeenCalled();
+    // The other tab puts the nudge back after an early interruption.
+    saveTips('alice', { ...loadTips('alice'), lastShown: 0, shows: {} });
+    await advance(2000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(1);
+    expect((server.shows as Record<string, number>).reorder).toBeUndefined();
+    expect(server.lastShown).toBe(0);
   });
 });

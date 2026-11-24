@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import type { TipState } from '../../../../frontend/src/tipsState';
+import { TIP_ACCOUNT_MISMATCH, tipSyncPath } from '../../../../frontend/src/tipSync';
 import { ApiError, request, serverOrigin } from '../../data/api';
 import { forgetSessionTokenIf, sessionToken } from '../../data/session';
 import { useUser } from '../../session/SessionProvider';
@@ -8,17 +9,23 @@ import { sessionEpoch } from '../../session/sessionEpoch';
 import { startTipSync } from './tips';
 
 /**
- * Saves this phone's tips to the account and resolves with the server's merged copy, or with null
- * when the server predates the tip store. The token is read once and checked against the session
- * the sync began in, so one account's tips are never sent with another account's sign-in.
+ * Saves this phone's copy of `account`'s tips and resolves with the server's reply, or with null
+ * when the server predates the tip store or refuses them for another account. The token is read
+ * once and checked against the session the sync began in, and the request names the account, so
+ * one account's tips are never saved into another.
  */
-export async function sendTips(epoch: number, state: TipState): Promise<unknown> {
+export async function sendTips(
+  epoch: number,
+  account: string,
+  state: TipState,
+  generation: string | undefined,
+): Promise<unknown> {
   const origin = serverOrigin();
   const token = await sessionToken(origin);
   if (!token || sessionEpoch() !== epoch) throw new Error('The session changed.');
   try {
     return await request(
-      '/api/tips',
+      tipSyncPath(account, generation),
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -28,7 +35,8 @@ export async function sendTips(epoch: number, state: TipState): Promise<unknown>
     );
   } catch (error) {
     if (error instanceof ApiError) {
-      if (error.status === 404 || error.status === 405) return null;
+      if (error.status === 404 || error.status === 405 || error.code === TIP_ACCOUNT_MISMATCH)
+        return null;
       // The session ended on the server; forget it only if it is still the saved one.
       if (error.status === 401) await forgetSessionTokenIf(origin, token);
     }
@@ -45,7 +53,7 @@ export function TipSyncHost() {
   useEffect(() => {
     const epoch = sessionEpoch();
     const sync = startTipSync(account, {
-      send: (state) => sendTips(epoch, state),
+      send: (state, generation) => sendTips(epoch, account, state, generation),
       current: () => sessionEpoch() === epoch,
     });
     sync.syncNow();

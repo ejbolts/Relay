@@ -1,6 +1,6 @@
 import { useIsFocused } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { AppState, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import { AppState, Dimensions, Keyboard, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   usedMaintenanceRange,
   weightGoalReached,
@@ -14,14 +14,18 @@ import { Button, Card } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { promptShowing } from '../../ui/prompts';
-import { useTheme } from '../../ui/theme';
+import { space, useTheme } from '../../ui/theme';
+import { sheetShowing } from '../../ui/Sheet';
 import { toastShowing } from '../../ui/Toast';
+import { tipAnchorLayout } from '../guides/LoggerTips';
 import { useTips } from '../guides/tips';
 import { useBodyCheckInStatus } from './BodyCheckInSync';
 import { syncBodyCheckIns } from './bodyCheckInQueue';
 import { bodyIcons } from './bodyIcons';
 
 const TICK_MS = 500;
+/** As the web's, the bottom of the screen is kept for the tab bar. */
+const BOTTOM_RESERVED = 75;
 
 /** Check-ins saved on this phone that the server hasn't confirmed, as the web's sync card. */
 export function CheckInSyncCard() {
@@ -107,8 +111,12 @@ export function MaintenanceTip({
   );
 }
 
-/** A quiet moment: no toast, menu or prompt, keyboard or app switch, as the logger's tips. */
+/**
+ * A quiet moment, as the web's: no sheet (a weigh-in, goal or any other), toast, menu or prompt,
+ * keyboard or app switch.
+ */
 const quiet = () =>
+  !sheetShowing() &&
   !toastShowing() &&
   !(typeof promptShowing === 'function' && promptShowing()) &&
   !Keyboard.isVisible() &&
@@ -125,13 +133,22 @@ function MaintenanceTipVisit({
   const { colors, type, radius } = useTheme();
   const tips = useTips();
   const [shown, setShown] = useState(false);
+  const anchor = useRef<ComponentRef<typeof View>>(null);
   const { get, shown: recordShowing } = tips;
   useEffect(() => {
     if (shown) return;
     let quietSince = 0;
+    // Where the card would appear is on screen, as the web's check of a tip's slot.
+    let inView = false;
     const timer = setInterval(() => {
       const now = Date.now();
-      if (!quiet()) {
+      const view = anchor.current;
+      const windowHeight = Dimensions.get('window').height;
+      if (view)
+        tipAnchorLayout.measure(view, ({ y, width }) => {
+          inView = width > 0 && y >= 0 && y < windowHeight - BOTTOM_RESERVED;
+        });
+      if (!quiet() || !inView) {
         quietSince = 0;
         return;
       }
@@ -146,7 +163,18 @@ function MaintenanceTipVisit({
     return () => clearInterval(timer);
   }, [shown, workoutCount, get, recordShowing]);
   const status = tips.state.seen.maintenance;
-  if (!shown || !tips.state.enabled || status === 'dismissed' || status === 'learned') return null;
+  if (!shown)
+    // Marks where the card would appear without taking space: the negative margin cancels the
+    // page's gap before it.
+    return (
+      <View
+        ref={anchor}
+        collapsable={false}
+        pointerEvents="none"
+        style={{ height: 0, marginTop: -space.stack }}
+      />
+    );
+  if (!tips.state.enabled || status === 'dismissed' || status === 'learned') return null;
   const tip = TIP_DEFINITIONS.maintenance;
   const hide = () => tips.dismiss('maintenance');
   return (

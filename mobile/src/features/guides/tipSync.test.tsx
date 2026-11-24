@@ -26,7 +26,8 @@ jest.mock('../../data/session', () => ({
 let server: Record<string, Record<string, unknown>>;
 let tokens: Record<string, string>;
 const accountFor = (token: string) => Object.keys(tokens).find((id) => tokens[id] === token)!;
-const sent = () => jest.mocked(request).mock.calls.filter(([path]) => path === '/api/tips');
+const sent = () =>
+  jest.mocked(request).mock.calls.filter(([path]) => path.startsWith('/api/tips?'));
 let appStateListener: ((state: AppStateStatus) => void) | undefined;
 
 beforeEach(() => {
@@ -60,7 +61,7 @@ test('on sign-in, the account’s tips from the web merge into this phone’s', 
   await render(<TipSyncHost />);
   await flush();
   const [[path, init, token]] = sent();
-  expect(path).toBe('/api/tips');
+  expect(path).toBe('/api/tips?account=u1');
   expect(init?.method).toBe('PUT');
   expect(token).toBe('token-1');
   expect(tipsFor('u1').get()).toMatchObject({
@@ -139,4 +140,56 @@ test('a sign-in the server has ended is forgotten only if it is still the saved 
   await render(<TipSyncHost />);
   await flush();
   expect(forgetSessionTokenIf).toHaveBeenCalledWith('https://relay.example.com', 'token-1');
+});
+
+test('each save names the account and the generation the phone last synced', async () => {
+  jest.mocked(request).mockImplementation(async (_path, init) => {
+    server.u1 = mergeTipStates(server.u1, JSON.parse(String(init?.body)));
+    return { ...server.u1, generation: 'g1' };
+  });
+  await render(<TipSyncHost />);
+  await flush();
+  tipsFor('u1').dismiss('swap');
+  await act(async () => jest.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS));
+  expect(sent().map(([path]) => path)).toEqual([
+    '/api/tips?account=u1',
+    '/api/tips?account=u1&generation=g1',
+  ]);
+  // The generation is the phone's bookkeeping, never sent as a tip.
+  expect(JSON.parse(String(sent()[1][1]?.body)).syncGeneration).toBeUndefined();
+});
+
+test('after an archive restore the phone adopts the restored tips', async () => {
+  memoryKv.set(
+    tipStorageKey('u1'),
+    JSON.stringify({
+      enabled: false,
+      enabledAt: 9,
+      seen: { swap: 'dismissed' },
+      syncGeneration: 'g1',
+    }),
+  );
+  jest
+    .mocked(request)
+    .mockResolvedValue({ enabled: true, seen: { plates: 'learned' }, generation: 'g2' });
+  await render(<TipSyncHost />);
+  await flush();
+  expect(sent()[0][0]).toBe('/api/tips?account=u1&generation=g1');
+  expect(tipsFor('u1').get()).toMatchObject({
+    enabled: true,
+    seen: { plates: 'learned' },
+    syncGeneration: 'g2',
+  });
+  expect(tipsFor('u1').get().seen.swap).toBeUndefined();
+});
+
+test('tips refused for another account stop syncing', async () => {
+  jest
+    .mocked(request)
+    .mockRejectedValue(new ApiError(409, 'Not this account', 'tip_account_mismatch'));
+  await render(<TipSyncHost />);
+  await flush();
+  tipsFor('u1').dismiss('swap');
+  await act(async () => jest.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS * 2));
+  expect(sent()).toHaveLength(1);
 });

@@ -118,6 +118,7 @@ import {
 } from './clientVersion';
 import { workoutTypeExercisesPayload } from './workoutTypeExerciseSettings';
 import type { HomeLayout } from './homeLayout';
+import { tipSyncPath } from './tipSync';
 import { localDate } from './utils';
 import {
   deleteLocalBodyMeasurement,
@@ -1243,8 +1244,8 @@ export const api = {
       body: JSON.stringify(layout),
     }),
   /** Merges this browser's tips into the account's and returns the result (tipSync.ts). */
-  saveTipState: (state: unknown) =>
-    request<Record<string, unknown>>('/api/tips', {
+  saveTipState: (state: unknown, account: string, generation: string | undefined) =>
+    request<Record<string, unknown>>(tipSyncPath(account, generation), {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(state),

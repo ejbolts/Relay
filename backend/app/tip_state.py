@@ -6,15 +6,22 @@ rules in ``frontend/src/tipSync.ts`` (the shared cases in ``frontend/src/tipSync
 both), so no device can erase another's progress. Tip ids and fields the server doesn't know are
 kept as they are, for older and newer clients. Stored as the ``tip_state`` user setting, so account
 export, backups, restore and deletion include it like the account's other settings.
+
+Each request may name the account its client holds tips for (``account``); a mismatch with the
+signed-in account is refused before anything is read, so a stale browser tab can't save one
+account's tips into another. Restoring an account archive starts a new ``generation`` (a
+server-managed setting the archive leaves out): a client that last synced an earlier generation is
+sent the restored tips to adopt instead of merging its older copy back in.
 """
 
 from __future__ import annotations
 
 import json
 import math
+import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends
+from fastapi import APIRouter, Body, Depends, Query
 from sqlalchemy.orm import Session
 
 from .account_limits import limit_save_rate
@@ -24,6 +31,9 @@ from .errors import api_error
 from .training_metrics import get_setting, set_setting
 
 TIP_STATE_KEY = "tip_state"
+# Server-managed: an archive restore replaces it with a new value (account_archive.py).
+TIP_STATE_GENERATION_KEY = "tip_state_generation"
+INITIAL_GENERATION = "0"
 # Matches TIP_SYNC_MAX_BYTES in frontend/src/tipSync.ts.
 MAX_TIP_STATE_BYTES = 32 * 1024
 KNOWN_FIELDS = frozenset(
@@ -39,6 +49,8 @@ KNOWN_FIELDS = frozenset(
         "reminders",
     }
 )
+# Sync bookkeeping, never stored with the tips: the server's generation and a client's record of it.
+IGNORED_FIELDS = frozenset({"generation", "syncGeneration"})
 RANK = {"seen": 1, "dismissed": 2, "learned": 3}
 
 
@@ -89,7 +101,11 @@ def _clean(value: Any) -> dict[str, Any]:
         "homeRead": _ids(raw.get("homeRead")),
         "homeDone": _ids(raw.get("homeDone")),
         "reminders": reminders,
-        "extra": {key: item for key, item in raw.items() if key not in KNOWN_FIELDS},
+        "extra": {
+            key: item
+            for key, item in raw.items()
+            if key not in KNOWN_FIELDS and key not in IGNORED_FIELDS
+        },
     }
 
 
@@ -204,27 +220,65 @@ def stored_tip_state(db: Session, user_id: str) -> dict[str, Any]:
     return value if isinstance(value, dict) else {}
 
 
+def tip_state_generation(db: Session, user_id: str) -> str:
+    return get_setting(db, user_id, TIP_STATE_GENERATION_KEY, INITIAL_GENERATION)
+
+
+def start_tip_state_generation(db: Session, user_id: str) -> None:
+    """Called after an archive restore (no commit): devices adopt the restored tips."""
+    set_setting(db, user_id, TIP_STATE_GENERATION_KEY, uuid.uuid4().hex)
+
+
 router = APIRouter(prefix="/api/tips", tags=["tips"])
 DbSession = Annotated[Session, Depends(get_db)]
+# The account the client holds tips for, when it says.
+ExpectedAccount = Annotated[str | None, Query(alias="account", max_length=64)]
+
+
+def _check_account(user: CurrentUser, account: str | None) -> None:
+    if account is not None and account != user.id:
+        raise api_error(
+            409, "tip_account_mismatch", "These tips belong to an account that is not signed in."
+        )
 
 
 @router.get("")
-def get_tip_state(db: DbSession, user: CurrentUser) -> dict[str, Any]:
-    """The account's tips as last merged; an empty object before any client has saved them."""
-    return stored_tip_state(db, user.id)
+def get_tip_state(
+    db: DbSession, user: CurrentUser, account: ExpectedAccount = None
+) -> dict[str, Any]:
+    """The account's tips as last merged (an empty object before any client has saved them),
+    with the server's ``generation``."""
+    _check_account(user, account)
+    return {**stored_tip_state(db, user.id), "generation": tip_state_generation(db, user.id)}
 
 
 @router.put("", dependencies=[Depends(limit_save_rate)])
 def save_tip_state(
-    db: DbSession, user: CurrentUser, payload: Annotated[dict[str, Any], Body()]
+    db: DbSession,
+    user: CurrentUser,
+    payload: Annotated[dict[str, Any], Body()],
+    account: ExpectedAccount = None,
+    generation: Annotated[str | None, Query(max_length=64)] = None,
 ) -> dict[str, Any]:
-    """Merges a client's tips into the account's and returns the result for it to adopt."""
+    """Merges a client's tips into the account's and returns the result, with the server's
+    ``generation``, for it to adopt. A client that names an earlier generation (it synced before an
+    archive restore) gets the stored tips unmerged, to replace its own."""
+    _check_account(user, account)
     if _too_large(_encoded(payload)):
         raise api_error(413, "tip_state_too_large", "These tips are too large to save.")
-    merged = merge_tip_states(stored_tip_state(db, user.id), payload)
+    # Take the write lock before reading, so two devices saving at once are merged one after the
+    # other instead of the second overwriting the first (or both creating the row).
+    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+    current = tip_state_generation(db, user.id)
+    stored = stored_tip_state(db, user.id)
+    if generation is not None and generation != current:
+        db.rollback()
+        return {**stored, "generation": current}
+    merged = merge_tip_states(stored, payload)
     text = _encoded(merged)
     if _too_large(text):
+        db.rollback()
         raise api_error(413, "tip_state_too_large", "These tips are too large to save.")
     set_setting(db, user.id, TIP_STATE_KEY, text)
     db.commit()
-    return merged
+    return {**merged, "generation": current}

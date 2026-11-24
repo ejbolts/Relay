@@ -5,18 +5,42 @@
       "name": "empty copies give the defaults",
       "stored": {},
       "incoming": {},
-      "expected": { "enabled": true, "lastShown": 0, "seen": {}, "counts": {}, "shows": {} }
+      "expected": {
+        "enabled": true,
+        "lastShown": 0,
+        "seen": {},
+        "counts": {},
+        "shows": {}
+      }
     },
     {
       "name": "anything that is not an object counts as empty",
       "stored": null,
       "incoming": [1, 2],
-      "expected": { "enabled": true, "lastShown": 0, "seen": {}, "counts": {}, "shows": {} }
+      "expected": {
+        "enabled": true,
+        "lastShown": 0,
+        "seen": {},
+        "counts": {},
+        "shows": {}
+      }
     },
     {
       "name": "the strongest status wins, so dismissed and learned are sticky",
-      "stored": { "seen": { "swap": "dismissed", "plates": "learned", "reorder": "seen" } },
-      "incoming": { "seen": { "swap": "seen", "plates": "dismissed", "back": "dismissed" } },
+      "stored": {
+        "seen": {
+          "swap": "dismissed",
+          "plates": "learned",
+          "reorder": "seen"
+        }
+      },
+      "incoming": {
+        "seen": {
+          "swap": "seen",
+          "plates": "dismissed",
+          "back": "dismissed"
+        }
+      },
       "expected": {
         "enabled": true,
         "lastShown": 0,
@@ -32,12 +56,22 @@
     },
     {
       "name": "learned beats dismissed from either side",
-      "stored": { "seen": { "swap": "dismissed" } },
-      "incoming": { "seen": { "swap": "learned" } },
+      "stored": {
+        "seen": {
+          "swap": "dismissed"
+        }
+      },
+      "incoming": {
+        "seen": {
+          "swap": "learned"
+        }
+      },
       "expected": {
         "enabled": true,
         "lastShown": 0,
-        "seen": { "swap": "learned" },
+        "seen": {
+          "swap": "learned"
+        },
         "counts": {},
         "shows": {}
       }
@@ -46,26 +80,52 @@
       "name": "showings, event counts and the last showing take the larger value",
       "stored": {
         "lastShown": 5000,
-        "shows": { "swap": 2, "reorder": 1 },
-        "counts": { "warmup": 4, "swap": 1 }
+        "shows": {
+          "swap": 2,
+          "reorder": 1
+        },
+        "counts": {
+          "warmup": 4,
+          "swap": 1
+        }
       },
       "incoming": {
         "lastShown": 3000,
-        "shows": { "swap": 1, "back": 1 },
-        "counts": { "warmup": 2, "rest": 3 }
+        "shows": {
+          "swap": 1,
+          "back": 1
+        },
+        "counts": {
+          "warmup": 2,
+          "rest": 3
+        }
       },
       "expected": {
         "enabled": true,
         "lastShown": 5000,
         "seen": {},
-        "counts": { "warmup": 4, "swap": 1, "rest": 3 },
-        "shows": { "swap": 2, "reorder": 1, "back": 1 }
+        "counts": {
+          "warmup": 4,
+          "swap": 1,
+          "rest": 3
+        },
+        "shows": {
+          "swap": 2,
+          "reorder": 1,
+          "back": 1
+        }
       }
     },
     {
       "name": "the latest Show tips choice wins",
-      "stored": { "enabled": false, "enabledAt": 200 },
-      "incoming": { "enabled": true, "enabledAt": 100 },
+      "stored": {
+        "enabled": false,
+        "enabledAt": 200
+      },
+      "incoming": {
+        "enabled": true,
+        "enabledAt": 100
+      },
       "expected": {
         "enabled": false,
         "enabledAt": 200,
@@ -77,8 +137,14 @@
     },
     {
       "name": "a later choice to switch tips back on wins",
-      "stored": { "enabled": false, "enabledAt": 200 },
-      "incoming": { "enabled": true, "enabledAt": 300 },
+      "stored": {
+        "enabled": false,
+        "enabledAt": 200
+      },
+      "incoming": {
+        "enabled": true,
+        "enabledAt": 300
+      },
       "expected": {
         "enabled": true,
         "enabledAt": 300,
@@ -90,33 +156,63 @@
     },
     {
       "name": "on a tie, such as two copies from before the choice was timed, off wins",
-      "stored": { "enabled": true },
-      "incoming": { "enabled": false },
-      "expected": { "enabled": false, "lastShown": 0, "seen": {}, "counts": {}, "shows": {} }
+      "stored": {
+        "enabled": true
+      },
+      "incoming": {
+        "enabled": false
+      },
+      "expected": {
+        "enabled": false,
+        "lastShown": 0,
+        "seen": {},
+        "counts": {},
+        "shows": {}
+      }
     },
     {
       "name": "tip ids and fields this client does not know are kept",
       "stored": {
-        "seen": { "futureTip": "dismissed" },
-        "shows": { "futureTip": 2 },
+        "seen": {
+          "futureTip": "dismissed"
+        },
+        "shows": {
+          "futureTip": 2
+        },
         "futureField": "stored",
         "olderField": 1
       },
-      "incoming": { "seen": { "swap": "seen" }, "futureField": "incoming" },
+      "incoming": {
+        "seen": {
+          "swap": "seen"
+        },
+        "futureField": "incoming"
+      },
       "expected": {
         "futureField": "incoming",
         "olderField": 1,
         "enabled": true,
         "lastShown": 0,
-        "seen": { "futureTip": "dismissed", "swap": "seen" },
+        "seen": {
+          "futureTip": "dismissed",
+          "swap": "seen"
+        },
         "counts": {},
-        "shows": { "futureTip": 2 }
+        "shows": {
+          "futureTip": 2
+        }
       }
     },
     {
       "name": "Home lists are combined, stored order first",
-      "stored": { "homeRead": ["swap", "plates"], "homeDone": ["plates"] },
-      "incoming": { "homeRead": ["back", "swap"], "homeDone": ["back"] },
+      "stored": {
+        "homeRead": ["swap", "plates"],
+        "homeDone": ["plates"]
+      },
+      "incoming": {
+        "homeRead": ["back", "swap"],
+        "homeDone": ["back"]
+      },
       "expected": {
         "enabled": true,
         "lastShown": 0,
@@ -130,65 +226,143 @@
     {
       "name": "a tip that came back on one device replaces the older generation",
       "stored": {
-        "seen": { "normalise": "dismissed" },
-        "shows": { "normalise": 2 },
+        "seen": {
+          "normalise": "dismissed"
+        },
+        "shows": {
+          "normalise": 2
+        },
         "homeRead": ["normalise"],
         "homeDone": ["normalise"],
-        "reminders": { "normalise": { "count": 0, "at": 1000 } }
+        "reminders": {
+          "normalise": {
+            "count": 0,
+            "at": 1000
+          }
+        }
       },
-      "incoming": { "reminders": { "normalise": { "count": 1 } } },
+      "incoming": {
+        "reminders": {
+          "normalise": {
+            "count": 1
+          }
+        }
+      },
       "expected": {
         "enabled": true,
         "lastShown": 0,
         "seen": {},
         "counts": {},
         "shows": {},
-        "reminders": { "normalise": { "count": 1 } }
+        "reminders": {
+          "normalise": {
+            "count": 1
+          }
+        }
       }
     },
     {
       "name": "the newer generation wins from either side",
       "stored": {
-        "seen": { "normalise": "seen" },
-        "shows": { "normalise": 1 },
-        "reminders": { "normalise": { "count": 2, "at": 9000 } }
+        "seen": {
+          "normalise": "seen"
+        },
+        "shows": {
+          "normalise": 1
+        },
+        "reminders": {
+          "normalise": {
+            "count": 2,
+            "at": 9000
+          }
+        }
       },
       "incoming": {
-        "seen": { "normalise": "dismissed" },
-        "shows": { "normalise": 3 },
+        "seen": {
+          "normalise": "dismissed"
+        },
+        "shows": {
+          "normalise": 3
+        },
         "homeRead": ["normalise"],
-        "reminders": { "normalise": { "count": 1 } }
+        "reminders": {
+          "normalise": {
+            "count": 1
+          }
+        }
       },
       "expected": {
         "enabled": true,
         "lastShown": 0,
-        "seen": { "normalise": "seen" },
+        "seen": {
+          "normalise": "seen"
+        },
         "counts": {},
-        "shows": { "normalise": 1 },
-        "reminders": { "normalise": { "count": 2, "at": 9000 } }
+        "shows": {
+          "normalise": 1
+        },
+        "reminders": {
+          "normalise": {
+            "count": 2,
+            "at": 9000
+          }
+        }
       }
     },
     {
       "name": "learned survives an older generation",
-      "stored": { "reminders": { "normalise": { "count": 1 } } },
+      "stored": {
+        "reminders": {
+          "normalise": {
+            "count": 1
+          }
+        }
+      },
       "incoming": {
-        "seen": { "normalise": "learned" },
-        "reminders": { "normalise": { "count": 0 } }
+        "seen": {
+          "normalise": "learned"
+        },
+        "reminders": {
+          "normalise": {
+            "count": 0
+          }
+        }
       },
       "expected": {
         "enabled": true,
         "lastShown": 0,
-        "seen": { "normalise": "learned" },
+        "seen": {
+          "normalise": "learned"
+        },
         "counts": {},
         "shows": {},
-        "reminders": { "normalise": { "count": 1 } }
+        "reminders": {
+          "normalise": {
+            "count": 1
+          }
+        }
       }
     },
     {
       "name": "within a generation the earlier reminder date is kept",
-      "stored": { "reminders": { "normalise": { "count": 1, "at": 7000 } } },
+      "stored": {
+        "reminders": {
+          "normalise": {
+            "count": 1,
+            "at": 7000
+          }
+        }
+      },
       "incoming": {
-        "reminders": { "normalise": { "count": 1, "at": 5000 }, "split": { "count": 0 } }
+        "reminders": {
+          "normalise": {
+            "count": 1,
+            "at": 5000
+          },
+          "split": {
+            "count": 0
+          }
+        }
       },
       "expected": {
         "enabled": true,
@@ -196,20 +370,46 @@
         "seen": {},
         "counts": {},
         "shows": {},
-        "reminders": { "normalise": { "count": 1, "at": 5000 }, "split": { "count": 0 } }
+        "reminders": {
+          "normalise": {
+            "count": 1,
+            "at": 5000
+          },
+          "split": {
+            "count": 0
+          }
+        }
       }
     },
     {
       "name": "a reminder date on one side only is kept",
-      "stored": { "reminders": { "normalise": { "count": 1 } } },
-      "incoming": { "reminders": { "normalise": { "count": 1, "at": 5000 } } },
+      "stored": {
+        "reminders": {
+          "normalise": {
+            "count": 1
+          }
+        }
+      },
+      "incoming": {
+        "reminders": {
+          "normalise": {
+            "count": 1,
+            "at": 5000
+          }
+        }
+      },
       "expected": {
         "enabled": true,
         "lastShown": 0,
         "seen": {},
         "counts": {},
         "shows": {},
-        "reminders": { "normalise": { "count": 1, "at": 5000 } }
+        "reminders": {
+          "normalise": {
+            "count": 1,
+            "at": 5000
+          }
+        }
       }
     },
     {
@@ -218,14 +418,34 @@
         "enabled": "no",
         "enabledAt": -5,
         "lastShown": "yesterday",
-        "seen": { "swap": "bogus", "back": 3 },
-        "shows": { "swap": -1, "back": "two", "plates": true },
-        "counts": { "warmup": null },
+        "seen": {
+          "swap": "bogus",
+          "back": 3
+        },
+        "shows": {
+          "swap": -1,
+          "back": "two",
+          "plates": true
+        },
+        "counts": {
+          "warmup": null
+        },
         "homeRead": "swap",
         "homeDone": ["swap", 4, "swap"],
-        "reminders": { "normalise": { "count": 1.5 }, "split": "soon", "plates": { "count": -1 } }
+        "reminders": {
+          "normalise": {
+            "count": 1.5
+          },
+          "split": "soon",
+          "plates": {
+            "count": -1
+          }
+        }
       },
-      "incoming": { "seen": [], "shows": null },
+      "incoming": {
+        "seen": [],
+        "shows": null
+      },
       "expected": {
         "enabled": true,
         "lastShown": 0,
@@ -233,6 +453,78 @@
         "counts": {},
         "shows": {},
         "homeDone": ["swap"]
+      }
+    },
+    {
+      "name": "names of built-in object properties are ordinary tip ids and events",
+      "stored": {
+        "counts": {
+          "constructor": 2
+        },
+        "seen": {
+          "constructor": "dismissed",
+          "swap": "toString"
+        },
+        "shows": {
+          "toString": 1
+        },
+        "reminders": {
+          "hasOwnProperty": {
+            "count": 1
+          }
+        }
+      },
+      "incoming": {
+        "counts": {
+          "constructor": 3,
+          "hasOwnProperty": 1
+        },
+        "seen": {
+          "valueOf": "seen"
+        }
+      },
+      "expected": {
+        "enabled": true,
+        "lastShown": 0,
+        "seen": {
+          "constructor": "dismissed",
+          "valueOf": "seen"
+        },
+        "counts": {
+          "constructor": 3,
+          "hasOwnProperty": 1
+        },
+        "shows": {
+          "toString": 1
+        },
+        "reminders": {
+          "hasOwnProperty": {
+            "count": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "sync bookkeeping is never merged or stored",
+      "stored": {
+        "generation": "a1",
+        "syncGeneration": "a0",
+        "seen": {
+          "swap": "seen"
+        }
+      },
+      "incoming": {
+        "generation": "b1",
+        "syncGeneration": "b0"
+      },
+      "expected": {
+        "enabled": true,
+        "lastShown": 0,
+        "seen": {
+          "swap": "seen"
+        },
+        "counts": {},
+        "shows": {}
       }
     }
   ]
