@@ -61,7 +61,7 @@ test('on sign-in, the account’s tips from the web merge into this phone’s', 
   await render(<TipSyncHost />);
   await flush();
   const [[path, init, token]] = sent();
-  expect(path).toBe('/api/tips?account=u1');
+  expect(path).toBe('/api/tips?account=u1&generation=0');
   expect(init?.method).toBe('PUT');
   expect(token).toBe('token-1');
   expect(tipsFor('u1').get()).toMatchObject({
@@ -152,7 +152,7 @@ test('each save names the account and the generation the phone last synced', asy
   tipsFor('u1').dismiss('swap');
   await act(async () => jest.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS));
   expect(sent().map(([path]) => path)).toEqual([
-    '/api/tips?account=u1',
+    '/api/tips?account=u1&generation=0',
     '/api/tips?account=u1&generation=g1',
   ]);
   // The generation is the phone's bookkeeping, never sent as a tip.
@@ -183,7 +183,8 @@ test('after an archive restore the phone adopts the restored tips', async () => 
   expect(tipsFor('u1').get().seen.swap).toBeUndefined();
 });
 
-test('tips refused for another account stop syncing', async () => {
+test('tips refused for another account stay on the phone until a return is accepted', async () => {
+  const save = jest.mocked(request).getMockImplementation()!;
   jest
     .mocked(request)
     .mockRejectedValue(new ApiError(409, 'Not this account', 'tip_account_mismatch'));
@@ -192,4 +193,22 @@ test('tips refused for another account stop syncing', async () => {
   tipsFor('u1').dismiss('swap');
   await act(async () => jest.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS * 2));
   expect(sent()).toHaveLength(1);
+  jest.mocked(request).mockImplementation(save);
+  await act(async () => appStateListener?.('active'));
+  await flush();
+  expect(sent()).toHaveLength(2);
+  expect(server.u1.seen).toEqual({ swap: 'dismissed' });
+});
+
+test('a busy server is tried again shortly', async () => {
+  const save = jest.mocked(request).getMockImplementation()!;
+  jest.mocked(request).mockRejectedValueOnce(new ApiError(503, 'Tips are busy', 'tip_state_busy'));
+  jest.mocked(request).mockImplementation(save);
+  tipsFor('u1').dismiss('swap');
+  await render(<TipSyncHost />);
+  await flush();
+  expect(sent()).toHaveLength(1);
+  await act(async () => jest.advanceTimersByTimeAsync(2000));
+  expect(sent()).toHaveLength(2);
+  expect(server.u1.seen).toEqual({ swap: 'dismissed' });
 });

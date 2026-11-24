@@ -1,7 +1,12 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import type { TipState } from '../../../../frontend/src/tipsState';
-import { TIP_ACCOUNT_MISMATCH, tipSyncPath } from '../../../../frontend/src/tipSync';
+import {
+  TIP_ACCOUNT_MISMATCH,
+  TIP_SYNC_REFUSED,
+  TipSyncBusy,
+  tipSyncPath,
+} from '../../../../frontend/src/tipSync';
 import { ApiError, request, serverOrigin } from '../../data/api';
 import { forgetSessionTokenIf, sessionToken } from '../../data/session';
 import { useUser } from '../../session/SessionProvider';
@@ -9,16 +14,17 @@ import { sessionEpoch } from '../../session/sessionEpoch';
 import { startTipSync } from './tips';
 
 /**
- * Saves this phone's copy of `account`'s tips and resolves with the server's reply, or with null
- * when the server predates the tip store or refuses them for another account. The token is read
- * once and checked against the session the sync began in, and the request names the account, so
- * one account's tips are never saved into another.
+ * Saves this phone's copy of `account`'s tips and resolves with the server's reply; with null when
+ * the server predates the tip store; or with TIP_SYNC_REFUSED when it refuses them for another
+ * account. A busy server throws TipSyncBusy, for the sync to retry. The token is read once and
+ * checked against the session the sync began in, and the request names the account, so one
+ * account's tips are never saved into another.
  */
 export async function sendTips(
   epoch: number,
   account: string,
   state: TipState,
-  generation: string | undefined,
+  generation: string,
 ): Promise<unknown> {
   const origin = serverOrigin();
   const token = await sessionToken(origin);
@@ -35,8 +41,9 @@ export async function sendTips(
     );
   } catch (error) {
     if (error instanceof ApiError) {
-      if (error.status === 404 || error.status === 405 || error.code === TIP_ACCOUNT_MISMATCH)
-        return null;
+      if (error.code === TIP_ACCOUNT_MISMATCH) return TIP_SYNC_REFUSED;
+      if (error.status === 404 || error.status === 405) return null;
+      if (error.status === 503 || error.status === 429) throw new TipSyncBusy();
       // The session ended on the server; forget it only if it is still the saved one.
       if (error.status === 401) await forgetSessionTokenIf(origin, token);
     }

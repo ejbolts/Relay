@@ -45,7 +45,7 @@ import {
   saveTips,
   sendTips,
 } from './tipsStorage';
-import { createTipSync, tipSyncHoldUntil, type TipSync } from './tipSync';
+import { createTipSync, sameTips, tipSyncHoldUntil, type TipSync } from './tipSync';
 import './tips.css';
 
 type Environment = TipEnvironment;
@@ -262,23 +262,42 @@ export function TipsProvider({
     tipSync?.syncNow();
     const sync = (event: StorageEvent) => {
       if (!account || (event.key !== tipStorageKey(account) && event.key !== null)) return;
+      const previous = stateRef.current;
       const next = withTipReminders(loadTips(account), Date.now());
       stateRef.current = next;
       setState(next);
+      if (activeRef.current) {
+        // Another tab (or a sync reply) left the showing tip as it is: a nudge whose showing is
+        // still ours, or any tip when only sync bookkeeping changed. It stays up, and a nudge
+        // keeps its rollback.
+        const currentNudge = activeNudge.current;
+        const unaffected = currentNudge
+          ? showingStillOurs(next, currentNudge)
+          : sameTips(
+              { ...previous, syncGeneration: undefined },
+              { ...next, syncGeneration: undefined },
+            );
+        if (unaffected) return;
+        if (currentNudge) {
+          interrupt(Date.now());
+          return;
+        }
+      }
       api.close();
     };
+    /** The stored tips still hold this nudge's showing and nothing newer has replaced it. */
+    const showingStillOurs = (stored: TipState, currentNudge: ShownNudge) =>
+      stored.enabled &&
+      stored.lastShown === currentNudge.at &&
+      (stored.shows?.[currentNudge.id] ?? 0) === currentNudge.shownCount &&
+      stored.seen[currentNudge.id] === currentNudge.seenAfter;
     const interrupt = (now: number) => {
       const currentNudge = activeNudge.current;
       if (currentNudge && account) {
         // Read the latest stored state before rolling back: another tab may have saved a newer
         // showing or change before its storage event arrived. Leave newer stored state untouched.
         const stored = loadTips(account);
-        const stillOurs =
-          stored.enabled &&
-          stored.lastShown === currentNudge.at &&
-          (stored.shows?.[currentNudge.id] ?? 0) === currentNudge.shownCount &&
-          stored.seen[currentNudge.id] === currentNudge.seenAfter;
-        if (stillOurs) {
+        if (showingStillOurs(stored, currentNudge)) {
           const reverted = interruptedNudge(stored, currentNudge, now);
           if (reverted) {
             const next = withTipReminders(reverted.state, now);

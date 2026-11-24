@@ -9,7 +9,7 @@ import { SetupGuideHost } from './SetupGuide';
 import { activeGuide, exitGuide } from './setupGuides';
 import { onTipTarget, type TipAction } from './tipActions';
 import { Toast, ToastProvider } from './Toast';
-import { freshTips, TIP_COOLDOWN, tipShown, withTipsEnabled } from './tipsState';
+import { freshTips, TIP_COOLDOWN, tipShown, tipStorageKey, withTipsEnabled } from './tipsState';
 import { holdTipSync, loadTips, saveTips } from './tipsStorage';
 import { mergeTipStates, TIP_SYNC_REFRESH_MS, tipSyncHoldUntil } from './tipSync';
 
@@ -709,7 +709,7 @@ describe('tips that follow the account', () => {
     expect(loadTips('alice').enabled).toBe(false);
   });
 
-  it('names its account, and a stale tab now signed in to another account stops syncing', async () => {
+  it('names its account, and a stale tab keeps tips here until its account is back', async () => {
     await render('alice');
     await advance(0);
     expect(vi.mocked(api.saveTipState).mock.calls[0][1]).toBe('alice');
@@ -724,6 +724,56 @@ describe('tips that follow the account', () => {
     await advance(10_000);
     expect(api.saveTipState).toHaveBeenCalledTimes(2);
     expect(loadTips('alice').seen).toMatchObject({ swap: 'dismissed', plates: 'dismissed' });
+    // Alice signs in again in another tab; returning to this one is accepted, and syncing resumes.
+    vi.mocked(api.saveTipState).mockImplementation(async (state) => {
+      server = mergeTipStates(server, state);
+      return server;
+    });
+    window.dispatchEvent(new Event('focus'));
+    await advance(0);
+    expect(api.saveTipState).toHaveBeenCalledTimes(3);
+    expect(server.seen).toMatchObject({ swap: 'dismissed', plates: 'dismissed' });
+    await act(async () => controller.dismissTip('back'));
+    await advance(10_000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(4);
+  });
+
+  it('keeps a nudge and its rollback when another tab saves only sync bookkeeping', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // Another tab's sync reply records the account's generation.
+    saveTips('alice', { ...loadTips('alice'), syncGeneration: 'g1' });
+    await act(async () =>
+      window.dispatchEvent(new StorageEvent('storage', { key: tipStorageKey('alice') })),
+    );
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // An early interruption still puts the showing back.
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    document.body.append(dialog);
+    await advance(500);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice').shows?.reorder).toBeUndefined();
+    expect(loadTips('alice').syncGeneration).toBe('g1');
+    dialog.remove();
+  });
+
+  it('closes a nudge without a rollback when another tab saved a newer showing', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    const newer = { ...loadTips('alice'), lastShown: Date.now() + 100 };
+    saveTips('alice', newer);
+    await act(async () =>
+      window.dispatchEvent(new StorageEvent('storage', { key: tipStorageKey('alice') })),
+    );
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice').lastShown).toBe(newer.lastShown);
+    expect(loadTips('alice').shows?.reorder).toBe(1);
   });
 
   it('merges a reply into what another tab saved before its storage event arrived', async () => {

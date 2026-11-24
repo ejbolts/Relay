@@ -1,6 +1,6 @@
 import { api, ApiError } from './api';
 import { parseTips, tipStorageKey, type TipState } from './tipsState';
-import { TIP_ACCOUNT_MISMATCH } from './tipSync';
+import { TIP_ACCOUNT_MISMATCH, TIP_SYNC_REFUSED, TipSyncBusy } from './tipSync';
 
 /** The web keeps each account's tips in this browser's localStorage. */
 export function loadTips(account: string): TipState {
@@ -30,23 +30,23 @@ export function saveTips(account: string, state: TipState) {
 }
 
 /**
- * Saves the account's tips from this browser and resolves with the server's reply, or with null
- * when the server predates the tip store or the browser is now signed in to another account (a
- * stale tab), which stops this tab's sync.
+ * Saves the account's tips from this browser and resolves with the server's reply; with null when
+ * the server predates the tip store; or with TIP_SYNC_REFUSED when the browser is now signed in to
+ * another account (a stale tab), which keeps changes here until the account is back. A busy server
+ * throws TipSyncBusy, for the sync to retry.
  */
 export async function sendTips(
   account: string,
   state: TipState,
-  generation: string | undefined,
+  generation: string,
 ): Promise<unknown> {
   try {
     return await api.saveTipState(state, account, generation);
   } catch (error) {
-    if (
-      error instanceof ApiError &&
-      (error.status === 404 || error.status === 405 || error.code === TIP_ACCOUNT_MISMATCH)
-    )
-      return null;
+    if (!(error instanceof ApiError)) throw error;
+    if (error.code === TIP_ACCOUNT_MISMATCH) return TIP_SYNC_REFUSED;
+    if (error.status === 404 || error.status === 405) return null;
+    if (error.status === 503 || error.status === 429) throw new TipSyncBusy();
     throw error;
   }
 }

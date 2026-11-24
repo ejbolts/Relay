@@ -230,32 +230,52 @@ export function sameTips(a: unknown, b: unknown): boolean {
 export const tipSyncHoldUntil = (shownAt: number) => shownAt + NUDGE_MIN_VISIBLE_MS + 1000;
 
 /**
- * This client's tips after the server's reply, which carries the server's `generation`. A reply
- * from a later generation than this copy last synced (the account was restored from an archive)
- * replaces the tips; otherwise it merges into them. Either way the copy records the generation.
+ * The generation of an account's tips that no archive restore has replaced. A client with no
+ * recorded generation sends this one, so after a restore it adopts the restored tips too.
+ */
+export const INITIAL_TIP_GENERATION = '0';
+
+/**
+ * This client's tips after the server's reply, which carries the server's `generation`:
+ * - the copy's generation: the reply merges into the tips;
+ * - a later generation than the copy sent (the account was restored from an archive): the reply
+ *   replaces the tips;
+ * - null when the copy has meanwhile moved to another generation than both (another tab adopted
+ *   a restore while this reply was on its way): the reply is stale, and the caller syncs again.
+ * Either way the tips record the reply's generation.
  */
 export function tipsAfterReply(
   local: TipState,
   reply: unknown,
-  sentGeneration: string | undefined,
+  sentGeneration: string,
   now: number,
-): TipState {
+): TipState | null {
   const generation =
     reply && typeof reply === 'object' && Object.hasOwn(reply, 'generation')
       ? (reply as { generation?: unknown }).generation
       : undefined;
-  const replyGeneration = typeof generation === 'string' ? generation : undefined;
-  const restored =
-    replyGeneration !== undefined &&
-    sentGeneration !== undefined &&
-    replyGeneration !== sentGeneration &&
-    local.syncGeneration !== replyGeneration;
-  const next = restored
-    ? withTipReminders(parseTips(JSON.stringify(reply)), now)
-    : mergeServerTips(local, reply, now);
-  const syncGeneration = replyGeneration ?? local.syncGeneration;
-  return syncGeneration === undefined ? next : { ...next, syncGeneration };
+  if (typeof generation !== 'string') return mergeServerTips(local, reply, now);
+  const localGeneration = local.syncGeneration ?? INITIAL_TIP_GENERATION;
+  if (localGeneration !== generation && localGeneration !== sentGeneration) return null;
+  const next =
+    localGeneration === generation
+      ? mergeServerTips(local, reply, now)
+      : withTipReminders(parseTips(JSON.stringify(reply)), now);
+  return { ...next, syncGeneration: generation };
 }
+
+/** A transport's answer when the server refused tips held for another account (a stale tab). */
+export const TIP_SYNC_REFUSED = Symbol('tip sync refused');
+
+/** A transport's error when the server was busy and asked to be tried again shortly. */
+export class TipSyncBusy extends Error {
+  constructor() {
+    super('The tip store is busy.');
+  }
+}
+
+/** Waits before each retry of a busy server, and of a stale reply; then the next return retries. */
+const RETRY_MS = [2000, 5000, 15_000];
 
 export interface TipSyncOptions {
   /**
@@ -266,11 +286,15 @@ export interface TipSyncOptions {
   /** Saves merged tips on this device, without asking for another sync. */
   write: (state: TipState) => void;
   /**
-   * Saves the tips to the server, with the generation this copy last synced, and resolves with
-   * its reply, or with `null` when the server can't take them (an older Relay without the tip
-   * store, or a reply for another account), which stops syncing for this session.
+   * Saves the tips to the server, with the generation this copy last synced, and resolves with:
+   * - its reply;
+   * - `null` when the server has no tip store (an older Relay), which stops syncing for the
+   *   session;
+   * - `TIP_SYNC_REFUSED` when it refused tips for another account: changes stay on this device
+   *   until a sync asked for now (sign-in, returning to the app or tab) is accepted again.
+   * It throws `TipSyncBusy` for a busy server, which is retried a few times.
    */
-  send: (state: TipState, generation: string | undefined) => Promise<unknown>;
+  send: (state: TipState, generation: string) => Promise<unknown | null | typeof TIP_SYNC_REFUSED>;
   /** False once the account or session has changed, so a late reply is dropped. */
   current: () => boolean;
   /** A hold other copies of the app on this device have placed (another tab's nudge). */
@@ -301,6 +325,9 @@ export function createTipSync({
   let dirty = false;
   let stopped = false;
   let unsupported = false;
+  /** The server refused this copy's account; only a sync asked for now tries again. */
+  let refused = false;
+  let retries = 0;
   let holdUntil = 0;
   let lastSynced = 0;
 
@@ -339,42 +366,68 @@ export function createTipSync({
     }
     running = true;
     dirty = false;
+    let retryAt: number | undefined;
     try {
-      const reply = await send(tips, syncGeneration);
+      const sent = syncGeneration ?? INITIAL_TIP_GENERATION;
+      const reply = await send(tips, sent);
       if (stopped || !current()) return;
       if (reply === null) {
         unsupported = true;
         return;
       }
+      if (reply === TIP_SYNC_REFUSED) {
+        refused = true;
+        dirty = true;
+        return;
+      }
+      refused = false;
       lastSynced = now();
       const local = read();
-      const next = tipsAfterReply(local, reply, syncGeneration, now());
+      const next = tipsAfterReply(local, reply, sent, now());
+      if (next === null) {
+        // Another tab moved to a newer generation meanwhile: sync again from that one.
+        dirty = true;
+        if (retries < RETRY_MS.length) retryAt = now();
+        retries += 1;
+        return;
+      }
+      retries = 0;
       if (!sameTips(next, local)) write(next);
-    } catch {
+    } catch (error) {
       // Offline or refused: this device's tips stand, and the next change or return retries.
       dirty = true;
+      if (error instanceof TipSyncBusy && retries < RETRY_MS.length)
+        retryAt = now() + RETRY_MS[retries];
+      if (error instanceof TipSyncBusy) retries += 1;
     } finally {
       running = false;
-      if (again) {
-        again = false;
-        arm(now() + TIP_SYNC_DEBOUNCE_MS, false);
-      }
+      const pause = again && !refused ? now() + TIP_SYNC_DEBOUNCE_MS : undefined;
+      again = false;
+      if (retryAt !== undefined && (pause === undefined || retryAt <= pause)) arm(retryAt, true);
+      else if (pause !== undefined) arm(pause, false);
     }
+  }
+
+  function askNow() {
+    retries = 0;
+    syncSoon();
   }
 
   return {
     /** A local change: saved to the server once changes pause. Each change restarts the pause. */
     changed() {
       dirty = true;
+      // Refused for another account: kept here until a sync asked for now is accepted.
+      if (refused) return;
       // A sync already asked for will carry this change.
       if (timer !== undefined && soon) return;
       arm(now() + TIP_SYNC_DEBOUNCE_MS, false);
     },
     /** Sign-in: fetch and merge now. */
-    syncNow: syncSoon,
+    syncNow: askNow,
     /** Back in the app or tab: fetch now, unless it was fetched moments ago with nothing new. */
     refresh() {
-      if (dirty || now() - lastSynced >= TIP_SYNC_REFRESH_MS) syncSoon();
+      if (dirty || now() - lastSynced >= TIP_SYNC_REFRESH_MS) askNow();
     },
     /** Keeps this device's tips off the server until `until` (a nudge's rollback window). */
     hold(until: number) {

@@ -7,6 +7,9 @@ import {
   sameTips,
   TIP_SYNC_DEBOUNCE_MS,
   TIP_SYNC_REFRESH_MS,
+  INITIAL_TIP_GENERATION,
+  TIP_SYNC_REFUSED,
+  TipSyncBusy,
   tipsAfterReply,
   tipSyncHoldUntil,
   tipSyncPath,
@@ -321,29 +324,105 @@ describe('createTipSync', () => {
     expect(send).toHaveBeenLastCalledWith(expect.anything(), 'restored');
     expect(server.seen).toEqual({ plates: 'learned', back: 'seen' });
   });
+
+  it('sends the initial generation when it has none recorded', async () => {
+    make().syncNow();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenLastCalledWith(expect.anything(), INITIAL_TIP_GENERATION);
+  });
+
+  it('drops a reply from before another tab adopted a restore, and syncs again from it', async () => {
+    let release: (value: unknown) => void = () => {};
+    send.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)));
+    local = { ...local, syncGeneration: 'g1' };
+    const sync = make();
+    sync.syncNow();
+    await vi.advanceTimersByTimeAsync(0);
+    // Another tab adopted restore g2 while this reply (from g1) was on its way.
+    local = { ...freshTips(), seen: { plates: 'learned' }, syncGeneration: 'g2' };
+    send.mockImplementation(async () => ({ seen: { plates: 'learned' }, generation: 'g2' }));
+    release({ seen: { swap: 'dismissed' }, generation: 'g1' });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(local).toMatchObject({ seen: { plates: 'learned' }, syncGeneration: 'g2' });
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenLastCalledWith(expect.anything(), 'g2');
+  });
+
+  it('keeps changes here while refused for another account, until a sync asked for now is accepted', async () => {
+    send.mockResolvedValueOnce(TIP_SYNC_REFUSED);
+    const sync = make();
+    sync.syncNow();
+    await vi.advanceTimersByTimeAsync(0);
+    local = { ...local, seen: { swap: 'dismissed' } };
+    sync.changed();
+    await vi.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS * 2);
+    expect(send).toHaveBeenCalledTimes(1);
+    // The account signed in again: returning to the tab is accepted, and syncing resumes.
+    sync.refresh();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenCalledTimes(2);
+    expect(server.seen).toEqual({ swap: 'dismissed' });
+    local = { ...local, seen: { ...local.seen, back: 'seen' } };
+    sync.changed();
+    await vi.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS);
+    expect(send).toHaveBeenCalledTimes(3);
+  });
+
+  it('retries a busy server a few times, then waits for the next change or return', async () => {
+    send.mockRejectedValue(new TipSyncBusy());
+    const sync = make();
+    sync.syncNow();
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(send).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(send).toHaveBeenCalledTimes(3);
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(send).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(send).toHaveBeenCalledTimes(4);
+    send.mockImplementation(async (state) => (server = mergeTipStates(server, state)));
+    sync.refresh();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(send).toHaveBeenCalledTimes(5);
+  });
 });
 
 describe('tipsAfterReply', () => {
   const reply = { seen: { plates: 'learned' }, generation: 'g2' };
-  it('merges and records the generation on a first sync', () => {
-    const local = { ...freshTips(), seen: { swap: 'dismissed' as const } };
-    expect(tipsAfterReply(local, reply, undefined, 0)).toMatchObject({
+  const local = (syncGeneration?: string) => ({
+    ...freshTips(),
+    seen: { swap: 'dismissed' as const },
+    ...(syncGeneration === undefined ? {} : { syncGeneration }),
+  });
+  it('merges and records the generation on a first sync of an unrestored account', () => {
+    expect(tipsAfterReply(local(), { ...reply, generation: '0' }, '0', 0)).toMatchObject({
       seen: { swap: 'dismissed', plates: 'learned' },
+      syncGeneration: '0',
+    });
+  });
+  it('replaces a copy with no recorded generation once the account has been restored', () => {
+    expect(tipsAfterReply(local(), reply, INITIAL_TIP_GENERATION, 0)).toMatchObject({
+      seen: { plates: 'learned' },
       syncGeneration: 'g2',
     });
   });
   it('replaces a copy from before a restore, on any device that reconnects', () => {
-    const local = { ...freshTips(), seen: { swap: 'dismissed' as const }, syncGeneration: 'g1' };
-    const next = tipsAfterReply(local, reply, 'g1', 0);
+    const next = tipsAfterReply(local('g1'), reply, 'g1', 0)!;
     expect(next.seen).toEqual({ plates: 'learned' });
     expect(next.syncGeneration).toBe('g2');
   });
   it('merges when another tab has already adopted the restore', () => {
-    const local = { ...freshTips(), seen: { swap: 'dismissed' as const }, syncGeneration: 'g2' };
-    expect(tipsAfterReply(local, reply, 'g1', 0).seen).toEqual({
+    expect(tipsAfterReply(local('g2'), reply, 'g1', 0)!.seen).toEqual({
       swap: 'dismissed',
       plates: 'learned',
     });
+  });
+  it('discards a reply from before a restore that another tab has since adopted', () => {
+    expect(tipsAfterReply(local('g2'), { ...reply, generation: 'g1' }, 'g1', 0)).toBeNull();
+  });
+  it('discards a reply from an earlier restore once another tab adopted a later one', () => {
+    expect(tipsAfterReply(local('g3'), reply, 'g1', 0)).toBeNull();
   });
 });
 
