@@ -4,6 +4,8 @@ export { TIP_DEFINITIONS, type TipId, type TipTarget } from './tipDefinitions';
 
 export type TipState = {
   enabled: boolean;
+  /** When Show tips was last switched, so the latest choice wins across devices (tipSync). */
+  enabledAt?: number;
   lastShown: number;
   seen: Partial<Record<TipId, 'seen' | 'dismissed' | 'learned'>>;
   counts: Record<string, number>;
@@ -75,6 +77,11 @@ export function parseTips(raw: string | null): TipState {
         ),
       ),
       enabled: value.enabled !== false,
+      ...(typeof value.enabledAt === 'number' &&
+      Number.isFinite(value.enabledAt) &&
+      value.enabledAt > 0
+        ? { enabledAt: value.enabledAt }
+        : {}),
       lastShown:
         typeof value.lastShown === 'number' && Number.isFinite(value.lastShown)
           ? value.lastShown
@@ -126,6 +133,10 @@ export function tipShown(state: TipState, id: TipId, now: number): TipState {
     shows: { ...state.shows, [id]: shows },
     seen: shows >= TIP_MAX_SHOWS ? { ...state.seen, [id]: 'seen' } : state.seen,
   };
+}
+/** Show tips switched on or off now; the account's other devices follow the latest choice. */
+export function withTipsEnabled(state: TipState, enabled: boolean, now: number): TipState {
+  return { ...state, enabled, enabledAt: now };
 }
 export function countTipEvent(state: TipState, event: string): TipState {
   return {
