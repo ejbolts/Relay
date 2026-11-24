@@ -66,6 +66,7 @@ import { LoggerTipSlot } from '../guides/LoggerTips';
 import { restTimesPreference } from '../settings/devicePreferences';
 import { CardioSetImport } from './CardioSetImport';
 import { lastUsedMachines, useMachinePhotos } from './loggerQueries';
+import type { SetMove } from './loggerState';
 import { formatPlain, NumberField, parseDecimal, parseWhole } from './NumberField';
 import { restMenuItems } from './restChoices';
 import { SetDragGesture, useSetDrag } from './SetDrag';
@@ -78,7 +79,8 @@ export interface MovementActions {
   insertSet?: (movementKey: string, position: number) => void;
   /** `via` says a swipe deleted it, rather than the set menu. */
   deleteSet: (movementKey: string, setKey: string, via?: 'swipe') => void;
-  moveSet: (movementKey: string, from: number, to: number) => void;
+  /** Moves a set by its key, one place or into another set's place. */
+  moveSet: (movementKey: string, setKey: string, move: SetMove) => void;
   setKind: (movementKey: string, setKey: string, kind: SetKind) => void;
   completeExercise: (movementKey: string, isComplete: boolean) => void;
   openActions: (movementKey: string) => void;
@@ -227,7 +229,7 @@ export const MovementCard = memo(function MovementCard({
   // Holding a set and dragging it moves it, as the web's set handle does.
   const { moveSet } = actions;
   const dropSet = useCallback(
-    (from: number, to: number) => moveSet(movement.key, from, to),
+    (setKey: string, targetKey: string) => moveSet(movement.key, setKey, { to: targetKey }),
     [moveSet, movement.key],
   );
   const setKeys = movement.sets.map((item) => item.key);
@@ -762,10 +764,10 @@ function SetRow({
         ]
       : []),
     ...(index > 0
-      ? [{ label: 'Move up', onPress: () => actions.moveSet(movement.key, index, index - 1) }]
+      ? [{ label: 'Move up', onPress: () => actions.moveSet(movement.key, item.key, { by: -1 }) }]
       : []),
     ...(index < movement.sets.length - 1
-      ? [{ label: 'Move down', onPress: () => actions.moveSet(movement.key, index, index + 1) }]
+      ? [{ label: 'Move down', onPress: () => actions.moveSet(movement.key, item.key, { by: 1 }) }]
       : []),
     {
       label: 'Delete set',

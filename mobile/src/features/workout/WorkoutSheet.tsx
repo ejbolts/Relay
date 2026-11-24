@@ -173,17 +173,22 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const recentRemoval = useRef<number | null>(null);
   const identity = workoutIdentity(state, types);
   const elapsed = useElapsed(state.startedAt, state.pause, state.previousDurationMinutes);
-  // The clock correction opens on the clock as it reads then (this session's training time).
-  const [timeEditor, setTimeEditor] = useState({ open: false, seconds: 0, key: 0 });
+  // The clock correction opens on the clock as it reads then (this session's training time),
+  // for the workout it was opened for: another workout replacing it (from the web, say) closes
+  // it, and its save never reaches the replacement.
+  const [timeEditor, setTimeEditor] = useState({ open: false, seconds: 0, key: 0, sessionId: '' });
   const openTimeEditor = () => {
     const latest = getState() ?? state;
     setTimeEditor((current) => ({
       open: true,
       seconds: activeElapsedSeconds(latest.startedAt, latest.pause, Date.now()),
       key: current.key + 1,
+      sessionId: latest.clientSessionId,
     }));
   };
   const closeTimeEditor = () => setTimeEditor((current) => ({ ...current, open: false }));
+  if (timeEditor.open && timeEditor.sessionId !== state.clientSessionId)
+    setTimeEditor({ ...timeEditor, open: false });
   const paused = state.pause.pausedAt !== null;
   const { ticked } = setCounts(state);
   const restShown = !!(logger.rest.timer || logger.rest.done);
@@ -454,9 +459,9 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           run: () => change((latest) => restoreSet(latest, movementKey, removed, index)),
         });
       },
-      moveSet: (movementKey, from, to) => {
+      moveSet: (movementKey, setKey, move) => {
         loggerTips.learn('reorder');
-        change((latest) => moveSet(latest, movementKey, from, to));
+        change((latest) => moveSet(latest, movementKey, setKey, move));
       },
       setKind: (movementKey, setKey, kind: SetKind) => {
         const set = getState()
@@ -886,7 +891,12 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         elapsedSeconds={timeEditor.seconds}
         onClose={closeTimeEditor}
         onSave={(seconds) => {
-          change((latest) => correctWorkoutTime(latest, seconds, Date.now()));
+          const { sessionId } = timeEditor;
+          change((latest) =>
+            latest.clientSessionId === sessionId
+              ? correctWorkoutTime(latest, seconds, Date.now())
+              : latest,
+          );
           closeTimeEditor();
         }}
       />

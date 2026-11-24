@@ -31,21 +31,33 @@ export function setDropIndex(blocks: (SetBlock | undefined)[], from: number, dy:
 
 /**
  * The card's set drag, as the web's set handle: hold a set, drag it, and let go to move it. The
- * dragged block follows the finger and the place it will drop into is outlined; set numbers,
+ * dragged block follows the finger and the place it will drop into is marked; set numbers,
  * types and rests follow the sets once it drops, since they belong to each set.
+ *
+ * The drag in progress lives in a ref that the gesture callbacks update at once, so a release
+ * arriving in the same batch as the last move drops where the finger was; state only draws the
+ * marker. The drop names the set and the set whose place it takes by key, so a set removed or
+ * moved meanwhile (on another device, say) cancels the move instead of moving the wrong set.
  */
-export function useSetDrag(setKeys: string[], onMove: (from: number, to: number) => void) {
+export function useSetDrag(setKeys: string[], onDrop: (setKey: string, targetKey: string) => void) {
   const [drag, setDrag] = useState<{ key: string; target: number } | null>(null);
   const [offset] = useState(() => new Animated.Value(0));
   const layouts = useRef(new Map<string, SetBlock>());
-  const latest = useRef({ setKeys, onMove, drag });
+  const active = useRef<{ key: string; target: number; targetKey: string } | null>(null);
+  const latest = useRef({ setKeys, onDrop });
   useEffect(() => {
-    latest.current = { setKeys, onMove, drag };
+    latest.current = { setKeys, onDrop };
   });
 
   const measure = useCallback((key: string, block: SetBlock) => {
     layouts.current.set(key, block);
   }, []);
+
+  const cancel = useCallback(() => {
+    active.current = null;
+    offset.setValue(0);
+    setDrag(null);
+  }, [offset]);
 
   const start = useCallback(
     (key: string) => {
@@ -53,6 +65,7 @@ export function useSetDrag(setKeys: string[], onMove: (from: number, to: number)
       if (from < 0) return;
       offset.setValue(0);
       haptics.press();
+      active.current = { key, target: from, targetKey: key };
       setDrag({ key, target: from });
     },
     [offset],
@@ -60,35 +73,42 @@ export function useSetDrag(setKeys: string[], onMove: (from: number, to: number)
 
   const move = useCallback(
     (key: string, dy: number) => {
-      const { setKeys: keys, drag: current } = latest.current;
+      const current = active.current;
       if (current?.key !== key) return;
+      const keys = latest.current.setKeys;
+      const from = keys.indexOf(key);
+      // The set went away mid-drag (deleted on another device): nothing is left to move.
+      if (from < 0) {
+        cancel();
+        return;
+      }
       offset.setValue(dy);
       const target = setDropIndex(
         keys.map((item) => layouts.current.get(item)),
-        keys.indexOf(key),
+        from,
         dy,
       );
       if (target !== current.target) {
         haptics.selection();
+        active.current = { key, target, targetKey: keys[target] };
         setDrag({ key, target });
       }
     },
-    [offset],
+    [offset, cancel],
   );
 
   const end = useCallback(
     (key: string, canceled: boolean) => {
-      const { setKeys: keys, drag: current, onMove: moveSet } = latest.current;
-      offset.setValue(0);
-      setDrag(null);
-      if (canceled || current?.key !== key) return;
-      const from = keys.indexOf(key);
-      if (from >= 0 && current.target !== from) {
-        haptics.success();
-        moveSet(from, current.target);
-      }
+      const current = active.current;
+      if (current?.key !== key) return;
+      cancel();
+      if (canceled || current.targetKey === key) return;
+      const keys = latest.current.setKeys;
+      if (!keys.includes(key) || !keys.includes(current.targetKey)) return;
+      haptics.success();
+      latest.current.onDrop(key, current.targetKey);
     },
-    [offset],
+    [cancel],
   );
 
   return { drag, offset, measure, start, move, end };

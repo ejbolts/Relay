@@ -358,6 +358,23 @@ describe('dragging to reorder sets', () => {
     expect(screen.getByLabelText(/^Weight kilograms for set 2/).props.value).toBe('100');
   });
 
+  test('a release batched with the last move drops where the finger was', async () => {
+    await openLogger();
+    await fireEvent.changeText(
+      screen.getByLabelText('Weight kilograms for set 1, suggested value'),
+      '100',
+    );
+    await layOutSets();
+    const drag = dragOf(0);
+    await act(async () => drag.onActivate());
+    // The final move and the release reach React together, before any re-render.
+    await act(async () => {
+      drag.onUpdate({ translationY: 70 });
+      drag.onDeactivate({ canceled: false });
+    });
+    expect(draft()?.movements[0].sets.map((set) => set.weight_kg)).toEqual([80, 100]);
+  });
+
   test('a short or cancelled drag leaves the sets where they were', async () => {
     await openLogger();
     await fireEvent.changeText(
