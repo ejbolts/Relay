@@ -171,3 +171,36 @@ it('never starts a transfer that was stopped before it was created', async () =>
   await expect(transfer.done).rejects.toBeInstanceOf(UploadStopped);
   expect(mockTask.uploadAsync).not.toHaveBeenCalled();
 });
+
+it('uses an explicit bound session token when provided', async () => {
+  mockTask.uploadAsync.mockResolvedValue({ status: 201, body: '{"id":"clip-1"}' });
+  const transfer = startClipUpload(
+    '/api/sessions/s1/clips',
+    clip,
+    fields,
+    jest.fn(),
+    'bound-account-token',
+  );
+  await expect(transfer.done).resolves.toEqual({ id: 'clip-1' });
+  expect(options()).toMatchObject({
+    headers: { Authorization: 'Bearer bound-account-token', 'X-Relay-Version': '1.3.2' },
+  });
+
+  // Also forwards the bound token through the Expo Go fallback upload.
+  mockTask.uploadAsync.mockRejectedValueOnce(new Error('Missing read permission'));
+  jest.mocked(uploadFile).mockResolvedValueOnce({ id: 'clip-2' });
+  const fallback = startClipUpload(
+    '/api/sessions/s1/clips',
+    clip,
+    fields,
+    jest.fn(),
+    'bound-account-token',
+  );
+  await expect(fallback.done).resolves.toEqual({ id: 'clip-2' });
+  expect(uploadFile).toHaveBeenCalledWith(
+    '/api/sessions/s1/clips',
+    'POST',
+    clip,
+    expect.objectContaining({ token: 'bound-account-token' }),
+  );
+});

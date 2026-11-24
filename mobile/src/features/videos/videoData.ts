@@ -56,6 +56,7 @@ export const videoApi = {
     clip: PhoneClip,
     orderIndex: number,
     onProgress: (percent: number) => void,
+    token?: string,
   ) =>
     startClipUpload(
       `${session(sessionId)}/clips`,
@@ -66,6 +67,7 @@ export const videoApi = {
         exercise_label: clip.exerciseLabel,
       },
       onProgress,
+      token,
     ),
 };
 
