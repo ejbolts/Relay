@@ -1,29 +1,22 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { multiMachineExerciseId } from '../../../../frontend/src/machineUsage';
-import {
-  blocksGuideSteps,
-  guideFacts,
-  GUIDE_TIPS,
-  NORMALISE_GUIDE_WAIT,
-  SETUP_GUIDE_TITLES,
-  splitGuideSteps,
-  type GuideStepCopy,
-  type SetupGuideId,
-} from '../../../../frontend/src/setupGuideSteps';
-import { TIP_DEFINITIONS } from '../../../../frontend/src/tipDefinitions';
-import type { TrackedWorkout } from '../../../../frontend/src/types';
-import { formatWeight } from '../../../../frontend/src/weightUnits';
-import { useWeightUnit, useWorkoutHistory } from '../../data/queries';
-import { Button } from '../../ui/components';
+import { NORMALISE_GUIDE_WAIT, type SetupGuideId } from '../../../../frontend/src/setupGuideSteps';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
+import { useWorkoutHistory } from '../../data/queries';
+import { useUser } from '../../session/SessionProvider';
+import { Button, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Sheet } from '../../ui/Sheet';
-import { GuideCard, GuideText } from './GuideCard';
+import { GuideText } from './GuideCard';
+import { startSetupGuide } from './setupGuides';
 import { useTips } from './tips';
 
 /**
- * A setup guide, stepped through in a sheet: the web coaches inside the feature's own screens, so
- * the app explains each step with your own training first, then opens the feature to do it.
- * Reaching the end counts the guide as done, and its tips stop suggesting the feature.
+ * Starts a setup guide, as the web's guide host: the guide opens its feature, whose own screen
+ * coaches each step in place (`GuideCoach`), and saving the feature finishes it. Comparing
+ * machines needs one exercise logged on two saved machines: this sheet waits for the history
+ * (with loading, offline and retry states), and says what is needed when the history shows it
+ * isn't there yet.
  */
 export function SetupGuideSheet({
   guide,
@@ -32,72 +25,60 @@ export function SetupGuideSheet({
   guide: SetupGuideId | null;
   onClose: () => void;
 }) {
-  return (
-    <Sheet visible={!!guide} title={guide ? SETUP_GUIDE_TITLES[guide] : ''} onClose={onClose}>
-      {guide && <SetupGuideSteps key={guide} guide={guide} onClose={onClose} />}
-    </Sheet>
-  );
-}
-
-const FINISH: Record<SetupGuideId, string> = {
-  normalise: TIP_DEFINITIONS.normalise.action.label,
-  blocks: TIP_DEFINITIONS.blocks.action.label,
-  split: TIP_DEFINITIONS.split.action.label,
-};
-
-function SetupGuideSteps({ guide, onClose }: { guide: SetupGuideId; onClose: () => void }) {
   const router = useRouter();
+  const user = useUser();
   const tips = useTips();
-  const unit = useWeightUnit();
-  const history = useWorkoutHistory().data;
-  // Worked out once when the guide starts, as on the web.
-  const [workouts] = useState<TrackedWorkout[]>(() => history ?? []);
-  const [machineExerciseId] = useState(() => multiMachineExerciseId(workouts));
-  const [steps] = useState<GuideStepCopy[]>(() => {
-    const facts = guideFacts(workouts);
-    if (guide === 'blocks') return blocksGuideSteps(facts.lift);
-    if (guide === 'split') return splitGuideSteps(facts, (kg) => formatWeight(kg, unit, 1));
-    return [{ title: TIP_DEFINITIONS.normalise.title, body: TIP_DEFINITIONS.normalise.body }];
-  });
-  const [index, setIndex] = useState(0);
+  const history = useWorkoutHistory();
+  const workouts = history.data;
+  // Comparing machines needs your history to know whether it can start. Blocks and splits start
+  // at once, with the history so far (their wording has a version without it).
+  const machines = guide === 'normalise';
+  const machineExerciseId =
+    machines && workouts !== undefined ? multiMachineExerciseId(workouts) : null;
+  const starts = guide && (!machines || machineExerciseId) ? guide : null;
+  const begun = useRef<SetupGuideId | null>(null);
 
-  if (guide === 'normalise' && !machineExerciseId) {
-    return (
-      <>
-        <GuideText>{NORMALISE_GUIDE_WAIT.body}</GuideText>
-        <Button label="OK" onPress={onClose} />
-      </>
-    );
-  }
-
-  function finish() {
-    for (const tip of GUIDE_TIPS[guide]) tips.learn(tip);
+  useEffect(() => {
+    if (!starts) {
+      begun.current = null;
+      return;
+    }
+    if (begun.current === starts) return;
+    begun.current = starts;
+    // Opening a guide engages its tip, as the web's tip action does.
+    if (starts === 'split') tips.engage(tips.state.seen.split === 'learned' ? 'repRange' : 'split');
+    else tips.engage(starts);
+    startSetupGuide(starts, user.id, workouts ?? []);
     onClose();
-    if (guide === 'blocks') router.push('/blocks/edit');
-    else if (guide === 'split') router.push('/split');
+    if (starts === 'blocks') router.push('/blocks/edit');
+    else if (starts === 'split') router.push('/split');
     else
       router.push({
         pathname: '/training/machine-weights/[id]',
         params: { id: machineExerciseId! },
       });
-  }
+  }, [starts, tips, user.id, workouts, onClose, router, machineExerciseId]);
 
-  const step = steps[index];
-  const last = index === steps.length - 1;
   return (
-    <GuideCard
-      guide="Setup guide"
-      index={index}
-      total={steps.length}
-      title={step.title}
-      onBack={index > 0 ? () => setIndex(index - 1) : undefined}
-      next={{
-        label: last ? FINISH[guide] : 'Next',
-        onPress: last ? finish : () => setIndex(index + 1),
-      }}
-      onLeave={onClose}
+    <Sheet
+      visible={machines && !machineExerciseId}
+      title={NORMALISE_GUIDE_WAIT.title}
+      onClose={onClose}
     >
-      <GuideText>{step.body}</GuideText>
-    </GuideCard>
+      {workouts !== undefined ? (
+        // Known history without one exercise on two machines: say what is needed first.
+        <>
+          <GuideText>{NORMALISE_GUIDE_WAIT.body}</GuideText>
+          <Button label="OK" onPress={onClose} />
+        </>
+      ) : waitingForNetwork(history) || history.error ? (
+        <ErrorState
+          message={waitingForNetwork(history) ? OFFLINE_MESSAGE : errorMessage(history.error)}
+          onRetry={() => void history.refetch()}
+        />
+      ) : (
+        <Loading label="Loading your workouts" />
+      )}
+    </Sheet>
   );
 }
