@@ -86,14 +86,15 @@ export function CoachTarget({
     };
   }, [id, header]);
   return (
-    <View ref={ref} collapsable={false} style={style}>
+    <View ref={ref} collapsable={false} style={[header && styles.header, style]}>
       {children}
-      {on && <TargetRing radius={radius} />}
+      {on && <TargetRing radius={radius} inset={header ? 0 : 3} />}
     </View>
   );
 }
 
-function TargetRing({ radius }: { radius: number }) {
+/** The ring sits `inset` outside the control; a header button's ring stays inside the header. */
+function TargetRing({ radius, inset }: { radius: number; inset: number }) {
   const { colors } = useTheme();
   const reduced = useReduceMotion();
   const [pulse] = useState(() => new Animated.Value(0));
@@ -120,7 +121,11 @@ function TargetRing({ radius }: { radius: number }) {
           style={[
             styles.ring,
             {
-              borderRadius: radius + 3,
+              top: -inset,
+              right: -inset,
+              bottom: -inset,
+              left: -inset,
+              borderRadius: radius + inset,
               borderColor: colors.accent,
               opacity: pulse.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.7, 0, 0] }),
               transform: [
@@ -130,7 +135,19 @@ function TargetRing({ radius }: { radius: number }) {
           ]}
         />
       )}
-      <View style={[styles.ring, { borderRadius: radius + 3, borderColor: colors.accent }]} />
+      <View
+        style={[
+          styles.ring,
+          {
+            top: -inset,
+            right: -inset,
+            bottom: -inset,
+            left: -inset,
+            borderRadius: radius + inset,
+            borderColor: colors.accent,
+          },
+        ]}
+      />
     </View>
   );
 }
@@ -227,35 +244,35 @@ export function GuideCoach({
     [me],
   );
 
-  // Brings the control into view above the coach once the screen has laid out.
+  // Brings the control into view above the coach once the screen has laid out, and again a
+  // moment later in case loading content moved it (a pass with nothing to move does nothing).
   useEffect(() => {
     if (inline || !scroll) return;
     let live = true;
-    const timer = setTimeout(() => {
-      void (async () => {
-        const marked = targets.get(target);
-        const scroller = scroll.current;
-        if (!marked || marked.header || !scroller) return;
-        const [frame, content, control, coach] = await Promise.all([
-          measure(scroller as Measurable),
-          measure(scroller.getInnerViewRef?.() as Measurable | null),
-          measure(marked.view),
-          measure(card.current),
-        ]);
-        if (!live || !frame || !content || !control) return;
-        const top = frame.y + 8;
-        const bottom = Math.min(frame.y + frame.height, coach?.y ?? Infinity) - 16;
-        const end = control.y + control.height;
-        let delta = 0;
-        if (end > bottom) delta = Math.min(end - bottom, control.y - top);
-        else if (control.y < top) delta = control.y - top;
-        if (Math.abs(delta) < 4) return;
-        scroller.scrollTo({ y: Math.max(0, frame.y - content.y + delta), animated: !reduced });
-      })();
-    }, 350);
+    const reveal = async () => {
+      const marked = targets.get(target);
+      const scroller = scroll.current;
+      if (!marked || marked.header || !scroller) return;
+      const [frame, content, control, coach] = await Promise.all([
+        measure(scroller as Measurable),
+        measure(scroller.getInnerViewRef?.() as Measurable | null),
+        measure(marked.view),
+        measure(card.current),
+      ]);
+      if (!live || !frame || !content || !control) return;
+      const top = frame.y + 8;
+      const bottom = Math.min(frame.y + frame.height, coach?.y ?? Infinity) - 16;
+      const end = control.y + control.height;
+      let delta = 0;
+      if (end > bottom) delta = Math.min(end - bottom, control.y - top);
+      else if (control.y < top) delta = control.y - top;
+      if (Math.abs(delta) < 4) return;
+      scroller.scrollTo({ y: Math.max(0, frame.y - content.y + delta), animated: !reduced });
+    };
+    const timers = [350, 1100].map((delay) => setTimeout(() => void reveal(), delay));
     return () => {
       live = false;
-      clearTimeout(timer);
+      timers.forEach(clearTimeout);
     };
   }, [inline, scroll, target, reduced]);
 
@@ -348,7 +365,9 @@ export function GuideCoach({
 }
 
 const styles = StyleSheet.create({
-  ring: { position: 'absolute', top: -3, right: -3, bottom: -3, left: -3, borderWidth: 2 },
+  ring: { position: 'absolute', borderWidth: 2 },
+  // Room for the ring inside the header, which clips anything outside its bar.
+  header: { paddingHorizontal: 6, paddingVertical: 2 },
   anchor: { position: 'absolute', left: 0, right: 0, bottom: 0, height: 0 },
   docked: {
     position: 'absolute',
@@ -359,6 +378,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   inline: { padding: 16, borderWidth: 1.5 },
-  handle: { alignSelf: 'stretch', alignItems: 'center', justifyContent: 'center', height: 28 },
+  handle: {
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: 24,
+    marginBottom: -6,
+  },
   grabber: { width: 40, height: 5, borderRadius: 3 },
 });

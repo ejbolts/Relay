@@ -80,13 +80,15 @@ export function GuideCard({
           ) : (
             <View style={{ flex: 1 }} />
           )}
-          {next && (
+          {next ? (
             <Button
               label={next.label ?? 'Next'}
               disabled={next.disabled}
               style={{ flex: 1 }}
               onPress={next.onPress}
             />
+          ) : (
+            <View style={{ flex: 1 }} />
           )}
         </View>
       )}
