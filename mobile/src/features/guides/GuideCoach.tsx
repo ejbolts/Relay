@@ -219,10 +219,18 @@ export function GuideCoach({
   const anchor = useRef<ComponentRef<typeof View>>(null);
   const [lift, setLift] = useState(0);
   // Folding lasts for its step only: each new step opens again, as on the web.
-  const [foldedAt, setFoldedAt] = useState<number | null>(null);
-  const folded = foldedAt === index;
+  const [foldedState, setFoldedState] = useState<{ index: number; folded: boolean } | null>(null);
+  const [keyboardFoldIndex, setKeyboardFoldIndex] = useState<number | null>(null);
+  const [coachHeight, setCoachHeight] = useState(0);
+  const folded = foldedState?.index === index ? foldedState.folded : keyboardFoldIndex === index;
   const { target, title } = step;
   const [me] = useState(() => ({}));
+  const indexRef = useRef(index);
+  useEffect(() => {
+    indexRef.current = index;
+  }, [index]);
+  const triggerReveal = useRef<((gentle: boolean) => void) | null>(null);
+  const revealedCard = useRef<{ index: number; height: number } | null>(null);
 
   useEffect(() => {
     highlighted = { owner: me, target };
@@ -241,15 +249,25 @@ export function GuideCoach({
       AccessibilityInfo.announceForAccessibility(`Setup guide, ${index + 1} of ${total}. ${title}`);
   }, [index, total, title]);
 
-  // Stays clear of the keyboard: lifted by however much of it covers the screen's bottom.
+  // Stays clear of the keyboard: folds to a compact bar while typing and lifts above the keyboard.
   useEffect(() => {
     if (inline) return;
     const show = Keyboard.addListener('keyboardDidShow', (event) => {
+      const currentStep = indexRef.current;
+      setKeyboardFoldIndex(currentStep);
+      setFoldedState((current) => (current?.index === currentStep ? null : current));
       anchor.current?.measureInWindow((_x, y, _width, height) =>
         setLift(keyboardObstruction(y + height, event.endCoordinates)),
       );
     });
-    const hide = Keyboard.addListener('keyboardDidHide', () => setLift(0));
+    const hide = Keyboard.addListener('keyboardDidHide', () => {
+      const currentStep = indexRef.current;
+      setLift(0);
+      setKeyboardFoldIndex(null);
+      setFoldedState((current) =>
+        current?.index === currentStep && !current.folded ? null : current,
+      );
+    });
     return () => {
       show.remove();
       hide.remove();
@@ -273,33 +291,56 @@ export function GuideCoach({
     if (inline || !scroll) return;
     let live = true;
     let latest = 0;
+    let activeNonGentle = 0;
     let soon: ReturnType<typeof setTimeout> | undefined;
+    let cardTimer: ReturnType<typeof setTimeout> | undefined;
     /**
-     * `gentle` passes (after the first, or because the control grew or moved) leave a control
-     * that is already partly in view where it is, so a long list growing as someone works lower
-     * down never jumps back to its top.
+     * `gentle` passes (after the first, or because the control grew or moved) leave a tall
+     * control whose top is already scrolled past the frame top where it is, so a long list
+     * growing as someone works lower down never jumps back to its top, while still scrolling a
+     * control that the coach card covers.
      */
     const reveal = async (gentle: boolean) => {
+      if (gentle && activeNonGentle !== 0) return;
       const pass = ++latest;
-      const marked = targets.get(target);
-      const scroller = scroll.current;
-      if (!marked || marked.header || !scroller) return;
-      const [frame, content, control, coach] = await Promise.all([
-        coachLayout.measure(scroller as Measurable, 'frame'),
-        coachLayout.measure(scroller.getInnerViewRef?.() as Measurable | null, 'content'),
-        coachLayout.measure(marked.view, 'control'),
-        coachLayout.measure(card.current, 'coach'),
-      ]);
-      if (!live || pass !== latest || !frame || !content || !control) return;
-      const top = frame.y + 8;
-      const bottom = Math.min(frame.y + frame.height, coach?.y ?? Infinity) - 16;
-      const end = control.y + control.height;
-      if (gentle && end > top && control.y < bottom) return;
-      let delta = 0;
-      if (end > bottom) delta = Math.min(end - bottom, control.y - top);
-      else if (control.y < top) delta = control.y - top;
-      if (Math.abs(delta) < 4) return;
-      scroller.scrollTo({ y: Math.max(0, frame.y - content.y + delta), animated: !reduced });
+      if (!gentle) activeNonGentle = pass;
+      try {
+        const marked = targets.get(target);
+        const scroller = scroll.current;
+        if (!marked || marked.header || !scroller) return;
+        const [frame, content, control, coach] = await Promise.all([
+          coachLayout.measure(scroller as Measurable, 'frame'),
+          coachLayout.measure(scroller.getInnerViewRef?.() as Measurable | null, 'content'),
+          coachLayout.measure(marked.view, 'control'),
+          coachLayout.measure(card.current, 'coach'),
+        ]);
+        if (
+          !live ||
+          pass !== latest ||
+          !frame ||
+          frame.height <= 0 ||
+          !content ||
+          !control ||
+          control.height <= 0 ||
+          (coach && coach.height <= 0)
+        )
+          return;
+        const top = frame.y + 8;
+        const bottom = Math.min(frame.y + frame.height, coach?.y ?? Infinity) - 16;
+        const end = control.y + control.height;
+        if (gentle && control.y <= top && end > top) return;
+        let delta = 0;
+        if (end > bottom) delta = Math.min(end - bottom, control.y - top);
+        else if (control.y < top) delta = control.y - top;
+        if (Math.abs(delta) < 4) return;
+        scroller.scrollTo({ y: Math.max(0, frame.y - content.y + delta), animated: !reduced });
+      } finally {
+        if (activeNonGentle === pass) activeNonGentle = 0;
+      }
+    };
+    triggerReveal.current = (gentle) => {
+      clearTimeout(cardTimer);
+      cardTimer = setTimeout(() => void reveal(gentle), 120);
     };
     const timers = [350, 1100].map((delay, pass) => setTimeout(() => void reveal(pass > 0), delay));
     const listener = (asked: CoachTargetId) => {
@@ -310,17 +351,30 @@ export function GuideCoach({
     revealListeners.add(listener);
     return () => {
       live = false;
+      triggerReveal.current = null;
       timers.forEach(clearTimeout);
       clearTimeout(soon);
+      clearTimeout(cardTimer);
       revealListeners.delete(listener);
     };
   }, [inline, scroll, target, reduced]);
+
+  // Rerun a reveal when the card's measured height or keyboard lift changes for the current step,
+  // so a card that laid out after the first pass still brings the control clear of it.
+  useEffect(() => {
+    if (inline || coachHeight <= 0) return;
+    const prev = revealedCard.current;
+    const grewForStep = !prev || prev.index !== index || coachHeight > prev.height;
+    revealedCard.current = { index, height: coachHeight };
+    triggerReveal.current?.(!grewForStep);
+  }, [inline, coachHeight, lift, index]);
 
   // Tapping the grabber folds or opens the card; swiping it down folds it and up opens it. The
   // 40 x 5 pt bar sits in a 44 pt band that answers touches, and screen readers activate it.
   const pressY = useRef<number | null>(null);
   const swiped = useRef(false);
-  const toggle = () => setFoldedAt(folded ? null : index);
+  const setFolded = (next: boolean) => setFoldedState({ index, folded: next });
+  const toggle = () => setFolded(!folded);
   const handle = inline ? undefined : (
     <Pressable
       accessibilityRole="button"
@@ -336,8 +390,8 @@ export function GuideCoach({
         pressY.current = null;
         if (start === null) return;
         const moved = event.nativeEvent.pageY - start;
-        if (moved > 16) setFoldedAt(index);
-        else if (moved < -16) setFoldedAt(null);
+        if (moved > 16) setFolded(true);
+        else if (moved < -16) setFolded(false);
         else return;
         swiped.current = true;
       }}
@@ -387,7 +441,9 @@ export function GuideCoach({
         ref={card}
         accessibilityLabel="Setup guide"
         onLayout={(event) => {
-          const height = Math.round(event.nativeEvent.layout.height) + 12;
+          const measured = Math.round(event.nativeEvent.layout.height);
+          setCoachHeight(measured);
+          const height = measured + 12;
           if (docked?.owner !== me || docked.height !== height) {
             docked = { owner: me, height };
             emit();
