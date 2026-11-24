@@ -7,9 +7,9 @@ import {
 } from '../../../../frontend/src/bodyMeasurementHistory';
 import { TIP_DEFINITIONS } from '../../../../frontend/src/tipDefinitions';
 import { hintMayShow, TIP_QUIET_MS } from '../../../../frontend/src/tipScheduling';
-import { savedWorkoutCount } from '../../../../frontend/src/tipTriggers';
+import { tipWorkoutCount } from '../../../../frontend/src/tipTriggers';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
-import { useWorkoutHistory } from '../../data/queries';
+import { useDashboard, useWorkoutHistory } from '../../data/queries';
 import { Button, Card } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
@@ -90,6 +90,7 @@ export function MaintenanceTip({
   const { learn } = useTips();
   const focused = useIsFocused();
   const history = useWorkoutHistory();
+  const totalWorkouts = useDashboard().data?.history?.total_workouts;
   const usedMaintenance = usedMaintenanceRange(goals);
   useEffect(() => {
     if (ready && usedMaintenance) learn('maintenance');
@@ -99,7 +100,10 @@ export function MaintenanceTip({
   // Each visit to Body asks again, as the web's tip goes when its page changes.
   if (!eligible || !focused || !history.data) return null;
   return (
-    <MaintenanceTipVisit workoutCount={savedWorkoutCount(history.data)} onSetGoal={onSetGoal} />
+    <MaintenanceTipVisit
+      workoutCount={tipWorkoutCount(history.data, totalWorkouts)}
+      onSetGoal={onSetGoal}
+    />
   );
 }
 

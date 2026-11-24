@@ -139,6 +139,7 @@ import {
   readdsRemovedSet,
   replacesRemovedExercise,
   savedWorkoutCount,
+  tipWorkoutCount,
   type TipRemoval,
 } from './tipTriggers';
 import { PlateCalculatorDialog } from './PlateCalculator';
@@ -2228,11 +2229,7 @@ function AppContent() {
         !workoutSaveBlocked &&
         finishedQueue.items.length === 0,
       resting: restEndsAt !== null && restEndsAt > Date.now(),
-      workoutCount: Math.max(
-        (dashboard?.history?.total_workouts ?? workouts.length) -
-          workouts.filter((workout) => workout.is_sample).length,
-        workouts.filter((workout) => !workout.is_sample).length,
-      ),
+      workoutCount: tipWorkoutCount(workouts, dashboard?.history?.total_workouts),
     });
   }, [
     configureTips,

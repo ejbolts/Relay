@@ -21,6 +21,18 @@ export function savedWorkoutCount(workouts: { is_sample: boolean }[]): number {
 }
 
 /**
+ * Saved workouts for the tips' first-workout gate, leaving out sample data: from the account's
+ * total when the dashboard has it, never fewer than the loaded history holds.
+ */
+export function tipWorkoutCount(
+  workouts: { is_sample: boolean }[],
+  totalWorkouts: number | undefined,
+): number {
+  const saved = savedWorkoutCount(workouts);
+  return Math.max((totalWorkouts ?? workouts.length) - (workouts.length - saved), saved);
+}
+
+/**
  * Choosing exercises soon after removing one reads as replacing it, which Swap exercise does in
  * one go (the swap tip), once there are five saved workouts.
  */
