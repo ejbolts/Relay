@@ -24,6 +24,7 @@ import { useLogger, useWorkout, WorkoutProvider } from '../workout/WorkoutProvid
 import { forgetJustSavedWorkouts } from './justSavedWorkouts';
 import { resetNoticeMemory } from './noticeMemory';
 import { WeeklyReviewScreen } from './WeeklyReviewScreen';
+import { MuscleSetsCard } from '../home/MuscleSetsCard';
 
 const mockRouter = {
   push: jest.fn(),
@@ -445,6 +446,126 @@ test('counts a finished workout once while it saves and until the dashboard incl
   expect(screen.getByText('Triceps')).toBeVisible();
   expect(movers().getByText(/^4/)).toBeVisible();
   expect(movers().queryByText(/^6/)).toBeNull();
+
+  await view.unmount();
+});
+
+test('counts a resumed saved workout in place of its saved sets through queue, save and refresh', async () => {
+  // Saved this week with 2 sets: Chest 2 + 2 = 4, Triceps 1.
+  const saved = reviewWorkout('w-this', today, [reviewSet(100, 5), reviewSet(100, 5)]);
+  serverWorkouts = [...serverWorkouts, saved];
+  serverDashboard = {
+    ...serverDashboard,
+    weekly_sets: savedWeek(thisWeek, 2, 2, 'w-this'),
+  } as DashboardData;
+  let resolveSave!: (workout: TrackedWorkout) => void;
+  jest.mocked(apiSend).mockImplementation((path, method, body) => {
+    if (path === '/api/active-workout' && method === 'PUT')
+      return Promise.resolve({
+        revision: 1,
+        draft: (body as { draft: unknown }).draft,
+        conflict: false,
+      });
+    if (path === '/api/workouts/w-this' && method === 'PUT')
+      return new Promise<TrackedWorkout>((resolve) => {
+        resolveSave = resolve;
+      });
+    return Promise.resolve({});
+  });
+  const view = await renderReview();
+  await showThisWeek();
+  expect(await screen.findByText('Triceps')).toBeVisible();
+  expect(movers().getByText(/^4/)).toBeVisible();
+
+  // Resumed with 5 sets: they replace its 2, never add to them (Chest 7, Triceps 2.5).
+  await act(async () => workoutApi.resume(saved));
+  await waitFor(() => expect(loggerApi?.state?.resumingWorkoutId).toBe('w-this'));
+  await act(async () => {
+    loggerApi!.change((current) => ({ ...current, movements: [benchMovement(5)] }));
+  });
+  await waitFor(() => expect(movers().getByText(/^2\.5/)).toBeVisible());
+  expect(movers().getByText(/^7/)).toBeVisible();
+
+  // Finished: the queued edit carries the saved id, so it still replaces them.
+  await act(async () => {
+    expect(await loggerApi!.finish()).toEqual({ ok: true });
+  });
+  expect(loggerApi?.state).toBeNull();
+  expect(movers().getByText(/^2\.5/)).toBeVisible();
+  expect(movers().getByText(/^7/)).toBeVisible();
+
+  // Saved, with the dashboard's refresh on its way, then refreshed: Chest 7, never 9.
+  let resolveDashboard: ((value: DashboardData) => void) | undefined;
+  const fallback = jest.mocked(apiGet).getMockImplementation()!;
+  jest.mocked(apiGet).mockImplementation((path: string, signal?: AbortSignal) =>
+    path.startsWith('/api/dashboard')
+      ? new Promise<DashboardData>((resolve) => {
+          resolveDashboard = resolve;
+        })
+      : fallback(path, signal),
+  );
+  const edited = {
+    ...saved,
+    movements: [{ ...saved.movements[0], sets: Array(5).fill(reviewSet(100, 5)) }],
+  };
+  await act(async () => resolveSave(edited));
+  await waitFor(() => expect(workoutApi.queue.waiting).toBe(0));
+  expect(movers().getByText(/^2\.5/)).toBeVisible();
+  expect(movers().getByText(/^7/)).toBeVisible();
+
+  serverWorkouts = serverWorkouts.map((item) => (item.id === 'w-this' ? edited : item));
+  await waitFor(() => expect(resolveDashboard).toBeDefined());
+  const refreshed = savedWeek(thisWeek, 2, 5, 'w-this');
+  await act(async () =>
+    resolveDashboard!({ ...serverDashboard, weekly_sets: refreshed } as DashboardData),
+  );
+  await waitFor(() =>
+    expect(client.getQueryData<DashboardData>(['dashboard', today])?.weekly_sets).toEqual(
+      refreshed,
+    ),
+  );
+  expect(movers().getByText(/^2\.5/)).toBeVisible();
+  expect(movers().getByText(/^7/)).toBeVisible();
+  expect(movers().queryByText(/^3\.5/)).toBeNull();
+  expect(movers().queryByText(/^9/)).toBeNull();
+
+  await view.unmount();
+});
+
+test("Home's muscle sets card counts the workout in progress, and its row opens the logger", async () => {
+  function HomeCard() {
+    const workout = useWorkout();
+    const logger = useLogger();
+    useLayoutEffect(() => {
+      workoutApi = workout;
+      loggerApi = logger;
+    });
+    return <MuscleSetsCard />;
+  }
+  const view = await renderWithClient(
+    <WorkoutProvider>
+      <HomeCard />
+    </WorkoutProvider>,
+  );
+  expect(await screen.findByLabelText(/^Chest: 2 of/)).toBeVisible();
+  await waitFor(() => expect(loggerApi).not.toBeNull());
+
+  await act(async () => workoutApi.start({ kind: 'empty' }));
+  await waitFor(() => expect(loggerApi?.state).not.toBeNull());
+  mockRouter.push.mockClear();
+  await act(async () => {
+    loggerApi!.change((current) => ({ ...current, movements: [benchMovement(3)] }));
+  });
+  expect(await screen.findByLabelText(/^Chest: 5 of/)).toBeVisible();
+  expect(screen.getByLabelText(/^Triceps: 1\.5 of/)).toBeVisible();
+
+  // The live workout's contribution opens the logger, not a saved session.
+  await fireEvent.press(screen.getByLabelText(/^Triceps: 1\.5 of/));
+  await fireEvent.press(await screen.findByLabelText(/^View Bench Press in /));
+  await waitFor(() => expect(mockRouter.push).toHaveBeenCalledWith('/workout'));
+  expect(mockRouter.push).not.toHaveBeenCalledWith(
+    expect.objectContaining({ pathname: '/training/session/[id]' }),
+  );
 
   await view.unmount();
 });

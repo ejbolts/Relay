@@ -1,12 +1,6 @@
 import { useMemo } from 'react';
 import { weeklyReviewShownThisWeek } from '../../../../frontend/src/appNoticeRules';
-import { readFinishedWorkouts } from '../../../../frontend/src/finishedWorkoutQueue';
-import {
-  finishedMuscleSourcesFor,
-  liveMuscleSetsWithFinished,
-  type FinishedMuscleSource,
-} from '../../../../frontend/src/liveMuscleSets';
-import type { CardioWeek, Exercise } from '../../../../frontend/src/types';
+import type { CardioWeek } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import {
   lastWeekReview,
@@ -20,18 +14,13 @@ import {
   useTrainingPreferences,
   useWorkoutHistory,
 } from '../../data/queries';
-import { deviceStorage } from '../../data/deviceStorage';
 import { useUser } from '../../session/SessionProvider';
 import { useBodyMeasurements } from '../body/bodyQueries';
-import { loggerToDraft } from '../workout/loggerState';
-import { useLogger, useOptionalWorkout } from '../workout/WorkoutProvider';
 import { useAppNotices } from './appNotices';
-import { awaitingDashboard, useJustSavedWorkouts } from './justSavedWorkouts';
+import { useLiveMuscleSources, withLiveMuscleSets } from './liveMuscleSources';
 import { useNoticeMemory, weeklyReviewShownFor } from './noticeMemory';
 
 const NO_CARDIO_WEEKS: CardioWeek[] = [];
-const NO_EXERCISES: Exercise[] = [];
-const NO_FINISHED: FinishedMuscleSource[] = [];
 
 /**
  * The weekly review as the web works it out, from Home's data: every week's figures for the
@@ -49,7 +38,7 @@ export function useWeeklyReview() {
   const preferences = useTrainingPreferences().data;
   const notices = useAppNotices(user.id);
   useNoticeMemory();
-  const live = useLiveSources(user.id, dashboard);
+  const live = useLiveMuscleSources(user.id, dashboard);
   const dashboardWeekStart = dashboard?.weekly_sets?.week_start ?? null;
   const input = useMemo(
     () => ({
@@ -57,15 +46,7 @@ export function useWeeklyReview() {
       records: records ?? [],
       measurements: measurements ?? [],
       muscleWeeks: reviewMuscleWeeks(dashboard?.weekly_sets, dashboard?.weekly_sets_history).map(
-        (week) =>
-          liveMuscleSetsWithFinished(
-            week,
-            live.draft,
-            live.exercises,
-            workouts ?? [],
-            today,
-            live.finished,
-          ),
+        (week) => withLiveMuscleSets(week, live, workouts ?? [], today),
       ),
       muscleGoal: preferences?.weekly_muscle_set_goal ?? 10,
       muscleGoals: preferences?.weekly_muscle_set_goals,
@@ -93,33 +74,4 @@ export function useWeeklyReview() {
     ready: notices.ready,
     notice: weeklyReviewNoticeFor(lastWeek, shownThisWeek ? lastWeek.currentStart : shownHere),
   };
-}
-
-/** The workouts the dashboard doesn't count yet, from the workout engine (none without one). */
-function useLiveSources(userId: string, dashboard: unknown) {
-  const workout = useOptionalWorkout();
-  const logger = useLogger();
-  const justSaved = useJustSavedWorkouts();
-  const state = logger?.state ?? null;
-  const queue = workout?.queue ?? null;
-  const exercises = logger?.exercises ?? NO_EXERCISES;
-  const draft = useMemo(() => (state ? loggerToDraft(state, state.lastActiveAt) : null), [state]);
-  // Read again whenever the queue's status changes (a workout finished, sent or refused).
-  const finished = useMemo(
-    () =>
-      queue
-        ? finishedMuscleSourcesFor(
-            awaitingDashboard(justSaved, userId, dashboard).map((item) => ({
-              id: item.id,
-              finished: item.finished,
-            })),
-            readFinishedWorkouts(deviceStorage).filter(
-              (item) => item.pendingSave.userId === userId,
-            ),
-            queue.refusals,
-          )
-        : NO_FINISHED,
-    [queue, justSaved, userId, dashboard],
-  );
-  return useMemo(() => ({ draft, exercises, finished }), [draft, exercises, finished]);
 }

@@ -1,5 +1,6 @@
+import { useIsFocused } from 'expo-router';
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AccessibilityInfo, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   usedMaintenanceRange,
   weightGoalReached,
@@ -14,20 +15,39 @@ import { useTips } from '../guides/tips';
 import { retryBodyCheckIns, useBodyCheckInStatus } from './BodyCheckInSync';
 import { bodyIcons } from './bodyIcons';
 
+/** What the card last announced, shared by every tab's card so switching tabs stays quiet. */
+let lastAnnounced: string | null = null;
+
 /**
  * Check-ins saved on this phone that the server hasn't confirmed, as the web's sync card. Shown
  * at the top of every tab, as the web's is; BodyCheckInSync alone owns the queue and its sync.
  */
 export function CheckInSyncCard() {
-  const { colors, type, radius } = useTheme();
   const { pending, error } = useBodyCheckInStatus();
-  if (pending === 0) return null;
+  useEffect(() => {
+    if (pending === 0) lastAnnounced = null;
+  }, [pending]);
+  return pending === 0 ? null : <CheckInSyncDetails pending={pending} error={error} />;
+}
+
+function CheckInSyncDetails({ pending, error }: { pending: number; error: string | null }) {
+  const { colors, type, radius } = useTheme();
+  // Every tab keeps its card mounted; only the one on screen speaks.
+  const focused = useIsFocused();
+  const count = `${pending} ${pending === 1 ? 'check-in' : 'check-ins'} saved on this phone`;
+  const message = `${count}. ${error ?? 'Waiting to sync'}`;
+  useEffect(() => {
+    // Android announces through the live region; iOS has none, so say it, as the web's status.
+    if (!focused || Platform.OS !== 'ios' || lastAnnounced === message) return;
+    lastAnnounced = message;
+    AccessibilityInfo.announceForAccessibility(message);
+  }, [focused, message]);
   return (
     <Card accessibilityLabel="Check-in sync" style={{ gap: 8 }}>
-      <View accessibilityLiveRegion="polite" style={styles.row}>
+      <View accessibilityLiveRegion={focused ? 'polite' : 'none'} style={styles.row}>
         <Icon name={bodyIcons.cloud} size={18} color={colors.secondary} />
         <Text style={[type.callout, { color: colors.text, fontWeight: '600', flex: 1 }]}>
-          {pending} {pending === 1 ? 'check-in' : 'check-ins'} saved on this phone
+          {count}
         </Text>
         {!error && (
           <Text

@@ -1,5 +1,6 @@
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { AccessibilityInfo } from 'react-native';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { defaultHomeLayout } from '../../../../frontend/src/homeLayout';
@@ -35,10 +36,11 @@ jest.mock('../../data/api', () => ({
   apiSend: jest.fn(),
 }));
 const mockRouter = { navigate: jest.fn(), push: jest.fn(), back: jest.fn() };
+let mockFocused = true;
 jest.mock('expo-router', () => ({
   router: mockRouter,
   useRouter: () => mockRouter,
-  useIsFocused: () => true,
+  useIsFocused: () => mockFocused,
   Stack: { Screen: () => null },
 }));
 jest.mock('../workout/WorkoutProvider', () => ({
@@ -173,6 +175,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  mockFocused = true;
   client.clear();
   onlineManager.setOnline(true);
   setBodyCheckInOwner(null);
@@ -334,5 +337,53 @@ test('signing out or switching accounts hides the card and drops another account
   expect(bodyCheckInStatus().pending).toBe(0);
   expect(screen.queryByLabelText('Check-in sync')).toBeNull();
 
+  await view.unmount();
+});
+
+test('the tab on screen announces the card once on iOS; other tabs and tab switches stay quiet', async () => {
+  const announce = jest
+    .spyOn(AccessibilityInfo, 'announceForAccessibility')
+    .mockImplementation(() => undefined);
+  const view = await render(
+    <Shell>
+      <HomeScreen />
+    </Shell>,
+  );
+  onlineManager.setOnline(false);
+  const checkIn = (measurement_date: string) =>
+    act(async () => {
+      saveBodyCheckIn({ measurement_date, weight_kg: 82.4, body_fat_pct: null, notes: null });
+    });
+
+  await checkIn(today);
+  expect(await screen.findByText('1 check-in saved on this phone')).toBeVisible();
+  expect(announce.mock.calls).toEqual([['1 check-in saved on this phone. Waiting to sync']]);
+
+  // Another tab's card with the same status says nothing new.
+  await view.rerender(
+    <Shell>
+      <TrainingTabScreen />
+    </Shell>,
+  );
+  expect(screen.getByText('1 check-in saved on this phone')).toBeVisible();
+  expect(announce).toHaveBeenCalledTimes(1);
+
+  await checkIn('2026-11-02');
+  expect(screen.getByText('2 check-ins saved on this phone')).toBeVisible();
+  expect(announce).toHaveBeenLastCalledWith('2 check-ins saved on this phone. Waiting to sync');
+  expect(announce).toHaveBeenCalledTimes(2);
+
+  // A tab that isn't on screen never speaks.
+  mockFocused = false;
+  await view.rerender(
+    <Shell>
+      <SocialScreen />
+    </Shell>,
+  );
+  await checkIn('2026-11-03');
+  expect(screen.getByText('3 check-ins saved on this phone')).toBeVisible();
+  expect(announce).toHaveBeenCalledTimes(2);
+
+  announce.mockRestore();
   await view.unmount();
 });
