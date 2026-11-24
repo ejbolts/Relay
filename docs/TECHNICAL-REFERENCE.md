@@ -261,19 +261,26 @@ The native app registers an Expo push token instead of a Web Push subscription (
 `0066_expo_push_tokens`). `POST /api/notifications/expo/tokens` (`token`, optional `platform` and
 `local_alerts`) saves or refreshes it for the signed-in account and binds it to that sign-in; the
 same limit of 10 devices applies, and a token signed in to another account moves to it.
-`DELETE /api/notifications/expo/tokens` removes it. Alerts go only to tokens whose sign-in is still
-current, so signing out of the app (`/api/auth/logout-session`), signing out everywhere, a
-password change, disabling or deleting the account all stop them, and ended tokens are pruned.
-Account-wide alerts (Still working out?, auto-save, video ready, admin requests and the test
-alert) reach the app through `https://exp.host/--/api/v2/push/send`; rest timers and the legacy
-two-hour reminder stay with the browser that scheduled them. Tokens Expo reports as
-`DeviceNotRegistered` are removed. `GYM_EXPO_ACCESS_TOKEN` (or `EXPO_ACCESS_TOKEN`) is optional,
-for an Expo project with enhanced push security. The app schedules Still working out? on the
-phone too, so it lists `inactive-workout` in `local_alerts` and reports the workout and due time
-of the reminder it has scheduled with `PUT /api/notifications/expo/tokens/local-reminder`. The
-server skips that phone when its own reminder is for the same workout and due no more than two
-minutes before the server's, and still counts the alert as delivered. Tokens are device
-registrations and are left out of account backups.
+`DELETE /api/notifications/expo/tokens` removes it, and `POST /api/notifications/expo/tokens/test`
+sends a test alert to that phone alone, answering 410 if Expo reports it unregistered and 502 if
+Expo refuses it (the account-wide `/api/notifications/push/test` keeps its 204). Alerts go only to
+tokens whose sign-in is still current, so signing out of the app (`/api/auth/logout-session`, which
+the app retries until the server confirms it), signing out everywhere, a password change,
+disabling or deleting the account all stop them. Account-wide alerts (Still working out?,
+auto-save, video ready, admin requests and the test alert) reach the app through
+`https://exp.host/--/api/v2/push/send`; rest timers and the legacy two-hour reminder stay with the
+browser that scheduled them. The app's alerts are sent on background workers with bounded timeouts
+and one retry, so they never delay Web Push or change when a browser's alert is retried, and an
+alert retried for browsers reaches the app once. Text the phone shows names no workout or person.
+Android messages use the app's `relay-alerts` channel. Tokens Expo reports as `DeviceNotRegistered`,
+in a ticket or in the receipt checked about 15 minutes later, are removed only while they still
+belong to the same account and sign-in; credential errors are logged. `GYM_EXPO_ACCESS_TOKEN` (or
+`EXPO_ACCESS_TOKEN`) is optional, for an Expo project with enhanced push security. The app
+schedules Still working out? on the phone too, so it lists `inactive-workout` in `local_alerts` and
+reports the workout and due time of the reminder it has scheduled with
+`PUT /api/notifications/expo/tokens/local-reminder`. The server skips that phone when its own
+reminder is for the same workout and due within two minutes of the server's, either way. Tokens are
+device registrations and are left out of account backups.
 A workout left running can be saved with **Actual duration (minutes)**; the correction stays in
 its draft until saved. Inactivity reminders do not finish or discard the workout.
 

@@ -1,7 +1,7 @@
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';
-import { ApiError, currentUser } from '../data/api';
+import { ApiError, currentUser, retryPendingSignOut } from '../data/api';
 import { readJson } from '../data/deviceStorage';
 import { sessionToken } from '../data/session';
 import { memoryKv } from '../testing/memoryKvStore';
@@ -14,6 +14,7 @@ jest.mock('../data/api', () => ({
   ...jest.requireActual<typeof import('../data/api')>('../data/api'),
   apiOrigin: 'https://relay.test',
   currentUser: jest.fn(),
+  retryPendingSignOut: jest.fn(async () => undefined),
 }));
 
 const user = { id: 'u1', username: 'preview' } as Awaited<ReturnType<typeof currentUser>>;
@@ -107,6 +108,17 @@ test('a signed-out answer never opens offline, and forgets the cached account', 
   await open();
   expect(await screen.findByText('signed-out')).toBeVisible();
   expect(readJson(CACHE)).toBeNull();
+});
+
+test('a sign-out still waiting for the server is retried on reconnect while signed out', async () => {
+  jest.mocked(currentUser).mockRejectedValue(new ApiError(401, 'Sign in to continue.'));
+  jest.mocked(retryPendingSignOut).mockResolvedValue(undefined);
+  await open();
+  expect(await screen.findByText('signed-out')).toBeVisible();
+  jest.mocked(retryPendingSignOut).mockClear();
+  await reconnect();
+  expect(retryPendingSignOut).toHaveBeenCalledTimes(1);
+  expect(currentUser).toHaveBeenCalledTimes(1);
 });
 
 test('signing in remembers the account for offline launches', async () => {

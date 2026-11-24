@@ -1,6 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Alert, Linking } from 'react-native';
 import { readJson, writeJson } from '../../data/deviceStorage';
+import { sessionEpoch } from '../../session/sessionEpoch';
 import { showToast } from '../../ui/Toast';
 import { reportLocalReminder } from '../push/remotePush';
 import { restTimerPreference } from '../settings/devicePreferences';
@@ -166,8 +167,32 @@ export function onWorkoutReminderOpened(onOpen: (startedAt: number | null) => vo
   }
 }
 
+let held: { startedAt: number | null; epoch: number } | null = null;
+
+/** Keeps a tapped reminder whose workout hasn't loaded yet, for this session only. */
+export function holdReminder(startedAt: number | null) {
+  held = { startedAt, epoch: sessionEpoch() };
+}
+
+/**
+ * The held reminder, once the live workout it is about (`liveStartedAt`) has loaded: its start
+ * time (null when unknown), or undefined while there is none for this workout and session.
+ */
+export function takeHeldReminder(liveStartedAt: number): number | null | undefined {
+  if (!held) return undefined;
+  if (held.epoch !== sessionEpoch()) {
+    held = null;
+    return undefined;
+  }
+  if (held.startedAt !== null && held.startedAt !== liveStartedAt) return undefined;
+  const { startedAt } = held;
+  held = null;
+  return startedAt;
+}
+
 /** For tests: forget what was scheduled. */
 export function resetWorkoutRemindersForTests() {
+  held = null;
   wantedAt = null;
   wantedWorkout = null;
   scheduledAt = null;

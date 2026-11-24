@@ -14,6 +14,7 @@ import type { User } from '../../../frontend/src/types';
 import {
   ApiError,
   currentUser,
+  retryPendingSignOut,
   signIn as requestSignIn,
   signOut as requestSignOut,
 } from '../data/api';
@@ -138,11 +139,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // The app feeds onlineManager from NetInfo (src/data/queryClient.ts).
+    // Sign-outs the server hasn't confirmed are retried even while signed out, so an earlier
+    // account's alerts stop reaching this phone without waiting for the next launch.
     const net = onlineManager.subscribe((online) => {
-      if (online) void recheck();
+      if (!online) return;
+      void retryPendingSignOut();
+      void recheck();
     });
     const app = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void recheck();
+      if (state !== 'active') return;
+      void retryPendingSignOut();
+      void recheck();
     });
     return () => {
       net();

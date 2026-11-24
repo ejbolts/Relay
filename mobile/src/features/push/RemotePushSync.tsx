@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { setUpHandler } from '../workout/restAlerts';
 import {
+  flushLocalReminderReport,
   remoteAlertRoute,
   retryLocalReminderReport,
   setRemotePushAccount,
@@ -24,12 +25,20 @@ export function RemotePushSync({ userId }: { userId: string }) {
     setRemotePushAccount(userId);
     void syncRemotePush(true);
     const app = AppState.addEventListener('change', (state) => {
+      // Before the phone suspends Relay, so the server knows about the reminder it scheduled.
+      if (state === 'background' || state === 'inactive') {
+        void flushLocalReminderReport();
+        return;
+      }
       if (state !== 'active') return;
       void syncRemotePush();
       retryLocalReminderReport();
     });
+    // Back online: registers, sends turn-offs and reports that couldn't go out offline.
     const net = onlineManager.subscribe((online) => {
-      if (online) retryLocalReminderReport();
+      if (!online) return;
+      void syncRemotePush();
+      retryLocalReminderReport();
     });
     return () => {
       app?.remove();

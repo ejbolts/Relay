@@ -3,7 +3,9 @@ import { isRunningInExpoGo } from 'expo';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { Alert, Platform } from 'react-native';
-import { apiSend } from '../../data/api';
+import { request } from '../../data/api';
+import { sessionToken } from '../../data/session';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { showToast } from '../../ui/Toast';
 import { Section, SectionError } from '../settings/SettingsList';
@@ -11,7 +13,12 @@ import { PhoneAlertsRow, TestAlertRow, usePhoneAlerts } from './PhoneAlertsRows'
 import { resetRemotePushForTests, setRemotePushAccount, syncRemotePush } from './remotePush';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
-jest.mock('../../data/api', () => ({ apiSend: jest.fn(async () => undefined) }));
+jest.mock('../../data/api', () => ({
+  ApiError: jest.requireActual('../../data/api').ApiError,
+  serverOrigin: () => 'https://relay.test',
+  request: jest.fn(async () => undefined),
+}));
+jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'bearer-alice') }));
 jest.mock('../../ui/Toast', () => ({ showToast: jest.fn(), toastAccount: () => 'user:alice' }));
 jest.mock('expo', () => ({
   ...jest.requireActual('expo'),
@@ -45,7 +52,13 @@ function Notifications_() {
   );
 }
 
-const send = jest.mocked(apiSend);
+const send = jest.mocked(request);
+const sentAs = (path: string, method: string, body?: unknown) =>
+  expect(send).toHaveBeenCalledWith(
+    path,
+    expect.objectContaining({ method, ...(body ? { body: JSON.stringify(body) } : {}) }),
+    'bearer-alice',
+  );
 
 beforeEach(() => {
   memoryKv.clear();
@@ -56,6 +69,11 @@ beforeEach(() => {
   jest.mocked(isRunningInExpoGo).mockReturnValue(false);
   mockConstants.expoConfig = { extra: { eas: { projectId: 'project-1' } } };
   mockConstants.easConfig = null;
+  jest.mocked(sessionToken).mockResolvedValue('bearer-alice');
+  jest
+    .mocked(Notifications.getPermissionsAsync)
+    .mockResolvedValue({ granted: true, canAskAgain: true } as never);
+  nextSessionEpoch();
   setRemotePushAccount('alice');
 });
 
@@ -85,13 +103,11 @@ test('a registered phone shows the switch on, sends a test alert, and turns off'
       account: 'user:alice',
     }),
   );
-  expect(send).toHaveBeenCalledWith('/api/notifications/push/test', 'POST');
+  sentAs('/api/notifications/expo/tokens/test', 'POST', { token: 'ExponentPushToken[phone]' });
 
   await fireEvent(screen.getByLabelText('Phone alerts'), 'valueChange', false);
   await waitFor(() => expect(screen.queryByText('Send test alert')).toBeNull());
-  expect(send).toHaveBeenCalledWith('/api/notifications/expo/tokens', 'DELETE', {
-    token: 'ExponentPushToken[phone]',
-  });
+  sentAs('/api/notifications/expo/tokens', 'DELETE', { token: 'ExponentPushToken[phone]' });
   expect(showToast).toHaveBeenCalledWith('Phone alerts off', undefined, { account: 'user:alice' });
 });
 
@@ -109,4 +125,21 @@ test('turning it on when notifications are blocked shows how to fix it beside th
     ),
   ).toBeTruthy();
   expect(showToast).not.toHaveBeenCalled();
+});
+
+test('turning it off offline says alerts stop once back online, without a confirmation', async () => {
+  await render(<Notifications_ />);
+  await act(() => syncRemotePush(true));
+  send.mockImplementation(async (_path, init) => {
+    if (init?.method === 'DELETE') throw new Error('Could not reach Relay.');
+    return undefined as never;
+  });
+  await fireEvent(screen.getByLabelText('Phone alerts'), 'valueChange', false);
+  expect(
+    await screen.findByText(
+      "Couldn't reach Relay. Phone alerts will stop for this phone once it's back online.",
+    ),
+  ).toBeTruthy();
+  expect(screen.getByLabelText('Phone alerts')).toHaveProp('value', false);
+  expect(showToast).not.toHaveBeenCalledWith('Phone alerts off', undefined, expect.anything());
 });

@@ -144,6 +144,39 @@ test('signs out offline at once and ends the server session on the next launch',
   expect(mockKeychain.size).toBe(0);
 });
 
+test('every session signed out offline is ended once the connection is back', async () => {
+  const api = signedIn();
+  fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));
+  await api.signOut();
+  // Another account signs in on this phone, then signs out offline too.
+  mockKeychain.set('relay.session', saved('https://relay.test', 'second-token'));
+  fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));
+  await api.signOut();
+  fetchMock.mockClear();
+
+  fetchMock.mockResolvedValueOnce(reply(204)).mockResolvedValueOnce(reply(204));
+  // Retried while still signed out, as when the connection returns on the sign-in screen.
+  await api.retryPendingSignOut();
+  expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
+    'https://relay.test/api/auth/logout-session',
+    'https://relay.test/api/auth/logout-session',
+  ]);
+  expect([headers(0).Authorization, headers(1).Authorization]).toEqual([
+    'Bearer sample-token',
+    'Bearer second-token',
+  ]);
+  expect(mockKeychain.size).toBe(0);
+});
+
+test('a sign-out saved by an older version is still ended', async () => {
+  mockKeychain.set('relay.pending-sign-out', saved('https://relay.test', 'old-token'));
+  const api = loadApi('https://relay.test');
+  fetchMock.mockResolvedValueOnce(reply(204));
+  await api.retryPendingSignOut();
+  expect(headers(0).Authorization).toBe('Bearer old-token');
+  expect(mockKeychain.size).toBe(0);
+});
+
 test('opening and becoming active together retry the sign-out once', async () => {
   const api = signedIn();
   fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));

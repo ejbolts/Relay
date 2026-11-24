@@ -3,9 +3,11 @@ import * as SecureStore from 'expo-secure-store';
 // The session token lives in the device's keychain or keystore, never in plain storage. Each is
 // saved with the server it belongs to, so pointing the app at another server starts signed out.
 const SESSION = 'relay.session';
-// A sign-out the server has not confirmed yet. The token is already gone from SESSION, so the
-// app is signed out; this copy only lets the next launch end the session on the server too.
+// Sign-outs the server has not confirmed yet, one per session. The token is already gone from
+// SESSION, so the app is signed out; these copies only let the app end each session on the
+// server too, so its alerts stop. Older versions kept a single { origin, token } here.
 const PENDING_SIGN_OUT = 'relay.pending-sign-out';
+const MAX_PENDING = 10;
 
 type Saved = { origin: string; token: string };
 
@@ -48,14 +50,38 @@ export const forgetSessionTokenIf = (origin: string, token: string) =>
     if ((await read(SESSION, origin)) === token) await SecureStore.deleteItemAsync(SESSION);
   });
 
+async function readPending(): Promise<Saved[]> {
+  try {
+    const saved = JSON.parse((await SecureStore.getItemAsync(PENDING_SIGN_OUT)) ?? 'null') as
+      Saved | Saved[] | null;
+    const list = Array.isArray(saved) ? saved : saved ? [saved] : [];
+    return list.filter((item) => typeof item?.origin === 'string' && !!item.token);
+  } catch {
+    return [];
+  }
+}
+
+const writePending = (list: Saved[]) =>
+  list.length
+    ? SecureStore.setItemAsync(PENDING_SIGN_OUT, JSON.stringify(list.slice(-MAX_PENDING)))
+    : SecureStore.deleteItemAsync(PENDING_SIGN_OUT);
+
 /** Signs out on this device at once, keeping the token to end its server session later. */
 export const startSignOut = (origin: string) =>
   inTurn(async () => {
     const token = await read(SESSION, origin);
-    if (token) await write(PENDING_SIGN_OUT, origin, token);
+    if (token) {
+      const pending = (await readPending()).filter((item) => item.token !== token);
+      await writePending([...pending, { origin, token }]);
+    }
     await SecureStore.deleteItemAsync(SESSION);
     return token;
   });
 
-export const pendingSignOut = (origin: string) => read(PENDING_SIGN_OUT, origin);
-export const finishSignOut = () => SecureStore.deleteItemAsync(PENDING_SIGN_OUT);
+/** The sessions on `origin` signed out here that the server has not ended yet, oldest first. */
+export const pendingSignOuts = async (origin: string) =>
+  (await readPending()).filter((item) => item.origin === origin).map((item) => item.token);
+
+/** The server has ended this session (or it had already ended). */
+export const finishSignOut = (token: string) =>
+  inTurn(async () => writePending((await readPending()).filter((item) => item.token !== token)));

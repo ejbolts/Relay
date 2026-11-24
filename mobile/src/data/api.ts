@@ -4,7 +4,7 @@ import type { User } from '../../../frontend/src/types';
 import {
   finishSignOut,
   forgetSessionTokenIf,
-  pendingSignOut,
+  pendingSignOuts,
   saveSessionToken,
   sessionToken,
   startSignOut,
@@ -109,15 +109,16 @@ export async function request<T>(
 
 async function sendPendingSignOut(origin: string) {
   try {
-    const token = await pendingSignOut(origin);
-    if (!token) return;
-    try {
-      await request<void>('/api/auth/logout-session', { method: 'POST' }, token);
-    } catch (error) {
-      // A server error or no connection leaves it for next time; a 401 means it already ended.
-      if (!(error instanceof ApiError) || error.status >= 500) return;
+    // Each signed-out session is ended in turn; that also removes its phone alerts.
+    for (const token of await pendingSignOuts(origin)) {
+      try {
+        await request<void>('/api/auth/logout-session', { method: 'POST' }, token);
+      } catch (error) {
+        // A server error or no connection leaves it for next time; a 401 means it already ended.
+        if (!(error instanceof ApiError) || error.status >= 500) return;
+      }
+      await finishSignOut(token);
     }
-    await finishSignOut();
   } catch {
     // Secure storage was unavailable; the next launch tries again.
   }
@@ -132,6 +133,18 @@ let ending: Promise<void> | undefined;
 function endPendingSignOut(origin: string) {
   ending ??= sendPendingSignOut(origin).finally(() => (ending = undefined));
   return ending;
+}
+
+/**
+ * Retries sign-outs the server hasn't confirmed, such as when the connection or the app comes
+ * back, even while signed out: until then the server can still alert this phone for them.
+ */
+export function retryPendingSignOut(): Promise<void> {
+  try {
+    return endPendingSignOut(serverOrigin());
+  } catch {
+    return Promise.resolve();
+  }
 }
 
 export async function currentUser(signal: AbortSignal) {

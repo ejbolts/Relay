@@ -10,9 +10,12 @@ import {
   remindAboutRestAlerts,
   resetWorkoutRemindersForTests,
   REST_ALERTS_ASKED_KEY,
+  holdReminder,
   syncInactiveReminder,
+  takeHeldReminder,
   takeLaunchReminder,
 } from './workoutReminders';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 jest.mock('../../ui/Toast', () => ({ showToast: jest.fn() }));
@@ -163,5 +166,25 @@ describe('a reminder that launched Relay', () => {
       .mockResolvedValue(response({ kind: 'rest' }));
     expect(await takeLaunchReminder()).toBeUndefined();
     expect(Notifications.clearLastNotificationResponseAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('a reminder tapped before its workout has loaded', () => {
+  it('waits for that workout, then opens once', () => {
+    holdReminder(42);
+    expect(takeHeldReminder(7)).toBeUndefined(); // Another workout loaded first.
+    expect(takeHeldReminder(42)).toBe(42);
+    expect(takeHeldReminder(42)).toBeUndefined();
+  });
+
+  it('opens whichever workout loads when it did not say which', () => {
+    holdReminder(null);
+    expect(takeHeldReminder(7)).toBeNull();
+  });
+
+  it('is dropped when the account changes', () => {
+    holdReminder(42);
+    nextSessionEpoch();
+    expect(takeHeldReminder(42)).toBeUndefined();
   });
 });
