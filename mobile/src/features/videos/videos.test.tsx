@@ -8,7 +8,7 @@ import type { User, WorkoutSession, YouTubeConnection } from '../../../../fronte
 import { ApiError, apiGet, apiSend } from '../../data/api';
 import { forgetSessionTokenIf, sessionToken } from '../../data/session';
 import { UploadStopped } from '../../data/uploadFile';
-import { nextSessionEpoch } from '../../session/sessionEpoch';
+import { nextSessionEpoch, runBeforeSignOut } from '../../session/sessionEpoch';
 import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { startClipUpload } from './clipUpload';
@@ -1148,3 +1148,197 @@ it.each(['create', 'poll', 'cancel', 'delete'] as const)(
     ).toEqual(['/api/sessions/s2/clips']);
   },
 );
+
+it('deletes an unfinished upload session with its captured token before sign-out revokes it', async () => {
+  const stops = stoppableTransfers();
+  const deleted = deferred<void>();
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1' && method === 'DELETE') return deleted.promise;
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  const view = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Signout test');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('1 clip');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  await screen.findByText('UPLOADING SESSION');
+
+  let cleanup!: Promise<void>;
+  await act(async () => {
+    cleanup = runBeforeSignOut();
+  });
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith(
+      '/api/sessions/s1',
+      'DELETE',
+      undefined,
+      expect.any(AbortSignal),
+      'tok-A',
+    ),
+  );
+  expect(stops.every((stop) => stop.mock.calls.length > 0)).toBe(true);
+  await act(async () => {
+    deleted.resolve();
+    await cleanup;
+  });
+
+  // Signing out afterwards does not send a duplicate DELETE.
+  await act(async () => {
+    nextSessionEpoch();
+    syncVideoUploadSession(null, false);
+  });
+  const deletes = jest
+    .mocked(apiSend)
+    .mock.calls.filter(([path, method]) => path === '/api/sessions/s1' && method === 'DELETE');
+  expect(deletes).toHaveLength(1);
+  await view.unmount();
+});
+
+it('never lets a failing session cleanup block sign-out and leaves Retry offered if sign-out fails', async () => {
+  stoppableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1' && method === 'DELETE') throw new Error('Network down');
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  const view = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Offline signout');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('1 clip');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  await screen.findByText('UPLOADING SESSION');
+
+  await act(async () => {
+    await expect(runBeforeSignOut()).resolves.toBeUndefined();
+  });
+  // If sign-out itself fails and the user stays signed in, the interrupted clip offers Retry.
+  expect(await screen.findByRole('button', { name: 'Retry failed uploads' })).toBeVisible();
+  await view.unmount();
+});
+
+it('does not delete a fully uploaded session on sign-out when Start processing failed', async () => {
+  jest.mocked(startClipUpload).mockImplementation((_path, _clip, _fields, onProgress) => {
+    onProgress(100);
+    return { done: Promise.resolve({} as never), stop: jest.fn() };
+  });
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return { ...session, expected_clip_count: 1 };
+    if (path === '/api/sessions/s1/process') throw new Error('Could not reach Relay.');
+    if (path === '/api/sessions/s1' && method === 'DELETE') return undefined;
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  const baseGet = jest.mocked(apiGet).getMockImplementation()!;
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions/s1') throw new Error('Could not reach Relay.');
+    return baseGet(path);
+  });
+  const view = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Process failed');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('1 clip');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  await screen.findByRole('button', { name: 'Start processing' });
+
+  await act(async () => {
+    await runBeforeSignOut();
+    nextSessionEpoch();
+    syncVideoUploadSession(null, false);
+  });
+  const deletes = jest
+    .mocked(apiSend)
+    .mock.calls.filter(([path, method]) => path === '/api/sessions/s1' && method === 'DELETE');
+  expect(deletes).toHaveLength(0);
+  await view.unmount();
+});
+
+it('switches accounts mid-upload with exactly one DELETE using the old token and none with the new one', async () => {
+  stoppableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1' && method === 'DELETE') return undefined;
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  const view = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Switch test');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('1 clip');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  await screen.findByText('UPLOADING SESSION');
+
+  // Account B signs in while A is mid-upload.
+  jest.mocked(sessionToken).mockResolvedValue('tok-B');
+  mockUser = { ...defaultUser, id: 'other', username: 'other' };
+  mockSessionStatus = { kind: 'signed-in', user: mockUser };
+  await act(async () => {
+    nextSessionEpoch();
+    syncVideoUploadSession('other', true);
+  });
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith(
+      '/api/sessions/s1',
+      'DELETE',
+      undefined,
+      expect.any(AbortSignal),
+      'tok-A',
+    ),
+  );
+  // A subsequent sign-out of B does not repeat the DELETE with B's token.
+  await act(async () => {
+    await runBeforeSignOut();
+  });
+  const deletes = jest
+    .mocked(apiSend)
+    .mock.calls.filter(([path, method]) => path === '/api/sessions/s1' && method === 'DELETE');
+  expect(deletes).toHaveLength(1);
+  expect(deletes[0][4]).toBe('tok-A');
+  await view.unmount();
+});

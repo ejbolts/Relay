@@ -559,8 +559,55 @@ test('your own profile edits inline, copies your account UUID, and opens sharing
   );
   expect(await screen.findByText('Profile saved.')).toBeOnTheScreen();
   expect(screen.getByText('Sam')).toBeVisible();
+  expect(screen.queryByText('Preview')).toBeNull();
   alert.mockRestore();
   jest.mocked(request).mockReset();
+});
+
+test('saving a profile updates the cached header before edit mode closes, even if a stale refresh resolves later', async () => {
+  let profileReads = 0;
+  const staleRefresh = deferred<SharedProfile>();
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/me') {
+      profileReads += 1;
+      if (profileReads === 1) {
+        return {
+          ...casey,
+          id: 'me',
+          display_name: 'Old Name',
+          profile_photo_url: '/api/sharing/profiles/me/photo?v=v1',
+          is_you: true,
+          visibility: 'public',
+        };
+      }
+      return staleRefresh.promise;
+    }
+    if (path.startsWith('/api/sharing/')) return [];
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  jest.mocked(request).mockImplementation(async () => ({
+    ...mockUser,
+    display_name: 'New Name',
+    profile_photo_url: '/api/profile/photo?v=v1',
+  }));
+  try {
+    await show(<ProfileScreen profileId="me" />);
+    expect(await screen.findByText('Old Name')).toBeVisible();
+    await fireEvent.press(screen.getByRole('button', { name: 'Edit profile' }));
+    await fireEvent.changeText(screen.getByLabelText('Name'), 'New Name');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
+
+    // Immediately after leaving edit mode (while the refresh query is still pending), the header
+    // already shows the saved name and keeps the shared photo URL with the matching version.
+    expect(await screen.findByText('Profile saved.')).toBeOnTheScreen();
+    expect(screen.getByText('New Name')).toBeVisible();
+    expect(screen.queryByText('Old Name')).toBeNull();
+    const cached = client.getQueryData<SharedProfile>(['social', 'profile', 'me']);
+    expect(cached?.display_name).toBe('New Name');
+    expect(cached?.profile_photo_url).toBe('/api/sharing/profiles/me/photo?v=v1');
+  } finally {
+    jest.mocked(request).mockReset();
+  }
 });
 
 test('inline profile editing surfaces validation and conflict errors without leaving the form', async () => {
@@ -897,10 +944,13 @@ test('SharedWorkoutScreen opens a friend’s profile filtered to a machine, and 
   await fireEvent.press(
     await screen.findByRole('button', { name: 'All workouts on this machine' }),
   );
-  expect(mockRouter.push).toHaveBeenLastCalledWith({
-    pathname: '/training/machine/[id]',
-    params: { id: 'mp-leg', caption: 'Alex Leg Press', exercise: 'Leg Press' },
-  });
+  expect(mockRouter.push).toHaveBeenLastCalledWith(
+    {
+      pathname: '/training/machine/[id]',
+      params: { id: 'mp-leg', caption: 'Alex Leg Press', exercise: 'Leg Press' },
+    },
+    { withAnchor: true },
+  );
 });
 
 test('a machine link filters the history and brings it into view once a refresh grants access', async () => {

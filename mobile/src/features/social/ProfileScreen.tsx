@@ -28,6 +28,7 @@ import type {
   SharedWorkoutFilters,
   User,
 } from '../../../../frontend/src/types';
+import { rememberAuthorisedImage } from '../../data/authorisedImage';
 import { useWeightUnit } from '../../data/queries';
 import { useOptionalSession } from '../../session/SessionProvider';
 import {
@@ -323,19 +324,41 @@ function ProfileHeader({ profile, onBlocked }: { profile: SharedProfile; onBlock
   const memberSince = formatMemberSince(profile.member_since);
   const photo = profile.profile_photo_url;
 
-  function handleSaved(saved: User) {
+  async function handleSaved(saved: User, options?: { refresh?: boolean; photoUri?: string }) {
     session?.updateUser(saved);
-    client.setQueryData<SharedProfile>(socialKeys.profile(profile.id), (cached) =>
-      cached
-        ? {
-            ...cached,
-            display_name: saved.display_name,
-            profile_photo_url: saved.profile_photo_url ?? null,
-            sex: saved.sex ?? cached.sex,
-          }
-        : cached,
-    );
-    void refreshSocial(client);
+    // Cancel any in-flight profile fetch started before the save so a stale reply cannot revert
+    // the header to the old name or photo right after edit mode closes.
+    await client.cancelQueries({ queryKey: socialKeys.profile(profile.id), exact: true });
+    let nextPhotoUrl: string | null = saved.profile_photo_url ?? null;
+    client.setQueryData<SharedProfile>(socialKeys.profile(profile.id), (cached) => {
+      if (!cached) return cached;
+      // Keep the shared profile photo URL when the photo version did not change, so renaming
+      // does not switch URLs and flash initials while re-fetching the same image.
+      if (saved.profile_photo_url && cached.profile_photo_url) {
+        const cachedVersion = cached.profile_photo_url.split('?')[1];
+        const savedVersion = saved.profile_photo_url.split('?')[1];
+        if (cachedVersion && cachedVersion === savedVersion) {
+          nextPhotoUrl = cached.profile_photo_url;
+        }
+      }
+      return {
+        ...cached,
+        display_name: saved.display_name,
+        profile_photo_url: nextPhotoUrl,
+        sex: saved.sex ?? cached.sex,
+      };
+    });
+    if (options?.photoUri && nextPhotoUrl) {
+      rememberAuthorisedImage(nextPhotoUrl, options.photoUri);
+      const query = nextPhotoUrl.split('?')[1];
+      if (query) {
+        rememberAuthorisedImage(
+          `/api/sharing/profiles/${encodeURIComponent(profile.id)}/photo?${query}`,
+          options.photoUri,
+        );
+      }
+    }
+    if (options?.refresh !== false) void refreshSocial(client);
   }
 
   return (

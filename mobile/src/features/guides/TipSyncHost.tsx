@@ -1,3 +1,4 @@
+import { onlineManager } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import type { TipState } from '../../../../frontend/src/tipsState';
@@ -46,7 +47,11 @@ export async function sendTips(
       if (error.status === 503 || error.status === 429) throw new TipSyncBusy();
       // The session ended on the server; forget it only if it is still the saved one.
       if (error.status === 401) await forgetSessionTokenIf(origin, token);
+      throw error;
     }
+    // A network error while online (e.g. server restarting or unreachable): retry with the
+    // sync's 2, 5, 15 s backoff; true offline waits for onlineManager to go online.
+    if (onlineManager.isOnline()) throw new TipSyncBusy();
     throw error;
   }
 }
@@ -64,10 +69,14 @@ export function TipSyncHost() {
       current: () => sessionEpoch() === epoch,
     });
     sync.syncNow();
+    const online = onlineManager.subscribe((isOnline) => {
+      if (isOnline) sync.refresh();
+    });
     const subscription = AppState.addEventListener('change', (state) => {
       if (state === 'active') sync.refresh();
     });
     return () => {
+      online();
       subscription.remove();
       sync.stop();
     };

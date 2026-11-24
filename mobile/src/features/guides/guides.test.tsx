@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { createContext, type ReactElement } from 'react';
-import { AppState, Text } from 'react-native';
+import { AppState, Keyboard, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { tipStorageKey } from '../../../../frontend/src/tipsState';
 import { OFFLINE_MESSAGE } from '../../data/offline';
@@ -302,6 +302,184 @@ test('the coach leaves a growing list in place once part of it is in view', asyn
   }
 });
 
+test('the coach brings a control clear of the card when the card lays out late or covers it', async () => {
+  const scrollTo = jest.fn();
+  const scroll = { current: { scrollTo, getInnerViewRef: () => ({}) } };
+  // On first measurement the card is not laid out yet (height 0); once it lays out, the target
+  // sits partly under the coach card's top edge (y 570..610 vs bottom 584).
+  const boxes = {
+    frame: { y: 0, height: 800 },
+    content: { y: 0, height: 2000 },
+    control: { y: 570, height: 40 },
+    coach: { y: 0, height: 0 },
+  };
+  const measure = jest
+    .spyOn(coachLayout, 'measure')
+    .mockImplementation(async (_view, part) => boxes[part]);
+  const coach = (
+    <GuideCoach
+      step={{ title: 'Give an exercise a rep range', body: 'Body', target: 'split.reps' }}
+      index={1}
+      total={3}
+      scroll={scroll as never}
+      onExit={jest.fn()}
+    />
+  );
+  try {
+    const view = await show(
+      <>
+        <CoachTarget id="split.reps">
+          <Text>Reps</Text>
+        </CoachTarget>
+        {coach}
+      </>,
+    );
+    // Card has not laid out yet: first pass does not scroll with bogus 0-height coach box.
+    await act(() => new Promise<void>((done) => setTimeout(done, 450)));
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // Card lays out at y=600, height=240 (bottom=584); target ends at 610 (covered by 26 pt).
+    boxes.coach = { y: 600, height: 240 };
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 600, width: 366, height: 240 } },
+    });
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ y: 26, animated: true }));
+
+    // A later gentle pass (target layout) still scrolls when the coach covers the control.
+    scrollTo.mockClear();
+    boxes.control = { y: 576, height: 40 };
+    await fireEvent(screen.getByText('Reps'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 0, width: 80, height: 40 } },
+    });
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ y: 32, animated: true }));
+    await view.unmount();
+  } finally {
+    measure.mockRestore();
+  }
+});
+
+test('folding and unfolding the coach does not jump a scrolled tall target back to its top', async () => {
+  const listeners: Record<string, ((event?: unknown) => void) | undefined> = {};
+  const kbSpy = jest.spyOn(Keyboard, 'addListener').mockImplementation((name, fn) => {
+    listeners[name] = fn as (event?: unknown) => void;
+    return { remove: () => (listeners[name] = undefined) } as never;
+  });
+  const scrollTo = jest.fn();
+  const scroll = { current: { scrollTo, getInnerViewRef: () => ({}) } };
+  const boxes = {
+    frame: { y: 0, height: 800 },
+    content: { y: -700, height: 3000 },
+    control: { y: -600, height: 1400 },
+    coach: { y: 560, height: 240 },
+  };
+  const measure = jest
+    .spyOn(coachLayout, 'measure')
+    .mockImplementation(async (_view, part) => boxes[part]);
+  const coach = (
+    <GuideCoach
+      step={{ title: 'Plan your days', body: 'Plan body', target: 'split.days' }}
+      index={1}
+      total={6}
+      scroll={scroll as never}
+      onExit={jest.fn()}
+    />
+  );
+  try {
+    const view = await show(
+      <>
+        <CoachTarget id="split.days">
+          <Text>Days</Text>
+        </CoachTarget>
+        {coach}
+      </>,
+    );
+    // Initial expanded card layout runs the step's first non-gentle reveal.
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 560, width: 366, height: 240 } },
+    });
+    await waitFor(() => expect(scrollTo).toHaveBeenCalledWith({ y: 92, animated: true }));
+    await act(() => new Promise<void>((done) => setTimeout(done, 1150)));
+    scrollTo.mockClear();
+
+    // User scrolls down past the tall target's top, then keyboard folds and unfolds the card.
+    boxes.control = { y: -900, height: 2400 };
+    await act(async () =>
+      listeners.keyboardDidShow?.({ endCoordinates: { screenY: 500, height: 300 } }),
+    );
+    boxes.coach = { y: 400, height: 96 };
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 400, width: 366, height: 96 } },
+    });
+    await act(async () => listeners.keyboardDidHide?.());
+    boxes.coach = { y: 560, height: 240 };
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 560, width: 366, height: 240 } },
+    });
+    await act(() => new Promise<void>((done) => setTimeout(done, 250)));
+    expect(scrollTo).not.toHaveBeenCalled();
+
+    // Manual grabber fold and unfold also leave the scrolled tall target where it is.
+    await fireEvent.press(screen.getByRole('button', { name: 'Minimise guide' }));
+    boxes.coach = { y: 700, height: 96 };
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 700, width: 366, height: 96 } },
+    });
+    await fireEvent.press(screen.getByRole('button', { name: 'Show guide' }));
+    boxes.coach = { y: 560, height: 240 };
+    await fireEvent(screen.getByLabelText('Setup guide'), 'layout', {
+      nativeEvent: { layout: { x: 0, y: 560, width: 366, height: 240 } },
+    });
+    await act(() => new Promise<void>((done) => setTimeout(done, 250)));
+    expect(scrollTo).not.toHaveBeenCalled();
+    await view.unmount();
+  } finally {
+    measure.mockRestore();
+    kbSpy.mockRestore();
+  }
+});
+
+test('the coach folds while the keyboard is up and unfolds when it closes or the step changes', async () => {
+  const listeners: Record<string, ((event?: unknown) => void) | undefined> = {};
+  const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation((name, fn) => {
+    listeners[name] = fn as (event?: unknown) => void;
+    return { remove: () => (listeners[name] = undefined) } as never;
+  });
+  const step = (title: string) => ({
+    title,
+    body: `${title} body`,
+    target: 'normalise.match' as const,
+  });
+  try {
+    const view = await show(
+      <GuideCoach step={step('Match the weights')} index={2} total={4} onExit={jest.fn()} />,
+    );
+    expect(screen.getByText('Match the weights body')).toBeVisible();
+
+    await act(async () =>
+      listeners.keyboardDidShow?.({ endCoordinates: { screenY: 500, height: 344 } }),
+    );
+    expect(screen.queryByText('Match the weights body')).toBeNull();
+    expect(screen.getByText('Match the weights')).toBeVisible();
+
+    // Closing the keyboard unfolds the card again.
+    await act(async () => listeners.keyboardDidHide?.());
+    expect(screen.getByText('Match the weights body')).toBeVisible();
+
+    // Moving to the next step while the keyboard is still up unfolds the new step.
+    await act(async () =>
+      listeners.keyboardDidShow?.({ endCoordinates: { screenY: 500, height: 344 } }),
+    );
+    expect(screen.queryByText('Match the weights body')).toBeNull();
+    await view.rerender(
+      <GuideCoach step={step('Save your weights')} index={3} total={4} onExit={jest.fn()} />,
+    );
+    expect(screen.getByText('Save your weights body')).toBeVisible();
+    await view.unmount();
+  } finally {
+    spy.mockRestore();
+  }
+});
+
 test('moving from the splits page to its editor and back keeps the guide; leaving both ends it', async () => {
   const pause = (ms: number) => act(() => new Promise<void>((done) => setTimeout(done, ms)));
   function SplitScreen() {
@@ -371,14 +549,45 @@ test('Compare machines waits for unknown history instead of saying what it needs
 });
 
 test('Settings starts each setup guide in its feature', async () => {
-  mockWorkouts.current = [workout('2026-02-01')];
-  await show(<GuidesScreen />);
+  mockWorkouts.current = [
+    {
+      ...workout('2026-02-01'),
+      movements: [
+        {
+          exercise: { id: 'leg-press', name: 'Leg Press', kind: 'strength' },
+          sets: [{ weight_kg: 120, reps: 8, warmup: false }],
+          machine_photos: [{ id: 'm1' }],
+        },
+      ],
+    } as unknown as TrackedWorkout,
+    {
+      ...workout('2026-02-03'),
+      movements: [
+        {
+          exercise: { id: 'leg-press', name: 'Leg Press', kind: 'strength' },
+          sets: [{ weight_kg: 140, reps: 8, warmup: false }],
+          machine_photos: [{ id: 'm2' }],
+        },
+      ],
+    } as unknown as TrackedWorkout,
+  ];
+  const view = await show(<GuidesScreen />);
   await fireEvent.press(screen.getByRole('button', { name: 'Training blocks' }));
   expect(mockRouter.push).toHaveBeenLastCalledWith('/blocks/edit');
   expect(activeSetupGuide()?.id).toBe('blocks');
   // Leaving part way marks nothing.
   exitSetupGuide();
   expect(stored().seen).toEqual({ blocks: 'seen' });
+
+  // Compare machines opens Machine weights with Training's index anchored underneath.
+  await fireEvent.press(screen.getByRole('button', { name: 'Compare machines' }));
+  expect(mockRouter.push).toHaveBeenLastCalledWith(
+    { pathname: '/training/machine-weights/[id]', params: { id: 'leg-press' } },
+    { withAnchor: true },
+  );
+  expect(activeSetupGuide()?.id).toBe('normalise');
+  exitSetupGuide();
+  await view.unmount();
 });
 
 test('Settings lists the guides, says why Compare machines must wait, and replays the tour', async () => {

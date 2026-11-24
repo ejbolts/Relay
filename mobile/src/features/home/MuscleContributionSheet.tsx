@@ -75,7 +75,12 @@ export function MuscleContributionSheet({
             if (id === liveWorkoutId) closeThen(() => onOpenLive?.());
             else if (isPendingWorkoutId(id)) showToast('This workout is waiting to sync.');
             else
-              closeThen(() => router.push({ pathname: '/training/session/[id]', params: { id } }));
+              closeThen(() =>
+                router.push(
+                  { pathname: '/training/session/[id]', params: { id } },
+                  { withAnchor: true },
+                ),
+              );
           }}
         />
       )}

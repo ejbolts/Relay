@@ -213,11 +213,16 @@ export const apiSend = <T>(
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
   signal?: AbortSignal,
+  token?: string | null,
 ) =>
-  request<T>(path, {
-    method,
-    signal,
-    ...(body === undefined
-      ? {}
-      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-  });
+  request<T>(
+    path,
+    {
+      method,
+      signal,
+      ...(body === undefined
+        ? {}
+        : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+    },
+    token,
+  );
