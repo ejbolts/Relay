@@ -1,11 +1,12 @@
 import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen, waitFor } from '@testing-library/react-native';
-import { Text } from 'react-native';
-import { ApiError, currentUser, retryPendingSignOut } from '../data/api';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { Pressable, Text } from 'react-native';
+import { ApiError, currentUser, retryPendingSignOut, signOut } from '../data/api';
 import { readJson } from '../data/deviceStorage';
 import { sessionToken } from '../data/session';
 import { memoryKv } from '../testing/memoryKvStore';
 import { rememberUser } from './cachedUser';
+import { registerBeforeSignOut } from './sessionEpoch';
 import { SessionProvider, useSession } from './SessionProvider';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../testing/memoryKvStore'));
@@ -15,6 +16,7 @@ jest.mock('../data/api', () => ({
   apiOrigin: 'https://relay.test',
   currentUser: jest.fn(),
   retryPendingSignOut: jest.fn(async () => undefined),
+  signOut: jest.fn(async () => undefined),
 }));
 
 const user = { id: 'u1', username: 'preview' } as Awaited<ReturnType<typeof currentUser>>;
@@ -126,4 +128,46 @@ test('signing in remembers the account for offline launches', async () => {
   await open();
   await screen.findByText('Signed in as preview');
   await waitFor(() => expect(readJson(CACHE)).toEqual({ origin: 'https://relay.test', user }));
+});
+
+test('signOut runs registered beforeSignOut cleanups before revoking the token and ignores errors', async () => {
+  const order: string[] = [];
+  jest.mocked(currentUser).mockResolvedValue(user);
+  jest.mocked(signOut).mockImplementation(async () => {
+    order.push('revoke');
+  });
+  const unregisterOk = registerBeforeSignOut(async () => {
+    order.push('cleanup');
+  });
+  const unregisterFail = registerBeforeSignOut(async () => {
+    throw new Error('cleanup failed');
+  });
+  function SignOutButton() {
+    const { signOut: doSignOut } = useSession();
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Sign out"
+        onPress={() => void doSignOut()}
+      />
+    );
+  }
+  try {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    await render(
+      <QueryClientProvider client={client}>
+        <SessionProvider>
+          <Probe />
+          <SignOutButton />
+        </SessionProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByText('Signed in as preview');
+    await fireEvent.press(screen.getByRole('button', { name: 'Sign out' }));
+    expect(await screen.findByText('signed-out')).toBeVisible();
+    expect(order).toEqual(['cleanup', 'revoke']);
+  } finally {
+    unregisterOk();
+    unregisterFail();
+  }
 });

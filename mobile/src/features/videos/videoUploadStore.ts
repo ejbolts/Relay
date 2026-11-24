@@ -13,7 +13,7 @@ import {
 import { ApiError, serverOrigin } from '../../data/api';
 import { forgetSessionTokenIf, sessionToken } from '../../data/session';
 import { UploadStopped } from '../../data/uploadFile';
-import { sessionEpoch } from '../../session/sessionEpoch';
+import { registerBeforeSignOut, sessionEpoch } from '../../session/sessionEpoch';
 import { useOptionalSession } from '../../session/SessionProvider';
 import { errorMessage } from '../../ui/components';
 import { showToast, toastAccount } from '../../ui/Toast';
@@ -44,6 +44,7 @@ export interface VideoUploadState {
 
 const STILL_UPLOADABLE: WorkoutSession['status'][] = ['draft', 'uploading', 'upload_failed'];
 const UPLOAD_WAKE_LOCK_TAG = 'relay-video-upload';
+const SIGN_OUT_DELETE_TIMEOUT_MS = 2000;
 
 /** The server has started work on the batch (or finished it), so it can't be cancelled. */
 export const processingBegan = (status: WorkoutSession['status']) =>
@@ -85,6 +86,7 @@ const listeners = new Set<() => void>();
 // late reply before it can touch the next account.
 let ownerUserId: string | null = null;
 let ownerEpoch: number | null = null;
+let activeToken: string | undefined;
 let runId = 0;
 let stopped = false;
 const transfers = new Set<ClipTransfer>();
@@ -246,7 +248,43 @@ function resolveStopQuestion(choice: 'keep' | 'stop') {
   open?.settle(choice);
 }
 
-function abortAndReset(nextUserId: string | null, nextEpoch: number) {
+async function deleteSessionBestEffort(sessionId: string, token: string): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SIGN_OUT_DELETE_TIMEOUT_MS);
+  try {
+    await videoApi.removeWithToken(sessionId, token, controller.signal);
+  } catch {
+    // Best effort: never block sign-out or account switches when the server is unreachable.
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/**
+ * Deletes an unfinished upload session with its captured token before sign-out revokes it.
+ * Never throws and never delays sign-out past SIGN_OUT_DELETE_TIMEOUT_MS.
+ */
+async function cleanupActiveUploadForSignOut(): Promise<void> {
+  const session = state.session;
+  const token = activeToken;
+  if (
+    !session ||
+    !token ||
+    !STILL_UPLOADABLE.includes(session.status) ||
+    state.phase === 'starting'
+  ) {
+    return;
+  }
+  activeToken = undefined;
+  stopActiveTransfers(false);
+  await deleteSessionBestEffort(session.id, token);
+}
+
+function abortAndReset(nextUserId: string | null, nextEpoch: number, cleanup = false) {
+  const session = state.session;
+  const token = activeToken;
+  const phase = state.phase;
+  activeToken = undefined;
   runId += 1;
   ownerUserId = nextUserId;
   ownerEpoch = nextEpoch;
@@ -256,6 +294,15 @@ function abortAndReset(nextUserId: string | null, nextEpoch: number) {
   releaseWakeLock();
   state = initialState();
   emit();
+  if (
+    cleanup &&
+    session &&
+    token &&
+    STILL_UPLOADABLE.includes(session.status) &&
+    phase !== 'starting'
+  ) {
+    void deleteSessionBestEffort(session.id, token);
+  }
 }
 
 /**
@@ -266,7 +313,7 @@ function abortAndReset(nextUserId: string | null, nextEpoch: number) {
 function isRunCurrent(myRun: number, myEpoch: number): boolean {
   if (sessionEpoch() === myEpoch) return myRun === runId;
   // The session ended and nothing has rebound the store yet: stop this account's run now.
-  if (ownerEpoch === myEpoch) abortAndReset(null, sessionEpoch());
+  if (ownerEpoch === myEpoch) abortAndReset(null, sessionEpoch(), true);
   return false;
 }
 
@@ -295,7 +342,7 @@ export function syncVideoUploadSession(userId: string | null, allowed = true) {
   const epoch = sessionEpoch();
   if (!userId || !allowed) {
     if (ownerUserId !== null || ownerEpoch !== epoch || hasSessionState()) {
-      abortAndReset(null, epoch);
+      abortAndReset(null, epoch, true);
     } else {
       ownerEpoch = epoch;
     }
@@ -305,7 +352,7 @@ export function syncVideoUploadSession(userId: string | null, allowed = true) {
     (ownerUserId !== null && ownerUserId !== userId) ||
     (ownerEpoch !== null && ownerEpoch !== epoch)
   ) {
-    abortAndReset(userId, epoch);
+    abortAndReset(userId, epoch, true);
     return;
   }
   ownerUserId = userId;
@@ -355,6 +402,8 @@ export function VideoUploadSessionSync() {
   useEffect(() => {
     syncVideoUploadSession(userId, allowed);
   }, [userId, allowed, epoch]);
+
+  useEffect(() => registerBeforeSignOut(cleanupActiveUploadForSignOut), []);
 
   return null;
 }
@@ -594,6 +643,7 @@ export const videoUploadActions = {
         expected_clip_count: state.clips.length,
       });
       if (!isRunCurrent(myRun, myEpoch)) return;
+      activeToken = boundToken;
       setState({ session: created, step: 'progress', phase: 'uploading' });
       const uploaded = await uploadClips(
         created,
@@ -630,6 +680,7 @@ export const videoUploadActions = {
     try {
       const boundToken = await captureBoundToken();
       if (!isRunCurrent(myRun, myEpoch)) return;
+      activeToken = boundToken;
       const failed = state.clips.filter((clip) => clip.status === 'failed');
       const uploaded = await uploadClips(target, failed, concurrency, myRun, myEpoch, boundToken);
       if (uploaded && isRunCurrent(myRun, myEpoch) && currentPhase() === 'uploading') {
@@ -735,6 +786,7 @@ export const videoUploadActions = {
   },
 
   reset() {
+    activeToken = undefined;
     runId += 1;
     resolveStopQuestion('stop');
     clearPolling();

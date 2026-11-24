@@ -19,7 +19,7 @@ import {
   signOut as requestSignOut,
 } from '../data/api';
 import { forgetSessionToken } from '../data/session';
-import { nextSessionEpoch } from './sessionEpoch';
+import { nextSessionEpoch, runBeforeSignOut } from './sessionEpoch';
 import { forgetCachedUser, offlineUser, publicUser, rememberUser } from './cachedUser';
 
 type Status =
@@ -180,6 +180,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [client],
   );
   const signOut = useCallback(async () => {
+    await runBeforeSignOut();
     await requestSignOut();
     endSession();
   }, [endSession]);
