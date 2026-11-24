@@ -18,12 +18,15 @@ from __future__ import annotations
 
 import json
 import math
+import sqlite3
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
+from .account_backups import TIP_STATE_GENERATION_KEY
 from .account_limits import limit_save_rate
 from .auth import CurrentUser
 from .database import get_db
@@ -31,8 +34,8 @@ from .errors import api_error
 from .training_metrics import get_setting, set_setting
 
 TIP_STATE_KEY = "tip_state"
-# Server-managed: an archive restore replaces it with a new value (account_archive.py).
-TIP_STATE_GENERATION_KEY = "tip_state_generation"
+# The server-managed TIP_STATE_GENERATION_KEY (account_backups.py): an archive restore replaces
+# it with a new value (account_archive.py), and copies of the account leave it out.
 INITIAL_GENERATION = "0"
 # Matches TIP_SYNC_MAX_BYTES in frontend/src/tipSync.ts.
 MAX_TIP_STATE_BYTES = 32 * 1024
@@ -224,9 +227,28 @@ def tip_state_generation(db: Session, user_id: str) -> str:
     return get_setting(db, user_id, TIP_STATE_GENERATION_KEY, INITIAL_GENERATION)
 
 
-def start_tip_state_generation(db: Session, user_id: str) -> None:
-    """Called after an archive restore (no commit): devices adopt the restored tips."""
-    set_setting(db, user_id, TIP_STATE_GENERATION_KEY, uuid.uuid4().hex)
+def start_tip_state_generation(live: sqlite3.Connection, user_id: str) -> None:
+    """Called inside an archive restore's own transaction, so the restored tips and their new
+    generation commit together and no save can land between them: devices adopt the restore."""
+    live.execute(
+        "INSERT INTO user_settings (user_id, key, value) VALUES (?, ?, ?) "
+        "ON CONFLICT (user_id, key) DO UPDATE SET value = excluded.value",
+        (user_id, TIP_STATE_GENERATION_KEY, uuid.uuid4().hex),
+    )
+
+
+def _begin_write(db: Session) -> None:
+    """Takes the write lock before reading, so two devices saving at once are merged one after
+    the other instead of the second overwriting the first (or both creating the row)."""
+    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+
+
+# Another writer (such as a long archive restore) held the database past SQLite's wait.
+BUSY = HTTPException(
+    status_code=503,
+    detail={"error": {"code": "tip_state_busy", "message": "Tips are busy. Try again shortly."}},
+    headers={"Retry-After": "2"},
+)
 
 
 router = APIRouter(prefix="/api/tips", tags=["tips"])
@@ -262,16 +284,19 @@ def save_tip_state(
 ) -> dict[str, Any]:
     """Merges a client's tips into the account's and returns the result, with the server's
     ``generation``, for it to adopt. A client that names an earlier generation (it synced before an
-    archive restore) gets the stored tips unmerged, to replace its own."""
+    archive restore) gets the stored tips unmerged, to replace its own. A client that names none is
+    taken to hold the initial generation, so it can't merge older tips into a restored account."""
     _check_account(user, account)
     if _too_large(_encoded(payload)):
         raise api_error(413, "tip_state_too_large", "These tips are too large to save.")
-    # Take the write lock before reading, so two devices saving at once are merged one after the
-    # other instead of the second overwriting the first (or both creating the row).
-    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+    try:
+        _begin_write(db)
+    except OperationalError as error:
+        db.rollback()
+        raise BUSY from error
     current = tip_state_generation(db, user.id)
     stored = stored_tip_state(db, user.id)
-    if generation is not None and generation != current:
+    if (generation if generation is not None else INITIAL_GENERATION) != current:
         db.rollback()
         return {**stored, "generation": current}
     merged = merge_tip_states(stored, payload)

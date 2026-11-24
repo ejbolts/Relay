@@ -24,6 +24,9 @@ from sqlalchemy.orm import Session
 from .config import Settings
 from .models import AccountBackup, AccountBackupKind, User, new_uuid, utc_now
 
+# Server-managed and restarted by every restore, so a copy of the account never carries it.
+TIP_STATE_GENERATION_KEY = "tip_state_generation"
+
 BACKUP_DATABASE = "database.db"
 MANIFEST = "manifest.json"
 PHOTOS = "machine-photos"
@@ -262,6 +265,11 @@ def copy_account_rows(source: Path, target: Path, user_id: str) -> dict[str, int
                     {"user_id": user_id},
                 )
                 counts[table] = cursor.rowcount
+            if "user_settings" in counts:
+                cursor = connection.execute(
+                    "DELETE FROM main.user_settings WHERE key = ?", (TIP_STATE_GENERATION_KEY,)
+                )
+                counts["user_settings"] -= cursor.rowcount
             connection.execute("UPDATE main.users SET password_hash = ''")
             connection.execute("COMMIT")
         except BaseException:

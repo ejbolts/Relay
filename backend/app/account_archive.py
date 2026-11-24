@@ -789,6 +789,8 @@ def restore_archive(
                     check_references(live, tables, user_id, kept, inserted)
                     clear_orphans(live, already_broken, tables)
                     restored = count_rows(live, user_id)
+                    # Devices adopt the restored tips instead of merging older copies back in.
+                    start_tip_state_generation(live, user_id)
                     live.execute("COMMIT")
                     committed = True
                 except sqlite3.IntegrityError as error:
@@ -809,8 +811,6 @@ def restore_archive(
     rebuild_personal_records(db, user_id)
     # A new revision tells this account's other devices to reload their training data.
     set_setting(db, user_id, CACHE_REVISION_KEY, str(uuid.uuid4()))
-    # Devices adopt the restored tips instead of merging their older copies back in.
-    start_tip_state_generation(db, user_id)
     db.commit()
     logger.info("Restored an account archive for %s.", user.username)
     return ArchiveRestored(restored=restored, photos_skipped=len(skipped))

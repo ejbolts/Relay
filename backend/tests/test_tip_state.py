@@ -2,16 +2,20 @@ from __future__ import annotations
 
 import io
 import json
+import sqlite3
 import threading
 import time
 import zipfile
+from contextlib import closing
 from pathlib import Path
 
 import pytest
 from sqlalchemy import delete, select
+from sqlalchemy.exc import OperationalError
 from test_account_archive import download, send
 
-from app import tip_state
+from app import account_archive, tip_state
+from app.account_backups import BACKUP_DATABASE, TIP_STATE_GENERATION_KEY
 from app.database import SessionLocal
 from app.models import User, UserSetting
 from app.tip_state import MAX_TIP_STATE_BYTES, TIP_STATE_KEY, merge_tip_states
@@ -189,3 +193,68 @@ def test_devices_adopt_restored_tips_instead_of_merging_older_copies(client):
     ).json()
     assert merged["seen"] == {"swap": "dismissed", "back": "seen"}
     assert merged["enabled"] is True
+
+
+def test_a_save_at_the_end_of_a_restore_cannot_undo_it(client, monkeypatch):
+    """The restored tips and their new generation commit together: a device saving its
+    pre-restore copy right after the restore's rows commit gets the restored tips back."""
+    client.put("/api/tips", json={"enabled": True, "enabledAt": 10})
+    archive = download(client)
+    client.put("/api/tips?generation=0", json={"enabled": False, "enabledAt": 20})
+    replies = []
+    remove_photo_files = account_archive.remove_photo_files
+
+    def save_from_another_device(*args):
+        if not replies:
+            with SessionLocal() as db:
+                user = db.get(User, client.user["id"])
+                stale = {"enabled": False, "enabledAt": 30}
+                replies.append(tip_state.save_tip_state(db, user, stale, generation="0"))
+        return remove_photo_files(*args)
+
+    monkeypatch.setattr(account_archive, "remove_photo_files", save_from_another_device)
+    assert send(client, archive).status_code == 200
+    assert replies[0]["enabled"] is True
+    assert replies[0]["generation"] != "0"
+    assert client.get("/api/tips").json()["enabled"] is True
+
+
+def test_a_save_without_a_generation_cannot_override_a_restore(client):
+    client.put("/api/tips", json={"seen": {"swap": "dismissed"}, "enabled": True, "enabledAt": 10})
+    archive = download(client)
+    assert send(client, archive).status_code == 200
+    restored = client.get("/api/tips").json()
+    # A client that never recorded a generation is taken to hold the initial one.
+    reply = client.put("/api/tips", json={"enabled": False, "enabledAt": 99}).json()
+    assert reply == restored
+    assert client.get("/api/tips").json()["enabled"] is True
+
+
+def test_a_busy_database_asks_the_client_to_retry(client, monkeypatch):
+    client.put("/api/tips", json={"seen": {"swap": "seen"}})
+
+    def busy(_db):
+        raise OperationalError(
+            "BEGIN IMMEDIATE", {}, sqlite3.OperationalError("database is locked")
+        )
+
+    monkeypatch.setattr(tip_state, "_begin_write", busy)
+    response = client.put("/api/tips", json={"seen": {"plates": "learned"}})
+    assert response.status_code == 503
+    assert response.headers["retry-after"] == "2"
+    assert response.json()["error"]["code"] == "tip_state_busy"
+    monkeypatch.undo()
+    assert client.get("/api/tips").json()["seen"] == {"swap": "seen"}
+
+
+def test_copies_of_the_account_leave_out_the_tip_generation(client, tmp_path):
+    client.put("/api/tips", json={"seen": {"swap": "dismissed"}})
+    assert send(client, download(client)).status_code == 200
+    with SessionLocal() as db:
+        assert db.get(UserSetting, (client.user["id"], TIP_STATE_GENERATION_KEY)) is not None
+    with zipfile.ZipFile(io.BytesIO(download(client))) as bundle:
+        (tmp_path / "copy.db").write_bytes(bundle.read(BACKUP_DATABASE))
+    with closing(sqlite3.connect(tmp_path / "copy.db")) as copy:
+        keys = {row[0] for row in copy.execute("SELECT key FROM user_settings")}
+    assert TIP_STATE_KEY in keys
+    assert TIP_STATE_GENERATION_KEY not in keys
