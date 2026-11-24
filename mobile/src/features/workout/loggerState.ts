@@ -59,7 +59,6 @@ import {
 } from '../../../../frontend/src/workoutSets';
 import {
   suggestedSetsForPickedExercise,
-  suggestedSetsFromHistory,
   templateDraftMovements,
 } from '../../../../frontend/src/workoutStartMovements';
 import {
@@ -517,21 +516,28 @@ export function addExercises(
 
 /**
  * Swaps an exercise for another, as the web does: logged sets stay with the original, planned
- * sets move to the replacement with loads from its own last session.
+ * sets move to the replacement with loads from its own last session. A machine chosen for the
+ * replacement in the picker is pinned, and its own last session on that machine sets the loads;
+ * without a choice the logger pins the replacement's last-used machine.
  */
 export function swapExercise(
   state: LoggerState,
   movementKey: string,
   replacement: Exercise,
   context: LoggerContext,
+  machineChoices: ExerciseMachineChoices = {},
+  /** The saved workout being edited, which isn't the replacement's previous session. */
+  excludedWorkoutId?: string,
 ): LoggerState {
-  const suggested = suggestedSetsFromHistory(
+  const machine = machineSelection(replacement.id, machineChoices);
+  const suggested = suggestedSetsForPickedExercise(
     context.workouts,
     replacement,
     state.workoutDate,
-    undefined,
+    excludedWorkoutId ?? state.resumingWorkoutId ?? undefined,
     olderHistoryFor(context, state.workoutDate),
     context.defaultRest,
+    machine.machinePhotoIds[0],
     context.newKey,
   );
   const movements = swapMovementExercise(
@@ -539,7 +545,7 @@ export function swapExercise(
     movementKey,
     replacement,
     suggested,
-    machineSelection(replacement.id, {}),
+    machine,
     context.newKey,
   );
   return movements === state.movements ? state : { ...state, movements };

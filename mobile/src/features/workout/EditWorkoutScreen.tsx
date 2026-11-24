@@ -57,7 +57,6 @@ import {
   setMachineSettings,
   setMovementNotes,
   setSetKind,
-  swapExercise,
   updateSet,
   workoutIdentity,
   type EditTimes,
@@ -66,6 +65,7 @@ import {
 import { MachineSheet } from './MachineSheet';
 import { MovementCard, type MovementActions } from './MovementCard';
 import { SwapSheet } from './SwapSheet';
+import { swapOntoMachine } from './swapMachineSetup';
 import { useLogger, type LoggerApi } from './WorkoutProvider';
 
 /**
@@ -568,7 +568,8 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         lastDone={new Map()}
         onChoose={(replacement: Exercise) => {
           const key = swapping;
-          if (key) change((latest) => swapExercise(latest, key, replacement, context));
+          // Every swap goes through one path, so a newer swap supersedes an older one's loads.
+          if (key) void swapOntoMachine(change, key, replacement, context, {}, workout.id);
           setSwapping(null);
         }}
         onBrowseAll={() => {
@@ -618,10 +619,19 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         addedIds={addedIds}
         category={identity.category}
         chooseMachines
-        onAdd={(selected, machineChoices) => {
+        onAdd={(selected, machineChoices, machineUse) => {
           const target = picker?.swapping;
           if (target) {
-            if (selected[0]) change((latest) => swapExercise(latest, target, selected[0], context));
+            if (selected[0])
+              void swapOntoMachine(
+                change,
+                target,
+                selected[0],
+                context,
+                machineChoices,
+                workout.id,
+                machineUse,
+              );
           } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}
         onCreateSuperset={(selected, machineChoices) =>

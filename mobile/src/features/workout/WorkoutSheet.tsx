@@ -8,6 +8,7 @@ import { exerciseLastDoneDates } from '../../../../frontend/src/exerciseLastDone
 import { liveMuscleSets, type MuscleSetsWeek } from '../../../../frontend/src/liveMuscleSets';
 import { bodyweightOn } from '../../../../frontend/src/relativeStrength';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
+import type { ExerciseMachineChoices } from '../../../../frontend/src/exerciseMachineChoices';
 import type { Exercise } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import {
@@ -58,7 +59,6 @@ import {
   mergeMachines,
   setMachineSettings,
   setSetKind,
-  swapExercise,
   ungroupSuperset,
   workoutIdentity,
   type LoggerState,
@@ -67,6 +67,7 @@ import { MovementCard, type MovementActions } from './MovementCard';
 import { RestBar } from './RestBar';
 import { MachineSheet } from './MachineSheet';
 import { SwapSheet } from './SwapSheet';
+import { swapOntoMachine } from './swapMachineSetup';
 import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { restMenuItems } from './restChoices';
@@ -216,10 +217,23 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const closeShelf = useCallback(() => setShelf(null), []);
 
   const swap = useCallback(
-    (movementKey: string, replacement: Exercise) => {
+    (
+      movementKey: string,
+      replacement: Exercise,
+      machineChoices?: ExerciseMachineChoices,
+      machineUse?: Readonly<Record<string, number>>,
+    ) => {
       const before = getState();
       if (!before) return;
-      change((current) => swapExercise(current, movementKey, replacement, context));
+      void swapOntoMachine(
+        change,
+        movementKey,
+        replacement,
+        context,
+        machineChoices,
+        undefined,
+        machineUse,
+      );
       showToast(`Swapped to ${replacement.name}`, {
         label: 'Undo',
         run: () => change((current) => ({ ...current, movements: before.movements })),
@@ -752,10 +766,10 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         category={identity.category}
         chooseMachines
         lastDone={lastDone}
-        onAdd={(selected, machineChoices) => {
+        onAdd={(selected, machineChoices, machineUse) => {
           const target = picker?.swapping;
           if (target) {
-            if (selected[0]) swap(target, selected[0]);
+            if (selected[0]) swap(target, selected[0], machineChoices, machineUse);
           } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}
         onCreateSuperset={(selected, machineChoices) =>
