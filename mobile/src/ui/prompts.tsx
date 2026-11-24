@@ -43,6 +43,15 @@ interface TextRequest {
 type Request = MenuRequest | TextRequest;
 type Host = (request: Request | null) => void;
 const hosts: Host[] = [];
+/** iOS's own action sheet or text prompt is up (they answer through a callback). */
+let nativeShowing = false;
+/** The prompt host's menu sheet or text dialog is up. */
+let hostShowing = false;
+
+/** A menu or text prompt is on screen, so the logger's tips wait for it, as the web's do. */
+export function promptShowing() {
+  return nativeShowing || hostShowing;
+}
 
 /** A list of actions, with Cancel. */
 export function showMenu(title: string | undefined, options: MenuOption[]) {
@@ -55,8 +64,12 @@ export function showMenu(title: string | undefined, options: MenuOption[]) {
         cancelButtonIndex: options.length,
         destructiveButtonIndex: destructive,
       },
-      (index) => options[index]?.onPress(),
+      (index) => {
+        nativeShowing = false;
+        options[index]?.onPress();
+      },
     );
+    nativeShowing = true;
     return;
   }
   hosts.at(-1)?.({ kind: 'menu', title, options });
@@ -69,15 +82,25 @@ export function promptText(request: Omit<TextRequest, 'kind'>) {
       request.title,
       undefined,
       [
-        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => {
+            nativeShowing = false;
+          },
+        },
         {
           text: request.submitLabel,
-          onPress: (value?: string) => request.onSubmit(value ?? ''),
+          onPress: (value?: string) => {
+            nativeShowing = false;
+            request.onSubmit(value ?? '');
+          },
         },
       ],
       'plain-text',
       request.value,
     );
+    nativeShowing = true;
     return;
   }
   hosts.at(-1)?.({ kind: 'text', ...request });
@@ -92,6 +115,12 @@ export function PromptHost() {
       hosts.splice(hosts.indexOf(host), 1);
     };
   }, []);
+  useEffect(() => {
+    hostShowing = !!request;
+    return () => {
+      hostShowing = false;
+    };
+  }, [request]);
   const close = () => setRequest(null);
   return (
     <Modal

@@ -134,6 +134,13 @@ import { SupersetPicker } from './SupersetPicker';
 import { WarmupOnlyFinishDialog, type WarmupOnlyMovement } from './WarmupOnlyFinishDialog';
 import { loggedOnlyWarmups, warmupOnlyMovements as warmupOnly } from './workingSetCheck';
 import { foldedMovementSummary, workingSetsDone } from './movementFold';
+import {
+  machineTipEligible,
+  readdsRemovedSet,
+  replacesRemovedExercise,
+  savedWorkoutCount,
+  type TipRemoval,
+} from './tipTriggers';
 import { PlateCalculatorDialog } from './PlateCalculator';
 import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
@@ -3598,7 +3605,7 @@ function WorkoutLogger({
   const [endTime, setEndTime] = useState(workoutTimeInputValue(initialWorkout?.end_time ?? null));
   const sourceWorkout = initialWorkout ?? (restoredDraft ? null : resumingWorkout);
   const tips = useTips();
-  const recentRemoval = useRef<{ kind: 'set' | 'exercise'; key: string; at: number } | null>(null);
+  const recentRemoval = useRef<TipRemoval | null>(null);
   const [movements, setMovements] = useState<DraftMovement[]>(() =>
     sourceWorkout
       ? savedWorkoutMovements(sourceWorkout, () => crypto.randomUUID())
@@ -4127,10 +4134,12 @@ function WorkoutLogger({
         : nextMovements;
     });
     if (
-      recentRemoval.current?.kind === 'exercise' &&
-      Date.now() - recentRemoval.current.at < 120000 &&
-      selected.length &&
-      historicalWorkouts.filter((workout) => !workout.is_sample).length >= 5
+      replacesRemovedExercise(
+        recentRemoval.current,
+        selected.length,
+        savedWorkoutCount(historicalWorkouts),
+        Date.now(),
+      )
     )
       tips.event('replace-exercise', 'swap');
     recentRemoval.current = null;
@@ -4545,11 +4554,7 @@ function WorkoutLogger({
 
   /** Adds a set at `position` (the end by default), copying the set above it, or set 1 at the start. */
   function addSet(movement: DraftMovement, position?: number) {
-    if (
-      recentRemoval.current?.kind === 'set' &&
-      recentRemoval.current.key === movement.key &&
-      Date.now() - recentRemoval.current.at < 120000
-    )
+    if (readdsRemovedSet(recentRemoval.current, movement.key, Date.now()))
       tips.event('re-add-set', 'reorder');
     recentRemoval.current = null;
     setMovements((current) =>
@@ -5249,20 +5254,7 @@ function WorkoutLogger({
               onAddSet={() => addSet(movement)}
               onInsertSet={(position) => addSet(movement, position)}
               onSwitch={() => setSwapSheetMovementKey(movement.key)}
-              machineTipEligible={
-                /machine|cable/i.test(movement.exercise.equipment ?? '') &&
-                historicalWorkouts.filter(
-                  (workout) =>
-                    !workout.is_sample &&
-                    workout.movements.some((item) => item.exercise.id === movement.exercise.id),
-                ).length >= 3 &&
-                !historicalWorkouts.some((workout) =>
-                  workout.movements.some(
-                    (item) =>
-                      item.exercise.id === movement.exercise.id && item.machine_photos.length > 0,
-                  ),
-                )
-              }
+              machineTipEligible={machineTipEligible(movement.exercise, historicalWorkouts)}
               onRemove={() => removeMovement(movement.key)}
               onMoveUp={() => moveMovement(movementIndex, -1)}
               onMoveDown={() => moveMovement(movementIndex, 1)}

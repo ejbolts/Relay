@@ -56,6 +56,7 @@ jest.mock('./restAlerts', () => ({
 jest.mock('../../ui/prompts', () => ({
   promptText: jest.fn(),
   showMenu: jest.fn(),
+  promptShowing: () => mockPromptOpen.value,
   PromptHost: () => null,
 }));
 jest.mock('../../ui/Toast', () => ({
@@ -75,11 +76,18 @@ jest.mock('../../data/api', () => ({
   apiGet: jest.fn(async () => []),
 }));
 /** Whether last week's push day counts as a saved workout (it is sample data otherwise). */
-const mockSavedHistory = { value: false };
+const mockSavedHistory = { value: false, five: false };
+/** Whether a menu or text prompt is up, as ui/prompts reports it. */
+const mockPromptOpen = { value: false };
 jest.mock('../../data/queries', () => {
   const fixtures = jest.requireActual<typeof import('./testFixtures')>('./testFixtures');
   const sample = [fixtures.lastPush];
   const saved = [{ ...fixtures.lastPush, is_sample: false }];
+  const five = [1, 2, 3, 4, 5].map((n) => ({
+    ...fixtures.lastPush,
+    id: `push-${n}`,
+    is_sample: false,
+  }));
   return {
     ...jest.requireActual<typeof import('../../data/queries')>('../../data/queries'),
     useDashboard: () => ({
@@ -88,7 +96,9 @@ jest.mock('../../data/queries', () => {
         history: { first_workout_date: '2025-01-04' },
       },
     }),
-    useWorkoutHistory: () => ({ data: mockSavedHistory.value ? saved : sample }),
+    useWorkoutHistory: () => ({
+      data: mockSavedHistory.five ? five : mockSavedHistory.value ? saved : sample,
+    }),
     useWorkoutTypes: () => ({
       data: fixtures.types,
       isPlaceholderData: false,
@@ -112,6 +122,8 @@ beforeEach(() => {
   memoryKv.clear();
   resetTipsForTests();
   mockSavedHistory.value = false;
+  mockSavedHistory.five = false;
+  mockPromptOpen.value = false;
   jest.replaceProperty(Platform, 'OS', 'android');
   jest.mocked(currentUser).mockResolvedValue(user);
   jest.mocked(useUpNext).mockReturnValue({
@@ -521,10 +533,60 @@ describe('tips beside the logger', () => {
     expect(await screen.findByText('One less tap', {}, TIP_WAIT)).toBeVisible();
   }, 30000);
 
-  test('moving a set and swapping an exercise learn their tips', async () => {
+  test('moving a set learns the reorder tip', async () => {
     await openLogger();
     await fireEvent.press(screen.getAllByLabelText(/^Set 1 type: /)[0]);
     await act(async () => option(menuCall('Set 1'), 'Move down').onPress());
     expect(storedTips().seen.reorder).toBe('learned');
   });
+
+  test('swapping an exercise learns the swap tip', async () => {
+    await openLogger();
+    expect(storedTips().seen.swap).toBeUndefined();
+    await fireEvent.press(screen.getByRole('button', { name: 'Actions for Bench Press' }));
+    await act(async () =>
+      option(
+        jest.mocked(showMenu).mock.calls.at(-1)![1] as MenuOption[],
+        'Swap exercise',
+      ).onPress(),
+    );
+    await fireEvent.press(await screen.findByRole('button', { name: 'Browse all exercises' }));
+    await fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' }));
+    expect(draft()?.movements.map((item) => item.exerciseId)).toEqual(['press']);
+    expect(storedTips().seen.swap).toBe('learned');
+  });
+
+  test('removing an exercise and adding another soon after counts as replacing it', async () => {
+    mockSavedHistory.five = true;
+    await openLogger();
+    await fireEvent.press(screen.getByRole('button', { name: 'Actions for Bench Press' }));
+    await act(async () =>
+      option(
+        jest.mocked(showMenu).mock.calls.at(-1)![1] as MenuOption[],
+        'Remove exercise',
+      ).onPress(),
+    );
+    expect(storedTips().counts['replace-exercise']).toBeUndefined();
+    await addOverheadPress();
+    expect(storedTips().counts['replace-exercise']).toBe(1);
+  });
+
+  test('a pending tip waits while a set is dragged or a menu is open', async () => {
+    await openLogger();
+    await logWarmup();
+    // Pick a set up and keep holding it: the set type tip waits.
+    await layOutSets();
+    await act(async () => dragOf(1).onActivate());
+    await pause(3000);
+    expect(screen.queryByText('Warm-up or working set?')).toBeNull();
+    // A menu opens as the drag ends: still waiting.
+    mockPromptOpen.value = true;
+    await act(async () => dragOf(1).onDeactivate({ canceled: true }));
+    await pause(2500);
+    expect(screen.queryByText('Warm-up or working set?')).toBeNull();
+    expect(storedTips().shows?.setType).toBeUndefined();
+    // Once nothing is in the way, the quiet moment starts again and the tip shows.
+    mockPromptOpen.value = false;
+    expect(await screen.findByText('Warm-up or working set?', {}, TIP_WAIT)).toBeVisible();
+  }, 30000);
 });

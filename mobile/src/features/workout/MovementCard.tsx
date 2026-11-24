@@ -62,7 +62,7 @@ import { promptText } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
 import { ExerciseIcon } from '../../ui/ExerciseIcon';
-import { LoggerTipSlot } from '../guides/LoggerTips';
+import { LoggerTipSlot, useLoggerTips } from '../guides/LoggerTips';
 import { restTimesPreference } from '../settings/devicePreferences';
 import { CardioSetImport } from './CardioSetImport';
 import { lastUsedMachines, useMachinePhotos } from './loggerQueries';
@@ -250,6 +250,13 @@ export const MovementCard = memo(function MovementCard({
   const setKeys = movement.sets.map((item) => item.key);
   const setDrag = useSetDrag(setKeys, dropSet);
   const dragFrom = setDrag.drag ? setKeys.indexOf(setDrag.drag.key) : -1;
+  // Tips keep away while a set is being dragged.
+  const { hold: holdTips } = useLoggerTips();
+  const dragging = !!setDrag.drag;
+  useEffect(
+    () => (dragging ? holdTips(`drag:${movement.key}`) : undefined),
+    [dragging, holdTips, movement.key],
+  );
 
   return (
     <View

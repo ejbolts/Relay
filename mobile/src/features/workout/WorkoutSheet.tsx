@@ -35,6 +35,13 @@ import {
 } from '../../../../frontend/src/workoutPr';
 import { activeElapsedSeconds } from '../../../../frontend/src/workoutPause';
 import { isSupersetUpNext } from '../../../../frontend/src/workoutSupersets';
+import {
+  machineTipEligible,
+  readdsRemovedSet,
+  replacesRemovedExercise,
+  savedWorkoutCount,
+  type TipRemoval,
+} from '../../../../frontend/src/tipTriggers';
 import { newId } from '../../data/deviceStorage';
 import { useDashboard, useTrainingPreferences } from '../../data/queries';
 import { Button } from '../../ui/components';
@@ -156,7 +163,8 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   // Settings › Rest timer off hides the header's rest button, as on the web.
   const restTimerOn = restTimerPreference.use();
   const router = useRouter();
-  const { discard } = useWorkout();
+  const { discard, syncConflict, syncConflictOpen: conflictSheetOpen } = useWorkout();
+  const syncConflictOpen = !!syncConflict && conflictSheetOpen;
   const insets = useSafeAreaInsets();
   const { colors, type, space, radius } = useTheme();
   // The exercise picker adds exercises, or picks a replacement for the exercise being swapped.
@@ -166,12 +174,9 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const { change, types, context, getState, updateSet: applySetUpdate } = logger;
   // The web's tip pop-ups beside logger controls, fed by the same events.
   const loggerTips = useLoggerTips();
-  const savedWorkouts = useMemo(
-    () => logger.history.filter((workout) => !workout.is_sample),
-    [logger.history],
-  );
-  /** An exercise removed a moment ago, which choosing another may have been replacing. */
-  const recentRemoval = useRef<number | null>(null);
+  const savedWorkouts = savedWorkoutCount(logger.history);
+  /** The latest set or exercise removed, which adding its like again soon after may redo. */
+  const recentRemoval = useRef<TipRemoval | null>(null);
   const identity = workoutIdentity(state, types);
   const elapsed = useElapsed(state.startedAt, state.pause, state.previousDurationMinutes);
   // The clock correction opens on the clock as it reads then (this session's training time),
@@ -277,16 +282,18 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       const movement = before?.movements.find((item) => item.key === movementKey);
       if (!before || !movement) return;
       const remove = () => {
-        recentRemoval.current = Date.now();
+        recentRemoval.current = { kind: 'exercise', key: movementKey, at: Date.now() };
         change((current) => removeMovement(current, movementKey));
         showToast(`${movement.exercise.name} removed`, {
           label: 'Undo',
-          run: () =>
+          run: () => {
+            recentRemoval.current = null;
             change((current) =>
               current.movements.some((item) => item.key === movementKey)
                 ? current
                 : { ...current, movements: before.movements },
-            ),
+            );
+          },
         });
       };
       if (!movement.sets.some((item) => item.completed)) {
@@ -303,16 +310,23 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
 
   // Removing an exercise and choosing another soon after is what Swap exercise does in one go.
   const exercisesAdded = (count: number) => {
-    const removedAt = recentRemoval.current;
+    const removal = recentRemoval.current;
     recentRemoval.current = null;
-    if (
-      removedAt !== null &&
-      Date.now() - removedAt < 120_000 &&
-      count &&
-      savedWorkouts.length >= 5
-    )
+    if (replacesRemovedExercise(removal, count, savedWorkouts, Date.now()))
       loggerTips.event('replace-exercise', 'swap');
   };
+  // Adding a set soon after deleting one from the same exercise is counted as on the web. The
+  // app doesn't show the reorder tip it asks for there (its text is about the web's handle).
+  const { addSet: addLoggerSet } = logger;
+  const addSet = useCallback(
+    (movementKey: string, position?: number) => {
+      const removal = recentRemoval.current;
+      recentRemoval.current = null;
+      if (readdsRemovedSet(removal, movementKey, Date.now())) loggerTips.event('re-add-set');
+      addLoggerSet(movementKey, position);
+    },
+    [addLoggerSet, loggerTips],
+  );
   const openMachines = useCallback(
     (movementKey: string) => {
       loggerTips.learn('machine');
@@ -442,8 +456,8 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         if (next === 'hide') setShelf(null);
         else if (next) setShelf({ id: ++shelfId.current, gains: next });
       },
-      addSet: logger.addSet,
-      insertSet: logger.addSet,
+      addSet,
+      insertSet: addSet,
       deleteSet: (movementKey, setKey, via) => {
         const movement = getState()?.movements.find((item) => item.key === movementKey);
         const index = movement?.sets.findIndex((item) => item.key === setKey) ?? -1;
@@ -456,11 +470,15 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           return;
         }
         const removed = movement.sets[index];
+        recentRemoval.current = { kind: 'set', key: movementKey, at: Date.now() };
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         change((latest) => deleteSet(latest, movementKey, setKey));
         showToast('Set deleted', {
           label: 'Undo',
-          run: () => change((latest) => restoreSet(latest, movementKey, removed, index)),
+          run: () => {
+            recentRemoval.current = null;
+            change((latest) => restoreSet(latest, movementKey, removed, index));
+          },
         });
       },
       moveSet: (movementKey, setKey, move) => {
@@ -508,7 +526,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     }),
     [
       applySetUpdate,
-      logger.addSet,
+      addSet,
       change,
       getState,
       openActions,
@@ -616,28 +634,20 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   }
 
   // Tips wait while anything is over the logger, and nudges sit above the bottom docks.
-  const tipsReady = !picker && !swapping && !machinesFor && !timeEditor.open;
+  // As the web's tips wait for its weekly sets shelf, these wait for the shelf, every sheet and
+  // the sync choice.
+  const tipsReady =
+    !picker && !swapping && !machinesFor && !timeEditor.open && !shelf && !syncConflictOpen;
   const tipsBottom = insets.bottom + (restShown || shelf ? 150 : 28);
   const { configure: configureTips } = loggerTips;
   useEffect(() => {
     configureTips({
       ready: tipsReady,
       resting: restRunning,
-      workoutCount: savedWorkouts.length,
+      workoutCount: savedWorkouts,
       bottom: tipsBottom,
     });
-  }, [configureTips, tipsReady, restRunning, savedWorkouts.length, tipsBottom]);
-  // The machine photo tip, for a machine or cable exercise logged a few times without one.
-  const machineTipFor = (exercise: Exercise) =>
-    /machine|cable/i.test(exercise.equipment ?? '') &&
-    savedWorkouts.filter((workout) =>
-      workout.movements.some((item) => item.exercise.id === exercise.id),
-    ).length >= 3 &&
-    !savedWorkouts.some((workout) =>
-      workout.movements.some(
-        (item) => item.exercise.id === exercise.id && item.machine_photos.length > 0,
-      ),
-    );
+  }, [configureTips, tipsReady, restRunning, savedWorkouts, tipsBottom]);
 
   const supersetNames = (groupKey: string | null) =>
     groupKey
@@ -821,7 +831,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
               workoutDate={state.workoutDate}
               weightUnit={logger.weightUnit}
               skipHighRepWarning={state.skipHighRepWarning}
-              machineTip={machineTipFor(movement.exercise)}
+              machineTip={machineTipEligible(movement.exercise, logger.history)}
               supersetUpNext={isSupersetUpNext(state.movements, movement.key)}
               actions={actions}
             />

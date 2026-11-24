@@ -35,6 +35,7 @@ import { useUser } from '../../session/SessionProvider';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import * as prompts from '../../ui/prompts';
 import { toastShowing } from '../../ui/Toast';
 import { guideIcons } from './icons';
 import { tipsFor, useTips } from './tips';
@@ -42,9 +43,10 @@ import { tipsFor, useTips } from './tips';
 /**
  * The logger's tip pop-ups, as the web's TipsProvider shows them in the logger: an event (such as
  * a first logged warm-up) asks for a nudge, which appears in a quiet moment between sets; a dot
- * beside an eligible control (the machine row) opens its tip. Tips use the account's shared tip
- * state, so one dismissed here counts on Home's bulb, the Tips page and the web, and Show tips
- * off stops them.
+ * beside an eligible control (the machine row) opens its tip. Tips use the account's tip state
+ * on this phone (the web's format and key), so one dismissed here counts on Home's bulb and the
+ * Tips page, and Show tips off stops them. Like the web's, that state stays on the device: it
+ * does not follow the account to the web or another phone.
  */
 
 const PAGE = 'log';
@@ -75,6 +77,8 @@ interface LoggerTipsApi {
   /** The hint showing beside a control: its slot's key, or null. */
   hintSlot: string | null;
   registerHint: (key: string, hint: Hint) => () => void;
+  /** Keeps tips away while something is going on (a drag); returns the release. */
+  hold: (key: string) => () => void;
   /** Retires the showing tip. */
   dismiss: () => void;
   engage: (id: TipId) => void;
@@ -88,16 +92,31 @@ const LoggerTipsContext = createContext<LoggerTipsApi>({
   learn: noop,
   hintSlot: null,
   registerHint: () => noop,
+  hold: () => noop,
   dismiss: noop,
   engage: noop,
 });
 
 export const useLoggerTips = () => useContext(LoggerTipsContext);
 
-/** Nothing else is going on: no toast, keyboard or app switch, as the web's quiet check. */
-function quiet() {
+/** A menu or text prompt is up. (Screen tests often mock the prompts module without it.) */
+const promptOpen = () =>
+  typeof prompts.promptShowing === 'function' ? prompts.promptShowing() : false;
+
+/**
+ * Nothing else is going on, as the web's quiet check: no toast, menu or prompt, keyboard, app
+ * switch, or anything the logger holds the tips for (such as a set being dragged).
+ */
+function quiet(holds: ReadonlySet<string>) {
   const app = AppState.currentState;
-  return !toastShowing() && !Keyboard.isVisible() && app !== 'background' && app !== 'inactive';
+  return (
+    holds.size === 0 &&
+    !toastShowing() &&
+    !promptOpen() &&
+    !Keyboard.isVisible() &&
+    app !== 'background' &&
+    app !== 'inactive'
+  );
 }
 
 export function LoggerTipsProvider({ children }: { children: ReactNode }) {
@@ -113,9 +132,10 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
   const [bottom, setBottom] = useState(24);
   const pending = useRef(new Map<TipId, TipRequest>());
   const hints = useRef(new Map<string, Hint>());
+  const holds = useRef(new Set<string>());
   const completedSetAt = useRef(0);
   const quietSince = useRef(0);
-  const shown = useRef<{ id: TipId; page: string; at: number } | null>(null);
+  const shown = useRef<{ id: TipId; page: string; at: number; slot: string | null } | null>(null);
 
   const close = useCallback(() => {
     shown.current = null;
@@ -154,6 +174,14 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
         hints.current.set(key, hint);
         return () => {
           hints.current.delete(key);
+          // Its control went (folded, removed or no longer eligible): the hint goes with it.
+          if (shown.current?.slot === key) close();
+        };
+      },
+      hold: (key) => {
+        holds.current.add(key);
+        return () => {
+          holds.current.delete(key);
         };
       },
       dismiss: () => {
@@ -180,7 +208,7 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
           hint.visible = width > 0 && y >= 0 && y + h < height - BOTTOM_RESERVED;
         });
       const tipState = tips.get();
-      if (!current.ready || !tipState.enabled || !quiet()) {
+      if (!current.ready || !tipState.enabled || !quiet(holds.current)) {
         quietSince.current = 0;
         if (shown.current) close();
         return;
@@ -188,7 +216,10 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
       if (!quietSince.current) quietSince.current = now;
       if (shown.current) {
         const { id } = shown.current;
-        if (shownTipEnds(id, shown.current, current, completedSetAt.current, now)) {
+        const slot = shown.current.slot;
+        // A hint whose control scrolled away or went is put away, so other tips can show.
+        const anchorGone = slot !== null && !hints.current.get(slot)?.visible;
+        if (anchorGone || shownTipEnds(id, shown.current, current, completedSetAt.current, now)) {
           close();
           return;
         }
@@ -203,9 +234,10 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
       const id = nudge ?? hint?.[1].id;
       if (!id) return;
       tips.shown(id, now);
-      shown.current = { id, page: PAGE, at: now };
+      const slot = nudge ? null : (hint?.[0] ?? null);
+      shown.current = { id, page: PAGE, at: now, slot };
       pending.current.delete(id);
-      setActive({ id, slot: nudge ? null : (hint?.[0] ?? null) });
+      setActive({ id, slot });
       if (nudge) {
         const tip = TIP_DEFINITIONS[id];
         AccessibilityInfo.announceForAccessibility(`Quick tip. ${tip.title}. ${tip.body}`);
