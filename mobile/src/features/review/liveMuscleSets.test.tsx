@@ -60,6 +60,8 @@ jest.mock('../workout/workoutReminders', () => ({
   remindAboutRestAlerts: jest.fn(async () => undefined),
   syncInactiveReminder: jest.fn(async () => undefined),
   takeLaunchReminder: jest.fn(async () => undefined),
+  holdReminder: jest.requireActual('../workout/workoutReminders').holdReminder,
+  takeHeldReminder: jest.requireActual('../workout/workoutReminders').takeHeldReminder,
 }));
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 
