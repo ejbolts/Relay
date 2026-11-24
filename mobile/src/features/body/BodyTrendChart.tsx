@@ -470,6 +470,7 @@ export function TrendPlot({
                     plotBottom: height - PAD.bottom,
                   },
                   goal.maxValue != null ? model.y(goal.maxValue) : null,
+                  model.coords,
                 );
                 return (
                   <SvgText
