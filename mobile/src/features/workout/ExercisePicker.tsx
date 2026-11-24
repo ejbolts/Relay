@@ -108,8 +108,12 @@ export function ExercisePicker({
   const machinesQuery = useAllMachinePhotos(visible && machinesOn);
   const allMachines = machinesQuery.data;
   // Until the saved machines are known, a picked replacement can't be swapped on one tap: it may
-  // have machines to choose from.
-  const catalogKnown = !machinesOn || allMachines !== undefined;
+  // have machines to choose from. A list being read again (after a workout was saved, or once
+  // it is old) is provisional too: it still shows its machines to choose from, but nothing is
+  // chosen automatically from it, as its last-used machine may have changed.
+  const catalogKnown =
+    !machinesOn ||
+    (allMachines !== undefined && !(machinesQuery.isStale && machinesQuery.isFetching));
   const catalogProblem = catalogKnown
     ? null
     : waitingForNetwork(machinesQuery)
@@ -129,15 +133,21 @@ export function ExercisePicker({
   const [session, setSession] = useState(0);
   const sessionRef = useRef(session);
   const selectedRef = useRef(selected);
+  const choicesRef = useRef(machineChoices);
   useEffect(() => {
     sessionRef.current = session;
     selectedRef.current = selected;
-  }, [session, selected]);
-  const resolvedChoices = resolveMachineChoices(
-    selected.map((exercise) => exercise.id),
-    savedMachines,
-    machineChoices,
-  );
+    choicesRef.current = machineChoices;
+  }, [session, selected, machineChoices]);
+  // With the list known, a picked exercise starts on its last-used machine; until then only
+  // machines chosen here count, and the logger restores the rest from their last session.
+  const resolvedChoices = catalogKnown
+    ? resolveMachineChoices(
+        selected.map((exercise) => exercise.id),
+        savedMachines,
+        machineChoices,
+      )
+    : explicitChoices(selected, machineChoices);
   const equipmentOptions = useMemo(() => exerciseEquipmentOptions(exercises), [exercises]);
   const eligible = useMemo(() => exercises.filter((exercise) => !exercise.hidden), [exercises]);
   // The web's Body part and Equipment filters narrow the list before the search ranks it.
@@ -220,7 +230,13 @@ export function ExercisePicker({
     );
     void client.invalidateQueries({ queryKey: loggerKeys.machines(exercise.id) });
     const ids = (items: Exercise[]) => items.map((item) => item.id).join();
-    if (sessionRef.current !== session || ids(selectedRef.current) !== ids(selected)) return;
+    // A machine chosen meanwhile is a newer choice than the photo, so it stays.
+    if (
+      sessionRef.current !== session ||
+      ids(selectedRef.current) !== ids(selected) ||
+      choicesRef.current !== machineChoices
+    )
+      return;
     setMachineChoices((current) =>
       swap ? { [exercise.id]: photo.id } : { ...current, [exercise.id]: photo.id },
     );
@@ -570,12 +586,20 @@ export function ExercisePicker({
               </View>
             )}
             <Button
-              label={catalogKnown ? 'Swap exercise' : 'Swap without choosing a machine'}
+              label={
+                catalogKnown || resolvedChoices[selected[0].id] !== undefined
+                  ? 'Swap exercise'
+                  : 'Swap without choosing a machine'
+              }
               icon={{ sf: 'arrow.left.arrow.right', md: 'swap-horiz' }}
-              variant={catalogKnown ? 'primary' : 'secondary'}
+              variant={
+                catalogKnown || resolvedChoices[selected[0].id] !== undefined
+                  ? 'primary'
+                  : 'secondary'
+              }
               block
               onPress={() => {
-                onAdd([selected[0]], catalogKnown ? resolvedChoices : {});
+                onAdd([selected[0]], resolvedChoices);
                 close();
               }}
             />
@@ -604,6 +628,18 @@ export function ExercisePicker({
         />
       )}
     </Modal>
+  );
+}
+
+/** The machines chosen here for the picked exercises, without any automatic default. */
+function explicitChoices(
+  selected: Exercise[],
+  choices: ExerciseMachineChoices,
+): ExerciseMachineChoices {
+  return Object.fromEntries(
+    selected
+      .filter((exercise) => choices[exercise.id] !== undefined)
+      .map((exercise) => [exercise.id, choices[exercise.id]]),
   );
 }
 

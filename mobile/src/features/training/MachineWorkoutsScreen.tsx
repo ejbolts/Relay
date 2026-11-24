@@ -90,7 +90,8 @@ function MachineWorkouts({
   const [today] = useState(localDate);
   const client = useQueryClient();
   const query = useMachineWorkouts(photoId);
-  const catalog = useAllMachinePhotos().data;
+  const catalogQuery = useAllMachinePhotos();
+  const catalog = catalogQuery.data;
   const workouts = query.data ?? null;
   // A machine merged into another since this filter was opened answers as the machine it now
   // belongs to: its photo ids alias the survivor (the shared rule in exerciseHistory.ts).
@@ -103,6 +104,16 @@ function MachineWorkouts({
     [catalog, pinned, photoId],
   );
   const machine = catalog?.find((item) => item.id === machineId);
+  // A machine the cached list doesn't know yet (merged into elsewhere) shows as its workouts
+  // pin it: the canonical photo, its name and its exercise.
+  const pinnedMachine = pinned.find((photo) => photo.id === machineId);
+  const pinnedExercise = workouts
+    ?.flatMap((item) => item.movements)
+    .find((movement) => movement.machine_photos?.some((photo) => photo.id === machineId))
+    ?.exercise.name;
+  const bannerPhoto = machine?.thumbnail_url ?? pinnedMachine?.thumbnail_url ?? null;
+  const bannerCaption = machine?.caption || pinnedMachine?.caption || caption || 'Machine';
+  const bannerExercise = machine?.exercise_name || pinnedExercise || exerciseName;
   // The newest workout opens first, as on the web, until another is opened or closed.
   const [chosenOpen, setChosenOpen] = useState<string | null | undefined>(undefined);
   const openId = chosenOpen === undefined ? (workouts?.[0]?.id ?? null) : chosenOpen;
@@ -146,20 +157,22 @@ function MachineWorkouts({
       contentInsetAdjustmentBehavior="automatic"
       contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: space.xxl * 2 }}
       refreshControl={
-        <RefreshControl refreshing={query.isRefetching} onRefresh={() => void query.refetch()} />
+        <RefreshControl
+          refreshing={query.isRefetching}
+          // The machine list too, so a merge made elsewhere shows in the banner.
+          onRefresh={() => void Promise.all([query.refetch(), catalogQuery.refetch()])}
+        />
       }
     >
       <Card accessibilityLabel="Machine filter">
         <View style={styles.banner}>
-          <BannerPhoto url={machine?.thumbnail_url ?? null} />
+          <BannerPhoto url={bannerPhoto} />
           <View style={{ flex: 1, gap: 2 }}>
             <Text accessibilityRole="header" style={[type.title, { color: colors.text }]}>
-              {machine?.caption || caption || 'Machine'}
+              {bannerCaption}
             </Text>
-            {!!(machine?.exercise_name || exerciseName) && (
-              <Text style={[type.callout, { color: colors.secondary }]}>
-                {machine?.exercise_name || exerciseName}
-              </Text>
+            {!!bannerExercise && (
+              <Text style={[type.callout, { color: colors.secondary }]}>{bannerExercise}</Text>
             )}
             <Text
               accessibilityRole={error ? 'alert' : 'text'}

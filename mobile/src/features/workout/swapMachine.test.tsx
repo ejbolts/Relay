@@ -1,11 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useEffect, type ReactNode } from 'react';
-import { Platform } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import type { MachinePhotoUsage } from '../../../../frontend/src/types';
 import { readActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
-import { apiGet, currentUser } from '../../data/api';
+import { ApiError, apiGet, currentUser } from '../../data/api';
 import { deviceStorage } from '../../data/deviceStorage';
+import { forgetSessionTokenIf, sessionToken } from '../../data/session';
 import { useUpNext } from '../../data/queries';
 import { SessionProvider } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
@@ -17,6 +18,7 @@ import {
   finishInput,
   startLogger,
   swapExercise,
+  updateSet,
   type LoggerState,
 } from './loggerState';
 import { askForMachinePhoto, uploadMachinePhoto } from './machineMedia';
@@ -79,10 +81,14 @@ jest.mock('../../ui/Toast', () => ({
   toastAccountFor: () => mockAccount,
   isToastAccountCurrent: (account: string) => account === mockAccount,
 }));
-jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
+jest.mock('../../data/session', () => ({
+  sessionToken: jest.fn(async () => 'token'),
+  forgetSessionTokenIf: jest.fn(async () => undefined),
+}));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
   apiOrigin: 'https://relay.test',
+  serverOrigin: () => 'https://relay.test',
   currentUser: jest.fn(),
   apiSend: jest.fn(),
   apiGet: jest.fn(async () => []),
@@ -449,12 +455,15 @@ describe("the chosen machine's setup, once loaded", () => {
 
   it("reads the machine's last session when the loaded history has none on it", async () => {
     routes = hammerRoutes();
-    // Only Cybex is in the loaded history, so its 85 kg is planned until Hammer's own arrives.
+    // Only Cybex is in the loaded history: its 85 kg isn't Hammer's, so the loads wait, empty.
     const live = logger([lastPush, pressOnCybex]);
     const key = live.get().movements[0].key;
     const settled = swapOntoMachine(live.change, key, press, live.context, { press: 'hammer' });
-    expect(live.get().movements[0].sets.map((item) => item.weight_kg)).toEqual([85, 85]);
+    expect(live.get().movements[0].sets.map((item) => item.weight_kg)).toEqual([null, null]);
+    const keys = live.get().movements[0].sets.map((item) => item.key);
     await act(async () => settled);
+    // Each carried row keeps its key, so a note opened meanwhile still reaches it.
+    expect(live.get().movements[0].sets.map((item) => item.key)).toEqual(keys);
     expect(live.get().movements[0]).toMatchObject({
       machinePhotoIds: ['hammer'],
       machineSettings: hammerSettings,
@@ -629,4 +638,210 @@ test('a saved workout refreshes the machines, so the next swap starts on the new
   await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })));
   await waitFor(() => expect(screen.getByRole('checkbox', { name: 'Cybex press' })).toBeChecked());
   expect(screen.getByRole('checkbox', { name: 'Hammer Strength press' })).not.toBeChecked();
+});
+
+describe('after the recheck', () => {
+  function logger(workouts: (typeof lastPush)[]) {
+    let state = pushDayLogger();
+    const change = (update: (current: LoggerState) => LoggerState) => {
+      state = update(state);
+    };
+    return {
+      change,
+      get: () => state,
+      set: (next: LoggerState) => (state = next),
+      context: context({ workouts }),
+    };
+  }
+  /** Answers each path's requests in turn as the test releases them. */
+  function heldRoutes() {
+    const held = new Map<string, ReturnType<typeof deferred<unknown>>[]>();
+    jest.mocked(apiGet).mockImplementation((path: string) => {
+      const next = deferred<unknown>();
+      held.set(path, [...(held.get(path) ?? []), next]);
+      return next.promise as never;
+    });
+    return (path: string, index = 0) => {
+      const request = held.get(path)?.[index];
+      if (!request) throw new Error(`No request ${index} for ${path}`);
+      return request;
+    };
+  }
+  const settingsPath = '/api/exercises/press/machine-settings?machine_photo_id=hammer';
+  const historyPath = '/api/machine-photos/hammer/workouts';
+
+  it("leaves the loads empty when the machine's session can't be read", async () => {
+    const request = heldRoutes();
+    const live = logger([lastPush, pressOnCybex]);
+    const settled = swapOntoMachine(live.change, live.get().movements[0].key, press, live.context, {
+      press: 'hammer',
+    });
+    request(settingsPath).resolve({ settings: [] });
+    request(historyPath).reject(new Error('Relay is unavailable'));
+    await act(async () => settled);
+    expect(live.get().movements[0].sets.map((item) => item.weight_kg)).toEqual([null, null]);
+  });
+
+  it('ignores a session chosen for an earlier date when the workout was redated meanwhile', async () => {
+    const request = heldRoutes();
+    const live = logger([lastPush, pressOnCybex]);
+    const settled = swapOntoMachine(live.change, live.get().movements[0].key, press, live.context, {
+      press: 'hammer',
+    });
+    live.change((current) => ({ ...current, workoutDate: '2026-11-01' }));
+    request(settingsPath).resolve({ settings: [] });
+    request(historyPath).resolve([pressOnHammer]);
+    await act(async () => settled);
+    expect(live.get().movements[0].sets.map((item) => item.weight_kg)).toEqual([null, null]);
+  });
+
+  it('a note added after the session arrives reaches its row', async () => {
+    routes = { [historyPath]: [pressOnHammer], [settingsPath]: { settings: [] } };
+    const live = logger([lastPush, pressOnCybex]);
+    const movementKey = live.get().movements[0].key;
+    const settled = swapOntoMachine(live.change, movementKey, press, live.context, {
+      press: 'hammer',
+    });
+    // The note prompt opened on the first planned set before the answer.
+    const setKey = live.get().movements[0].sets[0].key;
+    await act(async () => settled);
+    const noted = updateSet(
+      live.get(),
+      movementKey,
+      setKey,
+      { notes: 'Seat one notch lower' },
+      {
+        addedByHand: false,
+        workoutBodyweight: null,
+      },
+    ).state;
+    expect(noted.movements[0].sets[0]).toMatchObject({
+      notes: 'Seat one notch lower',
+      weight_kg: 40,
+    });
+  });
+
+  it("an earlier swap's settings never fill a later swap back onto the same machine", async () => {
+    const request = heldRoutes();
+    const live = logger([lastPush, pressOnHammer]);
+    const key = live.get().movements[0].key;
+    const first = swapOntoMachine(live.change, key, press, live.context, { press: 'hammer' });
+    // Away to Bench and back onto Hammer: the unlogged row keeps its key.
+    void swapOntoMachine(live.change, key, bench, live.context);
+    const second = swapOntoMachine(live.change, key, press, live.context, { press: 'hammer' });
+    request(settingsPath, 1).resolve({ settings: [{ name: 'Seat', value: '7' }] });
+    await act(async () => second);
+    request(settingsPath, 0).resolve({ settings: [{ name: 'Seat', value: '4' }] });
+    await act(async () => first);
+    expect(live.get().movements[0].machineSettings).toEqual([{ name: 'Seat', value: '7' }]);
+  });
+});
+
+describe('the swap picker while its machines are read again', () => {
+  it('chooses nothing automatically until the refresh lands', async () => {
+    const refresh = deferred<MachinePhotoUsage[]>();
+    let reads = 0;
+    jest.mocked(apiGet).mockImplementation(async (path: string) => {
+      if (path !== '/api/machine-photos') return [] as never;
+      reads += 1;
+      // Hammer was used last; then a workout on Cybex is saved and the list is read again.
+      return (
+        reads === 1 ? [hammer, { ...cybex, last_used_date: '2026-11-01' }] : refresh.promise
+      ) as never;
+    });
+    const onAdd = await openSwap();
+    await screen.findByRole('button', { name: 'Show machines for Overhead Press' });
+    const { refreshTraining } =
+      jest.requireActual<typeof import('../../data/queries')>('../../data/queries');
+    await act(async () => {
+      void refreshTraining(client);
+    });
+    await act(async () =>
+      fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })),
+    );
+    // The old list's Hammer isn't chosen for you while the new one is on its way.
+    expect(screen.getByRole('checkbox', { name: 'Hammer Strength press' })).not.toBeChecked();
+    expect(screen.getByText('Loading machines…')).toBeVisible();
+    await act(async () => refresh.resolve([{ ...cybex, last_used_date: '2026-11-22' }, hammer]));
+    expect(
+      await screen.findByRole('checkbox', { name: 'Cybex press', checked: true }),
+    ).toBeVisible();
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Swap exercise' })));
+    expect(onAdd).toHaveBeenCalledWith([press], { press: 'cybex' });
+  });
+});
+
+describe("a machine photo's session", () => {
+  async function pickAndPhotograph(machines: MachinePhotoUsage[]) {
+    routes = { '/api/machine-photos': machines };
+    const upload = deferred<typeof hammer>();
+    jest
+      .mocked(askForMachinePhoto)
+      .mockImplementation((done) =>
+        done({ uri: 'file://photo.jpg', name: 'photo.jpg', type: 'image/jpeg' }, 'New press'),
+      );
+    jest.mocked(uploadMachinePhoto).mockImplementation(() => upload.promise);
+    const onAdd = await openSwap();
+    await screen.findByRole('button', { name: 'Show machines for Overhead Press' });
+    await act(async () =>
+      fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })),
+    );
+    return { upload, onAdd };
+  }
+
+  it("is sent with the session's own token", async () => {
+    await pickAndPhotograph([hammer]);
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Add machine for Overhead Press' })),
+    );
+    expect(uploadMachinePhoto).toHaveBeenCalledWith(
+      'press',
+      expect.anything(),
+      'New press',
+      [],
+      'token',
+    );
+  });
+
+  it('is never sent when another account signs in while its token is read', async () => {
+    const token = deferred<string>();
+    jest.mocked(sessionToken).mockImplementationOnce(() => token.promise);
+    await pickAndPhotograph([hammer]);
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Add machine for Overhead Press' })),
+    );
+    mockAccount = 'u2';
+    await act(async () => token.resolve('token'));
+    expect(uploadMachinePhoto).not.toHaveBeenCalled();
+  });
+
+  it('forgets only the token it was refused with', async () => {
+    const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+    try {
+      const { upload } = await pickAndPhotograph([hammer]);
+      await act(async () =>
+        fireEvent.press(screen.getByRole('button', { name: 'Add machine for Overhead Press' })),
+      );
+      await act(async () => upload.reject(new ApiError(401, 'Sign in to continue.')));
+      expect(forgetSessionTokenIf).toHaveBeenCalledWith('https://relay.test', 'token');
+    } finally {
+      alert.mockRestore();
+    }
+  });
+
+  it('keeps a machine chosen while it uploaded', async () => {
+    // Cybex is the default; Hammer is chosen by hand while the new photo uploads.
+    const { upload, onAdd } = await pickAndPhotograph([cybex, hammer]);
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Add machine for Overhead Press' })),
+    );
+    await act(async () =>
+      fireEvent.press(screen.getByRole('checkbox', { name: 'Hammer Strength press' })),
+    );
+    await act(async () => upload.resolve({ ...hammer, id: 'new-machine', caption: 'New press' }));
+    expect(await screen.findByRole('checkbox', { name: 'New press' })).not.toBeChecked();
+    expect(screen.getByRole('checkbox', { name: 'Hammer Strength press' })).toBeChecked();
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Swap exercise' })));
+    expect(onAdd).toHaveBeenCalledWith([press], { press: 'hammer' });
+  });
 });

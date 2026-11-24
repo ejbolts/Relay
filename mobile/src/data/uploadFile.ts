@@ -30,6 +30,7 @@ export async function uploadFile<T>(
     timeoutMs = TIMEOUT_MS,
     onProgress,
     signal,
+    token: boundToken,
   }: {
     field?: string;
     fields?: Record<string, string>;
@@ -40,10 +41,15 @@ export async function uploadFile<T>(
     onProgress?: (percent: number) => void;
     /** Aborting stops the upload and rejects with `UploadStopped`. */
     signal?: AbortSignal;
+    /**
+     * The session token to send, read by a caller that binds the upload to the session it
+     * started in. Without it, the saved token is read when the upload starts.
+     */
+    token?: string;
   } = {},
 ): Promise<T> {
   const origin = new URL(apiOrigin!).origin;
-  const token = await sessionToken(origin);
+  const token = boundToken ?? (await sessionToken(origin));
   const form = new FormData();
   for (const [name, value] of Object.entries(fields)) form.append(name, value);
   form.append(field, file as unknown as Blob);

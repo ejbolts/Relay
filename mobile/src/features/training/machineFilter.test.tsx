@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import type { ReactNode } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { machineDate, timeSince } from '../../../../frontend/src/machineHistory';
@@ -388,6 +388,28 @@ describe('Filtered by machine', () => {
     await fireEvent.press(screen.getByRole('imagebutton', { name: 'View Cybex chest press' }));
     // It is already the current filter, so it isn't offered again.
     expect(screen.queryByRole('button', { name: 'All workouts on this machine' })).toBeNull();
+  });
+
+  test("shows the machine as its workouts pin it when the saved list doesn't know it yet", async () => {
+    // Merged elsewhere: the cached list predates the survivor, and the route still has the old name.
+    responses['/api/machine-photos'] = [];
+    await open(<MachineWorkoutsScreen photoId="cybex" caption="Old name" />);
+    expect(await screen.findByRole('header', { name: 'Cybex chest press' })).toBeVisible();
+    // The banner names its exercise, as the open workout does.
+    expect(screen.getAllByText('Bench Press').length).toBeGreaterThan(1);
+
+    // Pulling to refresh reads the saved machines again, not only the workouts.
+    jest.mocked(apiGet).mockClear();
+    // The screen's scroll view carries the pull-to-refresh control.
+    let page = screen.getByRole('header', { name: 'Cybex chest press' }) as {
+      parent: typeof page | null;
+      props: { refreshControl?: { props: { onRefresh: () => void } } };
+    } | null;
+    while (page && !page.props.refreshControl) page = page.parent;
+    const pull = page!.props.refreshControl!.props.onRefresh;
+    await act(async () => pull());
+    expect(apiGet).toHaveBeenCalledWith('/api/machine-photos', expect.anything());
+    expect(apiGet).toHaveBeenCalledWith('/api/machine-photos/cybex/workouts', expect.anything());
   });
 
   test('a photo that fails to load says so and can be tried again', async () => {

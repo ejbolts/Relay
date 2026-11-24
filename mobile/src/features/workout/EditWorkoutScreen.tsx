@@ -57,7 +57,6 @@ import {
   setMachineSettings,
   setMovementNotes,
   setSetKind,
-  swapExercise,
   updateSet,
   workoutIdentity,
   type EditTimes,
@@ -569,8 +568,8 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         lastDone={new Map()}
         onChoose={(replacement: Exercise) => {
           const key = swapping;
-          if (key)
-            change((latest) => swapExercise(latest, key, replacement, context, {}, workout.id));
+          // Every swap goes through one path, so a newer swap supersedes an older one's loads.
+          if (key) void swapOntoMachine(change, key, replacement, context, {}, workout.id);
           setSwapping(null);
         }}
         onBrowseAll={() => {

@@ -11,13 +11,15 @@ import {
   View,
 } from 'react-native';
 import { machineUsedShort } from '../../../../frontend/src/machineHistory';
-import type { Exercise, MachinePhotoUsage } from '../../../../frontend/src/types';
+import type { Exercise, MachinePhoto, MachinePhotoUsage } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { useAuthorisedImage } from '../../data/authorisedImage';
 import { Icon } from '../../ui/Icon';
 import { isToastAccountCurrent, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
-import { askForMachinePhoto, uploadMachinePhoto } from './machineMedia';
+import { ApiError, serverOrigin } from '../../data/api';
+import { forgetSessionTokenIf, sessionToken } from '../../data/session';
+import { askForMachinePhoto, uploadMachinePhoto, type MachinePhotoFile } from './machineMedia';
 
 /**
  * A swipeable row of an exercise's saved machines inside the exercise picker, as the web's
@@ -44,16 +46,17 @@ export function PickerMachineStrip({
   const [today] = useState(localDate);
   const [saving, setSaving] = useState(false);
 
-  // The photo belongs to the account it was started on: nothing is sent, published or shown
+  // The photo belongs to the session it was started in: it is sent with that session's own token,
+  // read once and checked against the session after the read, and nothing is published or shown
   // once another account (or a new session) has signed in.
   const add = () => {
     const account = toastAccount();
     askForMachinePhoto((file, caption) => {
       if (!isToastAccountCurrent(account)) return;
       setSaving(true);
-      void uploadMachinePhoto(exercise.id, file, caption, [])
+      void sendPhoto(account, exercise.id, file, caption)
         .then((photo) => {
-          if (!isToastAccountCurrent(account)) return;
+          if (!photo) return;
           onAdded({
             ...photo,
             exercise_name: exercise.name,
@@ -119,6 +122,30 @@ export function PickerMachineStrip({
       </Pressable>
     </ScrollView>
   );
+}
+
+/**
+ * Uploads a machine photo for the session `account` names, with that session's token, or answers
+ * null when the session changed first. A refusal forgets only the token it was sent with, so a
+ * later account's token survives.
+ */
+async function sendPhoto(
+  account: string,
+  exerciseId: string,
+  file: MachinePhotoFile,
+  caption: string,
+): Promise<MachinePhoto | null> {
+  const origin = serverOrigin();
+  const token = await sessionToken(origin);
+  if (!token || !isToastAccountCurrent(account)) return null;
+  try {
+    const photo = await uploadMachinePhoto(exerciseId, file, caption, [], token);
+    return isToastAccountCurrent(account) ? photo : null;
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 401)
+      await forgetSessionTokenIf(origin, token);
+    throw error;
+  }
 }
 
 function MachineCard({
