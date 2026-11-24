@@ -1,10 +1,7 @@
 import { onlineManager, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { AppState, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useSyncExternalStore } from 'react';
+import { AppState } from 'react-native';
 import { useOptionalSession } from '../../session/SessionProvider';
-import { Button, Card } from '../../ui/components';
-import { Icon } from '../../ui/Icon';
-import { useTheme } from '../../ui/theme';
 import {
   bodyCheckInStatus,
   forgetBodyCheckInCopy,
@@ -13,7 +10,6 @@ import {
   subscribeBodyCheckIns,
   syncBodyCheckIns,
 } from './bodyCheckInQueue';
-import { bodyIcons } from './bodyIcons';
 import { bodyKeys, refreshBodyMeasurements } from './bodyQueries';
 
 /**
@@ -84,74 +80,3 @@ export function BodyCheckInSync() {
 export function useBodyCheckInStatus() {
   return useSyncExternalStore(subscribeBodyCheckIns, bodyCheckInStatus);
 }
-
-/**
- * Check-ins saved on this phone that the server hasn't confirmed, shown at the top of every tab
- * as the web's body-check-in-sync card is. Reads from the single BodyCheckInSync owner.
- */
-export function CheckInSyncCard() {
-  const { colors, type, radius } = useTheme();
-  const { pending, error } = useBodyCheckInStatus();
-  const [retrying, setRetrying] = useState(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-  if (pending === 0) return null;
-
-  const retry = () => {
-    if (retrying) return;
-    setRetrying(true);
-    void retryBodyCheckIns().finally(() => {
-      if (mounted.current) setRetrying(false);
-    });
-  };
-
-  return (
-    <Card accessibilityLabel="Check-in sync" style={{ gap: 8 }}>
-      <View accessibilityLiveRegion="polite" style={styles.row}>
-        <Icon name={bodyIcons.cloud} size={18} color={colors.secondary} />
-        <Text style={[type.callout, { color: colors.text, fontWeight: '600', flex: 1 }]}>
-          {pending} {pending === 1 ? 'check-in' : 'check-ins'} saved on this phone
-        </Text>
-        {!error && (
-          <Text
-            style={[
-              type.caption,
-              styles.badge,
-              {
-                color: colors.secondary,
-                backgroundColor: colors.surface2,
-                borderRadius: radius.pill,
-              },
-            ]}
-          >
-            Waiting to sync
-          </Text>
-        )}
-      </View>
-      {error && (
-        <>
-          <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
-            {error}
-          </Text>
-          <Button
-            label="Retry sync"
-            variant="secondary"
-            size="small"
-            loading={retrying}
-            onPress={retry}
-          />
-        </>
-      )}
-    </Card>
-  );
-}
-
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  badge: { paddingHorizontal: 8, paddingVertical: 2, overflow: 'hidden' },
-});

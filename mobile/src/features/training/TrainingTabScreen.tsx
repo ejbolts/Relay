@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { refreshTraining } from '../../data/queries';
 import { Screen } from '../../ui/components';
-import { CheckInSyncCard } from '../body/BodyCheckInSync';
+import { CheckInSyncCard } from '../body/BodyNotices';
 import { CardioSection } from './CardioSection';
 import { ExercisesSection } from './ExercisesSection';
 import { Segmented } from './parts';

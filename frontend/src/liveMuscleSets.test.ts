@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { liveMuscleSets, liveMuscleSetsWithFinished, type MuscleSetsWeek } from './liveMuscleSets';
+import type { FinishedWorkout } from './finishedWorkoutQueue';
+import {
+  finishedMuscleSourcesFor,
+  liveMuscleSets,
+  liveMuscleSetsWithFinished,
+  type MuscleSetsWeek,
+} from './liveMuscleSets';
 import { createWorkoutSet } from './workoutSets';
 import type { ActiveWorkoutDraft } from './workoutDraft';
 import type { Exercise, TrackedWorkout } from './types';
@@ -214,5 +220,34 @@ describe('live muscle set credits', () => {
       [{ id: 'saved-1', draft: finishedDraft }],
     );
     expect(totals(afterSave)).toEqual({ Pectorals: 3, Triceps: 0.5 });
+  });
+
+  it('lists just-saved workouts by saved id, then queued ones that are not refused', () => {
+    const finished = (session: string, workoutId: string | null = null): FinishedWorkout => ({
+      ...draft,
+      clientSessionId: session,
+      pendingSave: {
+        userId: 'me',
+        finishedAt: 5,
+        workoutId,
+        payload: { client_session_id: session } as FinishedWorkout['pendingSave']['payload'],
+      },
+    });
+    const saved = finished('saved-session');
+    const queued = finished('queued-session');
+    const resumed = finished('resumed-session', 'workout-7');
+    const refused = finished('refused-session');
+    expect(
+      finishedMuscleSourcesFor(
+        [{ id: 'workout-3', finished: saved }],
+        [queued, resumed, refused],
+        { 'refused-session': 'Workout name is required.' },
+      ),
+    ).toEqual([
+      { id: 'workout-3', draft: saved },
+      { id: 'pending:queued-session', draft: queued },
+      // A queued change to a saved workout replaces that workout's dashboard sets.
+      { id: 'workout-7', draft: resumed },
+    ]);
   });
 });

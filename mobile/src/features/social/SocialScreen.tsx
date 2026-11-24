@@ -11,7 +11,7 @@ import { AccountHeaderActions } from '../../ui/AccountHeaderActions';
 import { Button, EmptyState, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
 import { Segmented } from '../../ui/controls';
 import { useTheme } from '../../ui/theme';
-import { CheckInSyncCard } from '../body/BodyCheckInSync';
+import { CheckInSyncCard } from '../body/BodyNotices';
 import { CommentsSheet } from './Comments';
 import { FeedCard } from './FeedCard';
 import { FriendQrSheet } from './FriendQrSheet';

@@ -1,4 +1,6 @@
 import { partialSetsEnabledForWeek } from './exercisePartialSets';
+import { finishedWorkoutKey, type FinishedWorkout } from './finishedWorkoutQueue';
+import { previewIdFor } from './pendingWorkoutPreview';
 import { isCompletedWorkingSet } from './workoutSets';
 import type { ActiveWorkoutDraft } from './workoutDraft';
 import type { Exercise, TrackedWorkout, WeeklyMuscleSets, WeeklySets } from './types';
@@ -14,6 +16,24 @@ export type MuscleSetsWeek = Pick<WeeklySets, 'week_start' | 'week_end'> & {
 export interface FinishedMuscleSource {
   id: string;
   draft: ActiveWorkoutDraft;
+}
+
+/**
+ * The finished workouts the muscle sets count before the dashboard does: each one saved since
+ * the dashboard loaded (under its saved id, so the refreshed dashboard's copy replaces it), then
+ * each one waiting to sync that the server hasn't refused (refused ones wait for review).
+ */
+export function finishedMuscleSourcesFor(
+  awaitingDashboard: readonly { id: string; finished: FinishedWorkout }[],
+  queued: readonly FinishedWorkout[],
+  refusals: Readonly<Record<string, unknown>>,
+): FinishedMuscleSource[] {
+  return [
+    ...awaitingDashboard.map((item) => ({ id: item.id, draft: item.finished })),
+    ...queued
+      .filter((finished) => !(finishedWorkoutKey(finished) in refusals))
+      .map((finished) => ({ id: previewIdFor(finished.pendingSave), draft: finished })),
+  ];
 }
 
 /** Projects finished and in-progress workouts onto a week of muscle set credits. */

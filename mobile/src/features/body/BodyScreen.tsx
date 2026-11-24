@@ -22,8 +22,7 @@ import { useTheme } from '../../ui/theme';
 import { NotificationsBell, socialRoutes } from '../social';
 import { BodyHistory } from './BodyHistory';
 import { syncBodyCheckIns } from './bodyCheckInQueue';
-import { CheckInSyncCard } from './BodyCheckInSync';
-import { MaintenanceTip } from './BodyNotices';
+import { CheckInSyncCard, MaintenanceTip } from './BodyNotices';
 import {
   bodyCheckInApi,
   bodyGoalApi,
