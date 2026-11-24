@@ -1,3 +1,4 @@
+import { onlineManager } from '@tanstack/react-query';
 import { act, render } from '@testing-library/react-native';
 import { AppState, type AppStateStatus } from 'react-native';
 import { mergeTipStates, TIP_SYNC_DEBOUNCE_MS } from '../../../../frontend/src/tipSync';
@@ -33,6 +34,7 @@ let appStateListener: ((state: AppStateStatus) => void) | undefined;
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  onlineManager.setOnline(true);
   memoryKv.clear();
   resetTipsForTests();
   mockSession.user = { id: 'u1' };
@@ -211,4 +213,44 @@ test('a busy server is tried again shortly', async () => {
   await act(async () => jest.advanceTimersByTimeAsync(2000));
   expect(sent()).toHaveLength(2);
   expect(server.u1.seen).toEqual({ swap: 'dismissed' });
+});
+
+test('a network error retries with 2, 5, 15 s backoff and going online syncs immediately', async () => {
+  const save = jest.mocked(request).getMockImplementation()!;
+  await render(<TipSyncHost />);
+  await flush();
+  expect(sent()).toHaveLength(1);
+
+  // Server unreachable while online: retries at 2 s, 5 s, 15 s, then stops.
+  jest.mocked(request).mockRejectedValue(new Error('Could not reach Relay.'));
+  tipsFor('u1').enable(false);
+  await act(async () => jest.advanceTimersByTimeAsync(TIP_SYNC_DEBOUNCE_MS));
+  expect(sent()).toHaveLength(2);
+  await act(async () => jest.advanceTimersByTimeAsync(2000));
+  expect(sent()).toHaveLength(3);
+  await act(async () => jest.advanceTimersByTimeAsync(5000));
+  expect(sent()).toHaveLength(4);
+  await act(async () => jest.advanceTimersByTimeAsync(15_000));
+  expect(sent()).toHaveLength(5);
+  await act(async () => jest.advanceTimersByTimeAsync(60_000));
+  expect(sent()).toHaveLength(5);
+
+  // Going back online syncs the waiting change immediately.
+  jest.mocked(request).mockImplementation(save);
+  await act(async () => {
+    onlineManager.setOnline(false);
+    onlineManager.setOnline(true);
+  });
+  await flush();
+  expect(sent()).toHaveLength(6);
+  expect(server.u1).toMatchObject({ enabled: false });
+});
+
+test('a refusal (403/500) is not retried automatically', async () => {
+  jest.mocked(request).mockRejectedValue(new ApiError(500, 'Server error'));
+  await render(<TipSyncHost />);
+  await flush();
+  expect(sent()).toHaveLength(1);
+  await act(async () => jest.advanceTimersByTimeAsync(30_000));
+  expect(sent()).toHaveLength(1);
 });

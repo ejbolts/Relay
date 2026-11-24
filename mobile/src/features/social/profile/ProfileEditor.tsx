@@ -36,7 +36,7 @@ export function ProfileEditor({
   onSaved,
   onClose,
 }: {
-  onSaved: (user: User) => void;
+  onSaved: (user: User, options?: { refresh?: boolean; photoUri?: string }) => void | Promise<void>;
   onClose: () => void;
 }) {
   // Shown only on your own profile, behind the sign-in gate.
@@ -137,6 +137,7 @@ export function ProfileEditor({
     }
     setSaving(true);
     let detailsSaved = false;
+    const hasPhotoChange = photo !== null || removePhoto;
     try {
       const session = await profileSession(account);
       if (!session) return setSaving(false);
@@ -146,18 +147,21 @@ export function ProfileEditor({
           ...(sexDirty && sex ? { sex } : {}),
         });
         if (!updated) return setSaving(false);
-        onSaved(updated);
+        await onSaved(updated, { refresh: !hasPhotoChange });
+        if (!isToastAccountCurrent(account)) return;
         setBaseline({ name: updated.display_name, sex: updated.sex ?? null });
         detailsSaved = true;
       }
       if (photo) {
         const updated = await saveProfilePhoto(session, photo);
         if (!updated) return setSaving(false);
-        onSaved(updated);
+        await onSaved(updated, { refresh: true, photoUri: photo.uri });
+        if (!isToastAccountCurrent(account)) return;
       } else if (removePhoto) {
         const updated = await deleteProfilePhoto(session);
         if (!updated) return setSaving(false);
-        onSaved(updated);
+        await onSaved(updated, { refresh: true });
+        if (!isToastAccountCurrent(account)) return;
       }
       showToast('Profile saved.', undefined, { account });
       onClose();
