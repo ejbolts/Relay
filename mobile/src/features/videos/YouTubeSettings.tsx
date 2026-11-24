@@ -15,7 +15,7 @@ export function YouTubeSettingsRow() {
   return (
     <Section title="YouTube">
       <Row
-        label="Your YouTube channel"
+        label="Channel"
         icon={youtubeIcon}
         value={connection.data ? youtubeStatusLabel(connection.data) : null}
         onPress={() => router.push('/settings/youtube')}
