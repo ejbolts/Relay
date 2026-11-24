@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import {
+  Platform,
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   type LayoutChangeEvent,
   type ScrollViewInstance,
   type ViewStyle,
 } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Animated, {
   useAnimatedStyle,
   useSharedValue,
@@ -50,6 +53,44 @@ interface Box {
   height: number;
 }
 
+/** Where Edit Home's scroll view is and how far it has scrolled, all in points. */
+export interface DragScrollMetrics {
+  /** Content offset. */
+  y: number;
+  /** The viewport's height and its top edge in window coordinates. */
+  height: number;
+  top: number;
+  contentHeight: number;
+  /** How much of the viewport's bottom sits under the home indicator or navigation bar. */
+  bottomInset: number;
+  /** iOS adds `bottomInset` to the scrollable range (`contentInsetAdjustmentBehavior`). */
+  insetExtendsScroll: boolean;
+}
+
+export const AUTO_SCROLL_EDGE = 90;
+const AUTO_SCROLL_STEP = 10;
+
+/**
+ * The next content offset while a dragged card is held within `AUTO_SCROLL_EDGE` of the visible
+ * viewport's top or bottom, or null when the finger is clear of both edges or the view can't
+ * scroll further. `fingerY` is in window coordinates, like the viewport's `top`.
+ */
+export function dragAutoScrollStep(metrics: DragScrollMetrics, fingerY: number): number | null {
+  const { y, height, top, contentHeight, bottomInset, insetExtendsScroll } = metrics;
+  if (height <= 0) return null;
+  const visibleBottom = top + height - bottomInset;
+  const delta =
+    fingerY < top + AUTO_SCROLL_EDGE
+      ? -AUTO_SCROLL_STEP
+      : fingerY > visibleBottom - AUTO_SCROLL_EDGE
+        ? AUTO_SCROLL_STEP
+        : 0;
+  if (delta === 0) return null;
+  const maxScroll = Math.max(0, contentHeight - height + (insetExtendsScroll ? bottomInset : 0));
+  const next = Math.max(0, Math.min(maxScroll, y + delta));
+  return next === y ? null : next;
+}
+
 interface ActiveDrag {
   id: HomeSectionId;
   startTouchX: number;
@@ -65,7 +106,7 @@ interface HomeLayoutGridProps {
   visible: HomeSectionId[];
   disabled: boolean;
   scrollRef: RefObject<ScrollViewInstance | null>;
-  scrollMetricsRef: RefObject<{ y: number; height: number; contentHeight: number }>;
+  scrollMetricsRef: RefObject<DragScrollMetrics>;
   onChange: (next: HomeLayout) => void;
   onCustomise: (id: HomeSectionId) => void;
   onAddInGap: (gap: HomeSectionGap) => void;
@@ -90,6 +131,8 @@ export function HomeLayoutGrid({
   onDraggingChange,
 }: HomeLayoutGridProps) {
   const { colors, type, radius } = useTheme();
+  const insets = useSafeAreaInsets();
+  const window = useWindowDimensions();
   const rows = homeSectionGridRows(visible, draft.widths);
   const [draggingId, setDraggingId] = useState<HomeSectionId | null>(null);
   const [overTarget, setOverTarget] = useState<HomeDropTarget | null>(null);
@@ -181,20 +224,12 @@ export function HomeLayoutGrid({
       const drag = activeDragRef.current;
       if (!drag) return;
       const metrics = scrollMetricsRef.current;
-      if (metrics.height > 0 && metrics.contentHeight > metrics.height) {
-        const edge = 110;
-        const delta =
-          drag.absoluteY < edge + 60 ? -10 : drag.absoluteY > metrics.height - edge ? 10 : 0;
-        if (delta !== 0) {
-          const maxScroll = Math.max(0, metrics.contentHeight - metrics.height);
-          const nextY = Math.max(0, Math.min(maxScroll, metrics.y + delta));
-          if (nextY !== metrics.y) {
-            metrics.y = nextY;
-            scrollRef.current?.scrollTo({ y: nextY, animated: false });
-            dragY.set(drag.translationY + (nextY - drag.startScrollY));
-            updateTargetRef.current(drag);
-          }
-        }
+      const nextY = dragAutoScrollStep(metrics, drag.absoluteY);
+      if (nextY !== null) {
+        metrics.y = nextY;
+        scrollRef.current?.scrollTo({ y: nextY, animated: false });
+        dragY.set(drag.translationY + (nextY - drag.startScrollY));
+        updateTargetRef.current(drag);
       }
       frame = requestAnimationFrame(tick);
     };
@@ -216,6 +251,14 @@ export function HomeLayoutGrid({
     };
     activeDragRef.current = drag;
     overTargetRef.current = null;
+    // The finger's position comes in window coordinates, so measure the viewport the same way.
+    scrollRef.current?.measureInWindow((_x, top, _width, height) => {
+      const metrics = scrollMetricsRef.current;
+      metrics.top = top;
+      metrics.height = height;
+      metrics.bottomInset = Math.max(0, top + height - (window.height - insets.bottom));
+      metrics.insetExtendsScroll = Platform.OS === 'ios';
+    });
     dragX.set(0);
     dragY.set(0);
     dragScale.set(1.03);
@@ -739,15 +782,23 @@ export function RoundButton({
       accessibilityLabel={label}
       accessibilityState={{ disabled }}
       disabled={disabled}
-      hitSlop={compact ? 6 : 4}
+      // 38 pt with a 4 pt hit slop is a 46 pt target. A compact button is a full 44 pt frame
+      // around its 32 pt circle, since a parent row clips any hit slop beyond its own bounds.
+      hitSlop={compact ? undefined : 4}
       onPress={onPress}
       style={({ pressed }) => [
-        compact ? styles.roundCompact : styles.round,
-        !plain && { backgroundColor: colors.surface2 },
+        compact ? styles.touchCompact : styles.round,
+        !compact && !plain && { backgroundColor: colors.surface2 },
         (pressed || disabled) && { opacity: disabled ? 0.3 : 0.6 },
       ]}
     >
-      <Icon name={icon} size={plain ? (compact ? 22 : 24) : compact ? 16 : 18} color={color} />
+      {compact ? (
+        <View style={[styles.roundCompact, !plain && { backgroundColor: colors.surface2 }]}>
+          <Icon name={icon} size={plain ? 22 : 16} color={color} />
+        </View>
+      ) : (
+        <Icon name={icon} size={plain ? 24 : 18} color={color} />
+      )}
     </Pressable>
   );
 }
@@ -775,7 +826,7 @@ const styles = StyleSheet.create({
   gripWrap: { width: 18, alignItems: 'center', justifyContent: 'center' },
   halfCard: { padding: 10, gap: 10, flex: 1, justifyContent: 'space-between' },
   thirdCard: { padding: 8, gap: 8, flex: 1, justifyContent: 'space-between' },
-  compactTop: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  compactTop: { flexDirection: 'row', alignItems: 'center', gap: 2 },
   compactBottom: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -783,12 +834,19 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   gripLabel: { flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1, minWidth: 0 },
-  stepButtons: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  stepButtons: { flexDirection: 'row', alignItems: 'center' },
   thirdBody: { gap: 2 },
   thirdStepRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  touchCompact: {
+    width: TOUCH,
+    height: TOUCH,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   dropSpace: {
     minWidth: 0,

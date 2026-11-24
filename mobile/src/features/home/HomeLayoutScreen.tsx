@@ -29,7 +29,7 @@ import { showToast } from '../../ui/Toast';
 import { CARD_SETTINGS, CardSettingsForm } from './CardSettings';
 import { useHomeLayout, useSaveHomeLayout } from './homeData';
 import { homeIcons } from './homeIcons';
-import { HomeLayoutGrid, RoundButton } from './HomeLayoutGrid';
+import { HomeLayoutGrid, RoundButton, type DragScrollMetrics } from './HomeLayoutGrid';
 import { appDrawsSection } from './homeSections';
 import { HomeSheet } from './HomeSheet';
 
@@ -70,7 +70,14 @@ function Editor({ saved }: { saved: HomeLayout }) {
   const [done, setDone] = useState(false);
   const [baseline] = useState(() => JSON.stringify(homeLayoutDraft(saved)));
   const scrollRef = useRef<ScrollViewInstance | null>(null);
-  const scrollMetricsRef = useRef({ y: 0, height: 0, contentHeight: 0 });
+  const scrollMetricsRef = useRef<DragScrollMetrics>({
+    y: 0,
+    height: 0,
+    top: 0,
+    contentHeight: 0,
+    bottomInset: 0,
+    insetExtendsScroll: false,
+  });
   const dirty = JSON.stringify(draft) !== baseline;
   const { visible, hidden } = homeSectionLists(draft, appDrawsSection);
   const title = (id: HomeSectionId) => homeSection(id).title;
@@ -228,11 +235,11 @@ function Editor({ saved }: { saved: HomeLayout }) {
         />
       </ScrollView>
       <HomeSheet visible={!!addingTo} onClose={() => setAddingTo(null)} title="Add a section here">
-        <Text style={[type.callout, { color: colors.muted }]}>
-          {hidden.length
-            ? 'Choose a section to add to this space.'
-            : 'All available sections are already on Home.'}
-        </Text>
+        {hidden.length === 0 && (
+          <Text style={[type.callout, { color: colors.muted }]}>
+            All available sections are already on Home.
+          </Text>
+        )}
         {hidden.map((id) => {
           const section = homeSection(id);
           return (

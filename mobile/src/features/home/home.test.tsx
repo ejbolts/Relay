@@ -46,16 +46,26 @@ interface MockLongPressConfig {
   maxDistance?: number;
   numberOfPointers?: number;
   cancelsTouchesInView?: boolean;
+  onTouchesDown?: (event: { handlerTag: number; allTouches: { x: number; y: number }[] }) => void;
   onActivate?: () => void;
 }
-let mockHomeLongPress: MockLongPressConfig | null = null;
-jest.mock('react-native-gesture-handler', () => ({
-  GestureDetector: ({ children }: { children: unknown }) => children,
-  useLongPressGesture: (config: MockLongPressConfig) => {
-    mockHomeLongPress = config;
-    return config;
-  },
-}));
+// Each card's hold config reaches its view as `holdGesture`, so a test reads one card's hold.
+jest.mock('react-native-gesture-handler', () => {
+  const { cloneElement } = jest.requireActual<typeof import('react')>('react');
+  return {
+    GestureDetector: ({
+      gesture,
+      children,
+    }: {
+      gesture: MockLongPressConfig;
+      children: React.ReactElement;
+    }) => cloneElement(children, { holdGesture: gesture } as never),
+    GestureStateManager: { fail: jest.fn() },
+    useLongPressGesture: (config: MockLongPressConfig) => config,
+  };
+});
+const holdOn = (id: string) =>
+  screen.getByTestId(`home-card-${id}`).props.holdGesture as MockLongPressConfig;
 const mockUser = {
   id: 'u1',
   username: 'preview',
@@ -1067,7 +1077,7 @@ test('the check-in follows its saved mode: Weight only saves just the weight', a
   expect(await screen.findByText('Body weight saved')).toBeOnTheScreen();
 });
 
-test('holding Home cards for 500 ms opens Edit Home once the layout is confirmed', async () => {
+test('holding a Home card for 500 ms opens Edit Home once the layout is confirmed', async () => {
   let resolveLayout!: (value: HomeLayout) => void;
   responses['/api/home-layout'] = new Promise<HomeLayout>((resolve) => {
     resolveLayout = resolve;
@@ -1075,26 +1085,44 @@ test('holding Home cards for 500 ms opens Edit Home once the layout is confirmed
   await renderHome();
   await screen.findByText('Upper body day');
   // Before the server confirms the saved layout, holding is disabled.
-  expect(mockHomeLongPress?.enabled).toBe(false);
-  expect(mockHomeLongPress?.minDuration).toBe(500);
-  expect(mockHomeLongPress?.maxDistance).toBe(10);
-  expect(mockHomeLongPress?.cancelsTouchesInView).toBe(true);
+  expect(holdOn('next-workout').enabled).toBe(false);
+  expect(holdOn('next-workout')).toMatchObject({
+    minDuration: 500,
+    maxDistance: 10,
+    numberOfPointers: 1,
+    cancelsTouchesInView: true,
+  });
 
   await act(async () => resolveLayout(defaultHomeLayout()));
-  await waitFor(() => expect(mockHomeLongPress?.enabled).toBe(true));
+  await waitFor(() => expect(holdOn('next-workout').enabled).toBe(true));
+  // Every card holds; there is no hold outside a card.
+  expect(holdOn('profile').enabled).toBe(true);
 
-  // While a text input is focused (e.g. typing in Check-in), holding does not interrupt text entry.
+  // A stationary hold on a card opens Edit Home.
+  await act(async () => holdOn('next-workout').onActivate?.());
+  expect(mockRouter.push).toHaveBeenCalledWith('/home-layout');
+});
+
+test('a hold that starts while a text field is focused fails before it can activate', async () => {
+  const { GestureStateManager } = jest.requireMock<{
+    GestureStateManager: { fail: jest.Mock };
+  }>('react-native-gesture-handler');
+  responses['/api/home-layout'] = defaultHomeLayout();
+  await renderHome();
+  await screen.findByText('Upper body day');
+  await waitFor(() => expect(holdOn('next-workout').enabled).toBe(true));
   const focusedSpy = jest
     .spyOn(TextInput.State, 'currentlyFocusedInput')
     .mockReturnValue({} as never);
   try {
-    await act(async () => mockHomeLongPress?.onActivate?.());
-    expect(mockRouter.push).not.toHaveBeenCalled();
+    await act(async () =>
+      holdOn('next-workout').onTouchesDown?.({ handlerTag: 7, allTouches: [{ x: 20, y: 20 }] }),
+    );
+    expect(GestureStateManager.fail).toHaveBeenCalledWith(7);
+    // Even if it got as far as activating, a focused field keeps Edit Home closed.
+    await act(async () => holdOn('next-workout').onActivate?.());
+    expect(mockRouter.push).not.toHaveBeenCalledWith('/home-layout');
   } finally {
     focusedSpy.mockRestore();
   }
-
-  // Otherwise a stationary hold opens Edit Home.
-  await act(async () => mockHomeLongPress?.onActivate?.());
-  expect(mockRouter.push).toHaveBeenLastCalledWith('/home-layout');
 });

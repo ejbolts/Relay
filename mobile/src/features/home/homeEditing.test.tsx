@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   defaultHomeLayout,
@@ -11,6 +11,7 @@ import {
 import type { Exercise, TrainingPreferences, User } from '../../../../frontend/src/types';
 import { apiGet, apiSend } from '../../data/api';
 import { showToast } from '../../ui/Toast';
+import { AUTO_SCROLL_EDGE, dragAutoScrollStep, type DragScrollMetrics } from './HomeLayoutGrid';
 import { HomeLayoutScreen } from './HomeLayoutScreen';
 import { MuscleGoalsScreen } from './MuscleGoalsScreen';
 
@@ -416,5 +417,75 @@ test('tapping an empty space adds a hidden section into that slot', async () => 
     order: ['workouts', 'cardio-sessions', 'friends', 'consistency'],
     hidden: [],
     widths: { workouts: 'compact', 'cardio-sessions': 'compact', friends: 'third' },
+  });
+});
+
+test('the empty-space sheet lists sections without repeating its title, and says when none are left', async () => {
+  responses['/api/home-layout'] = {
+    order: ['workouts', 'cardio-sessions', 'friends', 'consistency'],
+    hidden: ['friends'],
+    widths: { workouts: 'compact', 'cardio-sessions': 'compact' },
+  };
+  await show(<HomeLayoutScreen />);
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'Add a section after Cardio sessions' }),
+  );
+  expect(await screen.findByText('Add a section here')).toBeVisible();
+  expect(screen.queryByText('Choose a section to add to this space.')).toBeNull();
+  expect(screen.queryByText('All available sections are already on Home.')).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add Recent Friends Activity here' }));
+  expect(screen.queryByText('Add a section here')).toBeNull();
+});
+
+test('compact cards give their move buttons a 44 pt touch frame around a 32 pt circle', async () => {
+  responses['/api/home-layout'] = {
+    order: ['workouts', 'cardio-sessions', 'consistency'],
+    hidden: [],
+    widths: { workouts: 'compact', 'cardio-sessions': 'compact', consistency: 'compact' },
+  };
+  await show(<HomeLayoutScreen />);
+  for (const label of ['Move Workouts down', 'Move Cardio sessions up', 'Move Consistency up']) {
+    const button = await screen.findByRole('button', { name: label });
+    expect(StyleSheet.flatten(button.props.style)).toMatchObject({ width: 44, height: 44 });
+  }
+});
+
+describe('drag auto-scroll', () => {
+  // A viewport 100 pt down the window and 650 pt tall, part-way through 2,000 pt of content.
+  const metrics: DragScrollMetrics = {
+    y: 300,
+    height: 650,
+    top: 100,
+    contentHeight: 2000,
+    bottomInset: 0,
+    insetExtendsScroll: false,
+  };
+
+  test('measures the edges from the viewport in window coordinates', () => {
+    // A stationary finger 600 pt down the window is well inside the viewport: no scrolling.
+    expect(dragAutoScrollStep(metrics, 600)).toBeNull();
+    expect(dragAutoScrollStep(metrics, 100 + AUTO_SCROLL_EDGE + 1)).toBeNull();
+    expect(dragAutoScrollStep(metrics, 750 - AUTO_SCROLL_EDGE - 1)).toBeNull();
+    // Near the bottom edge (window Y 750) it scrolls down; near the top (100) it scrolls up.
+    expect(dragAutoScrollStep(metrics, 700)).toBe(310);
+    expect(dragAutoScrollStep(metrics, 150)).toBe(290);
+    // Held still, the same finger keeps stepping from wherever the content has got to.
+    expect(dragAutoScrollStep({ ...metrics, y: 310 }, 700)).toBe(320);
+  });
+
+  test('keeps clear of the part of the viewport under the home indicator', () => {
+    const covered = { ...metrics, bottomInset: 34 };
+    expect(dragAutoScrollStep(covered, 750 - 34 - AUTO_SCROLL_EDGE - 1)).toBeNull();
+    expect(dragAutoScrollStep(covered, 750 - 34 - AUTO_SCROLL_EDGE + 1)).toBe(310);
+  });
+
+  test('stops at the ends of the content, including an iOS-adjusted bottom inset', () => {
+    expect(dragAutoScrollStep({ ...metrics, y: 0 }, 150)).toBeNull();
+    expect(dragAutoScrollStep({ ...metrics, y: 1350 }, 700)).toBeNull();
+    expect(dragAutoScrollStep({ ...metrics, y: 1345 }, 700)).toBe(1350);
+    const ios = { ...metrics, y: 1350, bottomInset: 34, insetExtendsScroll: true };
+    expect(dragAutoScrollStep(ios, 700)).toBe(1360);
+    expect(dragAutoScrollStep({ ...ios, y: 1384 }, 700)).toBeNull();
+    expect(dragAutoScrollStep({ ...metrics, height: 0 }, 700)).toBeNull();
   });
 });
