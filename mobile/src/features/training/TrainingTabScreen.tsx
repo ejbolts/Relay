@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { refreshTraining } from '../../data/queries';
 import { Screen } from '../../ui/components';
+import { CheckInSyncCard } from '../body/BodyNotices';
 import { CardioSection } from './CardioSection';
 import { ExercisesSection } from './ExercisesSection';
 import { Segmented } from './parts';
@@ -54,6 +55,7 @@ export function TrainingTabScreen({
         void refreshTraining(client).finally(() => setRefreshing(false));
       }}
     >
+      <CheckInSyncCard />
       <Segmented
         accessibilityLabel="Training sections"
         values={TRAINING_SECTIONS}

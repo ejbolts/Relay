@@ -37,7 +37,11 @@ jest.mock('../../data/api', () => ({
   apiGet: jest.fn(),
   apiSend: jest.fn(),
 }));
-jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: jest.fn() }));
+jest.mock('../workout/WorkoutProvider', () => ({
+  useWorkout: jest.fn(),
+  useOptionalWorkout: () => null,
+  useLogger: () => null,
+}));
 const mockRouter = { navigate: jest.fn(), push: jest.fn() };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useIsFocused: () => true }));
 interface MockLongPressConfig {

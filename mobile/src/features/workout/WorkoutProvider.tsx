@@ -85,6 +85,7 @@ import {
 } from '../../data/queries';
 import { useOptionalSession } from '../../session/SessionProvider';
 import { isToastAccountCurrent, showToast, toastAccountFor, ToastHost } from '../../ui/Toast';
+import { rememberSavedWorkout } from '../review/justSavedWorkouts';
 import { restTimerPreference } from '../settings/devicePreferences';
 import { refreshFriendPresence, socialKeys, updateFriendPresence } from '../social/socialQueries';
 import { FinishedQueueSender, type QueueStatus } from './finishedQueueSender';
@@ -282,6 +283,11 @@ export function useWorkout() {
   const workout = useContext(WorkoutContext);
   if (!workout) throw new Error('useWorkout needs a WorkoutProvider');
   return workout;
+}
+
+/** The workout engine, or null outside a WorkoutProvider (as useLogger is). */
+export function useOptionalWorkout() {
+  return useContext(WorkoutContext);
 }
 
 /** The engine behind the logger sheet; null while signed out. */
@@ -675,6 +681,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
           error instanceof ApiError && error.status === 409 && error.code === 'workout_conflict',
       }),
       onSaved: (workout, item, remaining) => {
+        // Counted in the weekly review until the refreshed dashboard includes it.
+        rememberSavedWorkout(client, user.id, workout.id, item);
         if (remaining === 0) void refreshTraining(client);
         // The queue no longer owns this session's shared copy.
         void syncRef.current?.sync();

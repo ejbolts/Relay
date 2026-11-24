@@ -13,6 +13,7 @@ import { Button } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { useTheme } from '../../ui/theme';
 import { LaunchNotices } from '../review';
+import { CheckInSyncCard } from '../body/BodyNotices';
 import { bodyKeys } from '../body/bodyQueries';
 import { settingsKeys } from '../settings/settingsData';
 import { trainingKeys } from '../training/trainingQueries';
@@ -101,6 +102,7 @@ export function HomeScreen() {
         refreshing={refreshing}
         onRefresh={() => void refresh()}
       >
+        <CheckInSyncCard />
         {home.isError && !home.confirmed && (
           <View style={styles.layoutError}>
             <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
