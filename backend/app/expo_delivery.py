@@ -9,18 +9,19 @@ later receipt, are removed only while they still belong to the same account and 
 
 from __future__ import annotations
 
+import heapq
 import logging
+import queue
 import threading
 import time
 from collections import OrderedDict
-from concurrent.futures import Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Literal
 
 import requests
 from requests import RequestException
-from sqlalchemy import and_, delete, or_, select
+from sqlalchemy import and_, delete, or_, select, update
 
 from .models import ExpoPushToken, UserSession
 from .push_security import EXPO_PUSH_URL, MAX_EXPO_PUSH_TOKENS
@@ -67,6 +68,8 @@ class ExpoAlert:
     ttl_seconds: int | None = None
     # The same alert sent again (such as a reminder retried for its browsers) goes out once.
     dedupe_key: str | None = None
+    # After this (epoch milliseconds) the alert is no longer useful; it also bounds Expo's TTL.
+    expires_at_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -78,6 +81,10 @@ class Registration:
     session_id: str | None
     token: str
     platform: str | None
+
+
+def now_ms() -> int:
+    return int(time.time() * 1000)
 
 
 def _aware(value: datetime) -> datetime:
@@ -122,29 +129,51 @@ def read_registrations(
             if expires_at is None or _aware(expires_at) <= now:
                 # Its sign-in ended (signed out, password changed or expired): never alert it.
                 ended.append(registration)
-            elif scheduled_on_phone(row, reminder):
+            elif scheduled_on_phone(row, reminder) or (
+                # Already sent (or refused for good) for this idle spell, even before a restart.
+                reminder is not None and row.native_reminder_due_ms == reminder.due_ms
+            ):
                 covered = True
             else:
                 targets.append(registration)
     return targets[:MAX_EXPO_PUSH_TOKENS], covered, ended
 
 
+def _still(registrations: list[Registration]):
+    """Rows that are still these registrations: the same account and sign-in."""
+    return or_(
+        *(
+            and_(
+                ExpoPushToken.id == item.id,
+                ExpoPushToken.user_id == item.user_id,
+                ExpoPushToken.session_id.is_(None)
+                if item.session_id is None
+                else ExpoPushToken.session_id == item.session_id,
+            )
+            for item in registrations
+        )
+    )
+
+
 def prune(session_factory: Callable[[], Session], registrations: list[Registration]) -> None:
     """Removes these registrations, but not a token that has since moved to another sign-in."""
     if not registrations:
         return
-    conditions = [
-        and_(
-            ExpoPushToken.id == item.id,
-            ExpoPushToken.user_id == item.user_id,
-            ExpoPushToken.session_id.is_(None)
-            if item.session_id is None
-            else ExpoPushToken.session_id == item.session_id,
-        )
-        for item in registrations
-    ]
     with session_factory() as db:
-        db.execute(delete(ExpoPushToken).where(or_(*conditions)))
+        db.execute(delete(ExpoPushToken).where(_still(registrations)))
+        db.commit()
+
+
+def mark_reminded(
+    session_factory: Callable[[], Session], registrations: list[Registration], due_ms: int
+) -> None:
+    """Records that these phones have had the "Still working out?" for the spell due then."""
+    if not registrations:
+        return
+    with session_factory() as db:
+        db.execute(
+            update(ExpoPushToken).where(_still(registrations)).values(native_reminder_due_ms=due_ms)
+        )
         db.commit()
 
 
@@ -159,8 +188,13 @@ def message_for(registration: Registration, alert: ExpoAlert) -> dict:
     }
     if registration.platform == "android":
         message["channelId"] = ANDROID_CHANNEL
-    if alert.ttl_seconds is not None:
-        message["ttl"] = alert.ttl_seconds
+    ttl = alert.ttl_seconds
+    if alert.expires_at_ms is not None:
+        # Counted from when the alert was due, not from when this attempt went out.
+        remaining = max(1, (alert.expires_at_ms - now_ms()) // 1000)
+        ttl = remaining if ttl is None else min(ttl, remaining)
+    if ttl is not None:
+        message["ttl"] = ttl
     return message
 
 
@@ -219,21 +253,146 @@ TestOutcome = Literal["ok", "unregistered", "failed"]
 
 
 class ExpoPushDispatcher:
-    """Sends native alerts in the background, with one retry and a later receipt check."""
+    """Sends native alerts in the background, for as long as the app is running.
 
-    def __init__(self) -> None:
+    Work is admitted to a bounded queue served by a few worker threads; retries and receipt checks
+    wait in one scheduler thread. ``start`` and ``stop`` follow the app's lifespan: on stopping it
+    takes no more work, drops what is queued or waiting, and waits a bounded time for requests
+    already out. Each worker opens and closes its own database sessions.
+    """
+
+    def __init__(self, *, workers: int = 2, max_queued: int = 500, max_waiting: int = 1000) -> None:
         self.retry_delay = 10.0
         self.receipt_delay = 15 * 60.0
         self.dedupe_seconds = 60 * 60.0
         # Tests run alerts at once, in the calling thread.
         self.inline = False
-        self._executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="expo-push")
-        self._lock = threading.Lock()
-        self._futures: set[Future] = set()
-        self._timers: set[threading.Timer] = set()
+        self._workers = workers
+        self._max_queued = max_queued
+        self._max_waiting = max_waiting
+        self._lock = threading.Condition()
+        self._users = 0
+        self._closed = True
+        self._queue: queue.Queue = queue.Queue(maxsize=max_queued)
+        self._waiting: list[tuple[float, int, Callable, tuple]] = []
+        self._sequence = 0
+        self._threads: list[threading.Thread] = []
         self._recent: OrderedDict[str, float] = OrderedDict()
         # In inline mode, retries and receipt checks wait here until a test runs them.
         self._pending_later: list[tuple] = []
+
+    # --- lifecycle -------------------------------------------------------------------------
+    def start(self) -> None:
+        """Starts serving work; each app lifespan calls it once and ``stop`` once."""
+        with self._lock:
+            self._users += 1
+            if not self._closed:
+                return
+            self._closed = False
+            self._queue = queue.Queue(maxsize=self._max_queued)
+            self._waiting = []
+            self._threads = [
+                threading.Thread(target=self._work, name=f"expo-push-{index}", daemon=True)
+                for index in range(self._workers)
+            ]
+            self._threads.append(
+                threading.Thread(target=self._schedule, name="expo-push-later", daemon=True)
+            )
+            for thread in self._threads:
+                thread.start()
+
+    def stop(self, timeout: float = 5.0) -> None:
+        """Stops taking work, drops what is queued or waiting, and waits up to ``timeout``."""
+        with self._lock:
+            self._users = max(0, self._users - 1)
+            if self._users or self._closed:
+                return
+            self._closed = True
+            self._waiting.clear()
+            threads, self._threads = self._threads, []
+            work = self._queue
+            self._lock.notify_all()
+        while True:
+            try:
+                work.get_nowait()
+                work.task_done()
+            except queue.Empty:
+                break
+        for _ in range(self._workers):
+            try:
+                work.put_nowait(None)
+            except queue.Full:
+                break
+        deadline = time.monotonic() + timeout
+        for thread in threads:
+            thread.join(max(0.0, deadline - time.monotonic()))
+
+    @property
+    def running(self) -> bool:
+        return not self._closed
+
+    def _work(self) -> None:
+        work = self._queue
+        while True:
+            item = work.get()
+            try:
+                if item is None:
+                    return
+                if not self._closed:
+                    self._guard(*item)
+            finally:
+                work.task_done()
+
+    def _schedule(self) -> None:
+        with self._lock:
+            while not self._closed:
+                if not self._waiting:
+                    self._lock.wait()
+                    continue
+                due = self._waiting[0][0] - time.monotonic()
+                if due > 0:
+                    self._lock.wait(due)
+                    continue
+                _, _, function, args = heapq.heappop(self._waiting)
+                self._admit(function, args)
+
+    # --- admission -------------------------------------------------------------------------
+    def _admit(self, function: Callable, args: tuple) -> None:
+        if self.inline:
+            self._guard(function, *args)
+            return
+        if self._closed:
+            logger.debug("Expo push work dropped: the app is not running")
+            return
+        try:
+            self._queue.put_nowait((function, *args))
+        except queue.Full:
+            logger.warning("Expo push queue is full; an alert was dropped")
+
+    def _later(self, delay: float, function: Callable, *args) -> None:
+        if self.inline:
+            self._pending_later.append((function, args))
+            return
+        with self._lock:
+            if self._closed:
+                return
+            if len(self._waiting) >= self._max_waiting:
+                logger.warning(
+                    "Too much delayed Expo push work; a retry or receipt check was dropped"
+                )
+                return
+            self._sequence += 1
+            heapq.heappush(
+                self._waiting, (time.monotonic() + delay, self._sequence, function, args)
+            )
+            self._lock.notify_all()
+
+    @staticmethod
+    def _guard(function: Callable, *args) -> None:
+        try:
+            function(*args)
+        except Exception:  # A failed alert must never stop the worker.
+            logger.exception("Could not send Expo push notifications")
 
     # --- sending ---------------------------------------------------------------------------
     def submit(
@@ -241,7 +400,7 @@ class ExpoPushDispatcher:
     ) -> None:
         if alert.dedupe_key is not None and not self._first(alert.dedupe_key):
             return
-        self._run(self._deliver, session_factory, settings, alert, 1)
+        self._admit(self._deliver, (session_factory, settings, alert, 1))
 
     def _first(self, key: str) -> bool:
         now = time.monotonic()
@@ -255,42 +414,6 @@ class ExpoPushDispatcher:
                 self._recent.popitem(last=False)
             return True
 
-    def _run(self, function, *args) -> None:
-        if self.inline:
-            self._guard(function, *args)
-            return
-        future = self._executor.submit(self._guard, function, *args)
-        with self._lock:
-            self._futures.add(future)
-        future.add_done_callback(self._forget)
-
-    def _forget(self, future: Future) -> None:
-        with self._lock:
-            self._futures.discard(future)
-
-    @staticmethod
-    def _guard(function, *args) -> None:
-        try:
-            function(*args)
-        except Exception:  # A failed alert must never stop the worker.
-            logger.exception("Could not send Expo push notifications")
-
-    def _later(self, delay: float, function, *args) -> None:
-        if self.inline:
-            self._pending_later.append((function, args))
-            return
-
-        def fire() -> None:
-            with self._lock:
-                self._timers.discard(timer)
-            self._run(function, *args)
-
-        timer = threading.Timer(delay, fire)
-        timer.daemon = True
-        with self._lock:
-            self._timers.add(timer)
-        timer.start()
-
     def _deliver(
         self,
         session_factory: Callable[[], Session],
@@ -298,6 +421,8 @@ class ExpoPushDispatcher:
         alert: ExpoAlert,
         attempt: int,
     ) -> None:
+        if alert.expires_at_ms is not None and now_ms() >= alert.expires_at_ms:
+            return  # Too late to be useful.
         targets, _covered, ended = read_registrations(
             session_factory, alert.user_id, alert.local_reminder
         )
@@ -311,7 +436,15 @@ class ExpoPushDispatcher:
             if attempt < 2:
                 self._later(self.retry_delay, self._deliver, session_factory, settings, alert, 2)
             return
-        self._handle_tickets(session_factory, settings, targets, tickets)
+        outcomes = self._handle_tickets(session_factory, settings, targets, tickets)
+        if alert.local_reminder is not None:
+            # Decided for this idle spell, whether Expo took it or refused it for good: the
+            # reminder is never sent to these phones again for it, whatever the browsers do.
+            mark_reminded(
+                session_factory,
+                [target for target in targets if outcomes.get(target.token) in {"ok", "failed"}],
+                alert.local_reminder.due_ms,
+            )
 
     def _handle_tickets(
         self,
@@ -320,7 +453,7 @@ class ExpoPushDispatcher:
         targets: list[Registration],
         tickets: list,
     ) -> dict[str, str]:
-        """Prunes unregistered tokens, schedules receipt checks, and returns each outcome."""
+        """Prunes unregistered tokens, schedules a receipt check, and returns each outcome."""
         stale: list[Registration] = []
         receipts: dict[str, Registration] = {}
         outcomes: dict[str, str] = {}
@@ -386,16 +519,12 @@ class ExpoPushDispatcher:
         outcome = self._handle_tickets(session_factory, settings, targets[:1], tickets)
         return outcome.get(token, "failed")  # type: ignore[return-value]
 
-    # --- lifecycle -------------------------------------------------------------------------
+    # --- tests -----------------------------------------------------------------------------
     def drain(self, timeout: float = 10) -> None:
-        """Waits for alerts already handed over (not for retries or receipts still waiting)."""
+        """Waits for queued alerts (not for retries or receipt checks still waiting)."""
         deadline = time.monotonic() + timeout
-        while True:
-            with self._lock:
-                pending = set(self._futures)
-            if not pending or time.monotonic() > deadline:
-                return
-            wait(pending, timeout=max(0.0, deadline - time.monotonic()))
+        while self._queue.unfinished_tasks and time.monotonic() < deadline:
+            time.sleep(0.01)
 
     def run_later_now(self) -> None:
         """For tests in inline mode: runs the retries and receipt checks that are waiting."""
@@ -405,17 +534,10 @@ class ExpoPushDispatcher:
 
     def reset(self) -> None:
         """For tests: forgets sent alerts and anything waiting."""
-        self.cancel_timers()
         self._pending_later = []
         with self._lock:
             self._recent.clear()
-
-    def cancel_timers(self) -> None:
-        with self._lock:
-            timers = list(self._timers)
-            self._timers.clear()
-        for timer in timers:
-            timer.cancel()
+            self._waiting.clear()
 
 
 expo_dispatcher = ExpoPushDispatcher()

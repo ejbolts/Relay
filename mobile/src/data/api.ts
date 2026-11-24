@@ -110,28 +110,39 @@ export async function request<T>(
 async function sendPendingSignOut(origin: string) {
   try {
     // Each signed-out session is ended in turn; that also removes its phone alerts.
-    for (const token of await pendingSignOuts(origin)) {
+    for (const { id, token } of await pendingSignOuts(origin)) {
       try {
         await request<void>('/api/auth/logout-session', { method: 'POST' }, token);
       } catch (error) {
-        // A server error or no connection leaves it for next time; a 401 means it already ended.
-        if (!(error instanceof ApiError) || error.status >= 500) return;
+        // Kept unless the server ended it or says it had already ended (401); no connection, a
+        // server error or any other refusal is tried again on the next reconnect or return.
+        if (!(error instanceof ApiError && error.status === 401)) return;
       }
-      await finishSignOut(token);
+      await finishSignOut(id);
     }
   } catch {
-    // Secure storage was unavailable; the next launch tries again.
+    // Secure storage was unavailable; the next attempt tries again.
   }
 }
 
 let ending: Promise<void> | undefined;
+let again = false;
 
 /**
- * Ends a sign-out the server has not confirmed yet. Never throws: it retries next launch. The
- * screen checks the session on opening and on becoming active, so one attempt runs at a time.
+ * Ends sign-outs the server has not confirmed yet. Never throws. One attempt runs at a time; a
+ * reconnect, return or new sign-out during it runs one more pass after it, so none is lost.
  */
 function endPendingSignOut(origin: string) {
-  ending ??= sendPendingSignOut(origin).finally(() => (ending = undefined));
+  if (ending) {
+    again = true;
+    return ending;
+  }
+  ending = (async () => {
+    do {
+      again = false;
+      await sendPendingSignOut(origin);
+    } while (again);
+  })().finally(() => (ending = undefined));
   return ending;
 }
 

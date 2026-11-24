@@ -185,6 +185,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         workout_reminders = ActiveWorkoutReminderScheduler(SessionLocal, settings)
         app.state.workout_reminders = workout_reminders
         workout_reminders.start()
+        # Native alerts are sent only while the app runs, by its own workers.
+        expo_dispatcher.start()
         app.state.processor = processor
         app.state.rest_timer_notifications = rest_timer_notifications
         await processor.start()
@@ -193,7 +195,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         finally:
             await workout_reminders.stop()
             await rest_timer_notifications.stop()
-            expo_dispatcher.cancel_timers()
+            expo_dispatcher.stop()
             await processor.stop()
 
     # The interactive docs describe every endpoint, so a public server keeps them off by default.

@@ -12,8 +12,11 @@ jest.mock('expo-constants', () => ({
 const mockKeychain = new Map<string, string>();
 // When set, the next read takes its snapshot at once but delivers it only once the gate opens.
 let mockReadGate: Promise<void> | null = null;
+// Keys whose reads fail, as when the keystore is unavailable.
+const mockFailingReads = new Set<string>();
 jest.mock('expo-secure-store', () => ({
   getItemAsync: async (key: string) => {
+    if (mockFailingReads.has(key)) throw new Error('Keystore unavailable');
     const value = mockKeychain.get(key) ?? null;
     const gate = mockReadGate;
     mockReadGate = null;
@@ -63,6 +66,7 @@ function signedIn(origin = 'https://relay.test') {
 beforeEach(() => {
   fetchMock.mockClear();
   mockKeychain.clear();
+  mockFailingReads.clear();
   globalThis.fetch = fetchMock as unknown as typeof fetch;
 });
 
@@ -177,6 +181,63 @@ test('a sign-out saved by an older version is still ended', async () => {
   expect(mockKeychain.size).toBe(0);
 });
 
+test('a reconnect while a sign-out is failing runs one more attempt', async () => {
+  const api = signedIn();
+  let fail: (error: Error) => void = () => undefined;
+  fetchMock.mockImplementationOnce(
+    () => new Promise<Response>((_resolve, reject) => (fail = reject)),
+  );
+  const signingOut = api.signOut();
+  await settle();
+  // The connection returns while the first attempt is still waiting to fail.
+  fetchMock.mockResolvedValueOnce(reply(204));
+  const retried = api.retryPendingSignOut();
+  fail(new TypeError('Network request failed'));
+  await signingOut;
+  await retried;
+  expect(fetchMock).toHaveBeenCalledTimes(2);
+  expect(mockKeychain.size).toBe(0);
+});
+
+test('every offline sign-out is kept, however many there are', async () => {
+  const api = signedIn();
+  for (let index = 0; index < 12; index += 1) {
+    mockKeychain.set('relay.session', saved('https://relay.test', `token-${index}`));
+    fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));
+    await api.signOut();
+  }
+  fetchMock.mockClear();
+  for (let index = 0; index < 12; index += 1) fetchMock.mockResolvedValueOnce(reply(204));
+  await api.retryPendingSignOut();
+  expect(fetchMock.mock.calls.map((_, index) => headers(index).Authorization)).toEqual(
+    Array.from({ length: 12 }, (_, index) => `Bearer token-${index}`),
+  );
+  expect(mockKeychain.size).toBe(0);
+});
+
+test("a keystore that can't be read never loses the sign-outs already saved", async () => {
+  const api = signedIn();
+  fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));
+  await api.signOut();
+  const saved = new Map(mockKeychain);
+  mockFailingReads.add('relay.pending-sign-outs');
+  mockKeychain.set('relay.session', JSON.stringify({ origin: 'https://relay.test', token: 'b' }));
+  await api.signOut();
+  mockFailingReads.clear();
+  for (const [key, value] of saved) expect(mockKeychain.get(key)).toBe(value);
+  expect(mockKeychain.has('relay.session')).toBe(false);
+});
+
+test('a refusal other than an ended session keeps the sign-out for the next try', async () => {
+  const api = signedIn();
+  fetchMock.mockResolvedValueOnce(reply(429, {}));
+  await api.signOut();
+  expect(mockKeychain.has('relay.pending-sign-outs')).toBe(true);
+  fetchMock.mockResolvedValueOnce(reply(204));
+  await api.retryPendingSignOut();
+  expect(mockKeychain.size).toBe(0);
+});
+
 test('opening and becoming active together retry the sign-out once', async () => {
   const api = signedIn();
   fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));
@@ -196,7 +257,7 @@ test('a sign-out the server rejects with an error stays queued for the next laun
   const api = signedIn();
   fetchMock.mockResolvedValueOnce(reply(503, {}));
   await api.signOut();
-  expect(mockKeychain.has('relay.pending-sign-out')).toBe(true);
+  expect(mockKeychain.has('relay.pending-sign-outs')).toBe(true);
 
   fetchMock.mockResolvedValueOnce(reply(401, {}));
   await expect(api.currentUser(new AbortController().signal)).rejects.toThrow();

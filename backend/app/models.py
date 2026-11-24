@@ -573,6 +573,9 @@ class ExpoPushToken(Base):
     # phone has scheduled, and when (epoch milliseconds) it is due.
     local_reminder_workout: Mapped[str | None] = mapped_column(String(30), nullable=True)
     local_reminder_due_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # The idle spell (its due time) whose "Still working out?" this phone has already been sent,
+    # or refused for good, so a reminder retried for browsers or after a restart isn't resent.
+    native_reminder_due_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

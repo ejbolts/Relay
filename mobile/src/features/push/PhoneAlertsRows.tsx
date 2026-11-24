@@ -13,6 +13,8 @@ import {
   remotePushStatus,
   sendTestAlert,
   subscribeRemotePush,
+  TURN_OFF_WAITING,
+  turnOffWaiting,
   unavailableMessage,
 } from './remotePush';
 
@@ -30,6 +32,9 @@ const icons = {
  */
 export function usePhoneAlerts() {
   const status = useSyncExternalStore(subscribeRemotePush, remotePushStatus);
+  // From what is saved, so it is still shown after Settings opens again, and clears once the
+  // server confirms the turn-off.
+  const waiting = useSyncExternalStore(subscribeRemotePush, turnOffWaiting);
   const [busy, setBusy] = useState<'switch' | 'test' | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,6 +47,7 @@ export function usePhoneAlerts() {
       await action();
       showToast(done, undefined, { account });
     } catch (reason) {
+      // A turn-off waiting for the server is shown from what is saved instead.
       setError(errorMessage(reason));
     } finally {
       setBusy(null);
@@ -52,7 +58,7 @@ export function usePhoneAlerts() {
     status,
     enabled: status.kind === 'enabled',
     busy,
-    error,
+    error: error && error !== TURN_OFF_WAITING ? error : waiting ? TURN_OFF_WAITING : null,
     toggle: (on: boolean) =>
       run(
         'switch',

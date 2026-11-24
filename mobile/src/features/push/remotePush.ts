@@ -81,9 +81,13 @@ let status: RemotePushStatus = { kind: 'checking' };
 const listeners = new Set<() => void>();
 let lastSync = 0;
 
+function emit() {
+  listeners.forEach((listener) => listener());
+}
+
 function setStatus(next: RemotePushStatus) {
   status = next;
-  listeners.forEach((listener) => listener());
+  emit();
 }
 
 /** For useSyncExternalStore. */
@@ -99,6 +103,11 @@ export function phoneAlertsPreferred(): boolean {
   return readJson<string>(PREFERENCE_KEY) !== 'disabled';
 }
 
+function setPreference(value: string | null) {
+  writeJson(PREFERENCE_KEY, value);
+  emit();
+}
+
 function registration(): Registration | null {
   const saved = readJson<Registration>(REGISTRATION_KEY);
   return saved && saved.userId === account ? saved : null;
@@ -110,7 +119,18 @@ function pendingDeletes(): Registration[] {
 }
 
 function setPendingDeletes(list: Registration[]) {
-  writeJson(PENDING_DELETE_KEY, list.length ? list.slice(-10) : null);
+  writeJson(PENDING_DELETE_KEY, list.length ? list : null);
+  emit();
+}
+
+/**
+ * Whether this account turned Phone alerts off here but the server hasn't confirmed it yet. Read
+ * from what is saved, so it is still shown after Settings is opened again.
+ */
+export function turnOffWaiting(): boolean {
+  return (
+    !!account && !phoneAlertsPreferred() && pendingDeletes().some((item) => item.userId === account)
+  );
 }
 
 async function permission() {
@@ -135,12 +155,15 @@ async function ensureAlertChannel() {
   }).catch(() => undefined);
 }
 
-// --- one change at a time, for the session that asked for it -----------------------------------
+// --- each change for the session it was asked in ------------------------------------------------
 
-/** The account and session a change started in; it is dropped if either has moved on. */
-interface Bound {
+/** The account and session a change was asked for in, taken when it is asked. */
+interface Ctx {
   userId: string;
   epoch: number;
+}
+
+interface Bound extends Ctx {
   bearer: string;
 }
 
@@ -150,20 +173,20 @@ class Stale extends Error {
   }
 }
 
-async function bind(): Promise<Bound | null> {
-  const userId = account;
-  const epoch = sessionEpoch();
-  if (!userId) return null;
-  const bearer = await sessionToken(serverOrigin()).catch(() => null);
-  if (!bearer || epoch !== sessionEpoch() || account !== userId) return null;
-  return { userId, epoch, bearer };
-}
+const ctxNow = (): Ctx | null => (account ? { userId: account, epoch: sessionEpoch() } : null);
+const isCurrent = (ctx: Ctx) => ctx.epoch === sessionEpoch() && account === ctx.userId;
 
-const stillCurrent = (bound: Bound) => bound.epoch === sessionEpoch() && account === bound.userId;
+/** That session's own token, or null once it is no longer the one signed in. */
+async function bind(ctx: Ctx): Promise<Bound | null> {
+  if (!isCurrent(ctx)) return null;
+  const bearer = await sessionToken(serverOrigin()).catch(() => null);
+  if (!bearer || !isCurrent(ctx)) return null;
+  return { ...ctx, bearer };
+}
 
 /** A request carrying the bound session's own token, never a newer account's. */
 function send<T>(bound: Bound, path: string, method: 'POST' | 'PUT' | 'DELETE', body: unknown) {
-  if (!stillCurrent(bound)) return Promise.reject(new Stale());
+  if (!isCurrent(bound)) return Promise.reject(new Stale());
   return request<T>(
     path,
     { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) },
@@ -172,21 +195,40 @@ function send<T>(bound: Bound, path: string, method: 'POST' | 'PUT' | 'DELETE', 
 }
 
 let queue: Promise<unknown> = Promise.resolve();
-function inTurn<T>(change: () => Promise<T>): Promise<T> {
-  const run = queue.then(change, change);
+
+/**
+ * Runs a change to this phone's registration after the ones before it, for the session `ctx` was
+ * taken in when the change was asked for. A change whose session has ended by its turn is dropped
+ * before it reads or writes anything.
+ */
+function inTurnFor<T>(ctx: Ctx | null, change: (ctx: Ctx) => Promise<T>): Promise<T> {
+  const run = queue.then(() => {
+    if (!ctx || !isCurrent(ctx)) throw new Stale();
+    return change(ctx);
+  });
   queue = run.catch(() => undefined);
   return run;
 }
 
-/** Tells the server about tokens turned off here until it confirms; false if any still wait. */
-async function flushDeletes(bound: Bound): Promise<boolean> {
+/**
+ * Tells the server about tokens turned off here, until it confirms. A turn-off the phone has
+ * since undone (alerts on again with the same token) is dropped instead. False if any still wait.
+ */
+async function flushDeletes(ctx: Ctx): Promise<boolean> {
   let done = true;
-  for (const item of pendingDeletes().filter((entry) => entry.userId === bound.userId)) {
+  for (const item of pendingDeletes().filter((entry) => entry.userId === ctx.userId)) {
+    if (phoneAlertsPreferred() && registration()?.token === item.token) {
+      setPendingDeletes(pendingDeletes().filter((entry) => entry.token !== item.token));
+      continue;
+    }
+    const bound = await bind(ctx);
+    if (!bound) return false;
     try {
       await send<void>(bound, TOKENS, 'DELETE', { token: item.token });
     } catch (error) {
-      // No connection or a server error: kept for the next try. Any other answer settles it.
-      if (error instanceof Stale || !(error instanceof ApiError) || error.status >= 500) {
+      // Settled when removed, already gone (404) or its session has ended (401); anything else,
+      // such as no connection, a server error or a rate limit, is tried again later.
+      if (!(error instanceof ApiError && (error.status === 404 || error.status === 401))) {
         done = false;
         continue;
       }
@@ -196,23 +238,52 @@ async function flushDeletes(bound: Bound): Promise<boolean> {
   return done;
 }
 
-async function register(bound: Bound, projectId: string): Promise<Registration | null> {
+let lookingUp: { projectId: string; run: Promise<string> } | null = null;
+
+/** Expo's token for this install. Looked up outside the queue: it can be slow. */
+function lookupToken(projectId: string): Promise<string> {
+  if (lookingUp?.projectId === projectId) return lookingUp.run;
+  const run = Notifications.getExpoPushTokenAsync({ projectId })
+    .then(({ data }) => {
+      if (typeof data !== 'string' || !/^Expo(nent)?PushToken\[[A-Za-z0-9_-]+\]$/.test(data))
+        throw new Error('Expo returned an unexpected push token.');
+      return data;
+    })
+    .finally(() => {
+      if (lookingUp?.run === run) lookingUp = null;
+    });
+  lookingUp = { projectId, run };
+  return run;
+}
+
+/**
+ * Registers this phone for the session `ctx` was taken in, unless alerts were turned off or the
+ * session ended meanwhile. A successful registration settles any older turn-off of the same token.
+ */
+async function registerFor(ctx: Ctx, projectId: string): Promise<Registration | null> {
   await ensureAlertChannel();
-  const { data: token } = await Notifications.getExpoPushTokenAsync({ projectId });
-  // Turned off, signed out or switched account while the phone looked the token up.
-  if (!stillCurrent(bound) || !phoneAlertsPreferred()) return null;
-  await send<void>(bound, TOKENS, 'POST', {
-    token,
-    platform: Platform.OS,
-    local_alerts: LOCAL_ALERTS,
+  const token = await lookupToken(projectId);
+  return inTurnFor(ctx, async (current) => {
+    if (!phoneAlertsPreferred()) return null;
+    const bound = await bind(current);
+    if (!bound) throw new Stale();
+    await send<void>(bound, TOKENS, 'POST', {
+      token,
+      platform: Platform.OS,
+      local_alerts: LOCAL_ALERTS,
+    });
+    // Turned off or signed out while the request was out: the turn-off stays queued.
+    if (!isCurrent(current) || !phoneAlertsPreferred()) return null;
+    const saved = { token, userId: current.userId };
+    writeJson(REGISTRATION_KEY, saved);
+    setPendingDeletes(
+      pendingDeletes().filter((item) => !(item.token === token && item.userId === saved.userId)),
+    );
+    lastSync = Date.now();
+    reported = null;
+    scheduleReport(0);
+    return saved;
   });
-  if (!stillCurrent(bound)) return null;
-  const saved = { token, userId: bound.userId };
-  writeJson(REGISTRATION_KEY, saved);
-  lastSync = Date.now();
-  reported = null;
-  scheduleReport(0);
-  return saved;
 }
 
 let syncing: { epoch: number; run: Promise<void> } | null = null;
@@ -223,83 +294,83 @@ let syncing: { epoch: number; run: Promise<void> } | null = null;
  * turn-offs the server hasn't confirmed. Runs on launch, on coming back and on reconnecting.
  */
 export function syncRemotePush(force = false): Promise<void> {
-  const epoch = sessionEpoch();
-  if (syncing?.epoch === epoch) return syncing.run;
-  const run = inTurn(() => syncNow(force)).finally(() => {
-    if (syncing?.run === run) syncing = null;
-  });
-  syncing = { epoch, run };
+  const ctx = ctxNow();
+  if (!ctx) return Promise.resolve();
+  if (syncing?.epoch === ctx.epoch) return syncing.run;
+  const run = syncFor(ctx, force)
+    .catch(() => undefined)
+    .finally(() => {
+      if (syncing?.run === run) syncing = null;
+    });
+  syncing = { epoch: ctx.epoch, run };
   return run;
 }
 
-async function syncNow(force: boolean) {
+async function syncFor(ctx: Ctx, force: boolean) {
   const availability = remotePushAvailability();
   if (!availability.available) {
     setStatus({ kind: 'unavailable', reason: availability.reason });
     return;
   }
-  const bound = await bind();
-  if (!bound) return;
-  await flushDeletes(bound);
+  await inTurnFor(ctx, flushDeletes);
   // Checked every time, such as on coming back from the phone's settings.
   const allowed = await permission();
+  if (!isCurrent(ctx)) return;
   setLocalAllowed(!!allowed?.granted);
   if (!allowed?.granted) {
-    if (stillCurrent(bound))
-      setStatus({ kind: allowed && !allowed.canAskAgain ? 'blocked' : 'available' });
+    setStatus({ kind: allowed && !allowed.canAskAgain ? 'blocked' : 'available' });
     return;
   }
   if (!phoneAlertsPreferred()) {
-    if (stillCurrent(bound)) setStatus({ kind: 'available' });
+    setStatus({ kind: 'available' });
     return;
   }
   // A registered phone registers again now and then.
   if (!force && registration() && Date.now() - lastSync < RESYNC_MS) {
-    if (stillCurrent(bound)) setStatus({ kind: 'enabled' });
+    setStatus({ kind: 'enabled' });
     return;
   }
   try {
-    const saved = await register(bound, availability.projectId);
-    if (stillCurrent(bound) && phoneAlertsPreferred())
+    const saved = await registerFor(ctx, availability.projectId);
+    if (isCurrent(ctx) && phoneAlertsPreferred())
       setStatus({ kind: saved || registration() ? 'enabled' : 'available' });
   } catch {
     // Offline or refused: shown as on if this phone was registered before, and retried later.
-    if (stillCurrent(bound) && phoneAlertsPreferred())
+    if (isCurrent(ctx) && phoneAlertsPreferred())
       setStatus({ kind: registration() ? 'enabled' : 'available' });
   }
 }
 
 /** Turns Phone alerts on from Settings: asks for permission and registers this phone. */
-export function enableRemotePush(): Promise<void> {
-  return inTurn(async () => {
-    const availability = remotePushAvailability();
-    if (!availability.available) throw new Error(unavailableMessage(availability.reason));
-    const bound = await bind();
-    if (!bound) throw new Error('Sign in to turn on phone alerts.');
-    await ensureAlertChannel();
-    const current = await permission();
-    const granted =
-      current?.granted ||
-      (current?.canAskAgain !== false &&
-        (await Notifications.requestPermissionsAsync().catch(() => null))?.granted);
-    if (!granted) {
-      if (stillCurrent(bound)) setStatus({ kind: 'blocked' });
-      throw new Error(
-        'Notifications are blocked. Allow them in your phone settings, then try again.',
-      );
-    }
-    setLocalAllowed(true);
-    const before = readJson<string>(PREFERENCE_KEY);
-    // The choice is made first, so a refresh running meanwhile doesn't undo it.
-    writeJson(PREFERENCE_KEY, 'enabled');
-    try {
-      if (!(await register(bound, availability.projectId))) throw new Stale();
-    } catch (error) {
-      if (stillCurrent(bound)) writeJson(PREFERENCE_KEY, before);
-      throw error;
-    }
-    setStatus({ kind: 'enabled' });
-  });
+export async function enableRemotePush(): Promise<void> {
+  const availability = remotePushAvailability();
+  if (!availability.available) throw new Error(unavailableMessage(availability.reason));
+  const ctx = ctxNow();
+  if (!ctx) throw new Error('Sign in to turn on phone alerts.');
+  await ensureAlertChannel();
+  const current = await permission();
+  const granted =
+    current?.granted ||
+    (current?.canAskAgain !== false &&
+      (await Notifications.requestPermissionsAsync().catch(() => null))?.granted);
+  if (!isCurrent(ctx)) throw new Stale();
+  if (!granted) {
+    setStatus({ kind: 'blocked' });
+    throw new Error(
+      'Notifications are blocked. Allow them in your phone settings, then try again.',
+    );
+  }
+  setLocalAllowed(true);
+  const before = readJson<string>(PREFERENCE_KEY);
+  // The choice is made first, so a refresh running meanwhile doesn't undo it.
+  setPreference('enabled');
+  try {
+    if (!(await registerFor(ctx, availability.projectId))) throw new Stale();
+  } catch (error) {
+    if (isCurrent(ctx) && readJson<string>(PREFERENCE_KEY) === 'enabled') setPreference(before);
+    throw error;
+  }
+  if (isCurrent(ctx)) setStatus({ kind: 'enabled' });
 }
 
 /** The message when a turn-off is saved here but the server hasn't been told yet. */
@@ -311,24 +382,23 @@ export const TURN_OFF_WAITING =
  * can't turn them back on; the token is kept until the server confirms it has removed it.
  */
 export function disableRemotePush(): Promise<void> {
-  writeJson(PREFERENCE_KEY, 'disabled');
+  const ctx = ctxNow();
+  setPreference('disabled');
   cancelReport();
+  const saved = registration();
+  writeJson(REGISTRATION_KEY, null);
+  if (saved)
+    setPendingDeletes([...pendingDeletes().filter((item) => item.token !== saved.token), saved]);
   setStatus({ kind: 'available' });
-  return inTurn(async () => {
-    const saved = registration();
-    writeJson(REGISTRATION_KEY, null);
-    if (saved)
-      setPendingDeletes([...pendingDeletes().filter((item) => item.token !== saved.token), saved]);
-    const bound = await bind();
-    if (!bound) return;
-    if (!(await flushDeletes(bound)) && stillCurrent(bound)) throw new Error(TURN_OFF_WAITING);
+  return inTurnFor(ctx, async (current) => {
+    if (!(await flushDeletes(current)) && isCurrent(current)) throw new Error(TURN_OFF_WAITING);
   });
 }
 
 /** Sends a test alert to this phone alone; it fails if Expo or the phone refused it. */
 export function sendTestAlert(): Promise<void> {
-  return inTurn(async () => {
-    const bound = await bind();
+  return inTurnFor(ctxNow(), async (ctx) => {
+    const bound = await bind(ctx);
     const saved = registration();
     if (!bound || !saved) throw new Error('Turn on phone alerts first.');
     await send<void>(bound, `${TOKENS}/test`, 'POST', { token: saved.token });
@@ -337,9 +407,10 @@ export function sendTestAlert(): Promise<void> {
 
 /**
  * The signed-in account, or null once signed out. Signing out forgets this phone's registration
- * here; the server removes the token with the sign-in itself, even if the phone was offline (the
- * sign-out is retried until the server confirms it). As on the web, the preference goes back to
- * its default for the next account.
+ * here, and the server removes the token with the sign-in itself, even if the phone was offline:
+ * the app retries that sign-out until the server confirms it. So the previous account's waiting
+ * turn-offs are settled by its sign-out. As on the web, the preference goes back to its default
+ * for the next account.
  */
 export function setRemotePushAccount(userId: string | null) {
   if (userId === account) return;
@@ -352,7 +423,6 @@ export function setRemotePushAccount(userId: string | null) {
   if (previous !== null) {
     writeJson(REGISTRATION_KEY, null);
     writeJson(PREFERENCE_KEY, null);
-    // The previous account's sign-out removes its tokens on the server.
     setPendingDeletes(pendingDeletes().filter((item) => item.userId !== previous));
   }
   setStatus({ kind: 'checking' });
@@ -398,12 +468,20 @@ function scheduleReport(delay = REPORT_DELAY_MS) {
 const sameReminder = (a: Reminder | null, b: Reminder) =>
   a?.workout === b.workout && a?.dueAt === b.dueAt;
 
+let reports: Promise<void> = Promise.resolve();
+
+/**
+ * Sends the reminder claim on its own chain, for the session it was asked in: it never waits for
+ * a token lookup or a registration, so it can go out before the phone suspends Relay.
+ */
 function sendReport(): Promise<void> {
-  return inTurn(async () => {
+  const ctx = ctxNow();
+  reports = reports.then(async () => {
+    if (!ctx || !isCurrent(ctx)) return;
     const saved = registration();
     const target = effective();
     if (!saved || sameReminder(reported, target)) return;
-    const bound = await bind();
+    const bound = await bind(ctx);
     if (!bound) return;
     try {
       await send<void>(bound, `${TOKENS}/local-reminder`, 'PUT', {
@@ -411,11 +489,12 @@ function sendReport(): Promise<void> {
         workout_started_at: target.workout,
         due_at_ms: target.dueAt,
       });
-      if (stillCurrent(bound)) reported = target;
+      if (isCurrent(ctx)) reported = target;
     } catch {
       // Offline: the next change, reconnect or return to the app sends it.
     }
   });
+  return reports;
 }
 
 /**
@@ -472,7 +551,9 @@ export function resetRemotePushForTests() {
   listeners.clear();
   lastSync = 0;
   syncing = null;
+  lookingUp = null;
   queue = Promise.resolve();
+  reports = Promise.resolve();
   cancelReport();
   wanted = NONE;
   reported = null;

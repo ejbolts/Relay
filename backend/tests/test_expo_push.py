@@ -309,7 +309,7 @@ def test_still_working_out_skips_a_phone_that_scheduled_it_itself(client, expo, 
         "kind": "workout",
         "startedAt": started,
     }
-    assert calls[0]["ttl"] == 1800
+    assert 1700 < calls[0]["ttl"] <= 1800
 
 
 def test_a_reminder_retried_for_its_browsers_reaches_the_app_once(client, expo):
@@ -521,6 +521,7 @@ def test_a_slow_expo_request_never_delays_browsers_or_other_accounts(monkeypatch
     from conftest import make_user
 
     monkeypatch.setattr(dispatcher, "inline", False)
+    dispatcher.start()
     web: list[str] = []
     monkeypatch.setattr(
         pywebpush,
@@ -569,6 +570,7 @@ def test_a_slow_expo_request_never_delays_browsers_or_other_accounts(monkeypatch
     assert results == [True, True, True]
     assert len(web) == 3
     dispatcher.drain(timeout=10)
+    dispatcher.stop()
     assert sorted(sent) == [f"ExponentPushToken[slow-phone-{index}]" for index in range(3)]
 
 
@@ -644,3 +646,97 @@ def test_an_alert_handed_over_twice_with_the_same_key_reaches_the_app_once(clien
     expo_dispatcher.submit(SessionLocal, client.app.state.settings, alert)
     calls, _ = expo
     assert to(calls) == [PHONE]
+
+
+def test_a_phone_gets_still_working_out_once_per_idle_spell_even_after_a_restart(
+    client, expo, dispatcher, monkeypatch
+):
+    register(client, local_alerts=[])  # No reminder of its own: the server's is its only one.
+    start_workout(client, idle_minutes=50)
+    due = server_due_ms(client.user["id"])
+    monkeypatch.setattr(expo_delivery, "now_ms", lambda: due + 10 * 60_000)
+    reminders = client.app.state.workout_reminders
+    reminders.deliver_inactive()
+    calls, _ = expo
+    assert to(calls) == [PHONE]
+    # Expo's TTL counts from when it was due: 20 of the 30 minutes are left.
+    assert calls[0]["ttl"] == 20 * 60
+    # No browser got it, so it is retried; a restart (or an hour) has emptied the short-term
+    # memory of what was sent.
+    dispatcher.reset()
+    reminders.deliver_inactive()
+    assert to(calls) == [PHONE]
+    [row] = tokens()
+    assert row.native_reminder_due_ms == due
+
+
+def test_a_still_working_out_too_late_to_help_is_not_sent(client, expo, monkeypatch):
+    register(client, local_alerts=[])
+    start_workout(client, idle_minutes=50)
+    due = server_due_ms(client.user["id"])
+    monkeypatch.setattr(expo_delivery, "now_ms", lambda: due + 31 * 60_000)
+    client.app.state.workout_reminders.deliver_inactive()
+    calls, _ = expo
+    assert calls == []
+
+
+def test_a_new_idle_spell_reaches_the_phone_again(client, expo, dispatcher):
+    register(client, local_alerts=[])
+    start_workout(client, idle_minutes=50)
+    with SessionLocal() as db:
+        db.query(ExpoPushToken).update({"native_reminder_due_ms": 1})
+        db.commit()
+    client.app.state.workout_reminders.deliver_inactive()
+    calls, _ = expo
+    assert to(calls) == [PHONE]
+
+
+def test_the_dispatcher_takes_no_work_once_stopped_and_drops_what_was_queued(caplog):
+    import threading
+    import time as clock
+
+    worker = expo_delivery.ExpoPushDispatcher(workers=1, max_queued=2)
+    worker.start()
+    blocked, ran = threading.Event(), []
+    worker._admit(blocked.wait, (5,))
+    for index in range(4):
+        worker._admit(ran.append, (index,))
+    assert "queue is full" in caplog.text  # Admission is bounded: two waited, two were dropped.
+    started = clock.monotonic()
+    worker.stop(timeout=0.3)
+    assert clock.monotonic() - started < 1  # Doesn't wait for the blocked request.
+    worker._admit(ran.append, ("after",))
+    worker._later(0, ran.append, "later")
+    blocked.set()
+    clock.sleep(0.2)
+    assert ran == []
+    assert not worker.running
+
+
+def test_delayed_work_runs_from_one_scheduler_thread():
+    import threading
+
+    worker = expo_delivery.ExpoPushDispatcher(workers=1)
+    worker.start()
+    try:
+        done = threading.Event()
+        seen: list[int] = []
+        for index in range(20):
+            worker._later(0.05, seen.append, index)
+        worker._later(0.1, done.set)
+        assert done.wait(2)
+        assert sorted(seen) == list(range(20))
+        names = [thread.name for thread in threading.enumerate()]
+        assert names.count("expo-push-later") == 1
+    finally:
+        worker.stop()
+
+
+def test_the_dispatcher_follows_every_app_lifespan_using_it():
+    worker = expo_delivery.ExpoPushDispatcher(workers=1)
+    worker.start()
+    worker.start()
+    worker.stop()
+    assert worker.running
+    worker.stop()
+    assert not worker.running

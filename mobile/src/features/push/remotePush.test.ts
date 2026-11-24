@@ -23,6 +23,7 @@ import {
   setRemotePushAccount,
   syncRemotePush,
   TURN_OFF_WAITING,
+  turnOffWaiting,
   unavailableMessage,
 } from './remotePush';
 
@@ -280,6 +281,55 @@ describe('registration', () => {
     expect(remotePushStatus()).toEqual({ kind: 'enabled' });
   });
 
+  test("work queued for one account never runs with the next account's sign-in", async () => {
+    await syncRemotePush(true);
+    sent.mockClear();
+    let release: () => void = () => undefined;
+    // A registration request is out, holding the queue.
+    sent.mockImplementationOnce(
+      () => new Promise<undefined>((done) => (release = () => done(undefined))),
+    );
+    const refresh = syncRemotePush(true);
+    await jest.advanceTimersByTimeAsync(0);
+    const test = sendTestAlert();
+    const expectStale = expect(test).rejects.toThrow('Signed out.');
+    // Alice also turns alerts on; it waits behind the request.
+    const on = enableRemotePush();
+    const expectOnStale = expect(on).rejects.toThrow('Signed out.');
+    await jest.advanceTimersByTimeAsync(0);
+    switchTo('bob');
+    release();
+    await refresh;
+    await expectStale;
+    await expectOnStale;
+    expect(calls().filter(([, , , token]) => token === 'bearer-bob')).toEqual([]);
+  });
+
+  test('turning alerts back on settles the turn-off still waiting for the same token', async () => {
+    await syncRemotePush(true);
+    sent.mockRejectedValueOnce(new Error('Could not reach Relay.'));
+    await expect(disableRemotePush()).rejects.toThrow(TURN_OFF_WAITING);
+    expect(turnOffWaiting()).toBe(true);
+    await enableRemotePush();
+    expect(turnOffWaiting()).toBe(false);
+    expect(readJson('relay.mobile.expo-push-pending-delete.v1')).toBeNull();
+    sent.mockClear();
+    await syncRemotePush(true);
+    expect(calls('DELETE')).toEqual([]);
+    expect(remotePushStatus()).toEqual({ kind: 'enabled' });
+  });
+
+  test('a turn-off is kept when the server refuses it for now', async () => {
+    await syncRemotePush(true);
+    sent.mockRejectedValueOnce(new ApiError(429, 'Wait a moment before trying alerts again.'));
+    await expect(disableRemotePush()).rejects.toThrow(TURN_OFF_WAITING);
+    expect(turnOffWaiting()).toBe(true);
+    sent.mockClear();
+    await syncRemotePush();
+    expect(calls('DELETE')).toHaveLength(1);
+    expect(turnOffWaiting()).toBe(false);
+  });
+
   test('an offline phone that registered before still shows as on, and retries later', async () => {
     await syncRemotePush(true);
     sent.mockRejectedValueOnce(new Error('offline'));
@@ -339,6 +389,16 @@ describe('the reminder the phone schedules itself', () => {
       workout_started_at: null,
       due_at_ms: null,
     });
+  });
+
+  test('a report goes out while a slow token lookup is still waiting', async () => {
+    await registered();
+    lookup.mockImplementationOnce(() => new Promise(() => undefined) as never);
+    void syncRemotePush(true);
+    await jest.advanceTimersByTimeAsync(0);
+    reportLocalReminder(5, 10);
+    await flushLocalReminderReport();
+    expect(calls('PUT')).toHaveLength(1);
   });
 
   test('a report still waiting is sent as Relay goes to the background', async () => {

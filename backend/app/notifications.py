@@ -78,6 +78,7 @@ def send_push_notification(
     native_title: str | None = None,
     native_body: str | None = None,
     dedupe_key: str | None = None,
+    native_expires_at_ms: int | None = None,
 ) -> bool:
     """Alerts one account's devices: its web push subscriptions and its native apps.
 
@@ -98,6 +99,7 @@ def send_push_notification(
                 local_reminder=local_reminder,
                 ttl_seconds=ttl_seconds,
                 dedupe_key=dedupe_key,
+                expires_at_ms=native_expires_at_ms,
             ),
         )
     return _send_web_push(
@@ -306,6 +308,7 @@ class ActiveWorkoutReminderScheduler:
                 db.commit()
                 if claimed.rowcount != 1:
                     continue
+                due_ms = int((_aware(row.last_activity_at) + INACTIVE_AFTER).timestamp() * 1000)
                 delivered = send_push_notification(
                     self.session_factory,
                     self.settings,
@@ -319,14 +322,9 @@ class ActiveWorkoutReminderScheduler:
                     tag=INACTIVE_WORKOUT_ALERT,
                     # The app opens the workout it is about, as for its own reminder.
                     data=workout_reminder_data(row.started_at),
-                    local_reminder=LocalReminder(
-                        workout=row.started_at,
-                        due_ms=int(
-                            (_aware(row.last_activity_at) + INACTIVE_AFTER).timestamp() * 1000
-                        ),
-                    ),
+                    local_reminder=LocalReminder(workout=row.started_at, due_ms=due_ms),
                     # A reminder that reaches a phone long after it was due only confuses.
-                    ttl_seconds=30 * 60,
+                    native_expires_at_ms=due_ms + 30 * 60_000,
                     # Retried for the browsers until they get it; the apps get it once.
                     dedupe_key=f"inactive:{row.user_id}:{row.revision}",
                 )

@@ -143,3 +143,31 @@ test('turning it off offline says alerts stop once back online, without a confir
   expect(screen.getByLabelText('Phone alerts')).toHaveProp('value', false);
   expect(showToast).not.toHaveBeenCalledWith('Phone alerts off', undefined, expect.anything());
 });
+
+test('a turn-off still waiting for the server is shown again when Settings reopens', async () => {
+  const first = await render(<Notifications_ />);
+  await act(() => syncRemotePush(true));
+  send.mockImplementation(async (_path, init) => {
+    if (init?.method === 'DELETE') throw new Error('Could not reach Relay.');
+    return undefined as never;
+  });
+  await fireEvent(screen.getByLabelText('Phone alerts'), 'valueChange', false);
+  await screen.findByText(
+    "Couldn't reach Relay. Phone alerts will stop for this phone once it's back online.",
+  );
+  await first.unmount();
+  await render(<Notifications_ />);
+  expect(
+    screen.getByText(
+      "Couldn't reach Relay. Phone alerts will stop for this phone once it's back online.",
+    ),
+  ).toBeTruthy();
+  // Once Relay confirms it, the message goes.
+  send.mockResolvedValue(undefined as never);
+  await act(() => syncRemotePush(true));
+  expect(
+    screen.queryByText(
+      "Couldn't reach Relay. Phone alerts will stop for this phone once it's back online.",
+    ),
+  ).toBeNull();
+});

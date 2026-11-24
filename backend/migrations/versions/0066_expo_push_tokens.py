@@ -29,6 +29,7 @@ def upgrade() -> None:
         sa.Column("local_alerts", sa.JSON(), nullable=False),
         sa.Column("local_reminder_workout", sa.String(30), nullable=True),
         sa.Column("local_reminder_due_ms", sa.BigInteger(), nullable=True),
+        sa.Column("native_reminder_due_ms", sa.BigInteger(), nullable=True),
         sa.Column(
             "created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False
         ),
