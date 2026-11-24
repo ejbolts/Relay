@@ -270,7 +270,8 @@ describe('Settings', () => {
     });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['dashboard'] });
     expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.personalRecords });
-    expect(screen.getByRole('button', { name: 'Weight unit, Pounds' })).toBeTruthy();
+    // The row re-renders from the updated cache after the save settles.
+    expect(await screen.findByRole('button', { name: 'Weight unit, Pounds' })).toBeTruthy();
   });
 
   it('checks a typed weekly goal with the web rule before saving it', async () => {
