@@ -40,13 +40,14 @@ What the app covers compared with the web, and what's still web-only, is tracked
 
 Expo Go needs none of this. A development or store build gets its identity from environment variables, set as EAS environment variables (or in the shell for a local build) so no installation's values are committed. `app.json` is the base config, and `app.config.js` adds each variable only when it is set (`nativeConfig.js`):
 
-| Variable                | Sets                                                                      |
-| ----------------------- | ------------------------------------------------------------------------- |
-| `RELAY_IOS_BUNDLE_ID`   | `ios.bundleIdentifier`. The Live Activity extension is named after it     |
-| `RELAY_ANDROID_PACKAGE` | `android.package`                                                         |
-| `RELAY_EAS_PROJECT_ID`  | `extra.eas.projectId`, which push tokens need                             |
-| `RELAY_EXPO_OWNER`      | `owner`, the Expo account or organisation that owns the EAS project       |
-| `RELAY_APP_LINK_HOSTS`  | Comma-separated Relay hostnames for universal links and Android App Links |
+| Variable                     | Sets                                                                                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RELAY_IOS_BUNDLE_ID`        | `ios.bundleIdentifier`. The Live Activity extension is named after it                                                                                                     |
+| `RELAY_ANDROID_PACKAGE`      | `android.package`                                                                                                                                                         |
+| `RELAY_EAS_PROJECT_ID`       | `extra.eas.projectId`, which push tokens need                                                                                                                             |
+| `RELAY_GOOGLE_SERVICES_FILE` | `android.googleServicesFile`: the path to Firebase's `google-services.json` (a local path or an EAS file variable), which Android push tokens need. Never commit the file |
+| `RELAY_EXPO_OWNER`           | `owner`, the Expo account or organisation that owns the EAS project                                                                                                       |
+| `RELAY_APP_LINK_HOSTS`       | Comma-separated Relay hostnames for universal links and Android App Links                                                                                                 |
 
 `eas.json` has a `development` profile (a development client, distributed internally) and a `production` profile.
 

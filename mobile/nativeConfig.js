@@ -7,6 +7,8 @@
  *   config already sets wins.
  * - `RELAY_EAS_PROJECT_ID`: the EAS project, as `extra.eas.projectId` (push tokens need it).
  * - `RELAY_EXPO_OWNER`: the Expo account or organisation that owns that project.
+ * - `RELAY_GOOGLE_SERVICES_FILE`: the path to Firebase's `google-services.json` (a local path,
+ *   or an EAS file variable), as `android.googleServicesFile`; Android push tokens need it.
  * - `RELAY_APP_LINK_HOSTS`: comma-separated Relay hostnames, such as `gym.example.com`, for
  *   universal links (iOS) and App Links (Android). The server must serve the matching files:
  *   see `GYM_IOS_TEAM_ID` and its neighbours in the backend settings.
@@ -50,10 +52,25 @@ function withNativeConfig(config, env = process.env) {
     config.extra?.eas?.projectId ??
     setting('RELAY_EAS_PROJECT_ID', env.RELAY_EAS_PROJECT_ID, PROJECT_ID);
   const owner = config.owner ?? setting('RELAY_EXPO_OWNER', env.RELAY_EXPO_OWNER, OWNER);
-  if (!hosts.length && !bundleIdentifier && !androidPackage && !projectId && !owner) return config;
+  // A path, so any non-blank value is used as given; the build reports a missing file.
+  const googleServicesFile =
+    config.android?.googleServicesFile ?? (env.RELAY_GOOGLE_SERVICES_FILE?.trim() || undefined);
+  if (
+    !hosts.length &&
+    !bundleIdentifier &&
+    !androidPackage &&
+    !projectId &&
+    !owner &&
+    !googleServicesFile
+  )
+    return config;
 
   const ios = { ...config.ios, ...(bundleIdentifier ? { bundleIdentifier } : {}) };
-  const android = { ...config.android, ...(androidPackage ? { package: androidPackage } : {}) };
+  const android = {
+    ...config.android,
+    ...(androidPackage ? { package: androidPackage } : {}),
+    ...(googleServicesFile ? { googleServicesFile } : {}),
+  };
   if (hosts.length) {
     ios.associatedDomains = [
       ...new Set([

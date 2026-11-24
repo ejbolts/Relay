@@ -37,6 +37,18 @@ it('sets the identifiers and EAS project a build names', () => {
   expect(config.android.intentFilters).toBeUndefined();
 });
 
+it('points Android at the Firebase file a build supplies, keeping one the base sets', () => {
+  const config = withNativeConfig(base, { RELAY_GOOGLE_SERVICES_FILE: ' ./secrets/google.json ' });
+  expect(config.android).toEqual({ googleServicesFile: './secrets/google.json' });
+  expect(config.ios).toEqual(base.ios);
+  const kept = withNativeConfig(
+    { android: { googleServicesFile: './base.json' } },
+    { RELAY_GOOGLE_SERVICES_FILE: './other.json' },
+  );
+  expect(kept.android.googleServicesFile).toBe('./base.json');
+  expect(withNativeConfig(base, { RELAY_GOOGLE_SERVICES_FILE: '  ' })).toBe(base);
+});
+
 it('adds universal links and verified App Links for each Relay host', () => {
   const config = withNativeConfig(base, {
     RELAY_APP_LINK_HOSTS: 'gym.example.com, Relay.Example.org,gym.example.com',
