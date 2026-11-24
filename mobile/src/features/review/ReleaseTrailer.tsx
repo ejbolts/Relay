@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Image, Pressable, StyleSheet, View } from 'react-native';
 import { useVideoPlayer, VideoView } from 'expo-video';
 import type { ReleaseVideo } from '../../../../frontend/src/releaseMetadata';
@@ -7,6 +7,7 @@ import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { useReduceMotion } from '../settings/devicePreferences';
+import { usePlayerError } from '../videos/usePlayerError';
 
 /** Resolves a bundled `/releases/...` path against the server origin. */
 export function releaseAssetUrl(origin: string | null, path: string): string | null {
@@ -21,7 +22,7 @@ export function releaseAssetUrl(origin: string | null, path: string): string | n
  */
 export function ReleaseTrailer({ video }: { video: ReleaseVideo }) {
   const { radius } = useTheme();
-  // Kept for parity with web's reduced-motion policy: never autoplays in either mode.
+  // Nothing autoplays in either mode; Reduce Motion also turns off the posters' fade-in.
   const reducedMotion = useReduceMotion();
   const [started, setStarted] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -46,6 +47,7 @@ export function ReleaseTrailer({ video }: { video: ReleaseVideo }) {
             source={{ uri: posterUrl }}
             accessibilityLabel={video.alt}
             accessibilityIgnoresInvertColors
+            fadeDuration={reducedMotion ? 0 : undefined}
             resizeMode="cover"
             style={StyleSheet.absoluteFill}
           />
@@ -95,12 +97,7 @@ function TrailerPlayer({
     instance.play();
   });
 
-  useEffect(() => {
-    const subscription = player.addListener('statusChange', ({ status }) => {
-      if (status === 'error') onError();
-    });
-    return () => subscription.remove();
-  }, [player, onError]);
+  usePlayerError(player, onError);
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -117,6 +114,7 @@ function TrailerPlayer({
       />
       {!ready && (
         <Image
+          testID="release-trailer-loading-poster"
           source={{ uri: posterUrl }}
           pointerEvents="none"
           accessibilityElementsHidden
