@@ -390,4 +390,3 @@ test('a clock correction opened for one workout never reaches the workout that r
   expect(readActiveWorkoutDraft(deviceStorage)?.adjustedMs).toBeUndefined();
   expect(server.draft?.adjustedMs).toBeUndefined();
 });
-
