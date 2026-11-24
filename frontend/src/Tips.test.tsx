@@ -247,13 +247,13 @@ describe('shared tip presentation', () => {
     expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
     expect(loadTips('alice').shows?.reorder).toBe(2);
   });
-  it('returns an interrupted nudge to pending without spending its showing or daily slot', async () => {
+  it('returns an interrupted nudge to pending at most once, and keeps a second interruption counted', async () => {
     saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
     await render();
     await act(async () => controller.event('re-add-set', 'reorder'));
     await advance();
     expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
-    // A dialog interrupts the nudge right after it appears.
+    // First interruption right after appearing rolls back and re-queues once.
     const dialog = document.createElement('dialog');
     dialog.setAttribute('open', '');
     document.body.append(dialog);
@@ -261,20 +261,48 @@ describe('shared tip presentation', () => {
     expect(document.querySelector('.relay-tip-nudge')).toBeNull();
     expect(loadTips('alice').shows?.reorder).toBeUndefined();
     expect(loadTips('alice').lastShown).toBe(0);
-    // Once the dialog closes and things are quiet again, the nudge appears.
+    // Once the dialog closes and things are quiet again, the nudge appears once more.
     dialog.remove();
     await advance();
     expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
     expect(loadTips('alice').shows?.reorder).toBe(1);
     expect(loadTips('alice').lastShown).toBeGreaterThan(0);
-    // After staying visible long enough, an interruption keeps the showing counted.
-    await advance(3500);
+    // A second quick interruption of the same request counts normally and does not replay again.
     document.body.append(dialog);
     await advance(500);
     expect(document.querySelector('.relay-tip-nudge')).toBeNull();
     expect(loadTips('alice').shows?.reorder).toBe(1);
     expect(loadTips('alice').lastShown).toBeGreaterThan(0);
     dialog.remove();
+    await advance(5000);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+  });
+  it('does not overwrite a newer stored tip state from another tab when rolling back', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // Another tab records a newer priority showing before this tab receives the storage event.
+    const newerTimestamp = Date.now() + 250;
+    const otherTabState = {
+      ...loadTips('alice'),
+      lastShown: newerTimestamp,
+      shows: { ...loadTips('alice').shows, setType: 1 },
+    };
+    saveTips('alice', otherTabState);
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    document.body.append(dialog);
+    await advance(500);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    // Newer state in storage is preserved and this tab does not re-queue its nudge.
+    expect(loadTips('alice').lastShown).toBe(newerTimestamp);
+    expect(loadTips('alice').shows?.setType).toBe(1);
+    expect(loadTips('alice').shows?.reorder).toBe(1);
+    dialog.remove();
+    await advance(5000);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
   });
   it('brings a dot back on later visits until it has been shown three times', async () => {
     await render();

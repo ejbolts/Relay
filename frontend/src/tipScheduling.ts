@@ -25,7 +25,12 @@ export type TipEnvironment = {
 };
 
 /** A nudge an event asked for, waiting to show on `page` until `until`. */
-export type TipRequest = { until: number; page: string };
+export type TipRequest = {
+  until: number;
+  page: string;
+  /** True once an early interruption has already returned this request to pending. */
+  retried?: boolean;
+};
 
 /** A showing nudge's record, so an early interruption can put it back untouched. */
 export type ShownNudge = {
@@ -33,6 +38,10 @@ export type ShownNudge = {
   at: number;
   previousLastShown: number;
   request: TipRequest;
+  /** The showing count written when this nudge appeared, to guard against stale rollbacks. */
+  shownCount?: number;
+  /** The `seen[id]` status written when this nudge appeared, to guard against stale rollbacks. */
+  seenAfter?: TipState['seen'][TipId];
 };
 
 /** How long an event's nudge waits for a quiet moment. */
@@ -148,7 +157,8 @@ export function hintMayShow(
 /**
  * When a nudge is closed by an interruption (a menu, sheet, prompt, dialog or backgrounding)
  * before the reader could see it, returns the state with that showing and `lastShown` undone and
- * a pending request so it can appear again once things are quiet; otherwise returns null.
+ * a pending request keeping its original deadline so it can appear once more when things are
+ * quiet. Allows at most one rollback per request and never revives an expired request.
  */
 export function interruptedNudge(
   state: TipState,
@@ -157,6 +167,7 @@ export function interruptedNudge(
 ): { state: TipState; request: TipRequest } | null {
   if (TIP_DEFINITIONS[shown.id].surface !== 'nudge') return null;
   if (now - shown.at >= NUDGE_MIN_VISIBLE_MS) return null;
+  if (shown.request.retried || shown.request.until <= now) return null;
   if (state.seen[shown.id] === 'dismissed' || state.seen[shown.id] === 'learned') return null;
   const currentShows = state.shows?.[shown.id] ?? 0;
   const nextShows = Math.max(0, currentShows - 1);
@@ -172,7 +183,8 @@ export function interruptedNudge(
     state: { ...state, lastShown, shows, seen },
     request: {
       page: shown.request.page,
-      until: Math.max(shown.request.until, now + TIP_REQUEST_MS),
+      until: shown.request.until,
+      retried: true,
     },
   };
 }
