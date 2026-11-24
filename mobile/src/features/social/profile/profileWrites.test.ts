@@ -54,6 +54,21 @@ test('a session is read only for the account that started the edit', async () =>
   expect(await reading).toBeNull();
 });
 
+test('the same account without a token is an error to show; another account stays silent', async () => {
+  jest.mocked(sessionToken).mockResolvedValueOnce(null);
+  await expect(profileSession('user:a')).rejects.toMatchObject({
+    status: 401,
+    message: 'Sign in to continue.',
+  });
+
+  const token = deferred<string | null>();
+  jest.mocked(sessionToken).mockImplementationOnce(() => token.promise);
+  const reading = profileSession('user:a');
+  mockAccount = 'user:b';
+  token.resolve(null);
+  expect(await reading).toBeNull();
+});
+
 test('writes go with the session’s own token, and stop when the account changes', async () => {
   const session = { account: 'user:a', origin: 'https://relay.test', token: 'token-a' };
   jest.mocked(request).mockResolvedValue(user);

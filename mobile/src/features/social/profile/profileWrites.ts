@@ -7,15 +7,22 @@ import { isToastAccountCurrent } from '../../../ui/Toast';
 /** The session a profile edit was started in, with the token its writes are sent with. */
 export type ProfileSession = { account: string; origin: string; token: string };
 
+/** The session has no token left, as after a refused save: the editor says so beside Save. */
+export const SIGN_IN_TO_CONTINUE = 'Sign in to continue.';
+
 /**
  * The token of the session `account` (from `toastAccount()`) names, or null once another
  * session, or none, has taken over: a draft started in one account is never sent with another's.
+ * Still the same account but without a token (a refusal forgot it) is an error to show, not a
+ * silent no-op.
  */
 export async function profileSession(account: string): Promise<ProfileSession | null> {
   if (!isToastAccountCurrent(account)) return null;
   const origin = serverOrigin();
   const token = await sessionToken(origin);
-  return token && isToastAccountCurrent(account) ? { account, origin, token } : null;
+  if (!isToastAccountCurrent(account)) return null;
+  if (!token) throw new ApiError(401, SIGN_IN_TO_CONTINUE);
+  return { account, origin, token };
 }
 
 /**

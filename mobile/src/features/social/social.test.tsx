@@ -679,6 +679,14 @@ test('a refused profile save forgets only the token it was sent with', async () 
   await waitFor(() =>
     expect(forgetSessionTokenIf).toHaveBeenCalledWith('https://relay.test', 'token'),
   );
+  expect(await screen.findByRole('alert')).toHaveTextContent('Sign in again.');
+
+  // The token is gone now, so saving again says why instead of doing nothing.
+  jest.mocked(sessionToken).mockResolvedValueOnce(null);
+  await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Sign in to continue.');
+  expect(profileWrites()).toHaveLength(1);
+  expect(screen.getByLabelText('Name')).toBeVisible();
 });
 
 test('saving only a sex leaves the name alone, and a chosen sex can be cleared', async () => {
