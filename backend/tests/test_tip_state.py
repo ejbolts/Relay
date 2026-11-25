@@ -317,19 +317,43 @@ def test_reading_tips_never_pairs_old_tips_with_a_restored_generation(client):
     assert (reply["enabled"], reply["generation"]) in {(False, "0"), (True, "restored")}
 
 
-def test_a_reader_holding_the_database_at_commit_asks_the_client_to_retry(client):
+def test_a_reader_holding_the_database_does_not_hold_up_a_save(client):
     client.put(tips_path(client), json={"seen": {"swap": "seen"}})
     reader = sqlite3.connect(get_settings().database_path, isolation_level=None)
     try:
-        # A read transaction keeps a shared lock, which the save's commit must wait out.
+        # With write-ahead logging, a save's commit no longer waits for a read transaction.
         reader.execute("BEGIN")
         reader.execute("SELECT count(*) FROM user_settings").fetchone()
         response = client.put(tips_path(client), json={"seen": {"plates": "learned"}})
     finally:
         reader.execute("ROLLBACK")
         reader.close()
+    assert response.status_code == 200
+    assert client.get("/api/tips").json()["seen"] == {"swap": "seen", "plates": "learned"}
+
+
+def test_a_writer_holding_the_database_asks_the_client_to_retry(client, monkeypatch):
+    client.put(tips_path(client), json={"seen": {"swap": "seen"}})
+    begin_write = tip_state._begin_write
+
+    def begin_without_the_usual_wait(db):
+        # The wait for another writer lasts seconds; shorten it for this save alone.
+        db.connection().exec_driver_sql("PRAGMA busy_timeout = 100")
+        begin_write(db)
+
+    monkeypatch.setattr(tip_state, "_begin_write", begin_without_the_usual_wait)
+    writer = sqlite3.connect(get_settings().database_path, isolation_level=None)
+    try:
+        writer.execute("BEGIN IMMEDIATE")
+        response = client.put(tips_path(client), json={"seen": {"plates": "learned"}})
+    finally:
+        writer.execute("ROLLBACK")
+        writer.close()
+        # Drop the pooled connection whose wait was shortened.
+        engine.dispose()
     assert response.status_code == 503
     assert response.headers["retry-after"] == "2"
+    assert response.json()["error"]["code"] == "tip_state_busy"
     assert client.get("/api/tips").json()["seen"] == {"swap": "seen"}
 
 

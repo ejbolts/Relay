@@ -67,6 +67,7 @@ What the native app covers compared with the web app, which it will replace. Upd
 
   See `mobile/README.md` ("Native builds") for the variables and steps.
 
+- **Check-in sync on a slow server:** when a save gets no answer, the web asks whether the server already holds the check-in before sending it again, and spaces automatic sends out to 15, 30 and then 60 seconds (`frontend/src/checkInSync.ts`, `frontend/src/syncBackoff.ts`). The app's queue still sends every five seconds until it is answered. The server treats a repeated save as no change, so the repeats cost it little. A follow-up can make the app's queue use the same shared rules.
 - **Uploads after the OS stops Relay:** an upload stops if the OS suspends or kills the app, and its session stays on the server where neither app lists it. A follow-up could offer to resume or discard it on launch.
 - **Remote push duplicates** are avoided in normal use, not ruled out: a phone clock far off, a report that never reached the server, several server processes, or Expo's acceptance window can still double an alert, and a server restart can drop a phone's reminder after a browser received its copy.
 - **Expo Go:** Android can't receive remote push, and tapping a background rest alert on Android opens Expo Go's own home screen.
