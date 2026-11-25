@@ -1,4 +1,6 @@
+import type { BodyFigureKind } from './bodyFigureShapes';
 import { BODY_SIZE_FIELDS, type BodySizeField, type BodySizeLog } from './bodySizes';
+import type { Sex } from './types';
 import type { WeightUnit } from './weightUnits';
 
 /**
@@ -202,4 +204,22 @@ export function bodySizeLastValue(
 ): string | undefined {
   const cm = logs?.find((row) => row.measurement_date < date && row[key] != null)?.[key];
   return cm == null ? undefined : String(bodySizeShown(cm, size));
+}
+
+/** A member's outline kind: female only when set to female, otherwise male. */
+export function bodyFigureKindForSex(sex: Sex | null | undefined): BodyFigureKind {
+  return sex === 'female' ? 'female' : 'male';
+}
+
+/** One shared entry's measured fields, formatted in the viewer's unit without carrying earlier values. */
+export function sharedBodyFigureValues(
+  entry: BodySizeLog,
+  size: BodySizeUnit,
+): Partial<Record<BodySizeField, string>> {
+  return Object.fromEntries(
+    BODY_SIZE_FIELDS.filter(([key]) => entry[key] != null).map(([key]) => [
+      key,
+      String(bodySizeShown(entry[key]!, size)),
+    ]),
+  );
 }

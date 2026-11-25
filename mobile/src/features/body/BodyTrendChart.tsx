@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { GestureDetector, usePinchGesture } from 'react-native-gesture-handler';
 import Svg, { Circle, Line, Path, Rect, Text as SvgText } from 'react-native-svg';
@@ -28,13 +28,13 @@ import { useTheme } from '../../ui/theme';
 import { LandscapeButton, LandscapeChartView } from './LandscapeChart';
 import { useRangePinch } from './rangePinch';
 
-interface Point {
+export interface TrendPoint {
   date: string;
   value: number;
   detail?: string;
 }
 
-interface Goal {
+export interface TrendGoal {
   startDate: string;
   startValue: number;
   endDate: string;
@@ -43,6 +43,10 @@ interface Goal {
   minValue?: number;
   maxValue?: number;
 }
+
+type Point = TrendPoint;
+type Goal = TrendGoal;
+const EMPTY_POINTS: Point[] = [];
 
 const PAD = { top: 12, right: 12, bottom: 26, left: 40 };
 const HEIGHT = 200;
@@ -267,30 +271,57 @@ function RangeTab({
   );
 }
 
+function PinchWrapper({
+  pinch,
+  children,
+}: {
+  pinch: { onPinch: (scale: number) => void; onPinchEnd: () => void };
+  children: ReactNode;
+}) {
+  const gesture = usePinchGesture({
+    runOnJS: true,
+    onUpdate: (event) => pinch.onPinch(event.scale),
+    onFinalize: () => pinch.onPinchEnd(),
+  });
+  return <GestureDetector gesture={gesture}>{children}</GestureDetector>;
+}
+
 /**
  * The chart itself, at a height (the card's, or the landscape view's), touched to show a day
- * tooltip and pinched to change the range.
+ * tooltip and optionally pinched to change the range.
  */
-function TrendPlot({
+export function TrendPlot({
   points,
-  dots,
+  dots = EMPTY_POINTS,
   goal,
-  showFat,
+  showFat = false,
   unit,
   height,
   active,
   onSelect,
   pinch,
+  seriesLabel,
+  accessibilityLabel,
+  lineColor,
+  formatValue,
 }: {
   points: Point[];
-  dots: Point[];
+  dots?: Point[];
   goal: Goal | null;
-  showFat: boolean;
+  showFat?: boolean;
   unit: WeightUnit;
   height: number;
   active: number | null;
   onSelect: (index: number | null) => void;
-  pinch: { onPinch: (scale: number) => void; onPinchEnd: () => void };
+  pinch?: { onPinch: (scale: number) => void; onPinchEnd: () => void };
+  /** Overrides the default tooltip/series label (e.g. "Body weight" on a shared profile). */
+  seriesLabel?: string;
+  /** Overrides the default screen-reader chart label. */
+  accessibilityLabel?: string;
+  /** Overrides the trend line colour (defaults to `colors.text`). */
+  lineColor?: string;
+  /** Optional point value formatter (defaults to fixed 1-decimal display for Body). */
+  formatValue?: (value: number) => string;
 }) {
   const { colors, type, radius } = useTheme();
   const [width, setWidth] = useState(0);
@@ -311,11 +342,6 @@ function TrendPlot({
   const line = model?.coords
     .map((point, index) => `${index ? 'L' : 'M'} ${point.x} ${point.y}`)
     .join(' ');
-  const gesture = usePinchGesture({
-    runOnJS: true,
-    onUpdate: (event) => pinch.onPinch(event.scale),
-    onFinalize: () => pinch.onPinchEnd(),
-  });
 
   const activePoint = active !== null ? points[active] : null;
   const activeCoord = active !== null && model ? model.coords[active] : null;
@@ -331,265 +357,271 @@ function TrendPlot({
         }
       : null;
 
-  const label = showFat ? 'Body fat percentage' : 'Bodyweight, 7-day average over daily weigh-ins';
+  const label =
+    accessibilityLabel ??
+    (showFat ? 'Body fat percentage' : 'Bodyweight, 7-day average over daily weigh-ins');
   const shown = active ?? (points.length ? points.length - 1 : null);
+  const formatPointValue = (value: number) =>
+    formatValue
+      ? formatValue(value)
+      : showFat
+        ? `${value.toFixed(1)}%`
+        : `${value.toFixed(1)} ${unit}`;
   const reading = (index: number) => {
     const point = points[index];
-    const value = showFat ? `${point.value.toFixed(1)}%` : `${point.value.toFixed(1)} ${unit}`;
+    const value = formatPointValue(point.value);
+    if (seriesLabel) return `${shortDate(point.date)}, ${value}`;
     return showFat
       ? `${shortDate(point.date)}, ${value}`
       : `${shortDate(point.date)}, ${value} 7-day average${point.detail ? `, ${point.detail}` : ''}`;
   };
 
-  return (
-    <GestureDetector gesture={gesture}>
-      <View style={{ height }}>
-        {model && (
-          <Svg width={width} height={height} pointerEvents="none">
-            {model.gridlines.map((grid) => (
-              <Line
-                key={grid.value}
-                x1={PAD.left}
-                x2={width - PAD.right}
-                y1={grid.y}
-                y2={grid.y}
-                stroke={grid.baseline ? colors.axis : colors.grid}
-                strokeWidth={1}
-              />
-            ))}
-            {model.gridlines.map((grid) => (
-              <SvgText
-                key={`label-${grid.value}`}
-                x={PAD.left - 7}
-                y={grid.y + 3.5}
-                fontSize={10.5}
-                fill={colors.muted}
-                textAnchor="end"
-              >
-                {Number(grid.value.toFixed(1))}
-              </SvgText>
-            ))}
-            {model.dates.map((date, index) => (
-              <SvgText
-                key={`date-${index}`}
-                x={date.x}
-                y={height - 7}
-                fontSize={10.5}
-                fill={colors.muted}
-                textAnchor={date.anchor}
-              >
-                {date.label}
-              </SvgText>
-            ))}
-            {goal && goalCoords && (
-              <>
-                {goal.minValue != null && goal.maxValue != null ? (
-                  <>
-                    <Rect
-                      x={goalCoords.x1}
-                      width={Math.max(goalCoords.x2 - goalCoords.x1, 1)}
-                      y={model.y(goal.maxValue)}
-                      height={Math.max(model.y(goal.minValue) - model.y(goal.maxValue), 1)}
-                      fill={colors.accent}
-                      opacity={0.12}
-                    />
-                    <Line
-                      x1={goalCoords.x1}
-                      y1={model.y(goal.minValue)}
-                      x2={goalCoords.x2}
-                      y2={model.y(goal.minValue)}
-                      stroke={colors.secondary}
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeDasharray="0.1 5.5"
-                    />
-                    <Line
-                      x1={goalCoords.x1}
-                      y1={model.y(goal.maxValue)}
-                      x2={goalCoords.x2}
-                      y2={model.y(goal.maxValue)}
-                      stroke={colors.secondary}
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeDasharray="0.1 5.5"
-                    />
-                  </>
-                ) : (
+  const chart = (
+    <View style={{ height }}>
+      {model && (
+        <Svg width={width} height={height} pointerEvents="none">
+          {model.gridlines.map((grid) => (
+            <Line
+              key={grid.value}
+              x1={PAD.left}
+              x2={width - PAD.right}
+              y1={grid.y}
+              y2={grid.y}
+              stroke={grid.baseline ? colors.axis : colors.grid}
+              strokeWidth={1}
+            />
+          ))}
+          {model.gridlines.map((grid) => (
+            <SvgText
+              key={`label-${grid.value}`}
+              x={PAD.left - 7}
+              y={grid.y + 3.5}
+              fontSize={10.5}
+              fill={colors.muted}
+              textAnchor="end"
+            >
+              {Number(grid.value.toFixed(1))}
+            </SvgText>
+          ))}
+          {model.dates.map((date, index) => (
+            <SvgText
+              key={`date-${index}`}
+              x={date.x}
+              y={height - 7}
+              fontSize={10.5}
+              fill={colors.muted}
+              textAnchor={date.anchor}
+            >
+              {date.label}
+            </SvgText>
+          ))}
+          {goal && goalCoords && (
+            <>
+              {goal.minValue != null && goal.maxValue != null ? (
+                <>
+                  <Rect
+                    x={goalCoords.x1}
+                    width={Math.max(goalCoords.x2 - goalCoords.x1, 1)}
+                    y={model.y(goal.maxValue)}
+                    height={Math.max(model.y(goal.minValue) - model.y(goal.maxValue), 1)}
+                    fill={colors.accent}
+                    opacity={0.12}
+                  />
                   <Line
                     x1={goalCoords.x1}
-                    y1={goalCoords.y1}
+                    y1={model.y(goal.minValue)}
                     x2={goalCoords.x2}
-                    y2={goalCoords.y2}
+                    y2={model.y(goal.minValue)}
                     stroke={colors.secondary}
                     strokeWidth={2}
                     strokeLinecap="round"
                     strokeDasharray="0.1 5.5"
                   />
-                )}
-                {(() => {
-                  const placed = goalLabelPlacement(
-                    goalCoords,
-                    {
-                      width,
-                      height,
-                      plotRight: width - PAD.right,
-                      plotBottom: height - PAD.bottom,
-                    },
-                    goal.maxValue != null ? model.y(goal.maxValue) : null,
-                  );
-                  return (
-                    <SvgText
-                      accessibilityLabel={goal.label}
-                      x={placed.x}
-                      y={placed.y}
-                      fontSize={10.5}
-                      fontWeight="600"
-                      fill={colors.secondary}
-                      textAnchor={placed.anchor}
-                    >
-                      {goal.label}
-                    </SvgText>
-                  );
-                })()}
-              </>
-            )}
-            {model.dots.map((dot, index) => (
-              <Circle
-                key={`dot-${index}`}
-                cx={dot.x}
-                cy={dot.y}
-                r={2.4}
-                fill={dotColor}
-                opacity={0.75}
-              />
-            ))}
-            {line && (
-              <Path
-                d={line}
-                fill="none"
-                stroke={colors.text}
-                strokeWidth={2}
-                strokeLinejoin="round"
-                strokeLinecap="round"
-              />
-            )}
-            {activeCoord ? (
-              <>
+                  <Line
+                    x1={goalCoords.x1}
+                    y1={model.y(goal.maxValue)}
+                    x2={goalCoords.x2}
+                    y2={model.y(goal.maxValue)}
+                    stroke={colors.secondary}
+                    strokeWidth={2}
+                    strokeLinecap="round"
+                    strokeDasharray="0.1 5.5"
+                  />
+                </>
+              ) : (
                 <Line
-                  x1={activeCoord.x}
-                  x2={activeCoord.x}
-                  y1={PAD.top}
-                  y2={model.baseline}
+                  x1={goalCoords.x1}
+                  y1={goalCoords.y1}
+                  x2={goalCoords.x2}
+                  y2={goalCoords.y2}
                   stroke={colors.secondary}
-                  strokeWidth={1}
-                  opacity={0.55}
-                />
-                <Circle
-                  cx={activeCoord.x}
-                  cy={activeCoord.y}
-                  r={5}
-                  fill={colors.text}
-                  stroke={colors.surface}
                   strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeDasharray="0.1 5.5"
                 />
-              </>
-            ) : (
+              )}
+              {(() => {
+                const placed = goalLabelPlacement(
+                  goalCoords,
+                  {
+                    width,
+                    height,
+                    plotRight: width - PAD.right,
+                    plotBottom: height - PAD.bottom,
+                  },
+                  goal.maxValue != null ? model.y(goal.maxValue) : null,
+                );
+                return (
+                  <SvgText
+                    accessibilityLabel={goal.label}
+                    x={placed.x}
+                    y={placed.y}
+                    fontSize={10.5}
+                    fontWeight="600"
+                    fill={colors.secondary}
+                    textAnchor={placed.anchor}
+                  >
+                    {goal.label}
+                  </SvgText>
+                );
+              })()}
+            </>
+          )}
+          {model.dots.map((dot, index) => (
+            <Circle
+              key={`dot-${index}`}
+              cx={dot.x}
+              cy={dot.y}
+              r={2.4}
+              fill={dotColor}
+              opacity={0.75}
+            />
+          ))}
+          {line && (
+            <Path
+              d={line}
+              fill="none"
+              stroke={lineColor ?? colors.text}
+              strokeWidth={2}
+              strokeLinejoin="round"
+              strokeLinecap="round"
+            />
+          )}
+          {activeCoord ? (
+            <>
+              <Line
+                x1={activeCoord.x}
+                x2={activeCoord.x}
+                y1={PAD.top}
+                y2={model.baseline}
+                stroke={colors.secondary}
+                strokeWidth={1}
+                opacity={0.55}
+              />
               <Circle
-                cx={model.coords[model.coords.length - 1].x}
-                cy={model.coords[model.coords.length - 1].y}
-                r={4}
-                fill={colors.text}
+                cx={activeCoord.x}
+                cy={activeCoord.y}
+                r={5}
+                fill={lineColor ?? colors.text}
                 stroke={colors.surface}
                 strokeWidth={2}
               />
-            )}
-          </Svg>
-        )}
-        {/*
+            </>
+          ) : (
+            <Circle
+              cx={model.coords[model.coords.length - 1].x}
+              cy={model.coords[model.coords.length - 1].y}
+              r={4}
+              fill={lineColor ?? colors.text}
+              stroke={colors.surface}
+              strokeWidth={2}
+            />
+          )}
+        </Svg>
+      )}
+      {/*
           The touch layer has no children, so a touch's locationX is always in plot coordinates,
           even under the readout (whose text lets touches through). For screen readers it is the
           chart: its value is the latest or chosen reading, and swiping up or down moves a day.
         */}
+      <View
+        style={StyleSheet.absoluteFill}
+        accessible
+        accessibilityRole="adjustable"
+        accessibilityLabel={label}
+        accessibilityValue={shown !== null ? { text: reading(shown) } : undefined}
+        accessibilityActions={[
+          { name: 'increment', label: 'Next reading' },
+          { name: 'decrement', label: 'Previous reading' },
+        ]}
+        onAccessibilityAction={(event) => {
+          if (shown === null) return;
+          const next =
+            event.nativeEvent.actionName === 'increment'
+              ? Math.min(shown + 1, points.length - 1)
+              : Math.max(shown - 1, 0);
+          if (next !== active) onSelect(next);
+        }}
+        onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
+        onStartShouldSetResponder={() => true}
+        onMoveShouldSetResponder={() => true}
+        onResponderTerminationRequest={() => true}
+        // A scroll that started on the chart doesn't leave a day selected.
+        onResponderTerminate={() => onSelect(null)}
+        onResponderGrant={(event) => select(event.nativeEvent.locationX)}
+        onResponderMove={(event) => select(event.nativeEvent.locationX)}
+      />
+      {activePoint && activeCoord && (
         <View
-          style={StyleSheet.absoluteFill}
-          accessible
-          accessibilityRole="adjustable"
-          accessibilityLabel={label}
-          accessibilityValue={shown !== null ? { text: reading(shown) } : undefined}
-          accessibilityActions={[
-            { name: 'increment', label: 'Next reading' },
-            { name: 'decrement', label: 'Previous reading' },
-          ]}
-          onAccessibilityAction={(event) => {
-            if (shown === null) return;
-            const next =
-              event.nativeEvent.actionName === 'increment'
-                ? Math.min(shown + 1, points.length - 1)
-                : Math.max(shown - 1, 0);
-            if (next !== active) onSelect(next);
+          pointerEvents="box-none"
+          onLayout={(event) => {
+            const { width: w, height: h } = event.nativeEvent.layout;
+            if (w !== tipSize.width || h !== tipSize.height) setTipSize({ width: w, height: h });
           }}
-          onLayout={(event) => setWidth(event.nativeEvent.layout.width)}
-          onStartShouldSetResponder={() => true}
-          onMoveShouldSetResponder={() => true}
-          onResponderTerminationRequest={() => true}
-          // A scroll that started on the chart doesn't leave a day selected.
-          onResponderTerminate={() => onSelect(null)}
-          onResponderGrant={(event) => select(event.nativeEvent.locationX)}
-          onResponderMove={(event) => select(event.nativeEvent.locationX)}
-        />
-        {activePoint && activeCoord && (
+          style={[
+            styles.tooltip,
+            {
+              left: tip.left,
+              top: tip.top,
+              backgroundColor: colors.surface,
+              borderColor: colors.lineStrong,
+              borderRadius: radius.sm,
+              shadowColor: colors.shadow,
+            },
+          ]}
+        >
           <View
-            pointerEvents="box-none"
-            onLayout={(event) => {
-              const { width: w, height: h } = event.nativeEvent.layout;
-              if (w !== tipSize.width || h !== tipSize.height) setTipSize({ width: w, height: h });
-            }}
-            style={[
-              styles.tooltip,
-              {
-                left: tip.left,
-                top: tip.top,
-                backgroundColor: colors.surface,
-                borderColor: colors.lineStrong,
-                borderRadius: radius.sm,
-                shadowColor: colors.shadow,
-              },
-            ]}
+            pointerEvents="none"
+            accessibilityElementsHidden
+            importantForAccessibility="no-hide-descendants"
+            style={styles.tooltipBody}
           >
-            <View
-              pointerEvents="none"
-              accessibilityElementsHidden
-              importantForAccessibility="no-hide-descendants"
-              style={styles.tooltipBody}
-            >
-              <Text style={[type.caption, { color: colors.secondary }]}>
-                {shortDate(activePoint.date)}
-              </Text>
-              <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>
-                {showFat
-                  ? `${activePoint.value.toFixed(1)}%`
-                  : `${activePoint.value.toFixed(1)} ${unit}`}
-              </Text>
-              <Text style={[type.caption, { color: colors.muted }]}>
-                {showFat ? 'Body fat' : '7-day average'}
-              </Text>
-              {!showFat && !!activePoint.detail && (
-                <Text style={[type.caption, { color: colors.muted }]}>{activePoint.detail}</Text>
-              )}
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Close ${shortDate(activePoint.date)} details`}
-              onPress={() => onSelect(null)}
-              style={styles.tooltipClose}
-            >
-              <Icon name="close" size={12} color={colors.muted} />
-            </Pressable>
+            <Text style={[type.caption, { color: colors.secondary }]}>
+              {shortDate(activePoint.date)}
+            </Text>
+            <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>
+              {formatPointValue(activePoint.value)}
+            </Text>
+            <Text style={[type.caption, { color: colors.muted }]}>
+              {seriesLabel ?? (showFat ? 'Body fat' : '7-day average')}
+            </Text>
+            {!showFat && !!activePoint.detail && (
+              <Text style={[type.caption, { color: colors.muted }]}>{activePoint.detail}</Text>
+            )}
           </View>
-        )}
-      </View>
-    </GestureDetector>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Close ${shortDate(activePoint.date)} details`}
+            onPress={() => onSelect(null)}
+            style={styles.tooltipClose}
+          >
+            <Icon name="close" size={12} color={colors.muted} />
+          </Pressable>
+        </View>
+      )}
+    </View>
   );
+  return pinch ? <PinchWrapper pinch={pinch}>{chart}</PinchWrapper> : chart;
 }
 
 /**
