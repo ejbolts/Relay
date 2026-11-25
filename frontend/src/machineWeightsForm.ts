@@ -12,7 +12,11 @@ import { weightFromKg, weightInputKg, weightInputValue, type WeightUnit } from '
 // The Machine weights form's rules: each machine's typed pair of weights (your weight on it, and
 // what that equals on the reference machine), turned into the mapping that is saved.
 
-export type PairText = { machine: string; reference: string };
+/**
+ * A machine's two typed weights. `held` is the conversion kept while your weight on the machine
+ * is being edited: the one the pair showed when the edit began, or null if it showed none.
+ */
+export type PairText = { machine: string; reference: string; held?: number | null };
 export type PairTexts = Record<string, PairText>;
 
 export const BLANK_PAIR: PairText = { machine: '', reference: '' };
@@ -64,13 +68,37 @@ export function typedFactor(text: PairText): number | null {
   return machine && reference && machine > 0 && reference > 0 ? reference / machine : null;
 }
 
-/** Your weight on the machine changes; the conversion, and so the trend, stays. */
+/**
+ * Your weight on the machine changes; the conversion, and so the trend, stays.
+ *
+ * The conversion is the one the pair showed when this edit began. Working it out again from the
+ * two boxes on each keystroke would let an emptied box, or a half-typed weight and its rounded
+ * match, replace it. A pair that showed no conversion has none to keep, so its other weight is
+ * left alone while this one is typed.
+ */
 export function pairWithMachineWeight(text: PairText, value: string): PairText {
-  const factor = typedFactor(text);
+  const held = text.held !== undefined ? text.held : typedFactor(text);
   const typed = decimalNumberOrNull(value);
-  return factor && typed && typed > 0
-    ? { machine: value, reference: trimmed(typed * factor) }
-    : { ...text, machine: value };
+  return {
+    machine: value,
+    reference: held && typed && typed > 0 ? trimmed(typed * held) : text.reference,
+    held,
+  };
+}
+
+/** The matching weight on the reference changes, so the pair shows a new conversion. */
+export function pairWithReferenceWeight(text: PairText, value: string): PairText {
+  return { machine: text.machine, reference: value };
+}
+
+/**
+ * Leaving the weight box ends the edit. A finished pair then speaks for itself: the next edit
+ * keeps the conversion it shows. An unfinished one still holds the conversion to return to.
+ */
+export function pairSettled(text: PairText): PairText {
+  return text.held === undefined || typedFactor(text) === null
+    ? text
+    : { machine: text.machine, reference: text.reference };
 }
 
 /**
