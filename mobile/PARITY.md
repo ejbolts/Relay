@@ -56,6 +56,7 @@ What the native app covers compared with the web app, which it will replace. Upd
 - **Phone alerts:** Settings › Notifications registers this phone for remote push. Rest alerts and "Still working out?" for a workout on this phone stay local notifications, and alerts shown by the phone use neutral text without names. Send test alert is app-only.
 - **Popups:** a toast stays on screen for the same time in both apps (`toastDuration` in `frontend/src/popupTiming.ts`): an Undo for a deleted set 2.5 seconds, a confirmation 3, a warning, a record or an Undo that is hard to redo 5, and an error 7. The app's toast has one look; the web styles warnings, errors and records differently.
 - **Deleting a saved workout:** the app asks first and can't undo it; the web deletes at once and offers Undo for five seconds.
+- **Today on the calendar:** today's ring takes the day's workout colours, as on the web, but stays still. The web's ripple repeats without end. Tried in the app, it kept Home from ever going idle: the emulator test driver could no longer read the screen, and the phone would keep redrawing for as long as Home is open.
 - **Rest timer on iPhone:** in an installed build on iOS 16.4 or later, it also shows as a Live Activity on the Lock Screen, and in the Dynamic Island on iPhones that have one, beside the rest pill and the rest alert.
 
 ## Known platform gaps
@@ -71,7 +72,6 @@ What the native app covers compared with the web app, which it will replace. Upd
 
 - **Check-in sync on a slow server:** when a save gets no answer, the web asks whether the server already holds the check-in before sending it again, and spaces automatic sends out to 15, 30 and then 60 seconds (`frontend/src/checkInSync.ts`, `frontend/src/syncBackoff.ts`). The app's queue still sends every five seconds until it is answered. The server treats a repeated save as no change, so the repeats cost it little. A follow-up can make the app's queue use the same shared rules.
 - **Offline notice:** the web shows an offline pill after a lasting outage, and Back online when the connection returns. The app has no such notice: screens that need the server say they are waiting for a connection, and offline changes queue as usual.
-- **Today on the calendar:** the web's ripple from today's outline is not in the app, where today's ring is still.
 - **Uploads after the OS stops Relay:** an upload stops if the OS suspends or kills the app, and its session stays on the server where neither app lists it. A follow-up could offer to resume or discard it on launch.
 - **Remote push duplicates** are avoided in normal use, not ruled out: a phone clock far off, a report that never reached the server, several server processes, or Expo's acceptance window can still double an alert, and a server restart can drop a phone's reminder after a browser received its copy.
 - **Expo Go:** Android can't receive remote push, and tapping a background rest alert on Android opens Expo Go's own home screen.
