@@ -304,6 +304,7 @@ export function TrendPlot({
   accessibilityLabel,
   lineColor,
   formatValue,
+  avoidLineOverlap = false,
 }: {
   points: Point[];
   dots?: Point[];
@@ -322,6 +323,8 @@ export function TrendPlot({
   lineColor?: string;
   /** Optional point value formatter (defaults to fixed 1-decimal display for Body). */
   formatValue?: (value: number) => string;
+  /** Opt in to flipping the goal label to the opposite side when the plotted line overlaps it. */
+  avoidLineOverlap?: boolean;
 }) {
   const { colors, type, radius } = useTheme();
   const [width, setWidth] = useState(0);
@@ -470,6 +473,7 @@ export function TrendPlot({
                     plotBottom: height - PAD.bottom,
                   },
                   goal.maxValue != null ? model.y(goal.maxValue) : null,
+                  avoidLineOverlap ? model.coords : undefined,
                 );
                 return (
                   <SvgText

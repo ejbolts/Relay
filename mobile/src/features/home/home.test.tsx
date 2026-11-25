@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
-import { Alert, Platform, StyleSheet } from 'react-native';
+import { Alert, Platform, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import {
@@ -37,9 +37,39 @@ jest.mock('../../data/api', () => ({
   apiGet: jest.fn(),
   apiSend: jest.fn(),
 }));
-jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: jest.fn() }));
+jest.mock('../workout/WorkoutProvider', () => ({
+  useWorkout: jest.fn(),
+  useOptionalWorkout: () => null,
+  useLogger: () => null,
+}));
 const mockRouter = { navigate: jest.fn(), push: jest.fn() };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useIsFocused: () => true }));
+interface MockLongPressConfig {
+  enabled?: boolean;
+  minDuration?: number;
+  maxDistance?: number;
+  numberOfPointers?: number;
+  cancelsTouchesInView?: boolean;
+  onTouchesDown?: (event: { handlerTag: number; allTouches: { x: number; y: number }[] }) => void;
+  onActivate?: () => void;
+}
+// Each card's hold config reaches its view as `holdGesture`, so a test reads one card's hold.
+jest.mock('react-native-gesture-handler', () => {
+  const { cloneElement } = jest.requireActual<typeof import('react')>('react');
+  return {
+    GestureDetector: ({
+      gesture,
+      children,
+    }: {
+      gesture: MockLongPressConfig;
+      children: React.ReactElement;
+    }) => cloneElement(children, { holdGesture: gesture } as never),
+    GestureStateManager: { fail: jest.fn() },
+    useLongPressGesture: (config: MockLongPressConfig) => config,
+  };
+});
+const holdOn = (id: string) =>
+  screen.getByTestId(`home-card-${id}`).props.holdGesture as MockLongPressConfig;
 const mockUser = {
   id: 'u1',
   username: 'preview',
@@ -920,10 +950,13 @@ test("a logged day's sheet opens, edits and adds workouts, replacing a live one"
   const tile = () => screen.getAllByRole('button', { name: /^View 1 workout for/ })[0];
   await fireEvent.press(tile());
   await fireEvent.press(await screen.findByRole('button', { name: 'Open Lower B' }));
-  expect(mockRouter.push).toHaveBeenLastCalledWith({
-    pathname: '/training/session/[id]',
-    params: { id: 'w2' },
-  });
+  expect(mockRouter.push).toHaveBeenLastCalledWith(
+    {
+      pathname: '/training/session/[id]',
+      params: { id: 'w2' },
+    },
+    { withAnchor: true },
+  );
   await fireEvent.press(tile());
   await fireEvent.press(await screen.findByRole('button', { name: 'Edit Lower B' }));
   expect(mockRouter.push).toHaveBeenLastCalledWith({
@@ -1001,10 +1034,13 @@ test('a muscle opens its contributions, and its goal can be changed there', asyn
       name: `View Hip Thrust in Lower B, ${shortDate(monday)}`,
     }),
   );
-  expect(mockRouter.push).toHaveBeenLastCalledWith({
-    pathname: '/training/session/[id]',
-    params: { id: 'w2' },
-  });
+  expect(mockRouter.push).toHaveBeenLastCalledWith(
+    {
+      pathname: '/training/session/[id]',
+      params: { id: 'w2' },
+    },
+    { withAnchor: true },
+  );
 });
 
 test('Sets per muscle opens the muscle goals; Recent records opens Progress', async () => {
@@ -1017,10 +1053,13 @@ test('Sets per muscle opens the muscle goals; Recent records opens Progress', as
     params: { section: 'exercises', request: expect.any(String) },
   });
   await fireEvent.press(screen.getByRole('button', { name: /^Barbell Bench Press, Weight PR/ }));
-  expect(mockRouter.push).toHaveBeenLastCalledWith({
-    pathname: '/training/exercise/[id]',
-    params: { id: 'bench' },
-  });
+  expect(mockRouter.push).toHaveBeenLastCalledWith(
+    {
+      pathname: '/training/exercise/[id]',
+      params: { id: 'bench' },
+    },
+    { withAnchor: true },
+  );
 });
 
 test('the check-in follows its saved mode: Weight only saves just the weight', async () => {
@@ -1049,4 +1088,54 @@ test('the check-in follows its saved mode: Weight only saves just the weight', a
     }),
   );
   expect(await screen.findByText('Body weight saved')).toBeOnTheScreen();
+});
+
+test('holding a Home card for 500 ms opens Edit Home once the layout is confirmed', async () => {
+  let resolveLayout!: (value: HomeLayout) => void;
+  responses['/api/home-layout'] = new Promise<HomeLayout>((resolve) => {
+    resolveLayout = resolve;
+  });
+  await renderHome();
+  await screen.findByText('Upper body day');
+  // Before the server confirms the saved layout, holding is disabled.
+  expect(holdOn('next-workout').enabled).toBe(false);
+  expect(holdOn('next-workout')).toMatchObject({
+    minDuration: 500,
+    maxDistance: 10,
+    numberOfPointers: 1,
+    cancelsTouchesInView: true,
+  });
+
+  await act(async () => resolveLayout(defaultHomeLayout()));
+  await waitFor(() => expect(holdOn('next-workout').enabled).toBe(true));
+  // Every card holds; there is no hold outside a card.
+  expect(holdOn('profile').enabled).toBe(true);
+
+  // A stationary hold on a card opens Edit Home.
+  await act(async () => holdOn('next-workout').onActivate?.());
+  expect(mockRouter.push).toHaveBeenCalledWith('/home-layout');
+});
+
+test('a hold that starts while a text field is focused fails before it can activate', async () => {
+  const { GestureStateManager } = jest.requireMock<{
+    GestureStateManager: { fail: jest.Mock };
+  }>('react-native-gesture-handler');
+  responses['/api/home-layout'] = defaultHomeLayout();
+  await renderHome();
+  await screen.findByText('Upper body day');
+  await waitFor(() => expect(holdOn('next-workout').enabled).toBe(true));
+  const focusedSpy = jest
+    .spyOn(TextInput.State, 'currentlyFocusedInput')
+    .mockReturnValue({} as never);
+  try {
+    await act(async () =>
+      holdOn('next-workout').onTouchesDown?.({ handlerTag: 7, allTouches: [{ x: 20, y: 20 }] }),
+    );
+    expect(GestureStateManager.fail).toHaveBeenCalledWith(7);
+    // Even if it got as far as activating, a focused field keeps Edit Home closed.
+    await act(async () => holdOn('next-workout').onActivate?.());
+    expect(mockRouter.push).not.toHaveBeenCalledWith('/home-layout');
+  } finally {
+    focusedSpy.mockRestore();
+  }
 });

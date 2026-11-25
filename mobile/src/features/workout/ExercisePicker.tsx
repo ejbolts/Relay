@@ -1,6 +1,7 @@
-import { useMemo, useRef, useState, type ComponentRef } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import {
   AccessibilityInfo,
+  ActivityIndicator,
   FlatList,
   Keyboard,
   Modal,
@@ -38,7 +39,8 @@ import type {
 import { CATEGORY_LABELS } from '../../../../frontend/src/trainingSummary';
 import { localDate } from '../../../../frontend/src/utils';
 import { supersetGroupName } from '../../../../frontend/src/workoutSupersets';
-import { Button } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
+import { Button, errorMessage } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { MenuButton, type MenuItem } from '../../ui/MenuButton';
@@ -82,7 +84,15 @@ export function ExercisePicker({
   /** The workout's type, which a new exercise created from a search starts in. */
   category?: WorkoutCategory;
   /** The picks in the order tapped, with the machine chosen for each that has saved machines. */
-  onAdd: (selected: Exercise[], machineChoices: ExerciseMachineChoices) => void;
+  /**
+   * `machineUse` gives each chosen machine's saved workout count, by machine id, as far as the
+   * picker knows it: a machine no workout has used can be planned from the general suggestion.
+   */
+  onAdd: (
+    selected: Exercise[],
+    machineChoices: ExerciseMachineChoices,
+    machineUse?: Readonly<Record<string, number>>,
+  ) => void;
   /** Adds the picks as a superset (tri-set, giant set) instead. */
   onCreateSuperset?: (selected: Exercise[], machineChoices: ExerciseMachineChoices) => void;
   /** Offers each picked exercise's saved machines. */
@@ -110,8 +120,26 @@ export function ExercisePicker({
   const { colors, type, radius } = useTheme();
   const insets = useSafeAreaInsets();
   const client = useQueryClient();
-  const machinesOn = chooseMachines && !swap;
-  const allMachines = useAllMachinePhotos(visible && machinesOn).data;
+  // Swapping offers the replacement's machines too, as the web's Switch exercise picker does.
+  const machinesOn = chooseMachines;
+  const machinesQuery = useAllMachinePhotos(visible && machinesOn);
+  const allMachines = machinesQuery.data;
+  // Until the saved machines are known, a picked replacement can't be swapped on one tap: it may
+  // have machines to choose from. A list being read again (after a workout was saved, or once
+  // it is old) is provisional too: it still shows its machines to choose from, but nothing is
+  // chosen automatically from it, as its last-used machine may have changed.
+  // A list whose refresh failed is no surer: the error shows, with Swap without choosing a machine.
+  const catalogKnown =
+    !machinesOn ||
+    (allMachines !== undefined &&
+      !(machinesQuery.isStale && (machinesQuery.isFetching || machinesQuery.isRefetchError)));
+  const catalogProblem = catalogKnown
+    ? null
+    : waitingForNetwork(machinesQuery)
+      ? OFFLINE_MESSAGE
+      : machinesQuery.isError
+        ? errorMessage(machinesQuery.error)
+        : null;
   const savedMachines = useMemo(
     () =>
       machinesOn ? machinesByExercise(allMachines ?? []) : new Map<string, MachinePhotoUsage[]>(),
@@ -120,11 +148,25 @@ export function ExercisePicker({
   // Only choices made here; a picked exercise otherwise starts on its last-used machine.
   const [machineChoices, setMachineChoices] = useState<ExerciseMachineChoices>({});
   const [openMachinesId, setOpenMachinesId] = useState<string | null>(null);
-  const resolvedChoices = resolveMachineChoices(
-    selected.map((exercise) => exercise.id),
-    savedMachines,
-    machineChoices,
-  );
+  // A photo saved after the picker closed, or after another pick, mustn't change the picks.
+  const [session, setSession] = useState(0);
+  const sessionRef = useRef(session);
+  const selectedRef = useRef(selected);
+  const choicesRef = useRef(machineChoices);
+  useEffect(() => {
+    sessionRef.current = session;
+    selectedRef.current = selected;
+    choicesRef.current = machineChoices;
+  }, [session, selected, machineChoices]);
+  // With the list known, a picked exercise starts on its last-used machine; until then only
+  // machines chosen here count, and the logger restores the rest from their last session.
+  const resolvedChoices = catalogKnown
+    ? resolveMachineChoices(
+        selected.map((exercise) => exercise.id),
+        savedMachines,
+        machineChoices,
+      )
+    : explicitChoices(selected, machineChoices);
   const equipmentOptions = useMemo(() => exerciseEquipmentOptions(exercises), [exercises]);
   const eligible = useMemo(() => exercises.filter((exercise) => !exercise.hidden), [exercises]);
   // The web's Body part, Equipment and Custom filters narrow the list before the search ranks it.
@@ -173,13 +215,24 @@ export function ExercisePicker({
     setHelpExercise(null);
     setMachineChoices({});
     setOpenMachinesId(null);
+    setSession((current) => current + 1);
     onClose();
   };
   const toggle = (exercise: Exercise) => {
     haptics.selection();
-    if (swap) {
+    // One tap swaps when the replacement is known to have no saved machines. Otherwise it is
+    // picked with its last-used machine and its machines open (once they have loaded), and Swap
+    // exercise confirms the choice.
+    if (swap && catalogKnown && !savedMachines.get(exercise.id)?.length) {
       onAdd([exercise], {});
       close();
+      return;
+    }
+    if (swap) {
+      const wasPicked = selected[0]?.id === exercise.id;
+      setSelected(wasPicked ? [] : [exercise]);
+      setMachineChoices({});
+      setOpenMachinesId(wasPicked ? null : exercise.id);
       return;
     }
     const wasSelected = selected.some((item) => item.id === exercise.id);
@@ -198,23 +251,49 @@ export function ExercisePicker({
   /** Tapping the chosen machine again returns to the baseline exercise; it picks the exercise too. */
   const chooseMachine = (exercise: Exercise, machineId: string) => {
     const picked = selected.some((item) => item.id === exercise.id);
-    setMachineChoices((current) => ({
-      ...current,
-      [exercise.id]: picked
-        ? toggledMachineChoice(resolvedChoices[exercise.id] ?? null, machineId)
-        : machineId,
-    }));
-    if (!picked) setSelected((current) => [...current, exercise]);
+    const choice = picked
+      ? toggledMachineChoice(resolvedChoices[exercise.id] ?? null, machineId)
+      : machineId;
+    // Swapping picks one replacement, so a machine of another exercise replaces the pick.
+    setMachineChoices((current) =>
+      swap ? { [exercise.id]: choice } : { ...current, [exercise.id]: choice },
+    );
+    if (!picked) setSelected((current) => (swap ? [exercise] : [...current, exercise]));
   };
+  /** How many saved workouts each chosen machine has, from the list shown. */
+  const machineUseOf = (choices: ExerciseMachineChoices) =>
+    Object.fromEntries(
+      Object.entries(choices).flatMap(([exerciseId, machineId]) => {
+        const machine = machineId
+          ? savedMachines.get(exerciseId)?.find((item) => item.id === machineId)
+          : undefined;
+        return machine ? [[machine.id, machine.workout_count]] : [];
+      }),
+    );
+  /**
+   * A machine photographed from the strip, for the account that took it (the strip checks).
+   * `session` and `selected` here are as they were when the photo was started: the new machine
+   * is picked only if the picker is still open on the same picks.
+   */
   const machineAdded = (exercise: Exercise, photo: MachinePhotoUsage) => {
-    client.setQueryData<MachinePhotoUsage[]>(loggerKeys.allMachines, (current) => [
-      ...(current ?? []),
-      photo,
-    ]);
+    // A cleared list stays empty, to be read again, rather than holding only this machine.
+    client.setQueryData<MachinePhotoUsage[]>(loggerKeys.allMachines, (current) =>
+      current ? [...current, photo] : current,
+    );
     void client.invalidateQueries({ queryKey: loggerKeys.machines(exercise.id) });
-    setMachineChoices((current) => ({ ...current, [exercise.id]: photo.id }));
+    const ids = (items: Exercise[]) => items.map((item) => item.id).join();
+    // A machine chosen meanwhile is a newer choice than the photo, so it stays.
+    if (
+      sessionRef.current !== session ||
+      ids(selectedRef.current) !== ids(selected) ||
+      choicesRef.current !== machineChoices
+    )
+      return;
+    setMachineChoices((current) =>
+      swap ? { [exercise.id]: photo.id } : { ...current, [exercise.id]: photo.id },
+    );
     if (!selected.some((item) => item.id === exercise.id))
-      setSelected((current) => [...current, exercise]);
+      setSelected((current) => (swap ? [exercise] : [...current, exercise]));
   };
 
   return (
@@ -568,6 +647,57 @@ export function ExercisePicker({
             />
           </View>
         )}
+        {swap && selected[0] && (
+          <View
+            style={[styles.footer, { borderColor: colors.line, paddingBottom: insets.bottom + 10 }]}
+          >
+            {!catalogKnown && (
+              <View style={styles.catalogStatus} accessibilityLiveRegion="polite">
+                {catalogProblem ? (
+                  <>
+                    <Text
+                      accessibilityRole="alert"
+                      style={[type.footnote, { color: colors.danger, flex: 1 }]}
+                    >
+                      {catalogProblem}
+                    </Text>
+                    <Button
+                      label="Try again"
+                      variant="secondary"
+                      size="small"
+                      onPress={() => void machinesQuery.refetch()}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <ActivityIndicator color={colors.muted} />
+                    <Text style={[type.footnote, { color: colors.muted, flex: 1 }]}>
+                      Loading machines…
+                    </Text>
+                  </>
+                )}
+              </View>
+            )}
+            <Button
+              label={
+                catalogKnown || resolvedChoices[selected[0].id] !== undefined
+                  ? 'Swap exercise'
+                  : 'Swap without choosing a machine'
+              }
+              icon={{ sf: 'arrow.left.arrow.right', md: 'swap-horiz' }}
+              variant={
+                catalogKnown || resolvedChoices[selected[0].id] !== undefined
+                  ? 'primary'
+                  : 'secondary'
+              }
+              block
+              onPress={() => {
+                onAdd([selected[0]], resolvedChoices, machineUseOf(resolvedChoices));
+                close();
+              }}
+            />
+          </View>
+        )}
       </View>
       {onCreate && (
         <CreateExerciseSheet
@@ -595,6 +725,18 @@ export function ExercisePicker({
       )}
       <ExerciseMuscleHelpSheet exercise={helpExercise} inline onClose={closeHelp} />
     </Modal>
+  );
+}
+
+/** The machines chosen here for the picked exercises, without any automatic default. */
+function explicitChoices(
+  selected: Exercise[],
+  choices: ExerciseMachineChoices,
+): ExerciseMachineChoices {
+  return Object.fromEntries(
+    selected
+      .filter((exercise) => choices[exercise.id] !== undefined)
+      .map((exercise) => [exercise.id, choices[exercise.id]]),
   );
 }
 
@@ -728,6 +870,7 @@ const styles = StyleSheet.create({
     paddingTop: 10,
     borderTopWidth: StyleSheet.hairlineWidth,
   },
+  catalogStatus: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingBottom: 10 },
   create: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -31,6 +31,12 @@ import {
 } from './machineWeightsForm';
 import { PopupDialog } from './PopupDialog';
 import { PreviewDrawer } from './PreviewDrawer';
+import {
+  normaliseCoachSteps,
+  normaliseFirstStep,
+  normaliseStepAfterToggle,
+  type CoachTarget,
+} from './setupGuideCoach';
 import { exitGuide, finishGuide, useActiveGuide } from './setupGuides';
 import { TrendChart, type TrendPoint } from './PulseCharts';
 import type { ExerciseProgress, MachineWeight, WeightMapping } from './types';
@@ -51,6 +57,14 @@ interface MachineWeightsDialogProps {
   onClose: () => void;
   onSaved: (mapping: WeightMapping) => void;
 }
+
+/** The dialog's controls each step of the machine weights guide is about. */
+const NORMALISE_COACH_TARGETS: Partial<Record<CoachTarget, string>> = {
+  'normalise.switch': '.machine-weights-toggle [role="switch"]',
+  'normalise.reference': '.machine-weights-list li.is-reference',
+  'normalise.match': '.machine-weights-list li.is-spoke',
+  'normalise.save': '.machine-weights-save',
+};
 
 /**
  * Choose a reference machine and how each other machine's weights compare with it. Suggestions
@@ -98,7 +112,7 @@ function MachineWeightsEditor({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const guide = useActiveGuide('normalise');
-  const [guideStep, setGuideStep] = useState(() => (mapping.enabled ? 1 : 0));
+  const [guideStep, setGuideStep] = useState(() => normaliseFirstStep(mapping.enabled));
   const { reference, tree, ordered } = machineWeightsLayout(draft);
   const recent = useMemo(() => recentSessionCounts(progress, localDate()), [progress]);
   const recommendedId = recommendedReferenceId(draft, recent);
@@ -168,7 +182,7 @@ function MachineWeightsEditor({
     const next = toggledNormalise(draft, recommendedId);
     setDraft(next);
     // Turning the switch on is the guide's first step; switching it off again returns there.
-    if (guide) setGuideStep((step) => (!next.enabled ? 0 : step === 0 ? 1 : step));
+    if (guide) setGuideStep((step) => normaliseStepAfterToggle(step, next.enabled));
     if (next.enabled) {
       setTexts((current) => withSuggestions(current, next, progress, weightUnit));
     }
@@ -194,39 +208,17 @@ function MachineWeightsEditor({
     exitGuide('normalise');
     onClose();
   };
-  const spokes = live.machines.filter((machine) => machine.id !== draft.reference_machine_id);
-  // Machines with no sessions yet have nothing to work a match out from.
-  const unmatched = spokes.some((machine) => !suggestions.has(machine.id));
-  const coachSteps: CoachStep[] = [
-    {
-      title: 'Switch on Normalise weights',
-      body: `Your ${exerciseName} machines weigh differently, so the same number is a different effort on each. This shows every session in one machine’s weights.`,
-      target: '.machine-weights-toggle [role="switch"]',
-      next: { disabled: !draft.enabled, onClick: () => setGuideStep(1) },
-    },
-    {
-      title: 'Check the reference machine',
-      body: 'Relay picked the machine you use most and matched your other machines to it from your history. Tap Make reference on another machine to change it.',
-      target: '.machine-weights-list li.is-reference',
-      next: { onClick: () => setGuideStep(2) },
-    },
-    {
-      title: 'Match the weights',
-      body: unmatched
-        ? 'Relay matched the machines you’ve used from your history; enter both weights for any without sessions. Drag a slider to adjust a match and watch the preview.'
-        : 'Relay worked out each match from your history. Drag the slider to adjust it and watch your sessions line up in the preview.',
-      target: '.machine-weights-list li.is-spoke',
-      next: {
-        disabled: spokes.some((machine) => !machine.machine_kg || !machine.reference_kg),
-        onClick: () => setGuideStep(3),
-      },
-    },
-    {
-      title: 'Save it',
-      body: 'Your logged sets keep the weights you entered. Only the All machines chart is converted.',
-      target: '.machine-weights-save',
-    },
-  ];
+  const coachSteps: CoachStep[] = normaliseCoachSteps({
+    exerciseName,
+    enabled: draft.enabled,
+    referenceId: draft.reference_machine_id,
+    machines: live.machines,
+    suggested: (machineId) => suggestions.has(machineId),
+  }).map(({ target, next, ...copy }, index) => ({
+    ...copy,
+    target: NORMALISE_COACH_TARGETS[target],
+    next: next && { disabled: next.disabled, onClick: () => setGuideStep(index + 1) },
+  }));
 
   return (
     <PopupDialog

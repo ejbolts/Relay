@@ -1,5 +1,6 @@
-import type { LiftBest, LiftComparison } from './types';
-import { formatWeight, type WeightUnit } from './weightUnits';
+import { formatLiftEstimate } from './liftWeightDisplay';
+import type { LiftComparison } from './types';
+import type { WeightUnit } from './weightUnits';
 
 // Pure comparison rules matching LiftComparison.tsx (shared with mobile/; switch
 // LiftComparison.tsx to import from here once #350 lands).
@@ -14,19 +15,6 @@ export function leaderOf(lift: LiftComparison): LiftLeader | null {
   if (!lift.yours || !lift.theirs) return null;
   if (lift.yours.estimated_1rm === lift.theirs.estimated_1rm) return 'level';
   return lift.yours.estimated_1rm > lift.theirs.estimated_1rm ? 'you' : 'them';
-}
-
-/** Normalised machine weights are approximate, as they are on the progress screen. */
-function approx(best: LiftBest): string {
-  return best.normalised ? '≈ ' : '';
-}
-
-export function formatLiftEstimate(best: LiftBest, unit: WeightUnit): string {
-  return `${approx(best)}${formatWeight(best.estimated_1rm, unit, 1)}`;
-}
-
-export function formatLiftBestSet(best: LiftBest, unit: WeightUnit): string {
-  return `${approx(best)}${formatWeight(best.weight_kg, unit)} × ${best.reps}`;
 }
 
 function liftCount(lifts: number): string {

@@ -109,6 +109,7 @@ export function ProfileBodyWeightCard({
               formatValue={(value) => formatSharedBodyWeightChartValue(value, unit)}
               seriesLabel="Body weight"
               accessibilityLabel={`Body weight over the last ${BODY_WEIGHT_CHART_DAYS} days`}
+              avoidLineOverlap
             />
           )}
         </>

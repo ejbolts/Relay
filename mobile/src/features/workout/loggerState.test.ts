@@ -133,6 +133,20 @@ test('in a superset the rest waits until the round is done', () => {
   expect(second.restSeconds).toBe(60);
 });
 
+test('a set moves by its key, and a set that is gone moves nothing', () => {
+  const state = addExercises(start(), [bench], context());
+  const key = state.movements[0].key;
+  const [first, second] = state.movements[0].sets;
+  // A menu or drag opened before the set was deleted elsewhere: no undefined entry, no change.
+  for (const move of [{ by: -1 as const }, { by: 1 as const }, { to: first.key }])
+    expect(moveSet(state, key, 'deleted-set', move)).toBe(state);
+  expect(moveSet(state, key, first.key, { to: 'deleted-set' })).toBe(state);
+  expect(moveSet(state, key, second.key, { by: 1 })).toBe(state);
+  const moved = moveSet(state, key, second.key, { to: first.key }).movements[0].sets;
+  expect(moved.map((item) => item.key)).toEqual([second.key, first.key]);
+  expect(moved.every(Boolean)).toBe(true);
+});
+
 test('sets can be added, retyped, deleted (never the last) and put back', () => {
   let state = addExercises(start(), [bench], context());
   const key = state.movements[0].key;
@@ -141,10 +155,11 @@ test('sets can be added, retyped, deleted (never the last) and put back', () => 
   expect(state.movements[0].sets).toHaveLength(3);
   expect(state.movements[0].sets[2]).toMatchObject({ key: added.setKey, weight_kg: 80, reps: 7 });
   state = setSetKind(state, key, added.setKey!, 'drop');
-  state = moveSet(state, key, 2, 1);
+  state = moveSet(state, key, added.setKey!, { by: -1 });
   expect(state.movements[0].sets[1].key).toBe(added.setKey);
-  expect(moveSet(state, key, 0, -1).movements[0].sets).toBe(state.movements[0].sets);
-  state = moveSet(state, key, 1, 2);
+  const firstKey = state.movements[0].sets[0].key;
+  expect(moveSet(state, key, firstKey, { by: -1 }).movements[0].sets).toBe(state.movements[0].sets);
+  state = moveSet(state, key, added.setKey!, { to: state.movements[0].sets[2].key });
   expect(state.movements[0].sets[2]).toMatchObject({ set_type: 'drop', warmup: false });
   const removed = state.movements[0].sets[0];
   state = deleteSet(state, key, removed.key);

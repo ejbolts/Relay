@@ -17,6 +17,7 @@ import {
 import { useUser } from '../../session/SessionProvider';
 import { useBodyMeasurements } from '../body/bodyQueries';
 import { useAppNotices } from './appNotices';
+import { useLiveMuscleSources, withLiveMuscleSets } from './liveMuscleSources';
 import { useNoticeMemory, weeklyReviewShownFor } from './noticeMemory';
 
 const NO_CARDIO_WEEKS: CardioWeek[] = [];
@@ -24,7 +25,8 @@ const NO_CARDIO_WEEKS: CardioWeek[] = [];
 /**
  * The weekly review as the web works it out, from Home's data: every week's figures for the
  * review screen, and whether last week's review is available, already shown (here or on another
- * of the account's devices) and new in the bell.
+ * of the account's devices) and new in the bell. Its muscle sets count the workout in progress,
+ * finished ones waiting to sync and ones saved since the dashboard loaded, as the web's do.
  */
 export function useWeeklyReview() {
   const user = useUser();
@@ -36,19 +38,22 @@ export function useWeeklyReview() {
   const preferences = useTrainingPreferences().data;
   const notices = useAppNotices(user.id);
   useNoticeMemory();
+  const live = useLiveMuscleSources(user.id, dashboard);
   const dashboardWeekStart = dashboard?.weekly_sets?.week_start ?? null;
   const input = useMemo(
     () => ({
       workouts: workouts ?? [],
       records: records ?? [],
       measurements: measurements ?? [],
-      muscleWeeks: reviewMuscleWeeks(dashboard?.weekly_sets, dashboard?.weekly_sets_history),
+      muscleWeeks: reviewMuscleWeeks(dashboard?.weekly_sets, dashboard?.weekly_sets_history).map(
+        (week) => withLiveMuscleSets(week, live, workouts ?? [], today),
+      ),
       muscleGoal: preferences?.weekly_muscle_set_goal ?? 10,
       muscleGoals: preferences?.weekly_muscle_set_goals,
       cardioWeeks: dashboard?.cardio_weeks ?? NO_CARDIO_WEEKS,
       today,
     }),
-    [workouts, records, measurements, dashboard, preferences, today],
+    [workouts, records, measurements, dashboard, preferences, today, live],
   );
   const lastWeek = useMemo(
     () => lastWeekReview({ ...input, loaded: !!dashboard, dashboardWeekStart }),

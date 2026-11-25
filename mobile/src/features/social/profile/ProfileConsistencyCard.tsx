@@ -1,7 +1,6 @@
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { prettyDate } from '../../../../../frontend/src/appShared';
 import {
   averagePerWeek,
   consistencyWeeks,
@@ -23,7 +22,6 @@ import {
   monthViews,
 } from '../../training/calendarModel';
 import { CalendarLegend, WorkoutCalendar } from '../../training/WorkoutCalendar';
-import { ProfileWorkoutsSheet } from './ProfileWorkoutsSheet';
 
 /**
  * The web's Consistency card on a profile: 12-week streak, training days and weekly average,
@@ -31,12 +29,16 @@ import { ProfileWorkoutsSheet } from './ProfileWorkoutsSheet';
  */
 export function ProfileConsistencyCard({
   consistency,
-  profileId,
   isYou,
+  selectedDate,
+  onOpenDay,
 }: {
   consistency: SharedConsistency;
-  profileId: string;
   isYou: boolean;
+  /** The day the history below is filtered to. */
+  selectedDate: string | null;
+  /** A trained day: the profile filters its history to it. */
+  onOpenDay: (date: string) => void;
 }) {
   const { colors, type } = useTheme();
   const router = useRouter();
@@ -57,7 +59,6 @@ export function ProfileConsistencyCard({
   const shownMonth =
     month < bounds.first ? bounds.first : month > bounds.last ? bounds.last : month;
   const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const categoryColors = builtinTypeColors(types);
   const splitDays = splitCalendarDays(trainingSplit, today, 42);
   const months = monthsBetween(bounds.first, bounds.last);
@@ -104,7 +105,7 @@ export function ProfileConsistencyCard({
         selectedDate={selectedDate}
         readOnly
         onSelectDay={(day) => {
-          if (day.entry) setSelectedDate(day.date);
+          if (day.entry) onOpenDay(day.date);
         }}
       />
       <CalendarLegend
@@ -119,15 +120,6 @@ export function ProfileConsistencyCard({
             return next;
           })
         }
-      />
-      <ProfileWorkoutsSheet
-        visible={!!selectedDate}
-        profileId={profileId}
-        workoutTypes={types}
-        kicker="TRAINING DAY"
-        title={selectedDate ? prettyDate(selectedDate) : ''}
-        date={selectedDate ?? undefined}
-        onClose={() => setSelectedDate(null)}
       />
     </Card>
   );

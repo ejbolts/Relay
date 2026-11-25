@@ -2,6 +2,7 @@ import * as Notifications from 'expo-notifications';
 import { Alert, Linking } from 'react-native';
 import { writeJson } from '../../data/deviceStorage';
 import { memoryKv } from '../../testing/memoryKvStore';
+import { reportLocalReminder } from '../push/remotePush';
 import { showToast } from '../../ui/Toast';
 import { restTimerPreference } from '../settings/devicePreferences';
 import {
@@ -9,12 +10,16 @@ import {
   remindAboutRestAlerts,
   resetWorkoutRemindersForTests,
   REST_ALERTS_ASKED_KEY,
+  holdReminder,
   syncInactiveReminder,
+  takeHeldReminder,
   takeLaunchReminder,
 } from './workoutReminders';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 jest.mock('../../ui/Toast', () => ({ showToast: jest.fn() }));
+jest.mock('../push/remotePush', () => ({ reportLocalReminder: jest.fn() }));
 jest.mock('expo-notifications', () => ({
   getPermissionsAsync: jest.fn(),
   requestPermissionsAsync: jest.fn(),
@@ -124,6 +129,21 @@ describe('the inactive workout reminder', () => {
     await syncInactiveReminder(now);
     expect(Notifications.scheduleNotificationAsync).not.toHaveBeenCalled();
     expect(Notifications.requestPermissionsAsync).not.toHaveBeenCalled();
+    // Nothing is scheduled, so the server's push must not skip this phone.
+    expect(jest.mocked(reportLocalReminder).mock.calls).toEqual([[null, null]]);
+  });
+
+  it("tells the server's push which reminder this phone scheduled itself", async () => {
+    permission(true);
+    await syncInactiveReminder(now, now - 600_000);
+    expect(reportLocalReminder).toHaveBeenLastCalledWith(now - 600_000, now + INACTIVE_REMINDER_MS);
+    await syncInactiveReminder(now + 60_000, now - 600_000);
+    expect(reportLocalReminder).toHaveBeenLastCalledWith(
+      now - 600_000,
+      now + 60_000 + INACTIVE_REMINDER_MS,
+    );
+    await syncInactiveReminder(null);
+    expect(reportLocalReminder).toHaveBeenLastCalledWith(null, null);
   });
 });
 
@@ -146,5 +166,25 @@ describe('a reminder that launched Relay', () => {
       .mockResolvedValue(response({ kind: 'rest' }));
     expect(await takeLaunchReminder()).toBeUndefined();
     expect(Notifications.clearLastNotificationResponseAsync).not.toHaveBeenCalled();
+  });
+});
+
+describe('a reminder tapped before its workout has loaded', () => {
+  it('waits for that workout, then opens once', () => {
+    holdReminder(42);
+    expect(takeHeldReminder(7)).toBeUndefined(); // Another workout loaded first.
+    expect(takeHeldReminder(42)).toBe(42);
+    expect(takeHeldReminder(42)).toBeUndefined();
+  });
+
+  it('opens whichever workout loads when it did not say which', () => {
+    holdReminder(null);
+    expect(takeHeldReminder(7)).toBeNull();
+  });
+
+  it('is dropped when the account changes', () => {
+    holdReminder(42);
+    nextSessionEpoch();
+    expect(takeHeldReminder(42)).toBeUndefined();
   });
 });

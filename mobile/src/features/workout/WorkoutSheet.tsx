@@ -1,13 +1,22 @@
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+} from 'react';
 import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineAliases } from '../../../../frontend/src/exerciseHistory';
 import { exerciseLastDoneDates } from '../../../../frontend/src/exerciseLastDone';
 import { liveMuscleSets, type MuscleSetsWeek } from '../../../../frontend/src/liveMuscleSets';
 import { bodyweightOn } from '../../../../frontend/src/relativeStrength';
-import type { SetKind } from '../../../../frontend/src/setFieldValues';
+import { setKindOf, type SetKind } from '../../../../frontend/src/setFieldValues';
+import type { ExerciseMachineChoices } from '../../../../frontend/src/exerciseMachineChoices';
 import type { Exercise } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import {
@@ -25,6 +34,15 @@ import {
   type DraftPrBadges,
   type PrCelebrations,
 } from '../../../../frontend/src/workoutPr';
+import { activeElapsedSeconds } from '../../../../frontend/src/workoutPause';
+import { isSupersetUpNext, nextInSupersetRound } from '../../../../frontend/src/workoutSupersets';
+import {
+  machineTipEligible,
+  readdsRemovedSet,
+  replacesRemovedExercise,
+  savedWorkoutCount,
+  type TipRemoval,
+} from '../../../../frontend/src/tipTriggers';
 import { newId } from '../../data/deviceStorage';
 import { useDashboard, useTrainingPreferences } from '../../data/queries';
 import { Button } from '../../ui/components';
@@ -35,7 +53,8 @@ import { MenuButton } from '../../ui/MenuButton';
 import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
-import { restTimerPreference } from '../settings/devicePreferences';
+import { LoggerTipsProvider, useLoggerTips } from '../guides/LoggerTips';
+import { restTimerPreference, useReduceMotion } from '../settings/devicePreferences';
 import { useBodyMeasurements } from '../training/trainingQueries';
 import { FinishedSummary } from './FinishedSummary';
 import { ExercisePicker } from './ExercisePicker';
@@ -44,6 +63,7 @@ import {
   addExercises,
   chooseMachines,
   completeExercise,
+  correctWorkoutTime,
   deleteSet,
   loggerToDraft,
   groupSuperset,
@@ -58,7 +78,6 @@ import {
   mergeMachines,
   setMachineSettings,
   setSetKind,
-  swapExercise,
   ungroupSuperset,
   workoutIdentity,
   type LoggerState,
@@ -67,10 +86,12 @@ import { MovementCard, type MovementActions } from './MovementCard';
 import { RestBar } from './RestBar';
 import { MachineSheet } from './MachineSheet';
 import { SwapSheet } from './SwapSheet';
+import { swapOntoMachine } from './swapMachineSetup';
 import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
 import { WeeklySetsShelf, type WeeklySetsUpdate } from './WeeklySetsShelf';
 import { restMenuItems } from './restChoices';
 import { useElapsed } from './useElapsed';
+import { WorkoutTimeSheet } from './WorkoutTimeSheet';
 import { useLogger, useWorkout, type LoggerApi } from './WorkoutProvider';
 
 /**
@@ -89,7 +110,12 @@ export function WorkoutSheet() {
   useEffect(() => () => closeFinished?.(), [closeFinished]);
 
   let content = <NoWorkout onClose={() => router.back()} />;
-  if (logger?.state) content = <LiveLogger logger={logger} state={logger.state} />;
+  if (logger?.state)
+    content = (
+      <LoggerTipsProvider>
+        <LiveLogger logger={logger} state={logger.state} />
+      </LoggerTipsProvider>
+    );
   else if (logger?.finished)
     content = <FinishedView logger={logger} onDone={() => router.back()} />;
   return (
@@ -138,7 +164,8 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   // Settings › Rest timer off hides the header's rest button, as on the web.
   const restTimerOn = restTimerPreference.use();
   const router = useRouter();
-  const { discard } = useWorkout();
+  const { discard, syncConflict, syncConflictOpen: conflictSheetOpen } = useWorkout();
+  const syncConflictOpen = !!syncConflict && conflictSheetOpen;
   const insets = useSafeAreaInsets();
   const { colors, type, space, radius } = useTheme();
   // The exercise picker adds exercises, or picks a replacement for the exercise being swapped.
@@ -146,8 +173,29 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const [swapping, setSwapping] = useState<string | null>(null);
   const [machinesFor, setMachinesFor] = useState<string | null>(null);
   const { change, types, context, getState, updateSet: applySetUpdate } = logger;
+  // The web's tip pop-ups beside logger controls, fed by the same events.
+  const loggerTips = useLoggerTips();
+  const savedWorkouts = savedWorkoutCount(logger.history);
+  /** The latest set or exercise removed, which adding its like again soon after may redo. */
+  const recentRemoval = useRef<TipRemoval | null>(null);
   const identity = workoutIdentity(state, types);
   const elapsed = useElapsed(state.startedAt, state.pause, state.previousDurationMinutes);
+  // The clock correction opens on the clock as it reads then (this session's training time),
+  // for the workout it was opened for: another workout replacing it (from the web, say) closes
+  // it, and its save never reaches the replacement.
+  const [timeEditor, setTimeEditor] = useState({ open: false, seconds: 0, key: 0, sessionId: '' });
+  const openTimeEditor = () => {
+    const latest = getState() ?? state;
+    setTimeEditor((current) => ({
+      open: true,
+      seconds: activeElapsedSeconds(latest.startedAt, latest.pause, Date.now()),
+      key: current.key + 1,
+      sessionId: latest.clientSessionId,
+    }));
+  };
+  const closeTimeEditor = () => setTimeEditor((current) => ({ ...current, open: false }));
+  if (timeEditor.open && timeEditor.sessionId !== state.clientSessionId)
+    setTimeEditor({ ...timeEditor, open: false });
   const paused = state.pause.pausedAt !== null;
   const { ticked } = setCounts(state);
   const restShown = !!(logger.rest.timer || logger.rest.done);
@@ -216,16 +264,30 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const closeShelf = useCallback(() => setShelf(null), []);
 
   const swap = useCallback(
-    (movementKey: string, replacement: Exercise) => {
+    (
+      movementKey: string,
+      replacement: Exercise,
+      machineChoices?: ExerciseMachineChoices,
+      machineUse?: Readonly<Record<string, number>>,
+    ) => {
       const before = getState();
       if (!before) return;
-      change((current) => swapExercise(current, movementKey, replacement, context));
+      loggerTips.learn('swap');
+      void swapOntoMachine(
+        change,
+        movementKey,
+        replacement,
+        context,
+        machineChoices,
+        undefined,
+        machineUse,
+      );
       showToast(`Swapped to ${replacement.name}`, {
         label: 'Undo',
         run: () => change((current) => ({ ...current, movements: before.movements })),
       });
     },
-    [change, context, getState],
+    [change, context, getState, loggerTips],
   );
 
   const removeExercise = useCallback(
@@ -234,15 +296,18 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       const movement = before?.movements.find((item) => item.key === movementKey);
       if (!before || !movement) return;
       const remove = () => {
+        recentRemoval.current = { kind: 'exercise', key: movementKey, at: Date.now() };
         change((current) => removeMovement(current, movementKey));
         showToast(`${movement.exercise.name} removed`, {
           label: 'Undo',
-          run: () =>
+          run: () => {
+            recentRemoval.current = null;
             change((current) =>
               current.movements.some((item) => item.key === movementKey)
                 ? current
                 : { ...current, movements: before.movements },
-            ),
+            );
+          },
         });
       };
       if (!movement.sets.some((item) => item.completed)) {
@@ -255,6 +320,33 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       ]);
     },
     [change, getState],
+  );
+
+  // Removing an exercise and choosing another soon after is what Swap exercise does in one go.
+  const exercisesAdded = (count: number) => {
+    const removal = recentRemoval.current;
+    recentRemoval.current = null;
+    if (replacesRemovedExercise(removal, count, savedWorkouts, Date.now()))
+      loggerTips.event('replace-exercise', 'swap');
+  };
+  // Adding a set soon after deleting one from the same exercise is counted as on the web. The
+  // app doesn't show the reorder tip it asks for there (its text is about the web's handle).
+  const { addSet: addLoggerSet } = logger;
+  const addSet = useCallback(
+    (movementKey: string, position?: number) => {
+      const removal = recentRemoval.current;
+      recentRemoval.current = null;
+      if (readdsRemovedSet(removal, movementKey, Date.now())) loggerTips.event('re-add-set');
+      addLoggerSet(movementKey, position);
+    },
+    [addLoggerSet, loggerTips],
+  );
+  const openMachines = useCallback(
+    (movementKey: string) => {
+      loggerTips.learn('machine');
+      setMachinesFor(movementKey);
+    },
+    [loggerTips],
   );
 
   const openActions = useCallback(
@@ -284,7 +376,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         { label: 'Swap exercise', onPress: () => setSwapping(movementKey) },
         ...(movement.exercise.kind === 'cardio'
           ? []
-          : [{ label: 'Machines', onPress: () => setMachinesFor(movementKey) }]),
+          : [{ label: 'Machines', onPress: () => openMachines(movementKey) }]),
       ];
       if (index > 0)
         options.push({
@@ -324,14 +416,72 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       });
       showMenu(movement.exercise.name, options);
     },
-    [change, getState, removeExercise],
+    [change, getState, removeExercise, openMachines],
+  );
+
+  // Folding a card from its bottom edge brings its header back into view, as on the web.
+  const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
+  const scrollY = useRef(0);
+  const cardTops = useRef(new Map<string, number>());
+  const reducedMotion = useReduceMotion();
+  const viewportHeight = useRef(0);
+  const cardHeights = useRef(new Map<string, number>());
+  const revealMovement = useCallback(
+    (movementKey: string) => {
+      requestAnimationFrame(() => {
+        const top = cardTops.current.get(movementKey);
+        if (top === undefined) return;
+        const target = Math.max(0, top - space.gutter);
+        if (target < scrollY.current)
+          scrollRef.current?.scrollTo({ y: target, animated: !reducedMotion });
+      });
+    },
+    [space.gutter, reducedMotion],
+  );
+  /**
+   * Scrolls the next card in a superset round into view only as far as needed, as the web's
+   * `scrollIntoView({ block: 'nearest' })` after logging a set. Two frames let a card that has
+   * just opened report its new height first.
+   */
+  const revealNearest = useCallback(
+    (movementKey: string) => {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          const top = cardTops.current.get(movementKey);
+          const height = cardHeights.current.get(movementKey);
+          if (top === undefined || height === undefined) return;
+          const viewTop = scrollY.current;
+          const viewBottom = viewTop + viewportHeight.current;
+          let target: number | null = null;
+          if (top - space.gutter < viewTop) target = top - space.gutter;
+          else if (top + height + space.gutter > viewBottom)
+            target = Math.min(
+              top - space.gutter,
+              top + height + space.gutter - viewportHeight.current,
+            );
+          if (target !== null)
+            scrollRef.current?.scrollTo({ y: Math.max(0, target), animated: !reducedMotion });
+        }),
+      );
+    },
+    [space.gutter, reducedMotion],
   );
 
   const actions = useMemo<MovementActions>(
     () => ({
+      revealMovement,
       updateSet: (movementKey, setKey, update) => {
         const current = getState();
         const movement = current?.movements.find((item) => item.key === movementKey);
+        const before = movement?.sets.find((item) => item.key === setKey);
+        if (before && update.completed === true && !before.completed) {
+          loggerTips.setLogged();
+          if (
+            movement?.exercise.kind !== 'cardio' &&
+            setKindOf({ ...before, ...update }) === 'warmup'
+          )
+            loggerTips.event('warmup-logged', 'setType');
+        }
         const next = current
           ? shelfAfterSetUpdate(
               movement,
@@ -344,31 +494,50 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
             )
           : null;
         applySetUpdate(movementKey, setKey, update, bodyweightRef.current);
+        // Logging a set here brings the next exercise in its superset round into view.
+        if (before && update.completed === true && !before.completed) {
+          const next = nextInSupersetRound(getState()?.movements ?? [], movementKey);
+          if (next) revealNearest(next.key);
+        }
         if (next === 'hide') setShelf(null);
         else if (next) setShelf({ id: ++shelfId.current, gains: next });
       },
-      addSet: logger.addSet,
-      insertSet: logger.addSet,
-      deleteSet: (movementKey, setKey) => {
+      addSet,
+      insertSet: addSet,
+      deleteSet: (movementKey, setKey, via) => {
         const movement = getState()?.movements.find((item) => item.key === movementKey);
         const index = movement?.sets.findIndex((item) => item.key === setKey) ?? -1;
         if (!movement || index < 0) return;
+        // A swipe is the quick way; deleting from the menu a few times suggests it.
+        if (via === 'swipe') loggerTips.learn('swipe');
+        else if (movement.sets.length > 1) loggerTips.event('menu-delete', 'swipe', 3);
         if (movement.sets.length === 1) {
           showToast('An exercise needs at least one set. Remove the exercise instead.');
           return;
         }
         const removed = movement.sets[index];
+        recentRemoval.current = { kind: 'set', key: movementKey, at: Date.now() };
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         change((latest) => deleteSet(latest, movementKey, setKey));
         showToast('Set deleted', {
           label: 'Undo',
-          run: () => change((latest) => restoreSet(latest, movementKey, removed, index)),
+          run: () => {
+            recentRemoval.current = null;
+            change((latest) => restoreSet(latest, movementKey, removed, index));
+          },
         });
       },
-      moveSet: (movementKey, from, to) =>
-        change((latest) => moveSet(latest, movementKey, from, to)),
-      setKind: (movementKey, setKey, kind: SetKind) =>
-        change((latest) => setSetKind(latest, movementKey, setKey, kind)),
+      moveSet: (movementKey, setKey, move) => {
+        loggerTips.learn('reorder');
+        change((latest) => moveSet(latest, movementKey, setKey, move));
+      },
+      setKind: (movementKey, setKey, kind: SetKind) => {
+        const set = getState()
+          ?.movements.find((item) => item.key === movementKey)
+          ?.sets.find((item) => item.key === setKey);
+        if (set && setKindOf(set) === 'warmup' && kind !== 'warmup') loggerTips.learn('setType');
+        change((latest) => setSetKind(latest, movementKey, setKey, kind));
+      },
       completeExercise: (movementKey, isComplete) => {
         const current = getState();
         const movement = current?.movements.find((item) => item.key === movementKey);
@@ -387,7 +556,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       },
       openActions,
       skipHighRepWarning: () => change((latest) => ({ ...latest, skipHighRepWarning: true })),
-      openMachines: setMachinesFor,
+      openMachines,
       restoreMachines: (movementKey, machinePhotoIds) =>
         change((latest) =>
           latest.movements.find((item) => item.key === movementKey)?.machinePhotosInitialized
@@ -401,7 +570,18 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
               ),
         ),
     }),
-    [applySetUpdate, logger.addSet, change, getState, openActions, context],
+    [
+      applySetUpdate,
+      addSet,
+      change,
+      getState,
+      openActions,
+      openMachines,
+      context,
+      revealMovement,
+      revealNearest,
+      loggerTips,
+    ],
   );
 
   function rename() {
@@ -449,6 +629,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   function openMenu() {
     showMenu(identity.name, [
       { label: 'Rename workout', onPress: rename },
+      { label: 'Adjust workout time', onPress: openTimeEditor },
       { label: 'Workout type', onPress: chooseType },
       {
         label: paused ? 'Resume workout' : 'Pause workout',
@@ -499,6 +680,22 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     run();
   }
 
+  // Tips wait while anything is over the logger, and nudges sit above the bottom docks.
+  // As the web's tips wait for its weekly sets shelf, these wait for the shelf, every sheet and
+  // the sync choice.
+  const tipsReady =
+    !picker && !swapping && !machinesFor && !timeEditor.open && !shelf && !syncConflictOpen;
+  const tipsBottom = insets.bottom + (restShown || shelf ? 150 : 28);
+  const { configure: configureTips } = loggerTips;
+  useEffect(() => {
+    configureTips({
+      ready: tipsReady,
+      resting: restRunning,
+      workoutCount: savedWorkouts,
+      bottom: tipsBottom,
+    });
+  }, [configureTips, tipsReady, restRunning, savedWorkouts, tipsBottom]);
+
   const supersetNames = (groupKey: string | null) =>
     groupKey
       ? state.movements
@@ -524,39 +721,59 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
         </Pressable>
         <View style={styles.headerRow}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${identity.name}, ${paused ? `${elapsed}, paused` : `live ${elapsed}`}, ${ticked} ${ticked === 1 ? 'set' : 'sets'}`}
-            accessibilityHint="Renames the workout"
-            onPress={rename}
-            style={styles.titleBlock}
-          >
-            <Text
-              accessibilityRole="header"
-              style={[styles.title, { color: colors.text }]}
-              numberOfLines={1}
+          <View style={styles.titleBlock}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={identity.name}
+              accessibilityHint="Renames the workout"
+              onPress={rename}
             >
-              {identity.name}
-            </Text>
-            <View style={styles.meta}>
-              <View
-                style={[styles.liveDot, { backgroundColor: paused ? colors.muted : colors.good }]}
-              />
               <Text
-                style={[
-                  styles.metaText,
-                  type.number,
-                  { color: paused ? colors.muted : colors.good },
-                ]}
+                accessibilityRole="header"
+                style={[styles.title, { color: colors.text }]}
+                numberOfLines={1}
               >
-                {paused ? elapsed : `Live ${elapsed}`}
+                {identity.name}
               </Text>
-              {paused && <Text style={[styles.metaText, { color: colors.muted }]}>· Paused</Text>}
-              <Text style={[styles.metaText, type.number, { color: colors.muted }]}>
+            </Pressable>
+            <View style={styles.meta}>
+              {/* Tapping the clock corrects it, as on the web, for a timer started late or left running. */}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Correct workout time, ${paused ? elapsed : `Live ${elapsed}`}`}
+                hitSlop={{ left: 6, right: 6 }}
+                onPress={() => {
+                  haptics.tap();
+                  openTimeEditor();
+                }}
+                style={({ pressed }) => [styles.clock, pressed && styles.pressed]}
+              >
+                <View
+                  style={[styles.liveDot, { backgroundColor: paused ? colors.muted : colors.good }]}
+                />
+                <Text
+                  style={[
+                    styles.metaText,
+                    styles.clockText,
+                    type.number,
+                    { color: paused ? colors.muted : colors.good },
+                  ]}
+                >
+                  {paused ? elapsed : `Live ${elapsed}`}
+                </Text>
+              </Pressable>
+              {paused && (
+                <Text style={[styles.metaText, styles.metaLine, { color: colors.muted }]}>
+                  · Paused
+                </Text>
+              )}
+              <Text
+                style={[styles.metaText, styles.metaLine, type.number, { color: colors.muted }]}
+              >
                 · {ticked} {ticked === 1 ? 'set' : 'sets'}
               </Text>
             </View>
-          </Pressable>
+          </View>
           {restTimerOn && (
             <MenuButton
               accessibilityLabel="Rest timer"
@@ -616,6 +833,14 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         </View>
       </View>
       <ScrollView
+        ref={scrollRef}
+        onLayout={(event) => {
+          viewportHeight.current = event.nativeEvent.layout.height;
+        }}
+        onScroll={(event) => {
+          scrollY.current = event.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={64}
         style={{ flex: 1 }}
         contentContainerStyle={{
           padding: space.gutter,
@@ -633,25 +858,34 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
           onChangeNotes={(notes) => change((latest) => ({ ...latest, notes }))}
         />
         {state.movements.map((movement, index) => (
-          <MovementCard
+          <View
             key={movement.key}
-            number={index + 1}
-            movement={movement}
-            supersetNames={supersetNames(movement.supersetKey)}
-            history={logger.history}
-            olderLatest={
-              olderHistoryFor(logger.context, state.workoutDate)?.get(movement.exercise.id)
-                ?.latest ?? null
-            }
-            lastDone={lastDone.get(movement.exercise.id) ?? null}
-            bodyweight={bodyweight}
-            prBadges={prBadges.get(movement.key)}
-            excludedWorkoutId={state.resumingWorkoutId ?? undefined}
-            workoutDate={state.workoutDate}
-            weightUnit={logger.weightUnit}
-            skipHighRepWarning={state.skipHighRepWarning}
-            actions={actions}
-          />
+            onLayout={(event) => {
+              cardTops.current.set(movement.key, event.nativeEvent.layout.y);
+              cardHeights.current.set(movement.key, event.nativeEvent.layout.height);
+            }}
+          >
+            <MovementCard
+              number={index + 1}
+              movement={movement}
+              supersetNames={supersetNames(movement.supersetKey)}
+              history={logger.history}
+              olderLatest={
+                olderHistoryFor(logger.context, state.workoutDate)?.get(movement.exercise.id)
+                  ?.latest ?? null
+              }
+              lastDone={lastDone.get(movement.exercise.id) ?? null}
+              bodyweight={bodyweight}
+              prBadges={prBadges.get(movement.key)}
+              excludedWorkoutId={state.resumingWorkoutId ?? undefined}
+              workoutDate={state.workoutDate}
+              weightUnit={logger.weightUnit}
+              skipHighRepWarning={state.skipHighRepWarning}
+              machineTip={machineTipEligible(movement.exercise, logger.history)}
+              supersetUpNext={isSupersetUpNext(state.movements, movement.key)}
+              actions={actions}
+            />
+          </View>
         ))}
         <Button
           label="Add exercise"
@@ -725,6 +959,21 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         }
         onClose={() => setMachinesFor(null)}
       />
+      <WorkoutTimeSheet
+        key={timeEditor.key}
+        visible={timeEditor.open}
+        elapsedSeconds={timeEditor.seconds}
+        onClose={closeTimeEditor}
+        onSave={(seconds) => {
+          const { sessionId } = timeEditor;
+          change((latest) =>
+            latest.clientSessionId === sessionId
+              ? correctWorkoutTime(latest, seconds, Date.now())
+              : latest,
+          );
+          closeTimeEditor();
+        }}
+      />
       <SwapSheet
         exercise={swapMovement?.exercise ?? null}
         plannedSetCount={swapMovement?.sets.filter((item) => !item.completed).length ?? 0}
@@ -752,15 +1001,19 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         category={identity.category}
         chooseMachines
         lastDone={lastDone}
-        onAdd={(selected, machineChoices) => {
+        onAdd={(selected, machineChoices, machineUse) => {
           const target = picker?.swapping;
           if (target) {
-            if (selected[0]) swap(target, selected[0]);
-          } else change((latest) => addExercises(latest, selected, context, machineChoices));
+            if (selected[0]) swap(target, selected[0], machineChoices, machineUse);
+          } else {
+            exercisesAdded(selected.length);
+            change((latest) => addExercises(latest, selected, context, machineChoices));
+          }
         }}
-        onCreateSuperset={(selected, machineChoices) =>
-          change((latest) => addExercises(latest, selected, context, machineChoices, newId()))
-        }
+        onCreateSuperset={(selected, machineChoices) => {
+          exercisesAdded(selected.length);
+          change((latest) => addExercises(latest, selected, context, machineChoices, newId()));
+        }}
         onCreate={logger.createExercise}
         onClose={() => setPicker(null)}
       />
@@ -922,9 +1175,9 @@ const styles = StyleSheet.create({
     gap: 16,
     padding: 24,
   },
+  // The clock's 44 pt row reaches the header's bottom edge, so it needs no padding below.
   header: {
     paddingHorizontal: 14,
-    paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   // A 44 pt tall touch area around the grabber.
@@ -936,13 +1189,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   grabber: { width: 36, height: 5, borderRadius: 3 },
-  headerRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  titleBlock: { flex: 1, minWidth: 0, gap: 3 },
+  headerRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  titleBlock: { flex: 1, minWidth: 0 },
   // The web's live title: 17 pt, extra bold, one line.
   title: { fontSize: 17, lineHeight: 22, fontWeight: '800', letterSpacing: -0.4 },
-  meta: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  // A 44 pt row under the title: the clock's touch area fills its height without reaching the
+  // title (which renames), and the text keeps its place just under the title.
+  meta: { flexDirection: 'row', alignItems: 'stretch', gap: 5, minHeight: 44 },
+  metaLine: { paddingTop: 3 },
   metaText: { fontSize: 13, fontWeight: '600' },
-  liveDot: { width: 6, height: 6, borderRadius: 3 },
+  liveDot: { width: 6, height: 6, borderRadius: 3, marginTop: 6 },
+  clock: { flexDirection: 'row', alignItems: 'flex-start', gap: 5, paddingTop: 3 },
+  clockText: { textDecorationLine: 'underline', textDecorationStyle: 'dotted' },
   square: {
     width: 44,
     height: 44,

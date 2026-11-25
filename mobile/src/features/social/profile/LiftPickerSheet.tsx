@@ -16,11 +16,11 @@ import {
   rankExerciseSearchMatches,
 } from '../../../../../frontend/src/exerciseSearch';
 import {
-  formatLiftEstimate,
   MAX_HEAD_TO_HEAD_LIFTS,
   orderLiftsForPicker,
   toggleLiftSelection,
 } from '../../../../../frontend/src/liftComparisonDisplay';
+import { formatLiftEstimate } from '../../../../../frontend/src/liftWeightDisplay';
 import type { LiftComparison, SharedProfileSummary } from '../../../../../frontend/src/types';
 import { useWeightUnit } from '../../../data/queries';
 import { haptics } from '../../../ui/haptics';

@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { AccessibilityInfo, Platform, StyleSheet, Text } from 'react-native';
+import { AccessibilityInfo, Keyboard, Platform, StyleSheet, Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { COLOUR_THEMES } from '../../../frontend/src/appearanceChoices';
 import { AccountHeaderActions } from './AccountHeaderActions';
@@ -7,6 +7,7 @@ import { Button, IconButton, splitStyle } from './components';
 import { Segmented, Slider, sliderValues, snapToStep, stepSlider } from './controls';
 import { DateField, TimeField } from './DateField';
 import { SheetFrame } from './navigation';
+import { Sheet, keyboardObstruction, sheetBackdropLayout } from './Sheet';
 import { palettes, themedPalette } from './theme';
 import { ToastHost, showToast, toastAnnouncement } from './Toast';
 
@@ -499,5 +500,99 @@ describe('Slider limits', () => {
       expect.objectContaining({ disabled: true }),
     );
     warn.mockRestore();
+  });
+});
+
+describe('Sheet keyboard avoidance', () => {
+  it('computes obstruction from backdrop bottom and keyboard screenY (three-button nav & resized windows)', () => {
+    // Full-height edge-to-edge modal (807 dp) with 3-button nav (48 dp) + keyboard (280 dp):
+    // screenY is 479, so actual overlap is 328 dp (not 280).
+    expect(keyboardObstruction(807, { screenY: 479, height: 280 })).toBe(328);
+    // Already-resized window whose bottom sits at the keyboard top needs 0 extra padding.
+    expect(keyboardObstruction(479, { screenY: 479, height: 280 })).toBe(0);
+    expect(keyboardObstruction(450, { screenY: 479, height: 280 })).toBe(0);
+    // Landscape rotation with shorter window and keyboard.
+    expect(keyboardObstruction(393, { screenY: 180, height: 213 })).toBe(213);
+    // Fallback when screenY is omitted.
+    expect(keyboardObstruction(807, { height: 290 })).toBe(290);
+    expect(keyboardObstruction(807, null)).toBe(0);
+  });
+
+  it('measures the Android backdrop on show and rotation, resets on hide, and leaves iOS unchanged', async () => {
+    Platform.OS = 'android';
+    const listeners: Record<
+      string,
+      ((event: { endCoordinates: { screenY: number; height: number } }) => void)[]
+    > = {};
+    const spy = jest.spyOn(Keyboard, 'addListener').mockImplementation(((
+      event: string,
+      cb: (e: { endCoordinates: { screenY: number; height: number } }) => void,
+    ) => {
+      (listeners[event] ??= []).push(cb);
+      return { remove: jest.fn() };
+    }) as unknown as typeof Keyboard.addListener);
+
+    let windowBounds = { y: 0, height: 807 };
+    const measureSpy = jest
+      .spyOn(sheetBackdropLayout, 'measure')
+      .mockImplementation((_node, done) => {
+        done(windowBounds);
+        return true;
+      });
+
+    try {
+      const view = await wrap(
+        <Sheet visible onClose={jest.fn()} title="Workout time so far">
+          <Text>Minutes</Text>
+        </Sheet>,
+      );
+      const modal = () => screen.container.queryAll((node) => node.type === 'Modal')[0];
+      const backdropStyle = () => {
+        const child = modal().children[0];
+        if (!child || typeof child === 'string') throw new Error('Sheet has no backdrop');
+        return StyleSheet.flatten(child.props.style);
+      };
+      expect(backdropStyle()?.paddingBottom).toBeUndefined();
+
+      // Three-button nav: height is 280, but screenY is 479 inside an 807 dp modal -> 328 dp overlap.
+      await act(async () => {
+        listeners.keyboardDidShow?.forEach((cb) =>
+          cb({ endCoordinates: { screenY: 479, height: 280 } }),
+        );
+      });
+      expect(backdropStyle()?.paddingBottom).toBe(328);
+
+      // Rotation: new modal bounds (393 dp tall) and new keyboard screenY (180) -> 213 dp overlap.
+      windowBounds = { y: 0, height: 393 };
+      await act(async () => {
+        listeners.keyboardDidShow?.forEach((cb) =>
+          cb({ endCoordinates: { screenY: 180, height: 170 } }),
+        );
+      });
+      expect(backdropStyle()?.paddingBottom).toBe(213);
+
+      await act(async () => {
+        listeners.keyboardDidHide?.forEach((cb) =>
+          cb({ endCoordinates: { screenY: 393, height: 0 } }),
+        );
+      });
+      expect(backdropStyle()?.paddingBottom).toBeUndefined();
+      await view.unmount();
+
+      // iOS keeps its native pageSheet without keyboard listeners.
+      spy.mockClear();
+      Platform.OS = 'ios';
+      const iosView = await wrap(
+        <Sheet visible onClose={jest.fn()} title="Workout time so far">
+          <Text>Minutes</Text>
+        </Sheet>,
+      );
+      expect(spy).not.toHaveBeenCalled();
+      expect(modal().props.presentationStyle).toBe('pageSheet');
+      await iosView.unmount();
+    } finally {
+      measureSpy.mockRestore();
+      spy.mockRestore();
+    }
   });
 });

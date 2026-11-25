@@ -1049,6 +1049,7 @@ ACCOUNT_TABLES = {
     "live_workouts",
     "active_workout_sync",
     "workout_photos",
+    "expo_push_tokens",
 }
 
 

@@ -14,6 +14,7 @@ import { connectLivePresence } from '../../data/livePresence';
 import { useUpNext } from '../../data/queries';
 import { SessionProvider } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
+import { showMenu, type MenuOption } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { pushDay, sessionId, types } from './testFixtures';
 import { useWorkout, WorkoutProvider } from './WorkoutProvider';
@@ -37,6 +38,13 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => children,
 }));
+jest.mock('react-native-gesture-handler', () => ({
+  ...jest.requireActual<typeof import('react-native-gesture-handler')>(
+    'react-native-gesture-handler',
+  ),
+  usePanGesture: (config: unknown) => config,
+  GestureDetector: ({ children }: { children: ReactNode }) => children,
+}));
 jest.mock('./restAlerts', () => ({
   askForRestAlerts: jest.fn(async () => undefined),
   syncRestAlert: jest.fn(async () => undefined),
@@ -49,6 +57,7 @@ jest.mock('../../ui/prompts', () => ({
 jest.mock('../../ui/Toast', () => ({
   showToast: jest.fn(),
   ToastHost: () => null,
+  toastShowing: () => false,
   toastAccount: () => 'u1',
   toastAccountFor: () => 'u1',
   isToastAccountCurrent: () => true,
@@ -314,4 +323,75 @@ test('edits on both devices that cannot combine ask which to keep', async () => 
   await waitFor(() => expect(server.draft?.movements[0].sets[0].weight_kg).toBe(85));
   expect(puts.at(-1)).toMatchObject({ replace: true, revision: 4 });
   expect(captured.workout!.syncConflict).toBeNull();
+});
+
+/** A web workout with three logged sets of bench, 6, 7 and 8 reps. */
+function threeSets(values: Partial<ActiveWorkoutDraft> = {}) {
+  const draft = remoteDraft(values);
+  const set = draft.movements[0].sets[0];
+  draft.movements[0].sets = [6, 7, 8].map((reps, index) => ({
+    ...set,
+    key: `web-set-${index + 1}`,
+    reps,
+  }));
+  return draft;
+}
+
+test('a set menu opened before the set was deleted elsewhere moves nothing', async () => {
+  server = { revision: 3, draft: threeSets(), refuseNextEdit: false };
+  await openApp();
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  await fireEvent.press(screen.getAllByLabelText(/^Set 3 type: /)[0]);
+  const menu = jest.mocked(showMenu).mock.calls.at(-1)![1] as MenuOption[];
+  const moveUp = menu.find((item) => item.label === 'Move up')!;
+
+  // The web deletes set 3 while the phone's menu is still open.
+  const deleted = threeSets();
+  deleted.movements[0].sets = deleted.movements[0].sets.slice(0, 2);
+  server = { revision: 4, draft: deleted, refuseNextEdit: false };
+  await reconnect();
+  await waitFor(() => expect(screen.queryAllByLabelText(/^Set 3 type: /)).toHaveLength(0));
+
+  await act(async () => moveUp.onPress());
+  expect(screen.getByText('Bench Press')).toBeVisible();
+  const stored = readActiveWorkoutDraft(deviceStorage)!;
+  expect(stored.movements[0].sets.map((item) => item.reps)).toEqual([6, 7]);
+  expect(stored.movements[0].sets.every(Boolean)).toBe(true);
+});
+
+test('a clock correction opened for one workout never reaches the workout that replaced it', async () => {
+  server = { revision: 3, draft: remoteDraft(), refuseNextEdit: false };
+  await openApp();
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: /^Correct workout time/ }));
+  await fireEvent.changeText(screen.getByLabelText('Minutes'), '45');
+  const setTime = screen.getByRole('button', { name: 'Set time' });
+
+  // The web finishes that workout and starts another before Set time is tapped.
+  server = {
+    revision: 4,
+    draft: remoteDraft({
+      clientSessionId: '2c5f39cb-3fb0-42e3-9e4a-1f7d2a6b8c01',
+      notes: 'Workout B',
+    }),
+    refuseNextEdit: false,
+  };
+  await reconnect();
+  await waitFor(() =>
+    expect(readActiveWorkoutDraft(deviceStorage)?.clientSessionId).toBe(
+      '2c5f39cb-3fb0-42e3-9e4a-1f7d2a6b8c01',
+    ),
+  );
+  // The editor closed with the workout it was opened for.
+  expect(screen.queryByText('Workout time so far')).toBeNull();
+  // Even a tap that was already on its way changes nothing.
+  await act(async () => {
+    try {
+      await fireEvent.press(setTime);
+    } catch {
+      // The button has gone with the sheet.
+    }
+  });
+  expect(readActiveWorkoutDraft(deviceStorage)?.adjustedMs).toBeUndefined();
+  expect(server.draft?.adjustedMs).toBeUndefined();
 });

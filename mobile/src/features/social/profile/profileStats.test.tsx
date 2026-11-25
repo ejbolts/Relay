@@ -5,6 +5,7 @@ import { Alert } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { prettyDate } from '../../../../../frontend/src/appShared';
 import { emptyBodySizeLog } from '../../../../../frontend/src/bodySizeEntries';
+import { sharedFiltersOnDay } from '../../../../../frontend/src/sharedHistoryFilters';
 import { addDays, dayMonth, shortDate } from '../../../../../frontend/src/trainingSummary';
 import type {
   LiftBest,
@@ -21,6 +22,7 @@ import { OFFLINE_MESSAGE } from '../../../data/offline';
 import { ToastHost } from '../../../ui/Toast';
 import { ProfileScreen } from '../ProfileScreen';
 import { socialKeys } from '../socialQueries';
+import { TrendPlot } from '../../body/BodyTrendChart';
 import { ProfileStats } from './ProfileStats';
 
 const mockRouter = { push: jest.fn(), navigate: jest.fn(), setParams: jest.fn(), back: jest.fn() };
@@ -337,6 +339,34 @@ async function show2(children: ReactNode) {
   };
 }
 
+const onOpenDay = jest.fn();
+const onOpenLift = jest.fn();
+
+/** The stats as a profile shows them, with its history's day and lift callbacks. */
+function Stats({
+  profile,
+  selectedDate = null,
+}: {
+  profile: SharedProfile;
+  selectedDate?: string | null;
+}) {
+  return (
+    <ProfileStats
+      profile={profile}
+      selectedDate={selectedDate}
+      onOpenDay={onOpenDay}
+      onOpenLift={onOpenLift}
+    />
+  );
+}
+
+/** Reads the profile's history again, as a pull to refresh does. */
+async function refetchHistory() {
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: [...socialKeys.profile('alex'), 'workouts'] });
+  });
+}
+
 test('ProfileScreen gates stats on can_view, respects sharing choices, and exposes My splits for own profile', async () => {
   // Real ProfileScreen gate: a friends-only profile hides all five stats cards.
   const sharedGet = jest.mocked(apiGet).getMockImplementation()!;
@@ -359,7 +389,7 @@ test('ProfileScreen gates stats on can_view, respects sharing choices, and expos
   await lockedView.unmount();
 
   // Viewable profile shows all five shared sections.
-  const view = await show(<ProfileStats profile={fullProfile} />);
+  const view = await show(<Stats profile={fullProfile} />);
   expect(screen.getByText('Head to head')).toBeVisible();
   expect(screen.getByText('Consistency')).toBeVisible();
   expect(screen.getByText('3 days')).toBeVisible();
@@ -383,7 +413,7 @@ test('ProfileScreen gates stats on can_view, respects sharing choices, and expos
     training_time: null,
     training_time_past_year: null,
   };
-  await view.rerender(<ProfileStats profile={privateExtras} />);
+  await view.rerender(<Stats profile={privateExtras} />);
   expect(screen.queryByText('Head to head')).toBeNull();
   expect(screen.queryByText('Time trained')).toBeNull();
   expect(screen.queryByText('Body weight')).toBeNull();
@@ -394,8 +424,8 @@ test('ProfileScreen gates stats on can_view, respects sharing choices, and expos
   await view.unmount();
 });
 
-test('consistency calendar disables empty days, toggles legend, and opens/collapses a single-workout day sheet', async () => {
-  const view = await show(<ProfileStats profile={fullProfile} />);
+test('consistency calendar disables empty days, toggles legend, filters the history to a trained day and marks it', async () => {
+  const view = await show(<Stats profile={fullProfile} />);
   const legendSwitch = screen.getByRole('switch', { name: 'Upper body' });
   expect(legendSwitch).toHaveProp('accessibilityState', expect.objectContaining({ checked: true }));
   await fireEvent.press(legendSwitch);
@@ -405,41 +435,116 @@ test('consistency calendar disables empty days, toggles legend, and opens/collap
   );
   await fireEvent.press(legendSwitch);
 
-  // Disabled empty day in the current month cannot open the workout sheet.
+  // A disabled empty day in the current month filters nothing.
   const emptyDay = screen.getByLabelText(`No workouts for ${prettyDate(emptyInMonth)}`);
   expect(emptyDay).toBeDisabled();
   await fireEvent.press(emptyDay);
-  expect(screen.queryByText('TRAINING DAY')).toBeNull();
-  expect(apiGet).not.toHaveBeenCalledWith(
-    expect.stringContaining(`start_date=${emptyInMonth}`),
-    expect.anything(),
-  );
+  expect(onOpenDay).not.toHaveBeenCalled();
 
-  // Tapping a trained day opens the sheet with swipe dismissal enabled and single workout expanded.
-  const trainedDay = screen.getByRole('button', {
-    name: `View 1 workout for ${prettyDate(trainedInMonth)}`,
+  // A trained day asks the profile to filter its history to that day.
+  const dayName = `View 1 workout for ${prettyDate(trainedInMonth)}`;
+  expect(screen.getByRole('button', { name: dayName })).toHaveProp(
+    'accessibilityState',
+    expect.objectContaining({ selected: false }),
+  );
+  await fireEvent.press(screen.getByRole('button', { name: dayName }));
+  expect(onOpenDay).toHaveBeenCalledWith(trainedInMonth);
+
+  // The day the history shows is marked.
+  await view.rerender(<Stats profile={fullProfile} selectedDate={trainedInMonth} />);
+  expect(screen.getByRole('button', { name: dayName })).toHaveProp(
+    'accessibilityState',
+    expect.objectContaining({ selected: true }),
+  );
+  await view.unmount();
+});
+
+test('a trained day or a lift filters the profile’s history on All sessions, as on the web', async () => {
+  const profile = { ...fullProfile, cardio_sessions: [] } as SharedProfile;
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/alex') return profile;
+    if (path === '/api/sharing/profiles/alex/lifts') {
+      return { selected: [], lifts: LIFTS } satisfies LiftComparisons;
+    }
+    if (path.startsWith('/api/sharing/profiles/alex/workout-filters')) {
+      return { exercises: [], machines: [] };
+    }
+    if (path.startsWith('/api/sharing/profiles/alex/workouts')) {
+      // Only a filtered history holds the workout, so finding it proves the filter applied.
+      return path.includes('start_date=') || path.includes('exercise_id=')
+        ? { total: 1, workouts: [sampleWorkout], personal_records: [], reactions: {} }
+        : { total: 0, workouts: [], personal_records: [], reactions: {} };
+    }
+    throw new Error(`Unexpected GET ${path}`);
   });
-  await fireEvent.press(trainedDay);
+  const view = await show(<ProfileScreen profileId="alex" />);
+  const dayName = `View 1 workout for ${prettyDate(trainedInMonth)}`;
+  await screen.findByRole('button', { name: dayName });
+
+  // From the Workouts tab, a day shows everything that day, on All sessions.
+  await fireEvent.press(screen.getByRole('radio', { name: 'Workouts' }));
+  await waitFor(() =>
+    expect(apiGet).toHaveBeenCalledWith(
+      expect.stringContaining('kind=strength'),
+      expect.anything(),
+    ),
+  );
+  await fireEvent.press(screen.getByRole('button', { name: dayName }));
   expect(await screen.findByText('Heavy Push Session')).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Open workout' })).toBeVisible();
-  const modals = screen.container.queryAll((node) => node.type === 'Modal');
-  expect(modals.some((modal) => modal.props.visible && modal.props.allowSwipeDismissal)).toBe(true);
-
-  // Tapping the single workout's expanded header collapses it; tapping again expands it.
-  await fireEvent.press(screen.getByText('Heavy Push Session'));
-  expect(screen.queryByRole('button', { name: 'Open workout' })).toBeNull();
-  await fireEvent.press(screen.getByText('Heavy Push Session'));
-  expect(screen.getByRole('button', { name: 'Open workout' })).toBeVisible();
-
   expect(apiGet).toHaveBeenCalledWith(
-    expect.stringContaining(`start_date=${trainedInMonth}&end_date=${trainedInMonth}`),
+    expect.stringMatching(new RegExp(`start_date=${trainedInMonth}&end_date=${trainedInMonth}$`)),
     expect.anything(),
   );
-  await fireEvent.press(screen.getByRole('button', { name: 'Open workout' }));
-  expect(mockRouter.push).toHaveBeenCalledWith({
-    pathname: '/social/workout/[id]',
-    params: { id: 'w-alex-1', member: 'alex', date: trainedInMonth },
-  });
+  expect(screen.getByRole('radio', { name: 'All sessions' })).toHaveProp(
+    'accessibilityState',
+    expect.objectContaining({ selected: true }),
+  );
+  expect(screen.getByRole('button', { name: 'Filter workouts, 1 filter on' })).toBeVisible();
+  expect(screen.getByRole('button', { name: dayName })).toHaveProp(
+    'accessibilityState',
+    expect.objectContaining({ selected: true }),
+  );
+
+  // A lift Alex logged shows their sessions of it instead, and the day is no longer marked.
+  await fireEvent.press(screen.getByRole('button', { name: 'Choose lifts' }));
+  await fireEvent.press(await screen.findByText('Squat'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+  await fireEvent.press(
+    await screen.findByRole('button', {
+      name: 'Squat: you 154 kg, Alex Morgan 140 kg. Show Alex Morgan’s sessions',
+    }),
+  );
+  await waitFor(() =>
+    expect(apiGet).toHaveBeenCalledWith(
+      expect.stringMatching(/exercise_id=theirs-Squat$/),
+      expect.anything(),
+    ),
+  );
+  expect(await screen.findByText('Heavy Push Session')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Filter workouts, 1 filter on' })).toBeVisible();
+  expect(screen.getByRole('button', { name: dayName })).toHaveProp(
+    'accessibilityState',
+    expect.objectContaining({ selected: false }),
+  );
+  await view.unmount();
+});
+
+test('tapping the day a linked workout is on keeps that workout open, as on the web', async () => {
+  const view = await show(
+    <ProfileScreen
+      profileId="alex"
+      targetWorkout={{ id: 'w-alex-1', workout_date: trainedInMonth }}
+    />,
+  );
+  // The link opens the workout's day with the workout open.
+  expect(await screen.findByText('Shared bench cues')).toBeVisible();
+  const dayName = `View 1 workout for ${prettyDate(trainedInMonth)}`;
+  expect(screen.getByRole('button', { name: dayName })).toHaveProp(
+    'accessibilityState',
+    expect.objectContaining({ selected: true }),
+  );
+  await fireEvent.press(screen.getByRole('button', { name: dayName }));
+  expect(screen.getByText('Shared bench cues')).toBeVisible();
   await view.unmount();
 });
 
@@ -465,7 +570,7 @@ test('revoked access (403 friend_required) evicts cached workouts, suppresses pr
       if (accessState === 'revoked') {
         throw new ApiError(403, 'Alex Morgan shares with friends only.', 'friend_required');
       }
-      // Return empty for the main profile history tab so only the day sheet has sampleWorkout.
+      // Return empty for the unfiltered history, so only the day's filter finds sampleWorkout.
       if (!path.includes('start_date=')) {
         return { total: 0, workouts: [], personal_records: [], reactions: {} };
       }
@@ -479,77 +584,33 @@ test('revoked access (403 friend_required) evicts cached workouts, suppresses pr
     name: `View 1 workout for ${prettyDate(trainedInMonth)}`,
   });
 
-  // 1. Load a trained day so its workout is cached.
+  // 1. A trained day filters the history to it, so its workout is cached.
   await fireEvent.press(trainedDay);
-  expect(await screen.findByText('Heavy Push Session')).toBeVisible();
+  await fireEvent.press(await screen.findByText('Heavy Push Session'));
   expect(screen.getByText('Shared bench cues')).toBeVisible();
-  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
 
   // 2. Transient network error on refetch preserves the cached workout with an alert underneath.
   accessState = 'network-error';
-  await fireEvent.press(trainedDay);
+  await refetchHistory();
   expect(await screen.findByText('Could not reach Relay.')).toBeVisible();
   expect(screen.getByText('Heavy Push Session')).toBeVisible();
-  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
 
   // 3. Access revoked (403 friend_required): cached workout and lifts are evicted and parent
   //    ProfileScreen revalidates into the FRIENDS ONLY locked state.
   accessState = 'revoked';
-  await fireEvent.press(trainedDay);
+  await refetchHistory();
   expect(await screen.findByText('FRIENDS ONLY')).toBeVisible();
   expect(screen.queryByText('Heavy Push Session')).toBeNull();
   expect(screen.queryByText('Shared bench cues')).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Open workout' })).toBeNull();
   expect(screen.queryByText('Head to head')).toBeNull();
   await waitFor(() => {
     expect(client.getQueryData(socialKeys.lifts('alex'))).toBeUndefined();
     expect(
-      client.getQueryData(socialKeys.workouts('alex', undefined, trainedInMonth)),
+      client.getQueryData(
+        socialKeys.workouts('alex', undefined, sharedFiltersOnDay(trainedInMonth)),
+      ),
     ).toBeUndefined();
   });
-  await view.unmount();
-});
-
-test('a refused refetch hides the cached day in the open sheet, a failing Try again keeps it hidden, and it is evicted once closed', async () => {
-  let refused = false;
-  let unreachable = false;
-  const sharedGet = jest.mocked(apiGet).getMockImplementation()!;
-  jest.mocked(apiGet).mockImplementation(async (path: string, ...rest) => {
-    if (unreachable) throw new Error('Could not reach Relay.');
-    if (refused && path.startsWith('/api/sharing/profiles/alex/workouts')) {
-      throw new ApiError(403, 'Alex Morgan shares with friends only.', 'friend_required');
-    }
-    return sharedGet(path, ...rest);
-  });
-  const view = await show(<ProfileStats profile={fullProfile} />);
-  const day = screen.getByRole('button', {
-    name: `View 1 workout for ${prettyDate(trainedInMonth)}`,
-  });
-  await fireEvent.press(day);
-  expect(await screen.findByText('Shared bench cues')).toBeVisible();
-  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
-
-  refused = true;
-  await fireEvent.press(day);
-  expect(await screen.findByText('Alex Morgan shares with friends only.')).toBeVisible();
-  expect(screen.queryByText('Heavy Push Session')).toBeNull();
-  expect(screen.queryByText('Shared bench cues')).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Open workout' })).toBeNull();
-
-  // Try again while the connection fails: the network error replaces the refusal on the query,
-  // but the recorded refusal still hides everything from before.
-  unreachable = true;
-  await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
-  expect(await screen.findByText('Could not reach Relay.')).toBeVisible();
-  expect(screen.queryByText('Heavy Push Session')).toBeNull();
-  expect(screen.queryByText('Shared bench cues')).toBeNull();
-
-  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
-  await waitFor(() =>
-    expect(
-      client.getQueryData(socialKeys.workouts('alex', undefined, trainedInMonth)),
-    ).toBeUndefined(),
-  );
   await view.unmount();
 });
 
@@ -587,13 +648,13 @@ test('a refusal outlives a failed profile refresh and leaving the profile, until
   });
   await waitFor(() => expect(client.getQueryData(socialKeys.lifts('alex'))).toBeDefined());
   await fireEvent.press(day);
-  expect(await screen.findByText('Shared bench cues')).toBeVisible();
-  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+  await fireEvent.press(await screen.findByText('Heavy Push Session'));
+  expect(screen.getByText('Shared bench cues')).toBeVisible();
 
-  // The day is refused, and the profile refresh that follows fails on the network.
+  // Read again, the day is refused, and the profile refresh that follows fails on the network.
   alex.refused = true;
   alex.profileUnreachable = true;
-  await fireEvent.press(day);
+  await refetchHistory();
   expect(await screen.findByText('FRIENDS ONLY')).toBeVisible();
   expect(screen.queryByRole('button', { name: 'Choose lifts' })).toBeNull();
   expect(screen.queryByText('Head to head')).toBeNull();
@@ -601,7 +662,9 @@ test('a refusal outlives a failed profile refresh and leaving the profile, until
   await waitFor(() => {
     expect(client.getQueryData(socialKeys.lifts('alex'))).toBeUndefined();
     expect(
-      client.getQueryData(socialKeys.workouts('alex', undefined, trainedInMonth)),
+      client.getQueryData(
+        socialKeys.workouts('alex', undefined, sharedFiltersOnDay(trainedInMonth)),
+      ),
     ).toBeUndefined();
   });
 
@@ -634,12 +697,12 @@ test('after a refusal, a refresh that fails on the network brings none of the ea
     name: `View 1 workout for ${prettyDate(trainedInMonth)}`,
   });
   await fireEvent.press(day);
-  expect(await screen.findByText('Shared bench cues')).toBeVisible();
-  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+  await fireEvent.press(await screen.findByText('Heavy Push Session'));
+  expect(screen.getByText('Shared bench cues')).toBeVisible();
 
   alex.refused = true;
   alex.profileUnreachable = true;
-  await fireEvent.press(day);
+  await refetchHistory();
   expect(await screen.findByText('FRIENDS ONLY')).toBeVisible();
 
   // Every Social query is retried while the server can't be reached.
@@ -659,7 +722,7 @@ test('after a refusal, a refresh that fails on the network brings none of the ea
 
 test('training time toggles between All time and Past year, explains Combined, and tolerates older servers', async () => {
   const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
-  const view = await show(<ProfileStats profile={fullProfile} />);
+  const view = await show(<Stats profile={fullProfile} />);
   expect(screen.getByText('2h 5min')).toBeVisible();
   expect(screen.getByText('2 workouts')).toBeVisible();
   await fireEvent.press(screen.getByRole('radio', { name: 'Past year' }));
@@ -674,16 +737,14 @@ test('training time toggles between All time and Past year, explains Combined, a
   );
 
   // Older server without past-year totals hides the segmented control.
-  await view.rerender(
-    <ProfileStats profile={{ ...fullProfile, training_time_past_year: undefined }} />,
-  );
+  await view.rerender(<Stats profile={{ ...fullProfile, training_time_past_year: undefined }} />);
   expect(screen.queryByLabelText('Time trained range')).toBeNull();
   alertSpy.mockRestore();
   await view.unmount();
 });
 
 test('body weight chart formats readings without trailing .0, supports selection, respects hidden goals, and body sizes step dates', async () => {
-  const view = await show(<ProfileStats profile={fullProfile} />);
+  const view = await show(<Stats profile={fullProfile} />);
   const chart = screen.getByLabelText('Body weight over the last 90 days');
   const drawn = { includeHiddenElements: true };
   // Once laid out, the chart draws the shared goal's line and label.
@@ -697,7 +758,7 @@ test('body weight chart formats readings without trailing .0, supports selection
   expect(screen.queryByText('78.0 kg', drawn)).toBeNull();
 
   // A goal the member doesn't share draws no goal line or label.
-  await view.rerender(<ProfileStats profile={{ ...fullProfile, goals: null }} />);
+  await view.rerender(<Stats profile={{ ...fullProfile, goals: null }} />);
   await fireEvent(screen.getByLabelText('Body weight over the last 90 days'), 'layout', {
     nativeEvent: { layout: { width: 320, height: 170 } },
   });
@@ -705,7 +766,7 @@ test('body weight chart formats readings without trailing .0, supports selection
 
   // Body measurements show only measured parts in inches when lb is active, and step between dates.
   mockWeightUnit = 'lb';
-  await view.rerender(<ProfileStats profile={fullProfile} />);
+  await view.rerender(<Stats profile={fullProfile} />);
   expect(screen.getByLabelText('Measurements on the body: Waist 30 in, Hips 38 in')).toBeVisible();
   await fireEvent.press(screen.getByRole('button', { name: 'Earlier measurements' }));
   expect(screen.getByLabelText('Measurements on the body: Waist 31 in')).toBeVisible();
@@ -714,16 +775,14 @@ test('body weight chart formats readings without trailing .0, supports selection
   expect(screen.getByLabelText('Measurements on the body: Waist 30 in, Hips 38 in')).toBeVisible();
 
   // Empty arrays (shared, but no entries yet) show the web's empty messages.
-  await view.rerender(
-    <ProfileStats profile={{ ...fullProfile, body_weight: [], body_sizes: [] }} />,
-  );
+  await view.rerender(<Stats profile={{ ...fullProfile, body_weight: [], body_sizes: [] }} />);
   expect(screen.getByText('No weigh-ins yet.')).toBeVisible();
   expect(screen.getByText('No body measurements yet.')).toBeVisible();
   expect(screen.queryByLabelText('Body weight over the last 90 days')).toBeNull();
 
   // Single body size entry hides stepper buttons.
   await view.rerender(
-    <ProfileStats
+    <Stats
       profile={{
         ...fullProfile,
         sex: null,
@@ -736,8 +795,8 @@ test('body weight chart formats readings without trailing .0, supports selection
   await view.unmount();
 });
 
-test('head to head picks lifts, uses sheet ToastHost Undo with invalidation, commits on iOS swipe dismissal, and opens sessions', async () => {
-  const view = await show(<ProfileStats profile={fullProfile} />);
+test('head to head picks lifts, uses sheet ToastHost Undo with invalidation, commits on iOS swipe dismissal, and opens their sessions of a lift', async () => {
+  const view = await show(<Stats profile={fullProfile} />);
   // Starts empty even though the server returned selected lifts.
   expect(screen.getByRole('button', { name: 'Choose lifts' })).toBeVisible();
   expect(screen.queryByText('All-time est. 1RM')).toBeNull();
@@ -798,25 +857,16 @@ test('head to head picks lifts, uses sheet ToastHost Undo with invalidation, com
   expect(screen.getByText('≈ 80 kg')).toBeVisible();
   expect(screen.getByRole('button', { name: 'Edit lifts' })).toBeVisible();
 
-  // Tapping a lift Alex logged opens their sessions for that exercise.
+  // Tapping a lift Alex logged asks the profile to show their sessions of that exercise.
   await fireEvent.press(
     screen.getByRole('button', {
       name: 'Bench: you 116.7 kg, Alex Morgan 121 kg. Show Alex Morgan’s sessions',
     }),
   );
-  await waitFor(() =>
-    expect(apiGet).toHaveBeenCalledWith(
-      expect.stringContaining('exercise_id=theirs-Bench'),
-      expect.anything(),
-    ),
-  );
-  expect(await screen.findByText('Heavy Push Session')).toBeVisible();
-  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+  expect(onOpenLift).toHaveBeenCalledWith('theirs-Bench');
 
   // Switching to another member starts empty again (no cross-profile state leak).
-  await view.rerender(
-    <ProfileStats profile={{ ...fullProfile, id: 'sam', display_name: 'Sam' }} />,
-  );
+  await view.rerender(<Stats profile={{ ...fullProfile, id: 'sam', display_name: 'Sam' }} />);
   expect(screen.queryByText('All-time est. 1RM')).toBeNull();
   await view.unmount();
 });
@@ -824,7 +874,7 @@ test('head to head picks lifts, uses sheet ToastHost Undo with invalidation, com
 test('head to head handles offline paused lifts, early taps on live loads, and cached 404 revocation', async () => {
   // 1. Offline paused query: tapping Choose lifts shows offline feedback with retry.
   onlineManager.setOnline(false);
-  const offlineView = await show(<ProfileStats profile={fullProfile} />);
+  const offlineView = await show(<Stats profile={fullProfile} />);
   await fireEvent.press(screen.getByRole('button', { name: 'Choose lifts' }));
   expect(await screen.findByText(OFFLINE_MESSAGE)).toBeVisible();
   expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
@@ -844,7 +894,7 @@ test('head to head handles offline paused lifts, early taps on live loads, and c
     }
     return Promise.reject(new ApiError(404, 'Not found'));
   });
-  const view = await show(<ProfileStats profile={fullProfile} />);
+  const view = await show(<Stats profile={fullProfile} />);
   await fireEvent.press(screen.getByRole('button', { name: 'Choose lifts' }));
   expect(screen.queryByText('Lifts to compare')).toBeNull();
   await act(async () => resolveLifts!({ selected: [], lifts: LIFTS }));
@@ -860,4 +910,158 @@ test('head to head handles offline paused lifts, early taps on live loads, and c
     expect(screen.queryByText('Head to head')).toBeNull();
   });
   await view.unmount();
+});
+
+test('head to head shows Try again on network or server errors, while hiding on 403/404', async () => {
+  let outcome: 'network' | 'server' | '403' | '404' | 'ok' = 'network';
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/alex/lifts') {
+      if (outcome === 'network')
+        throw new Error('Could not reach Relay. Check your connection, then try again.');
+      if (outcome === 'server') throw new ApiError(503, 'Relay is temporarily unavailable.');
+      if (outcome === '403') throw new ApiError(403, 'Forbidden');
+      if (outcome === '404') throw new ApiError(404, 'Not found');
+      return { selected: [], lifts: LIFTS } satisfies LiftComparisons;
+    }
+    throw new Error(`Unexpected GET ${path}`);
+  });
+
+  // 1. Network error keeps the card with ErrorState and Try again, and recovers on retry.
+  const netView = await show(<Stats profile={fullProfile} />);
+  expect(
+    await screen.findByText('Could not reach Relay. Check your connection, then try again.'),
+  ).toBeVisible();
+  expect(screen.getByText('Head to head')).toBeVisible();
+  outcome = 'ok';
+  await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+  expect(await screen.findByRole('button', { name: 'Choose lifts' })).toBeVisible();
+  await netView.unmount();
+
+  // 2. Other server error (503) also keeps the card with ErrorState.
+  outcome = 'server';
+  const serverView = await show(<Stats profile={fullProfile} />);
+  expect(await screen.findByText('Relay is temporarily unavailable.')).toBeVisible();
+  expect(screen.getByText('Head to head')).toBeVisible();
+  expect(screen.getByRole('button', { name: 'Try again' })).toBeVisible();
+  await serverView.unmount();
+
+  // 3. Plain 403 refusal and 404 (server without endpoint) still hide the card.
+  for (const hiddenOutcome of ['403', '404'] as const) {
+    outcome = hiddenOutcome;
+    const hiddenView = await show(<Stats profile={fullProfile} />);
+    await waitFor(() => expect(screen.queryByText('Head to head')).toBeNull());
+    await hiddenView.unmount();
+  }
+});
+
+test('head to head hides cached lifts and closes an open picker on 403/404/405/501, while keeping them on transient errors', async () => {
+  // 1. All four unavailable statuses hide cached lifts and close the open picker at once.
+  for (const status of [403, 404, 405, 501] as const) {
+    let fail: Error | null = null;
+    jest.mocked(apiGet).mockImplementation(async (path: string) => {
+      if (path === '/api/sharing/profiles/alex/lifts') {
+        if (fail) throw fail;
+        return { selected: [], lifts: LIFTS } satisfies LiftComparisons;
+      }
+      throw new Error(`Unexpected GET ${path}`);
+    });
+    const view = await show(<Stats profile={fullProfile} />);
+    await fireEvent.press(screen.getByRole('button', { name: 'Choose lifts' }));
+    expect(await screen.findByText('Lifts to compare')).toBeVisible();
+
+    fail = new ApiError(status, `HTTP ${status}`);
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: socialKeys.lifts('alex') });
+    });
+    await waitFor(() => {
+      expect(screen.queryByText('Lifts to compare')).toBeNull();
+      expect(screen.queryByText('Head to head')).toBeNull();
+    });
+    await view.unmount();
+  }
+
+  // 2. Transient network and 503 errors keep cached lifts and the open picker intact.
+  let transient: Error | null = null;
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sharing/profiles/alex/lifts') {
+      if (transient) throw transient;
+      return { selected: [], lifts: LIFTS } satisfies LiftComparisons;
+    }
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  const view = await show(<Stats profile={fullProfile} />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Choose lifts' }));
+  expect(await screen.findByText('Lifts to compare')).toBeVisible();
+
+  for (const err of [
+    new Error('Could not reach Relay. Check your connection, then try again.'),
+    new ApiError(503, 'Relay is temporarily unavailable.'),
+  ]) {
+    transient = err;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: socialKeys.lifts('alex') });
+    });
+    await waitFor(() =>
+      expect(client.getQueryState(socialKeys.lifts('alex'))?.fetchStatus).toBe('idle'),
+    );
+    expect(screen.getByText('Lifts to compare')).toBeVisible();
+    expect(screen.getByText('Head to head')).toBeVisible();
+  }
+  await view.unmount();
+});
+
+test('TrendPlot keeps default goal label placement for Body unless avoidLineOverlap is opted in', async () => {
+  const points = [
+    { date: '2026-10-01', value: 78.0 },
+    { date: '2026-10-20', value: 75.5 },
+    { date: '2026-11-10', value: 76.0 },
+    { date: '2026-11-23', value: 76.0 },
+  ];
+  const goal = {
+    startDate: '2026-10-15',
+    startValue: 77.5,
+    endDate: '2026-11-23',
+    endValue: 76.3,
+    label: 'Goal 75 kg',
+  };
+  const drawn = { includeHiddenElements: true };
+
+  // Default (Body screen): label stays below the falling goal line.
+  const bodyView = await show(
+    <TrendPlot
+      points={points}
+      goal={goal}
+      unit="kg"
+      height={170}
+      active={null}
+      onSelect={jest.fn()}
+      accessibilityLabel="Body chart"
+    />,
+  );
+  await fireEvent(screen.getByLabelText('Body chart'), 'layout', {
+    nativeEvent: { layout: { width: 320, height: 170 } },
+  });
+  const bodyY = Number(screen.getByLabelText('Goal 75 kg', drawn).props.y);
+  await bodyView.unmount();
+
+  // Opt-in (friend profile): label flips above the falling goal line to clear the plotted series.
+  const profileView = await show(
+    <TrendPlot
+      points={points}
+      goal={goal}
+      unit="kg"
+      height={170}
+      active={null}
+      onSelect={jest.fn()}
+      accessibilityLabel="Profile chart"
+      avoidLineOverlap
+    />,
+  );
+  await fireEvent(screen.getByLabelText('Profile chart'), 'layout', {
+    nativeEvent: { layout: { width: 320, height: 170 } },
+  });
+  const profileY = Number(screen.getByLabelText('Goal 75 kg', drawn).props.y);
+  await profileView.unmount();
+
+  expect(profileY).toBeLessThan(bodyY);
 });

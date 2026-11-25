@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import {
-  formatLiftBestSet,
-  formatLiftEstimate,
   headToHeadScore,
   leaderOf,
   liftBarShare,
@@ -67,14 +65,7 @@ describe('liftComparisonDisplay', () => {
     expect(withoutLevel.label).toBe('You lead 1 lift, Sam leads 1 lift');
   });
 
-  it('formats estimates, best sets, normalised prefix and row summaries', () => {
-    const normal = best(116.7, 'a', false);
-    const approx = best(80, 'b', true);
-    expect(formatLiftEstimate(normal, 'kg')).toBe('116.7 kg');
-    expect(formatLiftEstimate(approx, 'kg')).toBe('≈ 80 kg');
-    expect(formatLiftBestSet(normal, 'kg')).toBe('100 kg × 5');
-    expect(formatLiftBestSet(approx, 'kg')).toBe('≈ 100 kg × 5');
-
+  it('summarises each row for screen readers', () => {
     const bench = lift('Bench', 116.7, 121);
     const curl = lift('Curl', 40, null);
     expect(liftRowSummary(bench, 'Sam', 'kg')).toBe('Bench: you 116.7 kg, Sam 121 kg');

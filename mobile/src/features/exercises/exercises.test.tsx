@@ -20,6 +20,15 @@ import { ExercisesSection } from '../training/ExercisesSection';
 import { exercise, preferences, TODAY } from '../training/trainingFixtures';
 import { ExerciseEditScreen } from './ExerciseEditScreen';
 import { ExerciseMergeScreen } from './ExerciseMergeScreen';
+import { coachHighlight } from '../guides/GuideCoach';
+import {
+  activeSetupGuide,
+  exitSetupGuide,
+  resetSetupGuideForTests,
+  startSetupGuide,
+} from '../guides/setupGuides';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
+import { resetTipsForTests, tipsFor } from '../guides/tips';
 import { MachineWeightsScreen } from './MachineWeightsScreen';
 
 const mockRouter = {
@@ -29,8 +38,10 @@ const mockRouter = {
   dismiss: jest.fn(),
   replace: jest.fn(),
 };
+const mockFocus = { current: true };
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
+  useIsFocused: () => mockFocus.current,
   // The header's buttons render with the screen, so a test can press them.
   Stack: {
     Screen: ({ options }: { options?: { headerRight?: () => ReactNode } }) =>
@@ -465,6 +476,115 @@ describe('machine weights', () => {
       expect.objectContaining({ enabled: true, reference_machine_id: 'hammer' }),
     );
     expect(showToast).toHaveBeenCalledWith('Machine weights saved');
+  });
+
+  test('the machine weights guide coaches the switch, the reference, the match and Save', async () => {
+    resetSetupGuideForTests();
+    resetTipsForTests();
+    jest.mocked(apiSend).mockImplementation(async (_path, _method, body) => body as never);
+    startSetupGuide('normalise', 'u1', []);
+    await open(<MachineWeightsScreen exerciseId="press" />);
+    expect(await screen.findByText('Switch on Normalise weights')).toBeVisible();
+    expect(screen.getByText(/Your Chest Press machines weigh differently/)).toBeVisible();
+    expect(coachHighlight()).toBe('normalise.switch');
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    // Turning the switch on is the first step.
+    await fireEvent(screen.getByRole('switch', { name: 'Normalise weights' }), 'valueChange', true);
+    expect(await screen.findByText('Check the reference machine')).toBeVisible();
+    expect(coachHighlight()).toBe('normalise.reference');
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Match the weights')).toBeVisible();
+    expect(coachHighlight()).toBe('normalise.match');
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Save it')).toBeVisible();
+    expect(coachHighlight()).toBe('normalise.save');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save machine weights' }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(activeSetupGuide()).toBeNull();
+    expect(tipsFor('u1').get().seen.normalise).toBe('learned');
+  });
+
+  test('a late save finishes only its own guide, in this session or after an account switch', async () => {
+    const pending = () => {
+      let resolve!: (value: unknown) => void;
+      const promise = new Promise((done) => (resolve = done));
+      return { promise, resolve };
+    };
+    for (const replace of ['same session', 'other account'] as const) {
+      resetSetupGuideForTests();
+      resetTipsForTests();
+      const save = pending();
+      jest.mocked(apiSend).mockReturnValueOnce(save.promise as never);
+      startSetupGuide('normalise', 'u1', []);
+      const view = await open(<MachineWeightsScreen exerciseId="press" />);
+      await fireEvent(
+        await screen.findByRole('switch', { name: 'Normalise weights' }),
+        'valueChange',
+        true,
+      );
+      await fireEvent.press(screen.getByRole('button', { name: 'Save machine weights' }));
+      if (replace === 'other account') nextSessionEpoch();
+      else exitSetupGuide('normalise');
+      startSetupGuide('normalise', replace === 'other account' ? 'u2' : 'u1', []);
+      const replacement = activeSetupGuide();
+      await act(async () =>
+        save.resolve({ enabled: true, reference_machine_id: 'hammer', machines: [] }),
+      );
+      expect(activeSetupGuide()).toBe(replacement);
+      expect(tipsFor('u1').get().seen.normalise).toBeUndefined();
+      expect(tipsFor('u2').get().seen.normalise).toBeUndefined();
+      await view.unmount();
+    }
+  });
+
+  test('switching to another tab ends the guide even though the screen stays mounted', async () => {
+    resetSetupGuideForTests();
+    const pause = (ms: number) => act(() => new Promise<void>((done) => setTimeout(done, ms)));
+    const screenAt = () => (
+      <SafeAreaProvider
+        initialMetrics={{
+          frame: { x: 0, y: 0, width: 390, height: 844 },
+          insets: { top: 0, left: 0, right: 0, bottom: 0 },
+        }}
+      >
+        <QueryClientProvider client={client}>
+          <MachineWeightsScreen exerciseId="press" />
+        </QueryClientProvider>
+      </SafeAreaProvider>
+    );
+    try {
+      startSetupGuide('normalise', 'u1', []);
+      const view = await open(<MachineWeightsScreen exerciseId="press" />);
+      expect(await screen.findByText('Switch on Normalise weights')).toBeVisible();
+      // Briefly covered and back (as when the screen is replaced by itself): the guide stays.
+      mockFocus.current = false;
+      await view.rerender(screenAt());
+      mockFocus.current = true;
+      await view.rerender(screenAt());
+      await pause(800);
+      expect(activeSetupGuide()?.id).toBe('normalise');
+      // Another tab: the Training stack keeps the screen mounted, out of sight.
+      mockFocus.current = false;
+      await view.rerender(screenAt());
+      await pause(800);
+      expect(activeSetupGuide()).toBeNull();
+      expect(screen.queryByText(/Setup guide/)).toBeNull();
+      expect(tipsFor('u1').get().seen.normalise).toBeUndefined();
+    } finally {
+      mockFocus.current = true;
+    }
+  });
+
+  test('switching normalising off again returns the guide to its first step', async () => {
+    resetSetupGuideForTests();
+    startSetupGuide('normalise', 'u1', []);
+    await open(<MachineWeightsScreen exerciseId="press" />);
+    const toggle = await screen.findByRole('switch', { name: 'Normalise weights' });
+    await fireEvent(toggle, 'valueChange', true);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Match the weights')).toBeVisible();
+    await fireEvent(toggle, 'valueChange', false);
+    expect(screen.getByText('Switch on Normalise weights')).toBeVisible();
   });
 
   test('an unfinished pair is refused', async () => {

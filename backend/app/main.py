@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
@@ -28,6 +28,7 @@ from .active_workouts import (
     snapshot,
 )
 from .admin import admin_router
+from .app_links import router as app_links_router
 from .app_notices import router as app_notices_router
 from .auth import (
     CsrfOriginMiddleware,
@@ -40,6 +41,8 @@ from .client_versions import ClientVersion, ClientVersionGateMiddleware, normali
 from .config import Settings, get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import api_error
+from .expo_delivery import expo_dispatcher
+from .expo_push import expo_push_router
 from .feedback import admin_feedback_router, feedback_router
 from .frontend import FrontendFiles
 from .home_layout import router as home_layout_router
@@ -87,6 +90,7 @@ from .storage import (
     remove_session_files,
     stream_upload_to_disk,
 )
+from .tip_state import router as tip_state_router
 from .tracker import router as tracker_router
 from .tracker import seed_default_exercises, sync_all_workout_cardio_sessions
 from .training_blocks import router as training_blocks_router
@@ -94,7 +98,12 @@ from .training_metrics import rebuild_personal_records
 from .username_reminder_requests import admin_username_request_router, username_request_router
 from .weight_mapping import router as weight_mapping_router
 from .workout_type_exercises import router as workout_type_exercises_router
-from .youtube_connections import OAuthAccessLogFilter, YouTubeConnectionError, require_connection
+from .youtube_connections import (
+    OAuthAccessLogFilter,
+    OAuthStateSweeper,
+    YouTubeConnectionError,
+    require_connection,
+)
 from .youtube_connections import router as youtube_router
 
 logging.basicConfig(
@@ -181,17 +190,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         processor = SessionProcessor(SessionLocal, settings)
         rest_timer_notifications = RestTimerNotificationScheduler(SessionLocal, settings)
         workout_reminders = ActiveWorkoutReminderScheduler(SessionLocal, settings)
+        # Expired YouTube connection attempts, with any Google credentials an abandoned one holds.
+        oauth_states = OAuthStateSweeper(SessionLocal)
         app.state.workout_reminders = workout_reminders
-        workout_reminders.start()
         app.state.processor = processor
         app.state.rest_timer_notifications = rest_timer_notifications
-        await processor.start()
-        try:
+        async with AsyncExitStack() as cleanup:
+            # Each service's stop is registered before it starts, so a failed or partial startup
+            # still stops whatever is running. They unwind in reverse, each even if an earlier
+            # stop fails or is cancelled: the alert producers first, then the sweeper, and the
+            # native alert workers last, so they outlive anything that could still queue an alert.
+            cleanup.callback(expo_dispatcher.stop)
+            expo_dispatcher.start()
+            cleanup.push_async_callback(oauth_states.stop)
+            oauth_states.start()
+            cleanup.push_async_callback(processor.stop)
+            cleanup.push_async_callback(rest_timer_notifications.stop)
+            cleanup.push_async_callback(workout_reminders.stop)
+            workout_reminders.start()
+            await processor.start()
             yield
-        finally:
-            await workout_reminders.stop()
-            await rest_timer_notifications.stop()
-            await processor.stop()
 
     # The interactive docs describe every endpoint, so a public server keeps them off by default.
     docs = settings.api_docs
@@ -747,6 +765,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sharing_router)
     app.include_router(presence_router)
     app.include_router(protected)
+    app.include_router(expo_push_router)
     app.include_router(video)
     app.include_router(tracker_router)
     app.include_router(training_blocks_router)
@@ -754,10 +773,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(account_archive_router)
     app.include_router(workout_type_exercises_router)
     app.include_router(home_layout_router)
+    app.include_router(tip_state_router)
     app.include_router(app_notices_router)
     app.include_router(machine_settings_router)
     app.include_router(weight_mapping_router)
     app.include_router(youtube_router)
+    app.include_router(app_links_router)
 
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if frontend_dist.is_dir():

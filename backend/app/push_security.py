@@ -1,10 +1,15 @@
-"""Outbound push is restricted to browser vendors, never arbitrary subscription URLs."""
+"""Outbound push is restricted to browser vendors and Expo, never arbitrary subscription URLs."""
 
+import re
 from urllib.parse import urlsplit
 
 import requests
 
 MAX_PUSH_SUBSCRIPTIONS = 10
+MAX_EXPO_PUSH_TOKENS = 10
+# The only address native push is sent to: Expo forwards it to Apple and Google.
+EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
+_EXPO_TOKEN = re.compile(r"^Expo(nent)?PushToken\[[A-Za-z0-9_-]{8,160}\]$")
 PUSH_HOSTS = {
     "fcm.googleapis.com",
     "web.push.apple.com",
@@ -47,3 +52,10 @@ class PushSession(requests.Session):
         kwargs["allow_redirects"] = False
         kwargs["verify"] = True
         return super().request(method, url, **kwargs)
+
+
+def validate_expo_push_token(value: str) -> str:
+    """An Expo push token, as `getExpoPushTokenAsync` returns it; it names no address."""
+    if not _EXPO_TOKEN.fullmatch(value):
+        raise ValueError("Choose a valid Expo push token.")
+    return value

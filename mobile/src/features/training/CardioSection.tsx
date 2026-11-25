@@ -1,6 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import { hasCardioMetrics } from '../../../../frontend/src/cardioForm';
@@ -30,10 +30,10 @@ import { refreshTraining, useWeightUnit } from '../../data/queries';
 import { Button, Card, CardHeader, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
-import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { CardioAllStats } from '../cardio/CardioAllStats';
 import { deleteCardioEntry } from '../cardio/cardioData';
+import { openCardioImportMenu } from '../cardio/cardioScreenshotImport';
 import { CardioShareSheet } from '../cardio/CardioShareSheet';
 import { chartNeutral } from './contrast';
 import { trainingIcons } from './icons';
@@ -51,6 +51,14 @@ const shortDay = (value: string) =>
 export function CardioSection() {
   const overview = useCardioOverview();
   const router = useRouter();
+  const openingMenu = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   if (overview.isPending) return <Note>Loading cardio…</Note>;
   if (overview.isError)
     return (
@@ -62,6 +70,18 @@ export function CardioSection() {
         Could not load cardio.
       </Note>
     );
+  async function openImport() {
+    if (openingMenu.current) return;
+    openingMenu.current = true;
+    try {
+      await openCardioImportMenu(
+        (source) => router.push({ pathname: '/cardio/log', params: { import: source } }),
+        () => mounted.current,
+      );
+    } finally {
+      openingMenu.current = false;
+    }
+  }
   return (
     <View style={{ gap: 20 }}>
       {/* The web's two actions, side by side: log by hand, or read a watch screenshot. */}
@@ -77,20 +97,7 @@ export function CardioSection() {
           variant="secondary"
           icon={{ sf: 'camera', md: 'photo-camera' }}
           style={styles.action}
-          onPress={() =>
-            showMenu('Import screenshot', [
-              {
-                label: 'Choose screenshot',
-                onPress: () =>
-                  router.push({ pathname: '/cardio/log', params: { import: 'library' } }),
-              },
-              {
-                label: 'Take photo',
-                onPress: () =>
-                  router.push({ pathname: '/cardio/log', params: { import: 'camera' } }),
-              },
-            ])
-          }
+          onPress={() => void openImport()}
         />
       </View>
       <CardioTrend overview={overview.data} />

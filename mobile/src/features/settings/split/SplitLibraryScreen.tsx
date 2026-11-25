@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Stack, useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
+import { useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   hasSplitTemplate,
   legacySplitRoutine,
@@ -13,6 +13,12 @@ import {
   splitsActiveFirst,
   splitTemplateName,
 } from '../../../../../frontend/src/splitEditing';
+import {
+  splitConfirmCoach,
+  splitGuideFlow,
+  splitPageCoach,
+  type CoachTarget as CoachTargetId,
+} from '../../../../../frontend/src/setupGuideCoach';
 import { SPLIT_TEMPLATES } from '../../../../../frontend/src/trainingSplit';
 import type { Routine, TrainingSplit, WorkoutType } from '../../../../../frontend/src/types';
 import { localDate } from '../../../../../frontend/src/utils';
@@ -44,11 +50,22 @@ import {
   useTrainingSplit,
 } from '../settingsData';
 import { SettingsPage } from '../SettingsList';
+import { CoachSpacer, CoachTarget, GuideCoach } from '../../guides/GuideCoach';
+import {
+  exitSetupGuide,
+  finishSetupGuide,
+  setupGuideTicket,
+  ticketGuide,
+  useExitGuideOnLeave,
+  useSetupGuide,
+} from '../../guides/setupGuides';
 import { SplitGuide } from './SplitGuide';
 import { DateStepper, SplitPattern, SplitPreview } from './SplitParts';
 
 /** Your splits, as the web's split page: the library, the active split's week, and templates. */
 export function SplitLibraryScreen() {
+  // The splits guide runs on this page and the editor above it; leaving the page ends it.
+  useExitGuideOnLeave('split');
   const routines = useRoutines();
   const split = useTrainingSplit();
   const types = useWorkoutTypes();
@@ -116,10 +133,22 @@ function Library({
   const activeId = split?.enabled ? (split.routine_id ?? 'current-split') : null;
   const legacy = legacySplitRoutine(split, types);
   const displayed = splitsActiveFirst([...(legacy ? [legacy] : []), ...routines], activeId);
-  const [expanded, setExpanded] = useState<string | null>(activeId);
+  // Opened from a friend's profile after Save split, at the saved copy, as the web's View my splits.
+  const { open: openParam } = useLocalSearchParams<{ open?: string }>();
+  const [expanded, setExpanded] = useState<string | null>(() =>
+    openParam && displayed.some((routine) => routine.id === openParam) ? openParam : activeId,
+  );
   // Active split's exercise breakdown starts collapsed (matching web) so Templates stay above the fold.
   const [exercisesOpen, setExercisesOpen] = useState<Record<string, boolean>>({});
   const secondary = buttonColors(colors, 'secondary');
+  const guide = useSetupGuide('split');
+  const focused = useIsFocused();
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  // The page's step shows while the page itself is in front, as the web's hides under a dialog.
+  const coach =
+    guide && focused ? splitPageCoach(guide, splitGuideFlow(activeId), activeId, routines) : null;
+  const mark = (target: CoachTargetId, routineId?: string) =>
+    coach?.step.target === target && coach.step.routineId === routineId ? target : undefined;
 
   const edit = (params: { id: string } | { template: string }) =>
     router.push({ pathname: '/split/edit', params });
@@ -201,7 +230,7 @@ function Library({
           ),
         }}
       />
-      <SettingsPage refreshing={refreshing} onRefresh={onRefresh}>
+      <SettingsPage refreshing={refreshing} onRefresh={onRefresh} scrollRef={scroll}>
         <View style={{ gap: 12 }}>
           <View style={styles.sectionHeader}>
             <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
@@ -311,19 +340,22 @@ function Library({
                 )}
 
                 <View style={[styles.actionsRow, { borderTopColor: colors.line }]}>
-                  <Button
-                    label="Edit split"
-                    variant="secondary"
-                    disabled={busy || !typesReady}
-                    onPress={() => edit({ id: routine.id })}
-                  />
-                  <Button
-                    label={active ? 'Change schedule' : 'Use split'}
-                    variant={active ? 'secondary' : 'primary'}
-                    disabled={busy}
-                    onPress={() => setUsing(routine)}
-                    style={{ flex: 1 }}
-                  />
+                  <CoachTarget id={mark('split.edit', routine.id)}>
+                    <Button
+                      label="Edit split"
+                      variant="secondary"
+                      disabled={busy || !typesReady}
+                      onPress={() => edit({ id: routine.id })}
+                    />
+                  </CoachTarget>
+                  <CoachTarget id={mark('split.use', routine.id)} style={{ flex: 1 }}>
+                    <Button
+                      label={active ? 'Change schedule' : 'Use split'}
+                      variant={active ? 'secondary' : 'primary'}
+                      disabled={busy}
+                      onPress={() => setUsing(routine)}
+                    />
+                  </CoachTarget>
                   {routine.id !== 'current-split' && (
                     <Pressable
                       accessibilityRole="button"
@@ -352,7 +384,7 @@ function Library({
           })}
         </View>
 
-        <View style={{ gap: 10 }}>
+        <CoachTarget id={mark('split.templates')} radius={16} style={{ gap: 10 }}>
           <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
             Templates
           </Text>
@@ -397,16 +429,23 @@ function Library({
               );
             })}
           </View>
-        </View>
+        </CoachTarget>
+        <CoachSpacer />
       </SettingsPage>
+      {coach && !using && (
+        <GuideCoach {...coach} scroll={scroll} onExit={() => exitSetupGuide('split')} />
+      )}
       <UseSplitSheet
         routine={using}
         split={split}
         active={!!using && using.id === activeId}
         busy={busy}
+        coached={!!using && guide?.useRoutineId === using.id}
         onClose={() => setUsing(null)}
         onUse={(startDate) => {
           const routine = using!;
+          // Only the guide running now, waiting on this split, can be finished by this save.
+          const ticket = guide?.useRoutineId === routine.id ? setupGuideTicket('split') : null;
           void run(async () => {
             if (routine.id === 'current-split')
               await saveTrainingSplit({
@@ -419,6 +458,7 @@ function Library({
             else await startRoutine(routine.id, startDate);
             setUsing(null);
             setExpanded(routine.id);
+            if (ticketGuide(ticket)?.useRoutineId === routine.id) finishSetupGuide(ticket);
             showToast(`Using ${routine.name}`);
           });
         }}
@@ -479,6 +519,7 @@ function UseSplitSheet({
   split,
   active,
   busy,
+  coached,
   onUse,
   onClose,
 }: {
@@ -486,6 +527,8 @@ function UseSplitSheet({
   split: TrainingSplit | null;
   active: boolean;
   busy: boolean;
+  /** The splits guide's last step, for the split it saved. */
+  coached: boolean;
   onUse: (startDate: string) => void;
   onClose: () => void;
 }) {
@@ -498,6 +541,18 @@ function UseSplitSheet({
           initialDate={active ? (split?.start_date ?? localDate()) : localDate()}
           busy={busy}
           onUse={onUse}
+          coach={
+            coached ? (
+              <GuideCoach
+                {...splitConfirmCoach()}
+                inline
+                onBack={() => {
+                  if (!busy) onClose();
+                }}
+                onExit={() => exitSetupGuide('split')}
+              />
+            ) : null
+          }
         />
       )}
     </Sheet>
@@ -509,11 +564,14 @@ function UseSplitForm({
   initialDate,
   busy,
   onUse,
+  coach,
 }: {
   routine: Routine;
   initialDate: string;
   busy: boolean;
   onUse: (startDate: string) => void;
+  /** The splits guide's step, above the sheet's main action. */
+  coach: ReactNode;
 }) {
   const { colors, type, radius } = useTheme();
   const [startDate, setStartDate] = useState(initialDate);
@@ -534,13 +592,16 @@ function UseSplitForm({
       >
         <DateStepper label="Starts" date={startDate} onChange={setStartDate} disabled={busy} />
       </View>
-      <Button
-        label={busy ? 'Saving…' : 'Use this split'}
-        block
-        loading={busy}
-        disabled={busy}
-        onPress={() => onUse(startDate)}
-      />
+      {coach}
+      <CoachTarget id={coach ? 'split.confirm' : undefined}>
+        <Button
+          label={busy ? 'Saving…' : 'Use this split'}
+          block
+          loading={busy}
+          disabled={busy}
+          onPress={() => onUse(startDate)}
+        />
+      </CoachTarget>
     </>
   );
 }

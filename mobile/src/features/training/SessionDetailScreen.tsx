@@ -6,6 +6,7 @@ import { Button, Card, errorMessage, Loading } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { SavedWorkoutSocial } from '../social';
 import { SavedWorkoutActions } from '../workout/SavedWorkoutActions';
+import { machineWorkoutsRoute } from './MachinePhotos';
 import { Badge, Note } from './parts';
 import { RepeatWorkoutButton } from './RepeatWorkoutButton';
 import { useSavedWorkout } from './trainingQueries';
@@ -85,6 +86,7 @@ export function SessionDetailScreen({
                 bodyweight={context.bodyweightOn(workout.workout_date)}
                 unit={context.unit}
                 highlightExerciseId={exerciseId}
+                onFilterMachine={(filter) => router.push(machineWorkoutsRoute(filter))}
                 onOpenExercise={(id) =>
                   id !== exerciseId &&
                   router.push({

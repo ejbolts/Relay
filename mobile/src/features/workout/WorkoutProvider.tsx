@@ -85,6 +85,7 @@ import {
 } from '../../data/queries';
 import { useOptionalSession } from '../../session/SessionProvider';
 import { isToastAccountCurrent, showToast, toastAccountFor, ToastHost } from '../../ui/Toast';
+import { rememberSavedWorkout } from '../review/justSavedWorkouts';
 import { restTimerPreference } from '../settings/devicePreferences';
 import { refreshFriendPresence, socialKeys, updateFriendPresence } from '../social/socialQueries';
 import { FinishedQueueSender, type QueueStatus } from './finishedQueueSender';
@@ -111,10 +112,13 @@ import {
 import { useHistoryBaselines, useWorkoutAutoSave } from './loggerQueries';
 import { forgetOfflineQueries, saveOfflineQueries, seedOfflineQueries } from './offlineQueries';
 import { askForRestAlerts, syncRestAlert } from './restAlerts';
+import { syncRestActivity, useRestActivity } from './restActivity';
 import {
+  holdReminder,
   onWorkoutReminderOpened,
   remindAboutRestAlerts,
   syncInactiveReminder,
+  takeHeldReminder,
   takeLaunchReminder,
 } from './workoutReminders';
 import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
@@ -283,6 +287,11 @@ export function useWorkout() {
   return workout;
 }
 
+/** The workout engine, or null outside a WorkoutProvider (as useLogger is). */
+export function useOptionalWorkout() {
+  return useContext(WorkoutContext);
+}
+
 /** The engine behind the logger sheet; null while signed out. */
 export function useLogger() {
   return useContext(LoggerApiContext);
@@ -319,6 +328,12 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (signedOut) forgetOfflineQueries();
+  }, [signedOut]);
+  // Confirmed signed out, as when the app opens after the session ended: an iPhone rest Live
+  // Activity left from the last account goes. While the session is still loading it stays, so a
+  // restored rest can carry it on.
+  useEffect(() => {
+    if (signedOut) void syncRestActivity(null);
   }, [signedOut]);
 
   const idle = useMemo<WorkoutApi>(
@@ -606,6 +621,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
     );
   }, [rest, weightUnit]);
   useEffect(() => () => void syncRestAlert(NO_REST, null), []);
+  // On iPhone the rest also shows on the Lock Screen and in the Dynamic Island.
+  useRestActivity(rest, logger, weightUnit, waiting !== null);
 
   // "Still working out?" follows the live workout's last activity; tapping it opens the logger.
   // It is cancelled when the workout is finished or discarded (no logger) and on sign-out.
@@ -618,17 +635,30 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const openFromReminder = useCallback(
     (startedAt: number | null) => {
       const live = loggerRef.current;
-      if (live && (startedAt === null || startedAt === live.startedAt)) router.push('/workout');
+      if (!live || (startedAt !== null && startedAt !== live.startedAt)) return false;
+      router.push('/workout');
+      return true;
     },
     [router],
   );
-  useEffect(() => onWorkoutReminderOpened(openFromReminder), [openFromReminder]);
+  // A reminder tapped before its workout has loaded here (such as one started on the web) waits
+  // for it, for this account only.
+  useEffect(
+    () =>
+      onWorkoutReminderOpened((startedAt) => {
+        if (!openFromReminder(startedAt)) holdReminder(startedAt);
+      }),
+    [openFromReminder],
+  );
   // A tap that cold-launched Relay came before the listener: take it once the workout is back.
   useEffect(() => {
     if (liveStartedAt === null) return;
     let active = true;
     void takeLaunchReminder().then((startedAt) => {
-      if (active && startedAt !== undefined) openFromReminder(startedAt);
+      if (!active) return;
+      if (startedAt !== undefined) holdReminder(startedAt);
+      const held = takeHeldReminder(liveStartedAt);
+      if (held !== undefined) openFromReminder(held);
     });
     return () => {
       active = false;
@@ -666,6 +696,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
           error instanceof ApiError && error.status === 409 && error.code === 'workout_conflict',
       }),
       onSaved: (workout, item, remaining) => {
+        // Counted in the weekly review until the refreshed dashboard includes it.
+        rememberSavedWorkout(client, user.id, workout.id, item);
         if (remaining === 0) void refreshTraining(client);
         // The queue no longer owns this session's shared copy.
         void syncRef.current?.sync();

@@ -4,7 +4,7 @@ import type { User } from '../../../frontend/src/types';
 import {
   finishSignOut,
   forgetSessionTokenIf,
-  pendingSignOut,
+  pendingSignOuts,
   saveSessionToken,
   sessionToken,
   startSignOut,
@@ -109,29 +109,53 @@ export async function request<T>(
 
 async function sendPendingSignOut(origin: string) {
   try {
-    const token = await pendingSignOut(origin);
-    if (!token) return;
-    try {
-      await request<void>('/api/auth/logout-session', { method: 'POST' }, token);
-    } catch (error) {
-      // A server error or no connection leaves it for next time; a 401 means it already ended.
-      if (!(error instanceof ApiError) || error.status >= 500) return;
+    // Each signed-out session is ended in turn; that also removes its phone alerts.
+    for (const { id, token } of await pendingSignOuts(origin)) {
+      try {
+        await request<void>('/api/auth/logout-session', { method: 'POST' }, token);
+      } catch (error) {
+        // Kept unless the server ended it or says it had already ended (401); no connection, a
+        // server error or any other refusal is tried again on the next reconnect or return.
+        if (!(error instanceof ApiError && error.status === 401)) return;
+      }
+      await finishSignOut(id);
     }
-    await finishSignOut();
   } catch {
-    // Secure storage was unavailable; the next launch tries again.
+    // Secure storage was unavailable; the next attempt tries again.
   }
 }
 
 let ending: Promise<void> | undefined;
+let again = false;
 
 /**
- * Ends a sign-out the server has not confirmed yet. Never throws: it retries next launch. The
- * screen checks the session on opening and on becoming active, so one attempt runs at a time.
+ * Ends sign-outs the server has not confirmed yet. Never throws. One attempt runs at a time; a
+ * reconnect, return or new sign-out during it runs one more pass after it, so none is lost.
  */
 function endPendingSignOut(origin: string) {
-  ending ??= sendPendingSignOut(origin).finally(() => (ending = undefined));
+  if (ending) {
+    again = true;
+    return ending;
+  }
+  ending = (async () => {
+    do {
+      again = false;
+      await sendPendingSignOut(origin);
+    } while (again);
+  })().finally(() => (ending = undefined));
   return ending;
+}
+
+/**
+ * Retries sign-outs the server hasn't confirmed, such as when the connection or the app comes
+ * back, even while signed out: until then the server can still alert this phone for them.
+ */
+export function retryPendingSignOut(): Promise<void> {
+  try {
+    return endPendingSignOut(serverOrigin());
+  } catch {
+    return Promise.resolve();
+  }
 }
 
 export async function currentUser(signal: AbortSignal) {
@@ -157,10 +181,27 @@ export async function signIn(username: string, password: string) {
   return user;
 }
 
-/** Signs out on this phone at once, even offline; the server session ends now or next launch. */
+/**
+ * Signs out on this phone at once, even offline: the server session ends now or once the app can
+ * reach it. Only if the sign-out can't be saved on the phone must the server end it first.
+ */
 export async function signOut() {
   const origin = serverOrigin();
-  if (await startSignOut(origin)) await endPendingSignOut(origin);
+  const { token, journaled } = await startSignOut(origin);
+  if (!token) return;
+  if (journaled) {
+    await endPendingSignOut(origin);
+    return;
+  }
+  // The sign-out couldn't be saved, so the server must end the session now; until it does, this
+  // phone stays signed in rather than lose the only way to end it.
+  try {
+    await request<void>('/api/auth/logout-session', { method: 'POST' }, token);
+  } catch (error) {
+    if (!(error instanceof ApiError && error.status === 401))
+      throw new Error("Couldn't sign out. Check your connection, then try again.");
+  }
+  await forgetSessionTokenIf(origin, token);
 }
 
 /** A signed-in GET, for queries. */
@@ -172,11 +213,16 @@ export const apiSend = <T>(
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   body?: unknown,
   signal?: AbortSignal,
+  token?: string | null,
 ) =>
-  request<T>(path, {
-    method,
-    signal,
-    ...(body === undefined
-      ? {}
-      : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-  });
+  request<T>(
+    path,
+    {
+      method,
+      signal,
+      ...(body === undefined
+        ? {}
+        : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
+    },
+    token,
+  );

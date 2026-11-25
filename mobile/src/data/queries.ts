@@ -126,10 +126,14 @@ export function useUpNext() {
   };
 }
 
-/** After a workout is saved or deleted, refresh everything derived from training history. */
+/**
+ * After a workout is saved or deleted, refresh everything derived from training history,
+ * including saved machines' last use and counts (`['machine-photos']`), which choose the
+ * last-used machine and order the machine filter.
+ */
 export function refreshTraining(client: QueryClient) {
   return Promise.all(
-    [['dashboard'], ['workouts'], queryKeys.personalRecords].map((queryKey) =>
+    [['dashboard'], ['workouts'], queryKeys.personalRecords, ['machine-photos']].map((queryKey) =>
       client.invalidateQueries({ queryKey }),
     ),
   );

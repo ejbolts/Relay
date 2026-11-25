@@ -12,6 +12,11 @@ import {
 import { useEffect } from 'react';
 import { useIsFocused } from 'expo-router';
 import type { FriendPresenceEvent } from '../../../../frontend/src/presenceProtocol';
+import {
+  NO_SHARED_WORKOUT_FILTERS,
+  sharedWorkoutFilterCount,
+  sharedWorkoutQuery,
+} from '../../../../frontend/src/sharedHistoryFilters';
 import { SHARED_WORKOUT_PAGE_SIZE } from '../../../../frontend/src/sharedProfileDisplay';
 import type {
   CommentPage,
@@ -19,6 +24,7 @@ import type {
   FriendFeed,
   PersonalRecord,
   SharedProfile,
+  SharedWorkoutFilters,
   SharedWorkoutKind,
   SharedWorkoutPage,
   Timeline,
@@ -43,10 +49,18 @@ export const socialKeys = {
   suggestions: (page: number) => ['social', 'suggestions', page] as const,
   profile: (id: string) => ['social', 'profile', id] as const,
   lifts: (id: string) => ['social', 'profile', id, 'lifts'] as const,
-  workouts: (id: string, kind?: SharedWorkoutKind, date?: string, exerciseId?: string) =>
-    exerciseId
-      ? (['social', 'profile', id, 'workouts', kind ?? 'all', date ?? '', exerciseId] as const)
-      : (['social', 'profile', id, 'workouts', kind ?? 'all', date ?? ''] as const),
+  /** One history tab's workouts; filtered lists add their filters, so no filter shares one key. */
+  workouts: (id: string, kind?: SharedWorkoutKind, filters?: SharedWorkoutFilters) =>
+    [
+      'social',
+      'profile',
+      id,
+      'workouts',
+      kind ?? 'all',
+      filters && sharedWorkoutFilterCount(filters) ? JSON.stringify(filters) : '',
+    ] as const,
+  workoutFilters: (id: string) => ['social', 'profile', id, 'workout-filters'] as const,
+  splits: (id: string) => ['social', 'profile', id, 'splits'] as const,
   workout: (workoutId: string) => ['social', 'workout', workoutId] as const,
   comments: (workoutId: string) => ['social', 'comments', workoutId] as const,
   reactionPeople: (workoutId: string) => ['social', 'reactions', workoutId] as const,
@@ -291,19 +305,22 @@ export function useSharedLifts(id: string, enabled: boolean) {
   });
 }
 
-/** A profile's shared workouts, a page at a time, for one history tab, one day or one lift. */
+/** A profile's shared workouts, a page at a time, for one history tab and the filters set. */
 export function sharedWorkoutsQuery(
   id: string,
-  { kind, date, exerciseId }: { kind?: SharedWorkoutKind; date?: string; exerciseId?: string } = {},
+  {
+    kind,
+    filters = NO_SHARED_WORKOUT_FILTERS,
+  }: { kind?: SharedWorkoutKind; filters?: SharedWorkoutFilters } = {},
 ) {
   return infiniteQueryOptions({
-    queryKey: socialKeys.workouts(id, kind, date, exerciseId),
+    queryKey: socialKeys.workouts(id, kind, filters),
     queryFn: ({ pageParam, signal }) =>
       socialApi.workouts(
         id,
         pageParam,
         SHARED_WORKOUT_PAGE_SIZE,
-        { kind, exercise_id: exerciseId, start_date: date, end_date: date },
+        sharedWorkoutQuery(filters, kind),
         signal,
       ),
     initialPageParam: 0,
@@ -319,13 +336,30 @@ export function useSharedWorkouts(
   id: string,
   {
     kind,
-    date,
-    exerciseId,
+    filters,
     enabled,
-  }: { kind?: SharedWorkoutKind; date?: string; exerciseId?: string; enabled: boolean },
+  }: { kind?: SharedWorkoutKind; filters?: SharedWorkoutFilters; enabled: boolean },
 ) {
   useMemberAccessWatch();
-  return useInfiniteQuery({ ...sharedWorkoutsQuery(id, { kind, date, exerciseId }), enabled });
+  return useInfiniteQuery({ ...sharedWorkoutsQuery(id, { kind, filters }), enabled });
+}
+
+/** The exercises, machines and workout types a profile's history can be filtered by. */
+export function useSharedWorkoutFilters(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: socialKeys.workoutFilters(id),
+    queryFn: ({ signal }) => socialApi.workoutFilters(id, signal),
+    enabled,
+  });
+}
+
+/** The splits a member shows on their profile. */
+export function useProfileSplits(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: socialKeys.splits(id),
+    queryFn: ({ signal }) => socialApi.splits(id, signal),
+    enabled,
+  });
 }
 
 /** Every loaded page of a profile's workouts as one list, with their records and reactions. */

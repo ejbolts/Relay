@@ -1,22 +1,21 @@
 import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
-  formatLiftBestSet,
-  formatLiftEstimate,
   headToHeadScore,
   leaderOf,
   liftBarShare,
   liftRowSummary,
 } from '../../../../../frontend/src/liftComparisonDisplay';
-import type {
-  LiftComparison,
-  SharedProfileSummary,
-  WorkoutType,
-} from '../../../../../frontend/src/types';
+import {
+  formatLiftBestSet,
+  formatLiftEstimate,
+} from '../../../../../frontend/src/liftWeightDisplay';
+import type { LiftComparison, SharedProfileSummary } from '../../../../../frontend/src/types';
+import { ApiError } from '../../../data/api';
 import { OFFLINE_MESSAGE, waitingForNetwork } from '../../../data/offline';
 import { useWeightUnit } from '../../../data/queries';
 import { useUser } from '../../../session/SessionProvider';
-import { Button, Card, CardHeader, ErrorState } from '../../../ui/components';
+import { Button, Card, CardHeader, ErrorState, errorMessage } from '../../../ui/components';
 import { haptics } from '../../../ui/haptics';
 import { Sheet } from '../../../ui/Sheet';
 import { useTheme } from '../../../ui/theme';
@@ -24,39 +23,43 @@ import { Avatar } from '../Avatar';
 import { accessRevoked } from '../socialApi';
 import { useMemberRefusal, useSharedLifts } from '../socialQueries';
 import { LiftPickerSheet } from './LiftPickerSheet';
-import { ProfileWorkoutsSheet } from './ProfileWorkoutsSheet';
 
 type Member = Pick<SharedProfileSummary, 'id' | 'display_name' | 'profile_photo_url'>;
 
 /**
  * Your best lifts against another member's, on their profile. Starts empty on each visit;
- * lifts chosen belong to this visit only. Tapping a lift the member has logged opens their
- * sessions of that lift.
+ * lifts chosen belong to this visit only. Tapping a lift the member has logged filters their
+ * history to that lift.
  */
 export function HeadToHeadCard({
   member,
-  workoutTypes = [],
   onOpenLift,
 }: {
   member: Member;
-  workoutTypes?: WorkoutType[];
-  /** Optional override for opening a member's sessions of one of their exercises. */
-  onOpenLift?: (exerciseId: string) => void;
+  /** Opens the member's sessions of one of their exercises: the profile filters its history. */
+  onOpenLift: (exerciseId: string) => void;
 }) {
   const { colors, type } = useTheme();
   const unit = useWeightUnit();
   const user = useUser();
   const query = useSharedLifts(member.id, true);
   const refusal = useMemberRefusal(member.id);
-  // Refused by the server: hide what was cached at once; the profile above locks itself.
-  const revoked = !!refusal || accessRevoked(query.error);
+  // Hide whenever access is refused (403/404 or a recorded refusal) or the server lacks this
+  // endpoint (404/405/501), even if lifts were cached from an earlier load. Keep cached lifts
+  // and Try again only for transient network or 5xx server failures.
+  const unavailable =
+    query.error instanceof ApiError &&
+    (query.error.status === 403 ||
+      query.error.status === 404 ||
+      query.error.status === 405 ||
+      query.error.status === 501);
+  const revoked = !!refusal || accessRevoked(query.error) || unavailable;
   const lifts = revoked ? null : (query.data?.lifts ?? null);
   const offline = waitingForNetwork(query);
   const [selected, setSelected] = useState<string[]>([]);
   const [picking, setPicking] = useState(false);
   // While the sheet is open, keep the lifts shown before opening, then commit on close.
   const [held, setHeld] = useState<string[] | null>(null);
-  const [activeLift, setActiveLift] = useState<{ exerciseId: string; name: string } | null>(null);
   const byId = useMemo(
     () => new Map((lifts ?? []).map((lift) => [lift.exercise_id, lift])),
     [lifts],
@@ -68,8 +71,7 @@ export function HeadToHeadCard({
     [chosen, member.display_name],
   );
 
-  // The comparison is an extra: hide immediately if access was revoked or the endpoint fails.
-  if (revoked || (query.isError && !lifts)) return null;
+  if (revoked) return null;
 
   return (
     <Card accessibilityLabel="Head to head">
@@ -78,191 +80,190 @@ export function HeadToHeadCard({
         detail={chosen.length > 0 ? 'All-time est. 1RM' : undefined}
       />
 
-      {chosen.length === 0 && (
-        <View
-          accessibilityElementsHidden
-          importantForAccessibility="no-hide-descendants"
-          style={styles.template}
-        >
-          <View style={styles.scoreRow}>
-            <View style={styles.side}>
-              <View style={[styles.avatarRing, { borderColor: colors.deemph }]}>
-                <Avatar person={user} size={36} />
-              </View>
-              <Text style={[type.footnote, { color: colors.muted, fontWeight: '600' }]}>You</Text>
-            </View>
-            <View style={styles.scoreNumbers}>
-              <Text style={[styles.scoreDigit, type.number, { color: colors.muted }]}>?</Text>
-              <Text style={[styles.scoreDash, { color: colors.muted }]}>–</Text>
-              <Text style={[styles.scoreDigit, type.number, { color: colors.muted }]}>?</Text>
-            </View>
-            <View style={[styles.side, styles.sideThem]}>
-              <Text
-                style={[type.footnote, { color: colors.muted, fontWeight: '600', flexShrink: 1 }]}
-                numberOfLines={1}
-              >
-                {member.display_name}
-              </Text>
-              <View style={[styles.avatarRing, { borderColor: colors.deemph }]}>
-                <Avatar person={member} size={36} />
-              </View>
-            </View>
-          </View>
-          <View style={styles.ghostLift}>
-            <View style={styles.ghostValues}>
-              <Text style={[styles.ghostMark, { color: colors.muted }]}>?</Text>
-              <View style={styles.ghostTitleWrap}>
-                <View style={[styles.ghostTitleStub, { backgroundColor: colors.surface3 }]} />
-              </View>
-              <Text style={[styles.ghostMark, styles.rightText, { color: colors.muted }]}>?</Text>
-            </View>
-            <View style={[styles.ghostBar, { borderColor: colors.deemph }]} />
-          </View>
-        </View>
-      )}
-
-      {score.scored > 0 && (
-        <View accessible accessibilityLabel={score.label} style={styles.scoreRow}>
-          <View style={styles.side}>
+      {query.isError && !lifts ? (
+        <ErrorState message={errorMessage(query.error)} onRetry={() => void query.refetch()} />
+      ) : (
+        <>
+          {chosen.length === 0 && (
             <View
-              style={[
-                styles.avatarRing,
-                { borderColor: score.yours > score.theirs ? colors.accent : colors.deemph },
-              ]}
+              accessibilityElementsHidden
+              importantForAccessibility="no-hide-descendants"
+              style={styles.template}
             >
-              <Avatar person={user} size={36} />
+              <View style={styles.scoreRow}>
+                <View style={styles.side}>
+                  <View style={[styles.avatarRing, { borderColor: colors.deemph }]}>
+                    <Avatar person={user} size={36} />
+                  </View>
+                  <Text style={[type.footnote, { color: colors.muted, fontWeight: '600' }]}>
+                    You
+                  </Text>
+                </View>
+                <View style={styles.scoreNumbers}>
+                  <Text style={[styles.scoreDigit, type.number, { color: colors.muted }]}>?</Text>
+                  <Text style={[styles.scoreDash, { color: colors.muted }]}>–</Text>
+                  <Text style={[styles.scoreDigit, type.number, { color: colors.muted }]}>?</Text>
+                </View>
+                <View style={[styles.side, styles.sideThem]}>
+                  <Text
+                    style={[
+                      type.footnote,
+                      { color: colors.muted, fontWeight: '600', flexShrink: 1 },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {member.display_name}
+                  </Text>
+                  <View style={[styles.avatarRing, { borderColor: colors.deemph }]}>
+                    <Avatar person={member} size={36} />
+                  </View>
+                </View>
+              </View>
+              <View style={styles.ghostLift}>
+                <View style={styles.ghostValues}>
+                  <Text style={[styles.ghostMark, { color: colors.muted }]}>?</Text>
+                  <View style={styles.ghostTitleWrap}>
+                    <View style={[styles.ghostTitleStub, { backgroundColor: colors.surface3 }]} />
+                  </View>
+                  <Text style={[styles.ghostMark, styles.rightText, { color: colors.muted }]}>
+                    ?
+                  </Text>
+                </View>
+                <View style={[styles.ghostBar, { borderColor: colors.deemph }]} />
+              </View>
             </View>
-            <Text
-              style={[
-                type.footnote,
-                {
-                  color: score.yours > score.theirs ? colors.text : colors.muted,
-                  fontWeight: '600',
-                },
-              ]}
-            >
-              You
-            </Text>
-          </View>
-          <View style={styles.scoreNumbers}>
-            <Text
-              style={[
-                styles.scoreDigit,
-                type.number,
-                { color: score.yours > score.theirs ? colors.accentText : colors.text },
-              ]}
-            >
-              {score.yours}
-            </Text>
-            <Text style={[styles.scoreDash, { color: colors.muted }]}>–</Text>
-            <Text
-              style={[
-                styles.scoreDigit,
-                type.number,
-                { color: score.theirs > score.yours ? colors.accentText : colors.text },
-              ]}
-            >
-              {score.theirs}
-            </Text>
-          </View>
-          <View style={[styles.side, styles.sideThem]}>
-            <Text
-              style={[
-                type.footnote,
-                {
-                  color: score.theirs > score.yours ? colors.text : colors.muted,
-                  fontWeight: '600',
-                  flexShrink: 1,
-                },
-              ]}
-              numberOfLines={1}
-            >
-              {member.display_name}
-            </Text>
-            <View
-              style={[
-                styles.avatarRing,
-                { borderColor: score.theirs > score.yours ? colors.accent : colors.deemph },
-              ]}
-            >
-              <Avatar person={member} size={36} />
-            </View>
-          </View>
-        </View>
-      )}
+          )}
 
-      {chosen.length > 0 && (
-        <View>
-          {chosen.map((lift, index) => (
-            <LiftRow
-              key={lift.exercise_id}
-              lift={lift}
-              memberName={member.display_name}
-              unit={unit}
-              first={index === 0}
-              last={index === chosen.length - 1}
-              onOpen={
-                lift.theirs?.exercise_id
-                  ? () => {
-                      const theirExercise = lift.theirs!.exercise_id;
-                      if (onOpenLift) onOpenLift(theirExercise);
-                      else setActiveLift({ exerciseId: theirExercise, name: lift.name });
-                    }
-                  : undefined
-              }
+          {score.scored > 0 && (
+            <View accessible accessibilityLabel={score.label} style={styles.scoreRow}>
+              <View style={styles.side}>
+                <View
+                  style={[
+                    styles.avatarRing,
+                    { borderColor: score.yours > score.theirs ? colors.accent : colors.deemph },
+                  ]}
+                >
+                  <Avatar person={user} size={36} />
+                </View>
+                <Text
+                  style={[
+                    type.footnote,
+                    {
+                      color: score.yours > score.theirs ? colors.text : colors.muted,
+                      fontWeight: '600',
+                    },
+                  ]}
+                >
+                  You
+                </Text>
+              </View>
+              <View style={styles.scoreNumbers}>
+                <Text
+                  style={[
+                    styles.scoreDigit,
+                    type.number,
+                    { color: score.yours > score.theirs ? colors.accentText : colors.text },
+                  ]}
+                >
+                  {score.yours}
+                </Text>
+                <Text style={[styles.scoreDash, { color: colors.muted }]}>–</Text>
+                <Text
+                  style={[
+                    styles.scoreDigit,
+                    type.number,
+                    { color: score.theirs > score.yours ? colors.accentText : colors.text },
+                  ]}
+                >
+                  {score.theirs}
+                </Text>
+              </View>
+              <View style={[styles.side, styles.sideThem]}>
+                <Text
+                  style={[
+                    type.footnote,
+                    {
+                      color: score.theirs > score.yours ? colors.text : colors.muted,
+                      fontWeight: '600',
+                      flexShrink: 1,
+                    },
+                  ]}
+                  numberOfLines={1}
+                >
+                  {member.display_name}
+                </Text>
+                <View
+                  style={[
+                    styles.avatarRing,
+                    { borderColor: score.theirs > score.yours ? colors.accent : colors.deemph },
+                  ]}
+                >
+                  <Avatar person={member} size={36} />
+                </View>
+              </View>
+            </View>
+          )}
+
+          {chosen.length > 0 && (
+            <View>
+              {chosen.map((lift, index) => (
+                <LiftRow
+                  key={lift.exercise_id}
+                  lift={lift}
+                  memberName={member.display_name}
+                  unit={unit}
+                  first={index === 0}
+                  last={index === chosen.length - 1}
+                  onOpen={
+                    lift.theirs?.exercise_id
+                      ? () => onOpenLift(lift.theirs!.exercise_id)
+                      : undefined
+                  }
+                />
+              ))}
+            </View>
+          )}
+
+          <Button
+            label={chosen.length ? 'Edit lifts' : 'Choose lifts'}
+            variant="secondary"
+            block
+            onPress={() => {
+              setHeld(selected);
+              setPicking(true);
+            }}
+          />
+
+          {picking && lifts && (
+            <LiftPickerSheet
+              visible
+              member={member}
+              you={user}
+              lifts={lifts}
+              selected={selected}
+              onChange={setSelected}
+              onClose={() => {
+                setHeld(null);
+                setPicking(false);
+              }}
             />
-          ))}
-        </View>
+          )}
+
+          {picking && !lifts && offline && (
+            <Sheet
+              visible
+              allowSwipeDismissal
+              title="Lifts to compare"
+              onClose={() => {
+                setHeld(null);
+                setPicking(false);
+              }}
+            >
+              <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void query.refetch()} />
+            </Sheet>
+          )}
+        </>
       )}
-
-      <Button
-        label={chosen.length ? 'Edit lifts' : 'Choose lifts'}
-        variant="secondary"
-        block
-        onPress={() => {
-          setHeld(selected);
-          setPicking(true);
-        }}
-      />
-
-      {picking && lifts && (
-        <LiftPickerSheet
-          visible
-          member={member}
-          you={user}
-          lifts={lifts}
-          selected={selected}
-          onChange={setSelected}
-          onClose={() => {
-            setHeld(null);
-            setPicking(false);
-          }}
-        />
-      )}
-
-      {picking && !lifts && offline && (
-        <Sheet
-          visible
-          allowSwipeDismissal
-          title="Lifts to compare"
-          onClose={() => {
-            setHeld(null);
-            setPicking(false);
-          }}
-        >
-          <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void query.refetch()} />
-        </Sheet>
-      )}
-
-      <ProfileWorkoutsSheet
-        visible={!!activeLift}
-        profileId={member.id}
-        workoutTypes={workoutTypes}
-        kicker={member.display_name.toUpperCase()}
-        title={activeLift?.name ?? ''}
-        exerciseId={activeLift?.exerciseId}
-        onClose={() => setActiveLift(null)}
-      />
     </Card>
   );
 }
