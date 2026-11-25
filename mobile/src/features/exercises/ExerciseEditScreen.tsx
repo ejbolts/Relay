@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
@@ -9,7 +8,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { exerciseMuscleChoices } from '../../../../frontend/src/exerciseCreation';
@@ -28,6 +26,8 @@ import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { FieldLabel, HeaderTextButton } from '../blocks/parts';
 import { updateExercise } from './exerciseQueries';
+import { haptics } from '../../ui/haptics';
+import { TextField } from '../../ui/controls';
 
 /**
  * Edits a custom exercise's name, equipment and target muscles; its workouts, records and
@@ -89,7 +89,7 @@ function EditForm({ exercise, exercises }: { exercise: Exercise; exercises: Exer
     setError(null);
     try {
       await updateExercise(client, exercise.id, changes);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       showToast('Exercise updated');
       router.back();
     } catch (reason) {
@@ -98,11 +98,6 @@ function EditForm({ exercise, exercises }: { exercise: Exercise; exercises: Exer
     }
   }
 
-  const field = [
-    styles.field,
-    type.body,
-    { backgroundColor: colors.surface2, borderRadius: radius.md, color: colors.text },
-  ];
   const pill = (on: boolean) => [
     styles.pill,
     { backgroundColor: on ? colors.accent : colors.surface2, borderRadius: radius.pill },
@@ -139,7 +134,7 @@ function EditForm({ exercise, exercises }: { exercise: Exercise; exercises: Exer
       >
         <View style={styles.group}>
           <FieldLabel>Name</FieldLabel>
-          <TextInput
+          <TextField
             accessibilityLabel="Name"
             value={name}
             maxLength={160}
@@ -149,24 +144,21 @@ function EditForm({ exercise, exercises }: { exercise: Exercise; exercises: Exer
               setName(value);
               setError(null);
             }}
-            style={field}
           />
         </View>
         <View style={styles.group}>
           <FieldLabel>Equipment</FieldLabel>
-          <TextInput
+          <TextField
             accessibilityLabel="Equipment"
             value={equipment}
             maxLength={100}
             autoCorrect={false}
             placeholder="None"
-            placeholderTextColor={colors.muted}
             editable={!saving}
             onChangeText={(value) => {
               setEquipment(value);
               setError(null);
             }}
-            style={field}
           />
           {suggestions.length > 0 && (
             <ScrollView

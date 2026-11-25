@@ -1,14 +1,66 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
-import { Platform } from 'react-native';
+import { Platform, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { defaultHomeLayout, type HomeLayout } from '../../../../frontend/src/homeLayout';
+import {
+  defaultHomeLayout,
+  HOME_SECTIONS,
+  type HomeLayout,
+} from '../../../../frontend/src/homeLayout';
 import type { Exercise, TrainingPreferences, User } from '../../../../frontend/src/types';
 import { apiGet, apiSend } from '../../data/api';
 import { showToast } from '../../ui/Toast';
+import { AUTO_SCROLL_EDGE, dragAutoScrollStep, type DragScrollMetrics } from './HomeLayoutGrid';
 import { HomeLayoutScreen } from './HomeLayoutScreen';
 import { MuscleGoalsScreen } from './MuscleGoalsScreen';
+
+interface MockPanConfig {
+  enabled?: boolean;
+  onActivate?: (event: { x: number; y: number; absoluteY: number }) => void;
+  onUpdate?: (event: { translationX: number; translationY: number; absoluteY: number }) => void;
+  onDeactivate?: (event: { canceled: boolean }) => void;
+  onFinalize?: (event: { canceled: boolean }) => void;
+}
+const mockPanGestures = new Map<string, MockPanConfig>();
+
+jest.mock('react-native-gesture-handler', () => {
+  const { isValidElement } = jest.requireActual<typeof import('react')>('react');
+  const { ScrollView } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    ScrollView,
+    GestureDetector: ({
+      gesture,
+      children,
+    }: {
+      gesture: MockPanConfig;
+      children: ReactElement<{ testID?: string }>;
+    }) => {
+      if (isValidElement(children) && typeof children.props.testID === 'string') {
+        mockPanGestures.set(children.props.testID, gesture);
+      }
+      return children;
+    },
+    usePanGesture: (config: MockPanConfig) => config,
+  };
+});
+jest.mock('react-native-reanimated', () => {
+  const { View } = jest.requireActual<typeof import('react-native')>('react-native');
+  return {
+    __esModule: true,
+    default: { View },
+    useSharedValue: <T,>(initial: T) => {
+      const box = {
+        value: initial,
+        set(next: T) {
+          box.value = next;
+        },
+      };
+      return box;
+    },
+    useAnimatedStyle: (fn: () => object) => fn(),
+  };
+});
 
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
@@ -40,10 +92,15 @@ jest.mock('../../ui/MenuButton', () => {
     MenuButton: (props: {
       accessibilityLabel: string;
       items: { label: string; onPress: () => void }[];
+      width: number;
+      height: number;
     }) =>
       createElement(
         View,
-        { accessibilityLabel: props.accessibilityLabel },
+        {
+          accessibilityLabel: props.accessibilityLabel,
+          testID: `menu-${props.width}x${props.height}`,
+        },
         props.items.map((item) =>
           createElement(
             Pressable,
@@ -75,6 +132,7 @@ let responses: Record<string, unknown>;
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockPanGestures.clear();
   jest.replaceProperty(Platform, 'OS', 'android');
   responses = {
     '/api/home-layout': defaultHomeLayout(),
@@ -148,6 +206,14 @@ test('the layout editor moves, hides, adds and resizes cards, then saves the lay
   expect(Object.keys(layout.settings ?? {})).toHaveLength(7);
   expect(showToast).toHaveBeenLastCalledWith('Home layout saved');
   await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+});
+
+test("each row's More menu gets a 44 pt frame around its 38 pt circle", async () => {
+  await show(<HomeLayoutScreen />);
+  await screen.findByRole('button', { name: 'Save Home layout' });
+  const menus = screen.getAllByLabelText(/^More for [^:]+$/);
+  expect(menus.length).toBeGreaterThan(0);
+  expect(screen.getAllByTestId('menu-44x44')).toHaveLength(menus.length);
 });
 
 test("a card's options change in its Customise sheet", async () => {
@@ -237,4 +303,189 @@ test('a muscle goal out of range is not saved', async () => {
   await fireEvent(lats, 'endEditing');
   expect(await screen.findByText('Enter a whole number of sets from 1 to 1,000.')).toBeVisible();
   expect(apiSend).not.toHaveBeenCalled();
+});
+
+function layoutBox(
+  element: ReturnType<typeof screen.getByTestId>,
+  box: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  },
+) {
+  return fireEvent(element, 'layout', { nativeEvent: { layout: box } });
+}
+
+test('dragging a card into an empty half-row fills the space and saves the layout', async () => {
+  responses['/api/home-layout'] = {
+    order: ['consistency', 'friends', 'zone2', 'bodyweight-trend'],
+    hidden: [],
+    widths: { consistency: 'compact', friends: 'full' },
+  };
+  await show(<HomeLayoutScreen />);
+  const dropSpace = (await screen.findByTestId('home-drop-space-consistency')).parent!;
+  const consistencySlot = screen.getByTestId('home-layout-card-consistency').parent!;
+  const row0 = consistencySlot.parent!;
+  const friendsSlot = screen.getByTestId('home-layout-card-friends').parent!;
+  const row1 = friendsSlot.parent!;
+  const zone2Slot = screen.getByTestId('home-layout-card-zone2').parent!;
+  const row2 = zone2Slot.parent!;
+
+  await layoutBox(row0, { x: 0, y: 0, width: 360, height: 100 });
+  await layoutBox(consistencySlot, { x: 0, y: 0, width: 175, height: 100 });
+  await layoutBox(dropSpace, { x: 185, y: 0, width: 175, height: 100 });
+  await layoutBox(row1, { x: 0, y: 110, width: 360, height: 60 });
+  await layoutBox(friendsSlot, { x: 0, y: 0, width: 360, height: 60 });
+  await layoutBox(row2, { x: 0, y: 180, width: 360, height: 100 });
+  await layoutBox(zone2Slot, { x: 0, y: 0, width: 175, height: 100 });
+
+  const pan = mockPanGestures.get('home-layout-card-zone2')!;
+  await act(async () => {
+    pan.onActivate?.({ x: 80, y: 50, absoluteY: 300 });
+    // Moves from (80, 230) to (260, 50), landing inside the empty space after Consistency.
+    pan.onUpdate?.({ translationX: 180, translationY: -180, absoluteY: 120 });
+    pan.onDeactivate?.({ canceled: false });
+  });
+
+  expect(screen.queryByTestId('home-drop-space-consistency')).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Save Home layout' }));
+  await waitFor(() => expect(apiSend).toHaveBeenCalled());
+  expect(savedLayout()).toMatchObject({
+    order: ['consistency', 'zone2', 'friends', 'bodyweight-trend'],
+    widths: { consistency: 'compact', friends: 'full', zone2: 'compact' },
+  });
+});
+
+test('dragging onto another card reorders without losing cards, and cancelling keeps the draft', async () => {
+  responses['/api/home-layout'] = {
+    ...defaultHomeLayout(),
+    widths: { consistency: 'compact', friends: 'full' },
+  };
+  await show(<HomeLayoutScreen />);
+  const consistencySlot = (await screen.findByTestId('home-layout-card-consistency')).parent!;
+  const row0 = consistencySlot.parent!;
+  const friendsSlot = screen.getByTestId('home-layout-card-friends').parent!;
+  const row1 = friendsSlot.parent!;
+
+  await layoutBox(row0, { x: 0, y: 0, width: 360, height: 100 });
+  await layoutBox(consistencySlot, { x: 0, y: 0, width: 175, height: 100 });
+  await layoutBox(row1, { x: 0, y: 110, width: 360, height: 60 });
+  await layoutBox(friendsSlot, { x: 0, y: 0, width: 360, height: 60 });
+
+  // Cancel a drag over Consistency: Save stays disabled.
+  const friendsPan = mockPanGestures.get('home-layout-card-friends')!;
+  await act(async () => {
+    friendsPan.onActivate?.({ x: 50, y: 30, absoluteY: 200 });
+    friendsPan.onUpdate?.({ translationX: 0, translationY: -110, absoluteY: 90 });
+    friendsPan.onDeactivate?.({ canceled: true });
+  });
+  expect(screen.getByRole('button', { name: 'Save Home layout' })).toBeDisabled();
+
+  // Complete the drag onto Consistency.
+  const latestPan = mockPanGestures.get('home-layout-card-friends')!;
+  await act(async () => {
+    latestPan.onActivate?.({ x: 50, y: 30, absoluteY: 200 });
+    latestPan.onUpdate?.({ translationX: 0, translationY: -110, absoluteY: 90 });
+    latestPan.onDeactivate?.({ canceled: false });
+  });
+
+  await fireEvent.press(screen.getByRole('button', { name: 'Save Home layout' }));
+  await waitFor(() => expect(apiSend).toHaveBeenCalled());
+  const saved = savedLayout();
+  expect(saved.order).toHaveLength(HOME_SECTIONS.length);
+  expect(new Set(saved.order).size).toBe(HOME_SECTIONS.length);
+  expect(saved.order.indexOf('friends')).toBeLessThan(saved.order.indexOf('consistency'));
+});
+
+test('tapping an empty space adds a hidden section into that slot', async () => {
+  responses['/api/home-layout'] = {
+    order: ['workouts', 'cardio-sessions', 'friends', 'consistency'],
+    hidden: ['friends'],
+    widths: { workouts: 'compact', 'cardio-sessions': 'compact' },
+  };
+  await show(<HomeLayoutScreen />);
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'Add a section after Cardio sessions' }),
+  );
+  expect(await screen.findByText('Add a section here')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add Recent Friends Activity here' }));
+  expect(screen.queryByTestId('home-drop-space-cardio-sessions')).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Save Home layout' }));
+  await waitFor(() => expect(apiSend).toHaveBeenCalled());
+  expect(savedLayout()).toMatchObject({
+    order: ['workouts', 'cardio-sessions', 'friends', 'consistency'],
+    hidden: [],
+    widths: { workouts: 'compact', 'cardio-sessions': 'compact', friends: 'third' },
+  });
+});
+
+test('the empty-space sheet lists sections without repeating its title, and says when none are left', async () => {
+  responses['/api/home-layout'] = {
+    order: ['workouts', 'cardio-sessions', 'friends', 'consistency'],
+    hidden: ['friends'],
+    widths: { workouts: 'compact', 'cardio-sessions': 'compact' },
+  };
+  await show(<HomeLayoutScreen />);
+  await fireEvent.press(
+    await screen.findByRole('button', { name: 'Add a section after Cardio sessions' }),
+  );
+  expect(await screen.findByText('Add a section here')).toBeVisible();
+  expect(screen.queryByText('Choose a section to add to this space.')).toBeNull();
+  expect(screen.queryByText('All available sections are already on Home.')).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add Recent Friends Activity here' }));
+  expect(screen.queryByText('Add a section here')).toBeNull();
+});
+
+test('compact cards give their move buttons a 44 pt touch frame around a 32 pt circle', async () => {
+  responses['/api/home-layout'] = {
+    order: ['workouts', 'cardio-sessions', 'consistency'],
+    hidden: [],
+    widths: { workouts: 'compact', 'cardio-sessions': 'compact', consistency: 'compact' },
+  };
+  await show(<HomeLayoutScreen />);
+  for (const label of ['Move Workouts down', 'Move Cardio sessions up', 'Move Consistency up']) {
+    const button = await screen.findByRole('button', { name: label });
+    expect(StyleSheet.flatten(button.props.style)).toMatchObject({ width: 44, height: 44 });
+  }
+});
+
+describe('drag auto-scroll', () => {
+  // A viewport 100 pt down the window and 650 pt tall, part-way through 2,000 pt of content.
+  const metrics: DragScrollMetrics = {
+    y: 300,
+    height: 650,
+    top: 100,
+    contentHeight: 2000,
+    bottomInset: 0,
+    insetExtendsScroll: false,
+  };
+
+  test('measures the edges from the viewport in window coordinates', () => {
+    // A stationary finger 600 pt down the window is well inside the viewport: no scrolling.
+    expect(dragAutoScrollStep(metrics, 600)).toBeNull();
+    expect(dragAutoScrollStep(metrics, 100 + AUTO_SCROLL_EDGE + 1)).toBeNull();
+    expect(dragAutoScrollStep(metrics, 750 - AUTO_SCROLL_EDGE - 1)).toBeNull();
+    // Near the bottom edge (window Y 750) it scrolls down; near the top (100) it scrolls up.
+    expect(dragAutoScrollStep(metrics, 700)).toBe(310);
+    expect(dragAutoScrollStep(metrics, 150)).toBe(290);
+    // Held still, the same finger keeps stepping from wherever the content has got to.
+    expect(dragAutoScrollStep({ ...metrics, y: 310 }, 700)).toBe(320);
+  });
+
+  test('keeps clear of the part of the viewport under the home indicator', () => {
+    const covered = { ...metrics, bottomInset: 34 };
+    expect(dragAutoScrollStep(covered, 750 - 34 - AUTO_SCROLL_EDGE - 1)).toBeNull();
+    expect(dragAutoScrollStep(covered, 750 - 34 - AUTO_SCROLL_EDGE + 1)).toBe(310);
+  });
+
+  test('stops at the ends of the content, including an iOS-adjusted bottom inset', () => {
+    expect(dragAutoScrollStep({ ...metrics, y: 0 }, 150)).toBeNull();
+    expect(dragAutoScrollStep({ ...metrics, y: 1350 }, 700)).toBeNull();
+    expect(dragAutoScrollStep({ ...metrics, y: 1345 }, 700)).toBe(1350);
+    const ios = { ...metrics, y: 1350, bottomInset: 34, insetExtendsScroll: true };
+    expect(dragAutoScrollStep(ios, 700)).toBe(1360);
+    expect(dragAutoScrollStep({ ...ios, y: 1384 }, 700)).toBeNull();
+    expect(dragAutoScrollStep({ ...metrics, height: 0 }, 700)).toBeNull();
+  });
 });

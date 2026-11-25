@@ -5,7 +5,6 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
   type StyleProp,
   type TextInputProps,
@@ -17,24 +16,16 @@ import {
   type CardioMetricKey,
 } from '../../../../frontend/src/cardioForm';
 import type { CardioSession } from '../../../../frontend/src/types';
+import { TextField } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
+import { headerOptions } from '../../ui/navigation';
 import { useTheme } from '../../ui/theme';
 
 export function CardioPage({ title, children }: { title: string; children: ReactNode }) {
   const { colors, space } = useTheme();
   return (
     <>
-      <Stack.Screen
-        options={{
-          headerShown: true,
-          title,
-          headerTintColor: colors.accentText,
-          headerTitleStyle: { color: colors.text },
-          headerStyle: { backgroundColor: colors.page },
-          headerShadowVisible: false,
-          headerBackButtonDisplayMode: 'minimal',
-        }}
-      />
+      <Stack.Screen options={{ ...headerOptions(colors), headerShown: true, title }} />
       <ScrollView
         style={{ flex: 1, backgroundColor: colors.page }}
         contentContainerStyle={{ padding: space.lg, gap: space.lg, paddingBottom: space.xxl * 2 }}
@@ -63,29 +54,20 @@ export function CardioField({
   style?: StyleProp<ViewStyle>;
   hideLabel?: boolean;
 }) {
-  const { colors, radius, type } = useTheme();
+  const { colors } = useTheme();
+  // The shared field: the web's raised input with a strong outline that turns accent on focus.
   return (
-    <View style={[styles.field, style]}>
-      {!hideLabel && <Text style={[type.footnote, { color: colors.secondary }]}>{label}</Text>}
-      <TextInput
-        {...props}
-        accessibilityLabel={label}
-        placeholderTextColor={colors.muted}
-        selectionColor={colors.accent}
-        style={[
-          type.callout,
-          styles.input,
-          {
-            color: colors.text,
-            backgroundColor: colors.surface2,
-            borderRadius: radius.md,
-            borderColor: error || invalid ? colors.danger : colors.line,
-            ...(props.multiline ? { minHeight: 80, textAlignVertical: 'top' } : {}),
-          },
-        ]}
-      />
-      {error && <CardioError message={error} />}
-    </View>
+    <TextField
+      {...props}
+      label={hideLabel ? undefined : label}
+      accessibilityLabel={label}
+      error={error}
+      style={[styles.field, style]}
+      inputStyle={[
+        invalid && !error && { borderColor: colors.danger },
+        props.multiline && { minHeight: 80 },
+      ]}
+    />
   );
 }
 
@@ -120,7 +102,12 @@ export function CardioChoice({
       onPress={onPress}
       style={({ pressed }) => [
         styles.choice,
-        { backgroundColor: colors.surface2, borderRadius: radius.md, opacity: pressed ? 0.65 : 1 },
+        {
+          backgroundColor: colors.surface2,
+          borderColor: colors.lineStrong,
+          borderRadius: radius.md,
+          opacity: pressed ? 0.65 : 1,
+        },
       ]}
     >
       <Text style={[type.callout, { color: colors.text, flex: 1, fontWeight: '600' }]}>
@@ -158,12 +145,19 @@ export function CardioMetricFields({
           onChangeText={(value) => onChange(key, value.replace(',', '.'))}
           error={errors[key]}
           editable={!disabled}
+          // The web's hints: an example where a watch shows the number, Optional elsewhere.
           placeholder={
-            estimates && key === 'elevation_gain_m'
-              ? cardioMetricAutoPlaceholder(estimates.estimated_elevation_gain_m)
-              : estimates && key === 'average_mets'
-                ? cardioMetricAutoPlaceholder(estimates.estimated_mets)
-                : placeholder
+            !estimates
+              ? key === 'calories_kcal'
+                ? 'e.g. 350'
+                : key === 'average_heart_rate_bpm'
+                  ? 'e.g. 142'
+                  : (placeholder ?? 'Optional')
+              : estimates && key === 'elevation_gain_m'
+                ? cardioMetricAutoPlaceholder(estimates.estimated_elevation_gain_m)
+                : estimates && key === 'average_mets'
+                  ? cardioMetricAutoPlaceholder(estimates.estimated_mets)
+                  : placeholder
           }
         />
       ))}
@@ -172,15 +166,10 @@ export function CardioMetricFields({
 }
 
 const styles = StyleSheet.create({
-  field: { gap: 5 },
-  input: {
-    minHeight: 46,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    borderWidth: StyleSheet.hairlineWidth,
-  },
+  field: { gap: 6 },
   choice: {
     minHeight: 46,
+    borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,

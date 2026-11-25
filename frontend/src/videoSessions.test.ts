@@ -6,6 +6,7 @@ import {
   moveItem,
   newerSession,
   overallUploadProgress,
+  sessionKicker,
   sessionRetryLabel,
   sessionStatusDetail,
   sessionStatusText,
@@ -82,5 +83,13 @@ describe('newerSession', () => {
     expect(newerSession(at('a', 'complete'), at('a', 'stitching'))).toEqual(at('a', 'complete'));
     expect(newerSession(at('a', 'failed'), at('a', 'queued'))).toEqual(at('a', 'failed'));
     expect(newerSession(at('a', 'queued'), at('b', 'complete'))).toEqual(at('a', 'queued'));
+  });
+});
+
+describe('sessionKicker', () => {
+  it('names a cancelled session, and calls the rest processing', () => {
+    expect(sessionKicker('cancelled')).toBe('Cancelled session');
+    expect(sessionKicker('stitching')).toBe('Processing session');
+    expect(sessionKicker('failed')).toBe('Processing session');
   });
 });

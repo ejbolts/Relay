@@ -18,6 +18,16 @@ const mockTask = { uploadAsync: jest.fn(), cancel: jest.fn() };
 const mockCreate = jest.fn((..._args: unknown[]) => mockTask);
 const mockCopy = jest.fn(async (..._args: unknown[]) => undefined);
 const mockDelete = jest.fn();
+let mockEnvironment = 'storeClient';
+jest.mock('expo-constants', () => ({
+  __esModule: true,
+  default: {
+    get executionEnvironment() {
+      return mockEnvironment;
+    },
+  },
+  ExecutionEnvironment: { StoreClient: 'storeClient', Standalone: 'standalone' },
+}));
 jest.mock('expo-file-system', () => ({
   File: jest.fn().mockImplementation((...parts: unknown[]) => ({
     uri: parts.map(String).join('/'),
@@ -40,6 +50,7 @@ const ticks = async (count = 5) => {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockEnvironment = 'storeClient';
   mockTask.uploadAsync.mockReset();
   mockTask.cancel.mockReset();
 });
@@ -75,7 +86,7 @@ it("passes on the server's refusal", async () => {
   await expect(transfer.done).rejects.toEqual(new ApiError(413, 'Too large', 'too_large'));
 });
 
-it('falls back to the multipart upload where Expo Go may not read the file', async () => {
+it('falls back to the multipart upload only where Expo Go may not read the file', async () => {
   mockTask.uploadAsync.mockRejectedValue(new Error('Missing read permission'));
   jest.mocked(uploadFile).mockResolvedValue({ id: 'clip-1' });
   const transfer = startClipUpload('/api/sessions/s1/clips', clip, fields, jest.fn());
@@ -104,31 +115,54 @@ it('streams a copy named with the video extension when the file has none, then r
   expect(mockDelete).toHaveBeenCalledTimes(1);
 });
 
-it('keeps cancelling a transfer stopped before its native start, until it settles', async () => {
-  jest.useFakeTimers();
-  try {
-    let fail!: (reason: unknown) => void;
-    mockTask.uploadAsync.mockReturnValue(new Promise((_done, reject) => (fail = reject)));
-    const transfer = startClipUpload('/api/sessions/s1/clips', clip, fields, jest.fn());
-    transfer.done.catch(() => undefined);
-    await ticks();
-    // The stop reaches the task before the native side starts it, so this cancel is lost.
-    transfer.stop();
-    expect(mockTask.cancel).toHaveBeenCalledTimes(1);
-    // The native start then reports progress: the stopped transfer is cancelled again.
-    progressOf()({ bytesSent: 10, totalBytes: 200 });
-    expect(mockTask.cancel).toHaveBeenCalledTimes(2);
-    // And again on a timer until it settles.
-    jest.advanceTimersByTime(600);
-    expect(mockTask.cancel.mock.calls.length).toBeGreaterThan(2);
-    fail(new Error('cancelled'));
-    await expect(transfer.done).rejects.toBeInstanceOf(UploadStopped);
-    const settledAt = mockTask.cancel.mock.calls.length;
-    jest.advanceTimersByTime(1000);
-    expect(mockTask.cancel).toHaveBeenCalledTimes(settledAt);
-  } finally {
-    jest.useRealTimers();
-  }
+it('ignores a stopped transfer that completes anyway, after its cancel was lost', async () => {
+  let complete!: (result: { status: number; body: string }) => void;
+  mockTask.uploadAsync.mockReturnValue(new Promise((resolve) => (complete = resolve)));
+  const progress = jest.fn();
+  const transfer = startClipUpload('/api/sessions/s1/clips', clip, fields, progress);
+  await ticks();
+  transfer.stop();
+  expect(mockTask.cancel).toHaveBeenCalledTimes(1);
+  // The native start reset the cancel: the transfer reports progress and finishes with 2xx.
+  progressOf()({ bytesSent: 200, totalBytes: 200 });
+  complete({ status: 201, body: '{"id":"clip-1"}' });
+  await expect(transfer.done).rejects.toBeInstanceOf(UploadStopped);
+  expect(progress).not.toHaveBeenCalled();
+});
+
+it('reports a file an installed app cannot read instead of buffering it in memory', async () => {
+  mockEnvironment = 'standalone';
+  mockTask.uploadAsync.mockRejectedValue(new Error('Missing read permission'));
+  const transfer = startClipUpload('/api/sessions/s1/clips', clip, fields, jest.fn());
+  await expect(transfer.done).rejects.toThrow(/couldn’t read this video/);
+  expect(uploadFile).not.toHaveBeenCalled();
+});
+
+it('reports a copy that fails in an installed app instead of buffering it in memory', async () => {
+  mockEnvironment = 'standalone';
+  mockCopy.mockRejectedValueOnce(new Error('Not enough space'));
+  const transfer = startClipUpload(
+    '/api/sessions/s1/clips',
+    { ...clip, uri: 'content://media/video/42' },
+    fields,
+    jest.fn(),
+  );
+  await expect(transfer.done).rejects.toThrow(/couldn’t read this video/);
+  expect(uploadFile).not.toHaveBeenCalled();
+  expect(mockCreate).not.toHaveBeenCalled();
+});
+
+it('in Expo Go, sends a picked file it may not copy through the multipart upload', async () => {
+  mockCopy.mockRejectedValueOnce(new Error('Missing read permission'));
+  jest.mocked(uploadFile).mockResolvedValue({ id: 'clip-1' });
+  const transfer = startClipUpload(
+    '/api/sessions/s1/clips',
+    { ...clip, uri: 'content://media/video/42' },
+    fields,
+    jest.fn(),
+  );
+  await expect(transfer.done).resolves.toEqual({ id: 'clip-1' });
+  expect(uploadFile).toHaveBeenCalledTimes(1);
 });
 
 it('never starts a transfer that was stopped before it was created', async () => {
@@ -136,4 +170,37 @@ it('never starts a transfer that was stopped before it was created', async () =>
   transfer.stop();
   await expect(transfer.done).rejects.toBeInstanceOf(UploadStopped);
   expect(mockTask.uploadAsync).not.toHaveBeenCalled();
+});
+
+it('uses an explicit bound session token when provided', async () => {
+  mockTask.uploadAsync.mockResolvedValue({ status: 201, body: '{"id":"clip-1"}' });
+  const transfer = startClipUpload(
+    '/api/sessions/s1/clips',
+    clip,
+    fields,
+    jest.fn(),
+    'bound-account-token',
+  );
+  await expect(transfer.done).resolves.toEqual({ id: 'clip-1' });
+  expect(options()).toMatchObject({
+    headers: { Authorization: 'Bearer bound-account-token', 'X-Relay-Version': '1.3.2' },
+  });
+
+  // Also forwards the bound token through the Expo Go fallback upload.
+  mockTask.uploadAsync.mockRejectedValueOnce(new Error('Missing read permission'));
+  jest.mocked(uploadFile).mockResolvedValueOnce({ id: 'clip-2' });
+  const fallback = startClipUpload(
+    '/api/sessions/s1/clips',
+    clip,
+    fields,
+    jest.fn(),
+    'bound-account-token',
+  );
+  await expect(fallback.done).resolves.toEqual({ id: 'clip-2' });
+  expect(uploadFile).toHaveBeenCalledWith(
+    '/api/sessions/s1/clips',
+    'POST',
+    clip,
+    expect.objectContaining({ token: 'bound-account-token' }),
+  );
 });

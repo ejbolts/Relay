@@ -111,6 +111,10 @@ function PlannedDayBody({
   const needsRoutine = Boolean(startPlan && split?.routine_id);
   const routines = useRoutines();
   const routineLoading = needsRoutine && routines.isPending;
+  // A cached routine shows at once, but Start waits while it is being refreshed (Home's pull to
+  // refresh, or reopening after it went stale), so a routine changed elsewhere is never started
+  // from the old copy.
+  const routineRefreshing = needsRoutine && !routines.isPending && routines.isFetching;
   const routine = needsRoutine
     ? (routines.data?.find((item) => item.id === split?.routine_id) ?? null)
     : null;
@@ -168,9 +172,10 @@ function PlannedDayBody({
                 label={buttons.start.label}
                 accessibilityLabel={buttons.start.accessibilityLabel}
                 icon="play"
-                disabled={!start}
+                disabled={!start || routineRefreshing}
+                loading={routineRefreshing}
                 style={{ flex: 1 }}
-                onPress={() => start && onStart(start)}
+                onPress={() => start && !routineRefreshing && onStart(start)}
               />
             )}
             {buttons.empty && (
@@ -205,3 +210,13 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
 });
+
+/**
+ * Keeps the routines loaded with Home while the split follows a routine, so a planned day's
+ * sheet opens with its exercises instead of a spinner that then grows. While it is mounted,
+ * Home's pull to refresh refreshes them too.
+ */
+export function PlannedDayPrefetch() {
+  useRoutines();
+  return null;
+}

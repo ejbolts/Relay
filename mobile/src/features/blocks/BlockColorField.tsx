@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
@@ -9,6 +8,7 @@ import {
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { FieldLabel } from './parts';
+import { haptics } from '../../ui/haptics';
 
 const DEFAULT_CUSTOM = '#3a7bd5';
 
@@ -34,7 +34,7 @@ export function BlockColorField({
   const [lastCustom, setLastCustom] = useState(custom ?? DEFAULT_CUSTOM);
   const [hex, setHex] = useState(custom ?? '');
   const pick = (color: string | null) => {
-    void Haptics.selectionAsync();
+    haptics.selection();
     onChange(color);
   };
   const chip = (on: boolean) => [

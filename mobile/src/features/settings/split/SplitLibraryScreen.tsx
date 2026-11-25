@@ -1,7 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Stack, useIsFocused, useLocalSearchParams, useRouter } from 'expo-router';
+import { useRef, useState, type ComponentRef, type ReactNode } from 'react';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import {
   hasSplitTemplate,
   legacySplitRoutine,
@@ -13,16 +13,33 @@ import {
   splitsActiveFirst,
   splitTemplateName,
 } from '../../../../../frontend/src/splitEditing';
+import {
+  splitConfirmCoach,
+  splitGuideFlow,
+  splitPageCoach,
+  type CoachTarget as CoachTargetId,
+} from '../../../../../frontend/src/setupGuideCoach';
 import { SPLIT_TEMPLATES } from '../../../../../frontend/src/trainingSplit';
 import type { Routine, TrainingSplit, WorkoutType } from '../../../../../frontend/src/types';
 import { localDate } from '../../../../../frontend/src/utils';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../../data/offline';
 import { useWorkoutTypes } from '../../../data/queries';
-import { Button, Card, errorMessage, ErrorState, Loading } from '../../../ui/components';
+import {
+  Button,
+  buttonColors,
+  Card,
+  EmptyState,
+  errorMessage,
+  ErrorState,
+  Loading,
+} from '../../../ui/components';
+import { haptics } from '../../../ui/haptics';
 import { Icon } from '../../../ui/Icon';
 import { showMenu } from '../../../ui/prompts';
 import { Sheet } from '../../../ui/Sheet';
 import { showToast } from '../../../ui/Toast';
 import { useTheme } from '../../../ui/theme';
+import { settingsIcons } from '../icons';
 import {
   deleteRoutine,
   refreshSplits,
@@ -33,16 +50,39 @@ import {
   useTrainingSplit,
 } from '../settingsData';
 import { SettingsPage } from '../SettingsList';
+import { CoachSpacer, CoachTarget, GuideCoach } from '../../guides/GuideCoach';
+import {
+  exitSetupGuide,
+  finishSetupGuide,
+  setupGuideTicket,
+  ticketGuide,
+  useExitGuideOnLeave,
+  useSetupGuide,
+} from '../../guides/setupGuides';
 import { SplitGuide } from './SplitGuide';
 import { DateStepper, SplitPattern, SplitPreview } from './SplitParts';
 
 /** Your splits, as the web's split page: the library, the active split's week, and templates. */
 export function SplitLibraryScreen() {
+  // The splits guide runs on this page and the editor above it; leaving the page ends it.
+  useExitGuideOnLeave('split');
   const routines = useRoutines();
   const split = useTrainingSplit();
   const types = useWorkoutTypes();
   const client = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  // Offline with nothing cached the queries are paused, not loading: say so instead of spinning.
+  // A paused query resumes by itself once the phone is back online; Retry asks again now.
+  if (waitingForNetwork(routines) || waitingForNetwork(split))
+    return (
+      <ErrorState
+        message={OFFLINE_MESSAGE}
+        onRetry={() => {
+          void routines.refetch();
+          void split.refetch();
+        }}
+      />
+    );
   if (routines.isPending || split.isPending) return <Loading label="Loading splits" />;
   const error = routines.error ?? split.error;
   if (error && (!routines.data || split.data === undefined))
@@ -93,7 +133,22 @@ function Library({
   const activeId = split?.enabled ? (split.routine_id ?? 'current-split') : null;
   const legacy = legacySplitRoutine(split, types);
   const displayed = splitsActiveFirst([...(legacy ? [legacy] : []), ...routines], activeId);
-  const [expanded, setExpanded] = useState<string | null>(activeId);
+  // Opened from a friend's profile after Save split, at the saved copy, as the web's View my splits.
+  const { open: openParam } = useLocalSearchParams<{ open?: string }>();
+  const [expanded, setExpanded] = useState<string | null>(() =>
+    openParam && displayed.some((routine) => routine.id === openParam) ? openParam : activeId,
+  );
+  // Active split's exercise breakdown starts collapsed (matching web) so Templates stay above the fold.
+  const [exercisesOpen, setExercisesOpen] = useState<Record<string, boolean>>({});
+  const secondary = buttonColors(colors, 'secondary');
+  const guide = useSetupGuide('split');
+  const focused = useIsFocused();
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  // The page's step shows while the page itself is in front, as the web's hides under a dialog.
+  const coach =
+    guide && focused ? splitPageCoach(guide, splitGuideFlow(activeId), activeId, routines) : null;
+  const mark = (target: CoachTargetId, routineId?: string) =>
+    coach?.step.target === target && coach.step.routineId === routineId ? target : undefined;
 
   const edit = (params: { id: string } | { template: string }) =>
     router.push({ pathname: '/split/edit', params });
@@ -159,87 +214,177 @@ function Library({
       <Stack.Screen
         options={{
           headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 20 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
               <SplitGuide />
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="New split"
+                accessibilityState={{ disabled: !typesReady }}
                 disabled={!typesReady}
-                hitSlop={8}
                 onPress={() => edit({ template: 'custom' })}
+                style={styles.headerButton}
               >
-                <Icon name="plus" size={22} color={colors.accentText} />
+                <Icon name="plus" size={22} color={typesReady ? colors.accentText : colors.muted} />
               </Pressable>
             </View>
           ),
         }}
       />
-      <SettingsPage refreshing={refreshing} onRefresh={onRefresh}>
-        {displayed.length === 0 && (
-          <Text style={[type.callout, { color: colors.muted }]}>No saved splits.</Text>
-        )}
-        {displayed.map((routine) => {
-          const active = routine.id === activeId;
-          const open = expanded === routine.id;
-          return (
-            <Card key={routine.id} accessibilityLabel={routine.name}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ expanded: open }}
-                accessibilityLabel={`${routine.name}, ${splitDayCount(routine.days)}${active ? ', active' : ''}`}
-                onPress={() => setExpanded(open ? null : routine.id)}
-                style={{ gap: 8 }}
+      <SettingsPage refreshing={refreshing} onRefresh={onRefresh} scrollRef={scroll}>
+        <View style={{ gap: 12 }}>
+          <View style={styles.sectionHeader}>
+            <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
+              My splits
+            </Text>
+          </View>
+          {displayed.length === 0 && (
+            <EmptyState
+              icon={settingsIcons.split}
+              title="No saved splits"
+              // Like the header's +, the editor waits for workout types.
+              action={
+                typesReady
+                  ? {
+                      label: 'New split',
+                      icon: 'plus',
+                      onPress: () => edit({ template: 'custom' }),
+                    }
+                  : undefined
+              }
+            />
+          )}
+          {displayed.map((routine) => {
+            const active = routine.id === activeId;
+            const open = expanded === routine.id;
+            const showExercises = !!exercisesOpen[routine.id];
+            const hasExercises = routine.days.some((day) => day.movements.length > 0);
+            return (
+              <Card
+                key={routine.id}
+                accessibilityLabel={routine.name}
+                style={active ? { borderColor: colors.accent, borderWidth: 1.5 } : undefined}
               >
-                <View style={styles.cardTitle}>
-                  <View style={{ flex: 1, gap: 2 }}>
-                    <Text style={[type.headline, { color: colors.text }]}>{routine.name}</Text>
-                    <Text style={[type.footnote, { color: colors.muted }]}>
-                      {splitDayCount(routine.days)} · {routine.shared ? 'On profile' : 'Only you'}
-                    </Text>
-                  </View>
-                  {active && (
-                    <View style={[styles.badge, { backgroundColor: colors.accentSoft }]}>
-                      <Text style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}>
-                        Active
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: open }}
+                  accessibilityLabel={`${routine.name}, ${splitDayCount(routine.days)}${active ? ', active' : ''}`}
+                  onPress={() => setExpanded(open ? null : routine.id)}
+                  style={{ gap: 8 }}
+                >
+                  <View style={styles.cardTitle}>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={[type.headline, { color: colors.text }]}>{routine.name}</Text>
+                      <Text style={[type.footnote, { color: colors.muted }]}>
+                        {splitDayCount(routine.days)} · {routine.shared ? 'On profile' : 'Only you'}
                       </Text>
                     </View>
-                  )}
-                  <Icon name={open ? 'chevronUp' : 'chevronDown'} size={14} color={colors.muted} />
-                </View>
-                <SplitPattern days={routine.days} />
-              </Pressable>
-              {active && split && <SplitPreview split={split} types={types} />}
-              {open && <Cycle routine={routine} />}
-              <Button
-                label={active ? 'Change schedule' : 'Use split'}
-                variant={active ? 'secondary' : 'primary'}
-                disabled={busy}
-                onPress={() => setUsing(routine)}
-              />
-              <View style={styles.actions}>
-                <Button
-                  label="Edit split"
-                  variant="secondary"
-                  disabled={busy || !typesReady}
-                  onPress={() => edit({ id: routine.id })}
-                  style={{ flex: 1 }}
-                />
-                {routine.id !== 'current-split' && (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Options for ${routine.name}`}
-                    disabled={busy}
-                    onPress={() => options(routine)}
-                    style={[styles.more, { backgroundColor: colors.surface2 }]}
-                  >
-                    <Icon name="more" size={18} color={colors.text} />
-                  </Pressable>
+                    {active && (
+                      <View style={[styles.badge, { backgroundColor: colors.accentSoft }]}>
+                        <Text
+                          style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}
+                        >
+                          Active
+                        </Text>
+                      </View>
+                    )}
+                    <Icon
+                      name={open ? 'chevronUp' : 'chevronDown'}
+                      size={14}
+                      color={colors.muted}
+                    />
+                  </View>
+                  <SplitPattern days={routine.days} />
+                </Pressable>
+
+                {open && (
+                  <>
+                    {active && split && (
+                      <View style={[styles.dividerBlock, { borderTopColor: colors.line }]}>
+                        <SplitPreview split={split} types={types} />
+                      </View>
+                    )}
+                    {active ? (
+                      hasExercises && (
+                        <View style={{ gap: 8 }}>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel="Exercises & sets"
+                            accessibilityState={{ expanded: showExercises }}
+                            onPress={() => {
+                              haptics.selection();
+                              setExercisesOpen((current) => ({
+                                ...current,
+                                [routine.id]: !current[routine.id],
+                              }));
+                            }}
+                            style={styles.disclosure}
+                          >
+                            <Icon
+                              name={showExercises ? 'chevronDown' : 'chevronRight'}
+                              size={14}
+                              color={colors.muted}
+                            />
+                            <Text style={[type.callout, { color: colors.secondary }]}>
+                              Exercises &amp; sets
+                            </Text>
+                          </Pressable>
+                          {showExercises && <Cycle routine={routine} />}
+                        </View>
+                      )
+                    ) : (
+                      <View style={[styles.dividerBlock, { borderTopColor: colors.line }]}>
+                        <Cycle routine={routine} />
+                      </View>
+                    )}
+                  </>
                 )}
-              </View>
-            </Card>
-          );
-        })}
-        <View style={{ gap: 10 }}>
+
+                <View style={[styles.actionsRow, { borderTopColor: colors.line }]}>
+                  <CoachTarget id={mark('split.edit', routine.id)}>
+                    <Button
+                      label="Edit split"
+                      variant="secondary"
+                      disabled={busy || !typesReady}
+                      onPress={() => edit({ id: routine.id })}
+                    />
+                  </CoachTarget>
+                  <CoachTarget id={mark('split.use', routine.id)} style={{ flex: 1 }}>
+                    <Button
+                      label={active ? 'Change schedule' : 'Use split'}
+                      variant={active ? 'secondary' : 'primary'}
+                      disabled={busy}
+                      onPress={() => setUsing(routine)}
+                    />
+                  </CoachTarget>
+                  {routine.id !== 'current-split' && (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Options for ${routine.name}`}
+                      disabled={busy}
+                      onPress={() => {
+                        haptics.tap();
+                        options(routine);
+                      }}
+                      style={({ pressed }) => [
+                        styles.more,
+                        {
+                          backgroundColor: secondary.fill,
+                          borderColor: secondary.border,
+                        },
+                        pressed && { opacity: 0.7 },
+                        busy && { opacity: 0.45 },
+                      ]}
+                    >
+                      <Icon name="more" size={18} color={secondary.ink} />
+                    </Pressable>
+                  )}
+                </View>
+              </Card>
+            );
+          })}
+        </View>
+
+        <CoachTarget id={mark('split.templates')} radius={16} style={{ gap: 10 }}>
           <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
             Templates
           </Text>
@@ -253,12 +398,15 @@ function Library({
                   accessibilityLabel={`${splitTemplateName(preset)} template${saved ? ', already in My splits' : ''}`}
                   accessibilityState={{ disabled: saved || busy || !typesReady }}
                   disabled={saved || busy || !typesReady}
-                  onPress={() => edit({ template: preset.id })}
+                  onPress={() => {
+                    haptics.tap();
+                    edit({ template: preset.id });
+                  }}
                   style={({ pressed }) => [
                     styles.template,
                     {
                       backgroundColor: pressed ? colors.surface2 : colors.surface,
-                      borderColor: colors.line,
+                      borderColor: colors.lineStrong,
                     },
                     saved && { opacity: 0.55 },
                   ]}
@@ -269,9 +417,10 @@ function Library({
                     >
                       {splitTemplateName(preset)}
                     </Text>
-                    <Icon name={saved ? 'check' : 'plus'} size={14} color={colors.accentText} />
+                    <Icon name={saved ? 'check' : 'plus'} size={15} color={colors.accentText} />
                   </View>
                   <SplitPattern
+                    dashWidth={20}
                     days={preset.types.map((id) => ({
                       workout_type: types.find((item) => item.id === id) ?? null,
                     }))}
@@ -280,16 +429,23 @@ function Library({
               );
             })}
           </View>
-        </View>
+        </CoachTarget>
+        <CoachSpacer />
       </SettingsPage>
+      {coach && !using && (
+        <GuideCoach {...coach} scroll={scroll} onExit={() => exitSetupGuide('split')} />
+      )}
       <UseSplitSheet
         routine={using}
         split={split}
         active={!!using && using.id === activeId}
         busy={busy}
+        coached={!!using && guide?.useRoutineId === using.id}
         onClose={() => setUsing(null)}
         onUse={(startDate) => {
           const routine = using!;
+          // Only the guide running now, waiting on this split, can be finished by this save.
+          const ticket = guide?.useRoutineId === routine.id ? setupGuideTicket('split') : null;
           void run(async () => {
             if (routine.id === 'current-split')
               await saveTrainingSplit({
@@ -302,6 +458,7 @@ function Library({
             else await startRoutine(routine.id, startDate);
             setUsing(null);
             setExpanded(routine.id);
+            if (ticketGuide(ticket)?.useRoutineId === routine.id) finishSetupGuide(ticket);
             showToast(`Using ${routine.name}`);
           });
         }}
@@ -362,6 +519,7 @@ function UseSplitSheet({
   split,
   active,
   busy,
+  coached,
   onUse,
   onClose,
 }: {
@@ -369,6 +527,8 @@ function UseSplitSheet({
   split: TrainingSplit | null;
   active: boolean;
   busy: boolean;
+  /** The splits guide's last step, for the split it saved. */
+  coached: boolean;
   onUse: (startDate: string) => void;
   onClose: () => void;
 }) {
@@ -381,6 +541,18 @@ function UseSplitSheet({
           initialDate={active ? (split?.start_date ?? localDate()) : localDate()}
           busy={busy}
           onUse={onUse}
+          coach={
+            coached ? (
+              <GuideCoach
+                {...splitConfirmCoach()}
+                inline
+                onBack={() => {
+                  if (!busy) onClose();
+                }}
+                onExit={() => exitSetupGuide('split')}
+              />
+            ) : null
+          }
         />
       )}
     </Sheet>
@@ -392,11 +564,14 @@ function UseSplitForm({
   initialDate,
   busy,
   onUse,
+  coach,
 }: {
   routine: Routine;
   initialDate: string;
   busy: boolean;
   onUse: (startDate: string) => void;
+  /** The splits guide's step, above the sheet's main action. */
+  coach: ReactNode;
 }) {
   const { colors, type, radius } = useTheme();
   const [startDate, setStartDate] = useState(initialDate);
@@ -405,28 +580,62 @@ function UseSplitForm({
       <View style={{ gap: 6 }}>
         <Text style={[type.headline, { color: colors.text }]}>{routine.name}</Text>
         <Text style={[type.footnote, { color: colors.muted }]}>{splitDayCount(routine.days)}</Text>
-        <SplitPattern days={routine.days} size={12} />
+        <SplitPattern days={routine.days} />
       </View>
-      <View style={{ backgroundColor: colors.surface2, borderRadius: radius.lg }}>
+      <View
+        style={{
+          backgroundColor: colors.surface2,
+          borderRadius: radius.lg,
+          borderWidth: 1,
+          borderColor: colors.lineStrong,
+        }}
+      >
         <DateStepper label="Starts" date={startDate} onChange={setStartDate} disabled={busy} />
       </View>
-      <Button
-        label={busy ? 'Saving…' : 'Use this split'}
-        disabled={busy}
-        onPress={() => onUse(startDate)}
-      />
+      {coach}
+      <CoachTarget id={coach ? 'split.confirm' : undefined}>
+        <Button
+          label={busy ? 'Saving…' : 'Use this split'}
+          block
+          loading={busy}
+          disabled={busy}
+          onPress={() => onUse(startDate)}
+        />
+      </CoachTarget>
     </>
   );
 }
 
 const styles = StyleSheet.create({
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 2,
+  },
   cardTitle: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  badge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  badge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999 },
+  dividerBlock: { borderTopWidth: 1, paddingTop: 12 },
+  headerButton: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  disclosure: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 44,
+    alignSelf: 'flex-start',
+  },
+  actionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderTopWidth: 1,
+    paddingTop: 12,
+  },
   more: {
-    width: 46,
-    height: 46,
+    width: 44,
+    height: 44,
     borderRadius: 12,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -437,7 +646,8 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 10,
     borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
+    borderStyle: 'dashed',
   },
   cycleDay: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 36 },
   cycleBar: { width: 4, alignSelf: 'stretch', borderRadius: 2 },

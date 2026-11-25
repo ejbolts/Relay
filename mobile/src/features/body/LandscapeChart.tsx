@@ -3,22 +3,36 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { bodyIcons } from './bodyIcons';
 
-/** The button that opens a chart full screen in landscape, as the web's Landscape toggle. */
+/** The bordered square button that opens a chart full screen in landscape, as on the web. */
 export function LandscapeButton({ title, onPress }: { title: string; onPress: () => void }) {
-  const { colors } = useTheme();
+  const { colors, radius } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`View ${title} full screen in landscape`}
-      hitSlop={10}
-      onPress={onPress}
-      style={({ pressed }) => [styles.toggle, pressed && { opacity: 0.6 }]}
+      onPress={() => {
+        haptics.tap();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.toggleTarget, pressed && { opacity: 0.65 }]}
     >
-      <Icon name={bodyIcons.expand} size={16} color={colors.accentText} />
+      <View
+        style={[
+          styles.toggle,
+          {
+            backgroundColor: colors.surface2,
+            borderColor: colors.lineStrong,
+            borderRadius: radius.sm,
+          },
+        ]}
+      >
+        <Icon name={bodyIcons.expand} size={18} color={colors.accentText} />
+      </View>
     </Pressable>
   );
 }
@@ -76,7 +90,10 @@ export function LandscapeChartView({
               accessibilityRole="button"
               accessibilityLabel={`Exit full-screen ${title}`}
               hitSlop={10}
-              onPress={onClose}
+              onPress={() => {
+                haptics.tap();
+                onClose();
+              }}
               style={({ pressed }) => [styles.exit, pressed && { opacity: 0.6 }]}
             >
               <Icon name="close" size={14} color={colors.accentText} />
@@ -101,7 +118,15 @@ export function LandscapeChartView({
 }
 
 const styles = StyleSheet.create({
-  toggle: { padding: 4 },
+  // A 44 pt target around the web's 36 pt bordered square.
+  toggleTarget: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  toggle: {
+    width: 36,
+    height: 36,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   page: { flex: 1, paddingHorizontal: 16, paddingBottom: 8 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
   exit: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6 },

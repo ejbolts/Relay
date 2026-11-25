@@ -303,6 +303,89 @@ export function homeSectionRows(
   return rows;
 }
 
+export interface HomeSectionGap {
+  after: HomeSectionId;
+  span: number;
+}
+
+export interface HomeSectionRow {
+  items: { id: HomeSectionId; span: number }[];
+  gap: HomeSectionGap | null;
+}
+
+/**
+ * Visible sections grouped into six-column rows together with any usable empty space at the end
+ * of a row. Both web and mobile layout editors use the same row and empty-slot rules.
+ */
+export function homeSectionGridRows(
+  ids: HomeSectionId[],
+  widths: HomeSectionWidths = {},
+): HomeSectionRow[] {
+  const spans = homeSectionSpans(ids, widths);
+  const gaps = homeSectionGaps(ids, spans);
+  return homeSectionRows(ids, widths).map((items) => {
+    const last = items.at(-1);
+    const gapSpan = last ? gaps.get(last.id) : undefined;
+    return {
+      items,
+      gap: last && gapSpan !== undefined ? { after: last.id, span: gapSpan } : null,
+    };
+  });
+}
+
+export type HomeDropTarget =
+  { kind: 'card'; id: HomeSectionId } | { kind: 'gap'; after: HomeSectionId; span: number };
+
+export interface HomeDropRect {
+  target: HomeDropTarget;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Whether `source` can be dropped into the empty space of `gapSpan` columns after `after`. */
+export function canDropHomeSectionInGap(
+  source: HomeSectionId,
+  after: HomeSectionId,
+  gapSpan: number,
+): boolean {
+  if (source === after || !Number.isFinite(gapSpan)) return false;
+  const compactSpan = homeSectionSpans([source], { [source]: 'third' })[0];
+  return compactSpan <= gapSpan;
+}
+
+/** Apply a card-to-card or card-to-empty-space drop without losing or duplicating sections. */
+export function dropHomeSection(
+  layout: HomeLayout,
+  source: HomeSectionId,
+  target: HomeDropTarget,
+): HomeLayout {
+  if (target.kind === 'gap') {
+    if (!canDropHomeSectionInGap(source, target.after, target.span)) return layout;
+    return fillHomeSectionGap(layout, source, target.after, target.span);
+  }
+  return moveHomeSection(layout, source, target.id);
+}
+
+/** Find the valid drop target containing a point in the grid's coordinates, or null. */
+export function findHomeDropTarget(
+  rects: readonly HomeDropRect[],
+  source: HomeSectionId,
+  x: number,
+  y: number,
+): HomeDropTarget | null {
+  for (const rect of rects) {
+    if (x < rect.x || x > rect.x + rect.width || y < rect.y || y > rect.y + rect.height) continue;
+    const { target } = rect;
+    if (target.kind === 'gap') {
+      return canDropHomeSectionInGap(source, target.after, target.span) ? target : null;
+    }
+    return target.id !== source ? target : null;
+  }
+  return null;
+}
+
 /** Moves a visible section one place earlier (-1) or later (1) among the visible sections. */
 export function stepHomeSection(
   layout: HomeLayout,

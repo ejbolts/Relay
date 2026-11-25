@@ -8,11 +8,23 @@ import { sessionToken } from './session';
 // goes stale. The cache keeps the most recent images only.
 const MAX_CACHED = 60;
 const loaded = new Map<string, Promise<string | null>>();
+/** Synchronous mirror of resolved images so remounting an Avatar never flashes initials. */
+const resolved = new Map<string, string>();
 
 function remember(url: string, promise: Promise<string | null>) {
   loaded.delete(url);
   loaded.set(url, promise);
-  while (loaded.size > MAX_CACHED) loaded.delete(loaded.keys().next().value!);
+  while (loaded.size > MAX_CACHED) {
+    const oldest = loaded.keys().next().value!;
+    loaded.delete(oldest);
+    resolved.delete(oldest);
+  }
+}
+
+/** Seeds a freshly uploaded image URL with its local preview URI so views show it at once. */
+export function rememberAuthorisedImage(url: string, uri: string) {
+  resolved.set(url, uri);
+  remember(url, Promise.resolve(uri));
 }
 
 /** Reads a signed-in image as a data URI, or null when it can't be read. */
@@ -52,16 +64,19 @@ export function loadAuthorisedImage(url: string): Promise<string | null> {
   remember(url, promise);
   // A failure is tried again next time rather than remembered.
   void promise.then((result) => {
-    if (!result) loaded.delete(url);
+    if (loaded.get(url) !== promise) return;
+    if (result) resolved.set(url, result);
+    else loaded.delete(url);
   });
   return promise;
 }
 
 /** The image at `url` as a data URI once it has loaded, else null. */
 export function useAuthorisedImage(url: string | null | undefined): string | null {
+  const cached = url ? (resolved.get(url) ?? null) : null;
   const [image, setImage] = useState<{ url: string; uri: string | null } | null>(null);
   useEffect(() => {
-    if (!url) return;
+    if (!url || resolved.has(url)) return;
     let cancelled = false;
     void loadAuthorisedImage(url).then((uri) => {
       if (!cancelled) setImage({ url, uri });
@@ -70,5 +85,7 @@ export function useAuthorisedImage(url: string | null | undefined): string | nul
       cancelled = true;
     };
   }, [url]);
-  return url && image?.url === url ? image.uri : null;
+  if (!url) return null;
+  if (cached) return cached;
+  return image?.url === url ? image.uri : null;
 }

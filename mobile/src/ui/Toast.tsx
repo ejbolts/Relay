@@ -79,6 +79,15 @@ export function toastAccount() {
 }
 
 /**
+ * The session key for a signed-in user, the same one `toastAccount()` gives once the hosts have
+ * caught up with that sign-in. For work started by the signed-in user's own code (an effect keyed
+ * on the user) that can run before the hosts record the new session.
+ */
+export function toastAccountFor(userId: string | number) {
+  return accountKey(`user:${userId}`);
+}
+
+/**
  * Whether `account` (from `toastAccount()`) is still the session; check before late writes. The
  * session number is read live, so this is false as soon as a session ends, before any screen
  * has re-rendered.
@@ -107,8 +116,15 @@ interface Host {
   show: (toast: Toast) => void;
   /** A longer time for a toast that is still showing (Android's accessibility timeout). */
   extend: (id: number, ms: number) => void;
+  /** A toast is on screen. */
+  showing: () => boolean;
 }
 const hosts: Host[] = [];
+
+/** A toast is on screen somewhere, so the logger's tips wait for it, as the web's do. */
+export function toastShowing() {
+  return hosts.some((host) => host.showing());
+}
 let nextId = 0;
 
 const VISIBLE_MS = 3200;
@@ -226,6 +242,7 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
         current.current = longer;
         setToast(longer);
       },
+      showing: () => current.current !== null,
     };
     hosts.push(host);
     return () => {

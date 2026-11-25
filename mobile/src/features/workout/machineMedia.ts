@@ -21,6 +21,8 @@ export function uploadMachinePhoto(
   file: MachinePhotoFile,
   caption: string,
   settings: MachineSetting[],
+  /** The session token to send with, when the caller binds the upload to its session. */
+  token?: string,
 ): Promise<MachinePhoto> {
   return uploadFile<MachinePhoto>(
     `/api/exercises/${encodeURIComponent(exerciseId)}/machine-photos`,
@@ -29,6 +31,7 @@ export function uploadMachinePhoto(
     {
       fields: { caption, machine_settings: JSON.stringify({ settings }) },
       failure: 'Relay could not save this photo.',
+      token,
     },
   );
 }

@@ -175,3 +175,8 @@ export function newerSession<T extends { id: string; status: SessionStatus }>(
 
 /** Processing that the server reports as already started counts as started. */
 export const ALREADY_PROCESSING_CODES = ['already_processing', 'already_complete'];
+
+/** The kicker above a session that has left the upload screen: a cancelled batch says so. */
+export function sessionKicker(status: SessionStatus): string {
+  return status === 'cancelled' ? 'Cancelled session' : 'Processing session';
+}

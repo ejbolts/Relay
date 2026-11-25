@@ -1,7 +1,15 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useEffect, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { reactionEmoji } from '../../../../frontend/src/friendFeedData';
 import {
   ADMIN_REQUEST_TEXT,
@@ -31,7 +39,7 @@ import type {
   SharingNotifications,
 } from '../../../../frontend/src/types';
 import { notificationWorkoutFocus } from '../../../../frontend/src/workoutFocusRequest';
-import { Button, errorMessage } from '../../ui/components';
+import { Button, errorMessage, IconButton } from '../../ui/components';
 import { Icon, type IconPair } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
 import { reviewRoutes, useBellNotices } from '../review';
@@ -53,8 +61,14 @@ import { requestWorkoutFocus } from './workoutFocus';
  * administrators, people waiting for a reset or their username, with a count of what's unread or
  * waiting for an answer.
  */
-export function NotificationsBell({ size = 36 }: { size?: number }) {
-  const { colors } = useTheme();
+export function NotificationsBell({
+  style,
+}: {
+  /** Ignored: the bell is the shared 40 pt header button. Kept so older callers still compile. */
+  size?: number;
+  /** Restyles the button, such as Home's header buttons. */
+  style?: StyleProp<ViewStyle>;
+}) {
   const query = useNotifications();
   const bell = useBellNotices();
   const [open, setOpen] = useState(false);
@@ -62,26 +76,13 @@ export function NotificationsBell({ size = 36 }: { size?: number }) {
   const badge = profileBadgeText(count);
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
+      <IconButton
+        icon="bell"
+        badge={badge}
         accessibilityLabel={notificationsLabel(count)}
-        hitSlop={6}
         onPress={() => setOpen(true)}
-        style={({ pressed }) => [
-          styles.round,
-          { width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surface2 },
-          pressed && { opacity: 0.6 },
-        ]}
-      >
-        <Icon name="bell" size={Math.round(size * 0.52)} color={colors.text} />
-        {badge && (
-          <View
-            style={[styles.badge, { backgroundColor: colors.danger, borderColor: colors.page }]}
-          >
-            <Text style={styles.badgeText}>{badge}</Text>
-          </View>
-        )}
-      </Pressable>
+        style={style}
+      />
       {open && <NotificationsSheet notices={bell} onClose={() => setOpen(false)} />}
     </>
   );
@@ -188,32 +189,41 @@ function NotificationsSheet({
           <Text style={[type.callout, { color: colors.secondary }]}>{NOTIFICATIONS_EMPTY}</Text>
         )
       ) : (
-        <View style={{ gap: 2 }}>
-          {visible.map((row) =>
-            isSocial(row) ? (
-              <NotificationRow
-                key={notificationKey(notificationReference(row))}
-                row={row}
-                fresh={fresh.has(notificationKey(notificationReference(row)))}
-                busy={friend.isPending}
-                onOpenPerson={openPerson}
-                onOpenWorkout={() => openWorkout(row)}
-                onRespond={respond}
-              />
-            ) : (
-              <AppNoticeRow
-                key={appRowKey(row)}
-                row={row}
-                releaseUnread={!!notices.rows.releaseUnread}
-                onOpen={() => openApp(row)}
-              />
-            ),
-          )}
+        <View style={styles.list}>
+          {visible.map((row, index) => (
+            <View
+              key={isSocial(row) ? notificationKey(notificationReference(row)) : appRowKey(row)}
+              style={
+                index > 0 && {
+                  borderTopWidth: StyleSheet.hairlineWidth,
+                  borderTopColor: colors.line,
+                }
+              }
+            >
+              {isSocial(row) ? (
+                <NotificationRow
+                  row={row}
+                  fresh={fresh.has(notificationKey(notificationReference(row)))}
+                  busy={friend.isPending}
+                  onOpenPerson={openPerson}
+                  onOpenWorkout={() => openWorkout(row)}
+                  onRespond={respond}
+                />
+              ) : (
+                <AppNoticeRow
+                  row={row}
+                  releaseUnread={!!notices.rows.releaseUnread}
+                  onOpen={() => openApp(row)}
+                />
+              )}
+            </View>
+          ))}
           {rows.length > shown && (
             <Button
               label="Show more"
               variant="secondary"
               onPress={() => setShown((current) => current + NOTIFICATIONS_PER_PAGE)}
+              style={{ marginTop: 12 }}
             />
           )}
         </View>
@@ -248,7 +258,7 @@ function AppNoticeRow({
   releaseUnread: boolean;
   onOpen: () => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const notice: {
     icon: IconPair;
     title: ReactNode;
@@ -297,15 +307,11 @@ function AppNoticeRow({
             } request`,
           };
   return (
-    <View
-      accessibilityHint={notice.isNew ? 'New' : undefined}
-      style={[
-        styles.row,
-        { borderRadius: radius.lg },
-        notice.isNew && { backgroundColor: colors.accentSoft },
-      ]}
-    >
-      <View style={[styles.noticeIcon, { backgroundColor: colors.surface2 }]}>
+    <View accessibilityHint={notice.isNew ? 'New' : undefined} style={styles.row}>
+      <View style={styles.gutter}>
+        {notice.isNew && <View style={[styles.unreadDot, { backgroundColor: colors.accent }]} />}
+      </View>
+      <View style={[styles.noticeIcon, { backgroundColor: colors.accentSoft }]}>
         <Icon name={notice.icon} size={18} color={colors.accentText} />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
@@ -314,15 +320,7 @@ function AppNoticeRow({
             {notice.title}
           </Text>
           {notice.isNew && (
-            <Text
-              style={[
-                type.caption,
-                styles.newPill,
-                { color: colors.onAccent, backgroundColor: colors.accent },
-              ]}
-            >
-              New
-            </Text>
+            <Text style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}>New</Text>
           )}
         </View>
         {!!notice.detail && (
@@ -351,11 +349,11 @@ function NotificationRow({
   onOpenWorkout: () => void;
   onRespond: (person: SharingConnection, action: 'accept' | 'decline') => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const person = row.item;
   const name = (
     <Text
-      style={{ fontWeight: '700' }}
+      style={{ color: colors.text, fontWeight: '700' }}
       onPress={() => onOpenPerson(person)}
       accessibilityRole="link"
     >
@@ -367,7 +365,7 @@ function NotificationRow({
   );
   const workout = row.kind === 'comment' || row.kind === 'reaction';
   const text = (
-    <Text style={[type.callout, { color: colors.text }]}>
+    <Text style={[type.footnote, styles.copy, { color: colors.secondary }]}>
       {name}
       {row.kind === 'request'
         ? ' sent you a friend request'
@@ -377,7 +375,7 @@ function NotificationRow({
             ? ' reacted to '
             : commentNoticeText(row.item.kind).verb}
       {workout && (
-        <Text style={{ color: colors.accentText, fontWeight: '600' }}>{row.item.workout_name}</Text>
+        <Text style={{ color: colors.text, fontWeight: '600' }}>{row.item.workout_name}</Text>
       )}
       {date}
     </Text>
@@ -397,20 +395,23 @@ function NotificationRow({
       row.item.reaction ? (
         <Text style={styles.emoji}>{reactionEmoji(row.item.reaction)}</Text>
       ) : (
-        <Icon name={socialIcons.reply} size={16} color={colors.secondary} />
+        <Icon name={socialIcons.reply} size={17} color={colors.muted} />
       )
     ) : row.kind === 'accepted' ? (
-      <Icon name={socialIcons.people} size={18} color={colors.secondary} />
+      <Icon name={socialIcons.people} size={18} color={colors.muted} />
     ) : null;
   const body = (
     <>
+      <View style={styles.gutter}>
+        {fresh && <View style={[styles.unreadDot, { backgroundColor: colors.accent }]} />}
+      </View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`View ${person.display_name}’s profile`}
         onPress={() => onOpenPerson(person)}
         hitSlop={4}
       >
-        <Avatar person={person} size={40} />
+        <Avatar person={person} size={36} />
       </Pressable>
       <View style={{ flex: 1, gap: 4 }}>
         {text}
@@ -440,11 +441,7 @@ function NotificationRow({
       {trailing}
     </>
   );
-  const rowStyle = [
-    styles.row,
-    { borderRadius: radius.lg, overflow: 'hidden' as const },
-    fresh && { backgroundColor: colors.accentSoft },
-  ];
+  const rowStyle = [styles.row, row.kind === 'request' && styles.requestRow];
   return workout ? (
     <Pressable
       accessibilityRole="button"
@@ -463,43 +460,31 @@ function NotificationRow({
 }
 
 const styles = StyleSheet.create({
-  round: { alignItems: 'center', justifyContent: 'center' },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -6,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    paddingHorizontal: 3,
+  problem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  list: { paddingBottom: 16 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+  },
+  requestRow: { alignItems: 'flex-start' },
+  gutter: {
+    width: 8,
+    minHeight: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  problem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-  },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  unreadDot: { width: 7, height: 7, borderRadius: 3.5 },
+  copy: { lineHeight: 19 },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 4 },
   emoji: { fontSize: 20 },
   noticeIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
   noticeTitle: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
-  newPill: {
-    fontWeight: '700',
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 6,
-    overflow: 'hidden',
-  },
 });

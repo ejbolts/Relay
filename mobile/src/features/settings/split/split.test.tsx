@@ -1,5 +1,5 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import type { ReactElement } from 'react';
 import { Alert, Platform } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -15,8 +15,20 @@ import type {
 import { localDate } from '../../../../../frontend/src/utils';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../../frontend/src/workoutTypes';
 import { apiGet, apiSend } from '../../../data/api';
+import { OFFLINE_MESSAGE } from '../../../data/offline';
 import { showMenu } from '../../../ui/prompts';
 import { showToast } from '../../../ui/Toast';
+import { coachHighlight } from '../../guides/GuideCoach';
+import {
+  activeSetupGuide,
+  exitSetupGuide,
+  resetSetupGuideForTests,
+  setupGuideTicket,
+  startSetupGuide,
+  updateSetupGuide,
+} from '../../guides/setupGuides';
+import { nextSessionEpoch } from '../../../session/sessionEpoch';
+import { resetTipsForTests, tipsFor } from '../../guides/tips';
 import { SplitEditorScreen } from './SplitEditorScreen';
 import { SplitLibraryScreen } from './SplitLibraryScreen';
 
@@ -25,6 +37,7 @@ let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useLocalSearchParams: () => mockParams,
+  useIsFocused: () => true,
   // Header buttons render in place, so tests can press them.
   Stack: {
     Screen: ({ options }: { options?: { headerRight?: () => ReactElement } }) =>
@@ -142,13 +155,19 @@ async function show(element: ReactElement) {
 }
 
 describe('the split library', () => {
-  it('leads with the active split and its week, and marks templates already saved', async () => {
+  it('leads with the active split and its week, collapses exercises by default, and marks saved templates', async () => {
     await show(<SplitLibraryScreen />);
     expect(
       await screen.findByRole('button', { name: 'Push / Pull / Legs, 4 days, active' }),
     ).toBeTruthy();
-    expect(screen.getByText('NEXT 7 DAYS')).toBeTruthy();
+    expect(screen.getByText('Next 7 days')).toBeTruthy();
     expect(screen.getByText('Change schedule')).toBeTruthy();
+    const toggle = screen.getByRole('button', { name: 'Exercises & sets' });
+    expect(toggle).toHaveProp('accessibilityState', { expanded: false });
+    expect(screen.queryByText('Bench press')).toBeNull();
+    await fireEvent.press(toggle);
+    expect(toggle).toHaveProp('accessibilityState', { expanded: true });
+    expect(screen.getAllByText('Bench press').length).toBeGreaterThan(0);
     const pplTemplate = screen.getByRole('button', {
       name: 'Push / Pull / Legs template, already in My splits',
     });
@@ -160,6 +179,37 @@ describe('the split library', () => {
     });
   });
 
+  it("opens at a friend's split just saved, as the web's View my splits", async () => {
+    mockParams = { open: upper.id };
+    await show(<SplitLibraryScreen />);
+    const card = await screen.findByRole('button', {
+      name: `${upper.name}, ${upper.days.length} days`,
+    });
+    expect(card).toHaveProp('accessibilityState', { expanded: true });
+    expect(screen.getByRole('button', { name: 'Push / Pull / Legs, 4 days, active' })).toHaveProp(
+      'accessibilityState',
+      { expanded: false },
+    );
+  });
+
+  it('says it is offline instead of spinning, then loads once back online', async () => {
+    onlineManager.setOnline(false);
+    try {
+      await show(<SplitLibraryScreen />);
+      expect(await screen.findByText(OFFLINE_MESSAGE)).toBeVisible();
+      expect(screen.queryByLabelText('Loading splits')).toBeNull();
+      expect(apiGet).not.toHaveBeenCalled();
+      // Retry while still offline keeps the offline state rather than a spinner.
+      await fireEvent.press(screen.getByRole('button', { name: 'Try again' }));
+      expect(screen.getByText(OFFLINE_MESSAGE)).toBeVisible();
+      await act(async () => onlineManager.setOnline(true));
+      expect(await screen.findByText('My splits')).toBeVisible();
+      expect(screen.queryByText(OFFLINE_MESSAGE)).toBeNull();
+    } finally {
+      onlineManager.setOnline(true);
+    }
+  });
+
   it('shows the same active split in both preview views', async () => {
     await show(<SplitLibraryScreen />);
     await fireEvent.press(await screen.findByRole('button', { name: 'Show two-month calendar' }));
@@ -167,7 +217,7 @@ describe('the split library', () => {
       expect(screen.getByRole('header', { name: month.title })).toBeVisible();
     }
     await fireEvent.press(screen.getByRole('button', { name: 'Show next 7 days' }));
-    expect(screen.getByText('NEXT 7 DAYS')).toBeVisible();
+    expect(screen.getByText('Next 7 days')).toBeVisible();
     await fireEvent.press(screen.getByRole('button', { name: 'Splits guide' }));
     expect(screen.getByRole('header', { name: 'Start from a template' })).toBeVisible();
     await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
@@ -331,5 +381,233 @@ describe('the split editor', () => {
     });
     await fireEvent.press(chest);
     expect(screen.getAllByText('+3 sets')).toHaveLength(3);
+  });
+});
+
+describe('the splits setup guide', () => {
+  const withoutActiveSplit = () => {
+    const answer = jest.mocked(apiGet).getMockImplementation()!;
+    jest
+      .mocked(apiGet)
+      .mockImplementation(async (path: string) =>
+        path.startsWith('/api/training-split') ? { ...split, enabled: false } : answer(path),
+      );
+  };
+  const chooseReps = () =>
+    jest
+      .mocked(showMenu)
+      .mock.calls.at(-1)![1]
+      .find((item) => item.label === '8–12')!
+      .onPress();
+  beforeEach(() => {
+    resetSetupGuideForTests();
+    resetTipsForTests();
+  });
+
+  it('opens on the templates without an active split, and on Edit split with one', async () => {
+    startSetupGuide('split', 'u1', []);
+    await show(<SplitLibraryScreen />);
+    expect(await screen.findByText('Open your split')).toBeTruthy();
+    // The active split already plans exercises, so the guide skips planning days.
+    expect(screen.getByText('Setup guide · 1 of 3')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.edit');
+    await act(async () => client.clear());
+
+    withoutActiveSplit();
+    await show(<SplitLibraryScreen />);
+    expect(await screen.findByText('Start from a template')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 1 of 6')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.templates');
+  });
+
+  it('builds a split from a template, saves it as new and makes that split active', async () => {
+    withoutActiveSplit();
+    const created: Routine = {
+      id: 'created',
+      name: 'Upper / Lower',
+      shared: false,
+      days: [day('upper', 3), day('lower', 0), day(null)],
+    };
+    startSetupGuide('split', 'u1', []);
+    await show(<SplitLibraryScreen />);
+    expect(await screen.findByText('Start from a template')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Upper / Lower template' }));
+    expect(mockRouter.push).toHaveBeenCalledWith({
+      pathname: '/split/edit',
+      params: { template: 'upper-lower' },
+    });
+    await act(async () => client.clear());
+
+    mockParams = { template: 'upper-lower' };
+    await show(<SplitEditorScreen />);
+    expect(await screen.findByText('Plan your days')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 2 of 6')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.days');
+    // Next waits until a day plans an exercise.
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await fireEvent.press((await screen.findAllByRole('button', { name: 'Add exercise' }))[0]);
+    await fireEvent.press(
+      await screen.findByRole('checkbox', { name: 'Bench press' }, { timeout: 4000 }),
+    );
+    await fireEvent.press(screen.getByRole('button', { name: 'Add 1' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Give an exercise a rep range')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.reps');
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Rep range for Bench press on day 1: Any' }),
+    );
+    await act(async () => chooseReps());
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Tap Save. Then you’ll make it your active split.')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.save');
+    jest.mocked(apiSend).mockImplementationOnce(async (_path, _method, body) => ({
+      ...(body as object),
+      id: 'created',
+    }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save split' }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    const [path, method, body] = jest.mocked(apiSend).mock.calls[0];
+    expect([path, method]).toEqual(['/api/routines', 'POST']);
+    expect((body as Routine).days[0].movements[0].rep_range).toEqual({ min: 8, max: 12 });
+    // The new split still needs starting, so the guide moves on to Use split for the returned id.
+    expect(activeSetupGuide()?.useRoutineId).toBe('created');
+    await act(async () => client.clear());
+
+    const answer = jest.mocked(apiGet).getMockImplementation()!;
+    jest
+      .mocked(apiGet)
+      .mockImplementation(async (path: string) =>
+        path.split('?')[0] === '/api/routines' ? [created, ppl, upper] : answer(path),
+      );
+    jest.mocked(apiSend).mockClear();
+    await show(<SplitLibraryScreen />);
+    expect(await screen.findByText('Make it your split')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 5 of 6')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.use');
+    await fireEvent.press(
+      within(screen.getByLabelText('Upper / Lower')).getByRole('button', { name: 'Use split' }),
+    );
+    expect(await screen.findByText('Pick a start date')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 6 of 6')).toBeTruthy();
+    expect(coachHighlight()).toBe('split.confirm');
+    await fireEvent.press(screen.getByRole('button', { name: 'Use this split' }));
+    await waitFor(() => expect(activeSetupGuide()).toBeNull());
+    expect(jest.mocked(apiSend).mock.calls[0][0]).toMatch(/^\/api\/routines\/created\/use\?/);
+    expect(tipsFor('u1').get().seen).toMatchObject({ split: 'learned', repRange: 'learned' });
+  });
+
+  it('adds a rep range to an inactive split, then moves on to Use split for it', async () => {
+    withoutActiveSplit();
+    startSetupGuide('split', 'u1', []);
+    mockParams = { id: 'ul' };
+    await show(<SplitEditorScreen />);
+    expect(await screen.findByText('Plan your days')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 2 of 6')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Rep range for Bench press on day 1: Any' }),
+    );
+    await act(async () => chooseReps());
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save split' }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(jest.mocked(apiSend).mock.calls[0].slice(0, 2)).toEqual(['/api/routines/ul', 'PUT']);
+    expect(activeSetupGuide()?.useRoutineId).toBe('ul');
+  });
+
+  it('a late split save moves on only its own guide, in this session or another account', async () => {
+    withoutActiveSplit();
+    for (const replace of ['same session', 'other account'] as const) {
+      resetSetupGuideForTests();
+      let answer!: (value: unknown) => void;
+      jest.mocked(apiSend).mockReturnValueOnce(new Promise((done) => (answer = done)) as never);
+      startSetupGuide('split', 'u1', []);
+      mockParams = { id: 'ul' };
+      await show(<SplitEditorScreen />);
+      await fireEvent.press(await screen.findByRole('button', { name: 'Next' }));
+      await fireEvent.press(
+        screen.getByRole('button', { name: 'Rep range for Bench press on day 1: Any' }),
+      );
+      await act(async () => chooseReps());
+      await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+      await fireEvent.press(screen.getByRole('button', { name: 'Save split' }));
+      if (replace === 'other account') nextSessionEpoch();
+      else exitSetupGuide('split');
+      startSetupGuide('split', replace === 'other account' ? 'u2' : 'u1', []);
+      const replacement = activeSetupGuide();
+      await act(async () => answer({ ...upper }));
+      await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+      expect(activeSetupGuide()).toBe(replacement);
+      expect(activeSetupGuide()?.useRoutineId).toBeUndefined();
+      await act(async () => client.clear());
+      mockRouter.back.mockClear();
+    }
+  });
+
+  it('a late Use split finishes only its own guide, in this session or another account', async () => {
+    withoutActiveSplit();
+    for (const replace of ['same session', 'other account'] as const) {
+      resetSetupGuideForTests();
+      resetTipsForTests();
+      let answer!: (value: unknown) => void;
+      jest.mocked(apiSend).mockReturnValueOnce(new Promise((done) => (answer = done)) as never);
+      startSetupGuide('split', 'u1', []);
+      updateSetupGuide(setupGuideTicket('split'), { useRoutineId: 'ul' });
+      await show(<SplitLibraryScreen />);
+      await fireEvent.press(
+        within(await screen.findByLabelText('Upper day')).getByRole('button', {
+          name: 'Use split',
+        }),
+      );
+      await fireEvent.press(await screen.findByRole('button', { name: 'Use this split' }));
+      if (replace === 'other account') nextSessionEpoch();
+      else exitSetupGuide('split');
+      startSetupGuide('split', replace === 'other account' ? 'u2' : 'u1', []);
+      const replacement = activeSetupGuide();
+      await act(async () => answer(split));
+      expect(activeSetupGuide()).toBe(replacement);
+      expect(tipsFor('u1').get().seen.split).toBeUndefined();
+      expect(tipsFor('u2').get().seen.split).toBeUndefined();
+      await act(async () => client.clear());
+    }
+  });
+
+  it('adds a rep range to the active split, and saving it finishes the guide', async () => {
+    startSetupGuide('split', 'u1', []);
+    mockParams = { id: 'ppl' };
+    await show(<SplitEditorScreen />);
+    expect(await screen.findByText('Give an exercise a rep range')).toBeTruthy();
+    expect(screen.getByText('Setup guide · 2 of 3')).toBeTruthy();
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'Rep range for Bench press on day 1: Any' }),
+    );
+    await act(async () => chooseReps());
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(
+      screen.getByText('Tap Save. Your next workout shows the target as you log.'),
+    ).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('Give an exercise a rep range')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save split' }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(activeSetupGuide()).toBeNull();
+    expect(tipsFor('u1').get().seen).toMatchObject({ split: 'learned', repRange: 'learned' });
+  });
+
+  it('shows no coaching outside a guide, and Skip guide leaves it without marking it', async () => {
+    mockParams = { id: 'ppl' };
+    await show(<SplitEditorScreen />);
+    expect(await screen.findByDisplayValue('Push / Pull / Legs')).toBeTruthy();
+    expect(screen.queryByText(/Setup guide/)).toBeNull();
+    await act(async () => client.clear());
+
+    startSetupGuide('split', 'u1', []);
+    await show(<SplitLibraryScreen />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Skip guide' }));
+    expect(activeSetupGuide()).toBeNull();
+    expect(screen.queryByText(/Setup guide/)).toBeNull();
+    expect(tipsFor('u1').get().seen.split).toBeUndefined();
   });
 });

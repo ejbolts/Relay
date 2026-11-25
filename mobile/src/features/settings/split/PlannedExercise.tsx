@@ -15,6 +15,7 @@ import type { RepRange, RoutineMovement } from '../../../../../frontend/src/type
 import { Icon } from '../../../ui/Icon';
 import { showMenu } from '../../../ui/prompts';
 import { useTheme } from '../../../ui/theme';
+import { CoachTarget } from '../../guides/GuideCoach';
 import { StepButton } from './SplitParts';
 
 export function PlannedExercise({
@@ -22,6 +23,7 @@ export function PlannedExercise({
   muscles,
   target,
   disabled,
+  coachReps = false,
   onChange,
   onReplace,
 }: {
@@ -29,6 +31,8 @@ export function PlannedExercise({
   muscles: string;
   target: string;
   disabled: boolean;
+  /** The splits guide's rep range step points at this exercise's Reps. */
+  coachReps?: boolean;
   onChange: (movement: RoutineMovement | null) => void;
   onReplace: () => void;
 }) {
@@ -81,19 +85,21 @@ export function PlannedExercise({
           )}
         </Pressable>
         {!cardio && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Rep range for ${name} on ${target}: ${movement.rep_range ? repRangeLabel(movement.rep_range) : 'Any'}`}
-            disabled={disabled}
-            hitSlop={6}
-            onPress={chooseReps}
-            style={styles.reps}
-          >
-            <Text style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}>
-              Reps {movement.rep_range ? repRangeLabel(movement.rep_range) : 'Any'}
-            </Text>
-            <Icon name="chevronDown" size={10} color={colors.accentText} />
-          </Pressable>
+          <CoachTarget id={coachReps && 'split.reps'} radius={8} style={styles.repsTarget}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Rep range for ${name} on ${target}: ${movement.rep_range ? repRangeLabel(movement.rep_range) : 'Any'}`}
+              disabled={disabled}
+              hitSlop={6}
+              onPress={chooseReps}
+              style={styles.reps}
+            >
+              <Text style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}>
+                Reps {movement.rep_range ? repRangeLabel(movement.rep_range) : 'Any'}
+              </Text>
+              <Icon name="chevronDown" size={10} color={colors.accentText} />
+            </Pressable>
+          </CoachTarget>
         )}
       </View>
       <View style={styles.stepper}>
@@ -136,6 +142,7 @@ export function PlannedExercise({
 
 const styles = StyleSheet.create({
   planned: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12 },
+  repsTarget: { alignSelf: 'flex-start' },
   reps: {
     flexDirection: 'row',
     alignItems: 'center',

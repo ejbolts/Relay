@@ -1,21 +1,13 @@
 import { useEffect } from 'react';
 import { useUser } from '../../session/SessionProvider';
 import { openLaunchPrompt } from '../review/noticeMemory';
-import { AppTour } from './AppTour';
-import {
-  appTourWaiting,
-  closeAppTour,
-  finishAppTour,
-  showAppTourStep,
-  startAppTour,
-  useAppTour,
-} from './tourProgress';
+import { appTourWaiting, startAppTour, useAppTour } from './tourProgress';
 import { HomeTipsButton } from './HomeTipsButton';
 import { useTipReminders } from './tips';
 
 /**
- * Home's guides, mounted with one line in Home's header: the tips bulb and the quick tour for a
- * new account (or when Settings replays it).
+ * Home's guides, mounted with one line in Home's header: the tips bulb, and starting the quick
+ * tour for a new account. The tour itself shows from `AppTourHost`, above the tabs.
  */
 export function HomeGuides() {
   const user = useUser();
@@ -32,16 +24,6 @@ export function HomeGuides() {
   return (
     <>
       <HomeTipsButton />
-      {tour && (
-        <AppTour
-          index={tour.index}
-          onStep={(index) => showAppTourStep(user.id, index)}
-          onClose={() => {
-            finishAppTour(user.id);
-            closeAppTour(user.id);
-          }}
-        />
-      )}
     </>
   );
 }

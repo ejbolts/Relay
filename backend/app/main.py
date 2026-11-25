@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import logging
-from contextlib import asynccontextmanager
+from contextlib import AsyncExitStack, asynccontextmanager
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
@@ -28,6 +28,7 @@ from .active_workouts import (
     snapshot,
 )
 from .admin import admin_router
+from .app_links import router as app_links_router
 from .app_notices import router as app_notices_router
 from .auth import (
     CsrfOriginMiddleware,
@@ -40,6 +41,8 @@ from .client_versions import ClientVersion, ClientVersionGateMiddleware, normali
 from .config import Settings, get_settings
 from .database import Base, SessionLocal, engine, get_db
 from .errors import api_error
+from .expo_delivery import expo_dispatcher
+from .expo_push import expo_push_router
 from .feedback import admin_feedback_router, feedback_router
 from .frontend import FrontendFiles
 from .home_layout import router as home_layout_router
@@ -87,6 +90,7 @@ from .storage import (
     remove_session_files,
     stream_upload_to_disk,
 )
+from .tip_state import router as tip_state_router
 from .tracker import router as tracker_router
 from .tracker import seed_default_exercises, sync_all_workout_cardio_sessions
 from .training_blocks import router as training_blocks_router
@@ -94,7 +98,12 @@ from .training_metrics import rebuild_personal_records
 from .username_reminder_requests import admin_username_request_router, username_request_router
 from .weight_mapping import router as weight_mapping_router
 from .workout_type_exercises import router as workout_type_exercises_router
-from .youtube_connections import OAuthAccessLogFilter, YouTubeConnectionError, require_connection
+from .youtube_connections import (
+    OAuthAccessLogFilter,
+    OAuthStateSweeper,
+    YouTubeConnectionError,
+    require_connection,
+)
 from .youtube_connections import router as youtube_router
 
 logging.basicConfig(
@@ -115,12 +124,24 @@ def load_session(db: Session, user_id: str, session_id: str) -> WorkoutSession:
     return session
 
 
+ACCEPTING_UPLOADS = (SessionStatus.DRAFT, SessionStatus.UPLOADING, SessionStatus.UPLOAD_FAILED)
+
+
 def can_accept_uploads(session: WorkoutSession) -> bool:
-    return session.status in {
-        SessionStatus.DRAFT,
-        SessionStatus.UPLOADING,
-        SessionStatus.UPLOAD_FAILED,
-    }
+    return session.status in ACCEPTING_UPLOADS
+
+
+def move_if_accepting(db: Session, session_id: str, status: SessionStatus) -> bool:
+    """Moves the session to `status` only while it still accepts uploads, as one conditional
+    write. A clip streams for a long time after its session was checked; if the session was
+    cancelled or deleted meanwhile, nothing changes and the caller refuses the clip."""
+    result = db.execute(
+        update(WorkoutSession)
+        .where(WorkoutSession.id == session_id, WorkoutSession.status.in_(ACCEPTING_UPLOADS))
+        .values(status=status)
+        .execution_options(synchronize_session=False)
+    )
+    return result.rowcount == 1
 
 
 def check_youtube_connection(db: Session, settings: Settings, session: WorkoutSession) -> None:
@@ -169,17 +190,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         processor = SessionProcessor(SessionLocal, settings)
         rest_timer_notifications = RestTimerNotificationScheduler(SessionLocal, settings)
         workout_reminders = ActiveWorkoutReminderScheduler(SessionLocal, settings)
+        # Expired YouTube connection attempts, with any Google credentials an abandoned one holds.
+        oauth_states = OAuthStateSweeper(SessionLocal)
         app.state.workout_reminders = workout_reminders
-        workout_reminders.start()
         app.state.processor = processor
         app.state.rest_timer_notifications = rest_timer_notifications
-        await processor.start()
-        try:
+        async with AsyncExitStack() as cleanup:
+            # Each service's stop is registered before it starts, so a failed or partial startup
+            # still stops whatever is running. They unwind in reverse, each even if an earlier
+            # stop fails or is cancelled: the alert producers first, then the sweeper, and the
+            # native alert workers last, so they outlive anything that could still queue an alert.
+            cleanup.callback(expo_dispatcher.stop)
+            expo_dispatcher.start()
+            cleanup.push_async_callback(oauth_states.stop)
+            oauth_states.start()
+            cleanup.push_async_callback(processor.stop)
+            cleanup.push_async_callback(rest_timer_notifications.stop)
+            cleanup.push_async_callback(workout_reminders.stop)
+            workout_reminders.start()
+            await processor.start()
             yield
-        finally:
-            await workout_reminders.stop()
-            await rest_timer_notifications.stop()
-            await processor.stop()
 
     # The interactive docs describe every endpoint, so a public server keeps them off by default.
     docs = settings.api_docs
@@ -492,15 +522,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 settings=settings,
             )
         except UploadValidationError as error:
-            session.status = SessionStatus.UPLOAD_FAILED
+            # Marks the batch failed unless it was cancelled or deleted while the clip streamed.
+            move_if_accepting(db, session_id, SessionStatus.UPLOAD_FAILED)
             db.commit()
             raise api_error(400, error.code, error.message) from error
 
         if (int(existing_bytes or 0) + stored.file_size) > settings.max_session_size_bytes:
             stored.path.unlink(missing_ok=True)
-            session.status = SessionStatus.UPLOAD_FAILED
+            move_if_accepting(db, session_id, SessionStatus.UPLOAD_FAILED)
             db.commit()
             raise api_error(413, "session_too_large", "This upload exceeds the session size limit.")
+
+        # The session was checked before the clip streamed. Record the clip only if it still
+        # accepts uploads: a cancel or delete that landed meanwhile wins, and the file goes.
+        if not move_if_accepting(db, session_id, SessionStatus.UPLOADING):
+            db.rollback()
+            stored.path.unlink(missing_ok=True)
+            if db.scalar(select(WorkoutSession.id).where(WorkoutSession.id == session_id)) is None:
+                remove_session_files(session_id, settings)
+            raise api_error(
+                409, "uploads_not_allowed", "This session is no longer accepting uploads."
+            )
 
         clip = Clip(
             client_clip_id=client_clip_id,
@@ -526,7 +568,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 )
                 or 0
             )
-            session.status = SessionStatus.UPLOADING
             db.commit()
             db.refresh(clip)
             return clip
@@ -724,6 +765,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(sharing_router)
     app.include_router(presence_router)
     app.include_router(protected)
+    app.include_router(expo_push_router)
     app.include_router(video)
     app.include_router(tracker_router)
     app.include_router(training_blocks_router)
@@ -731,10 +773,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(account_archive_router)
     app.include_router(workout_type_exercises_router)
     app.include_router(home_layout_router)
+    app.include_router(tip_state_router)
     app.include_router(app_notices_router)
     app.include_router(machine_settings_router)
     app.include_router(weight_mapping_router)
     app.include_router(youtube_router)
+    app.include_router(app_links_router)
 
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if frontend_dist.is_dir():

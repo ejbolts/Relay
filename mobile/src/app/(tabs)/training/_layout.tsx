@@ -2,6 +2,9 @@ import { Stack } from 'expo-router';
 import { headerOptions } from '../../../ui/navigation';
 import { useTheme } from '../../../ui/theme';
 
+/** Keeps Training's root under screens pushed from outside the tab (guides, Home, Social). */
+export const unstable_settings = { anchor: 'index' };
+
 /** Training's own stack, so an exercise or a session opens on top of the tab. */
 export default function TrainingLayout() {
   const { colors } = useTheme();

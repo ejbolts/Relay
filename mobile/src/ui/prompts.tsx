@@ -6,6 +6,7 @@ import {
   Modal,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -42,6 +43,15 @@ interface TextRequest {
 type Request = MenuRequest | TextRequest;
 type Host = (request: Request | null) => void;
 const hosts: Host[] = [];
+/** iOS's own action sheet or text prompt is up (they answer through a callback). */
+let nativeShowing = false;
+/** The prompt hosts whose menu sheet or text dialog is up (several hosts can be mounted). */
+const showingHosts = new Set<Host>();
+
+/** A menu or text prompt is on screen, so the logger's tips wait for it, as the web's do. */
+export function promptShowing() {
+  return nativeShowing || showingHosts.size > 0;
+}
 
 /** A list of actions, with Cancel. */
 export function showMenu(title: string | undefined, options: MenuOption[]) {
@@ -54,8 +64,12 @@ export function showMenu(title: string | undefined, options: MenuOption[]) {
         cancelButtonIndex: options.length,
         destructiveButtonIndex: destructive,
       },
-      (index) => options[index]?.onPress(),
+      (index) => {
+        nativeShowing = false;
+        options[index]?.onPress();
+      },
     );
+    nativeShowing = true;
     return;
   }
   hosts.at(-1)?.({ kind: 'menu', title, options });
@@ -68,15 +82,25 @@ export function promptText(request: Omit<TextRequest, 'kind'>) {
       request.title,
       undefined,
       [
-        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Cancel',
+          style: 'cancel',
+          onPress: () => {
+            nativeShowing = false;
+          },
+        },
         {
           text: request.submitLabel,
-          onPress: (value?: string) => request.onSubmit(value ?? ''),
+          onPress: (value?: string) => {
+            nativeShowing = false;
+            request.onSubmit(value ?? '');
+          },
         },
       ],
       'plain-text',
       request.value,
     );
+    nativeShowing = true;
     return;
   }
   hosts.at(-1)?.({ kind: 'text', ...request });
@@ -91,6 +115,13 @@ export function PromptHost() {
       hosts.splice(hosts.indexOf(host), 1);
     };
   }, []);
+  useEffect(() => {
+    if (request) showingHosts.add(setRequest);
+    else showingHosts.delete(setRequest);
+    return () => {
+      showingHosts.delete(setRequest);
+    };
+  }, [request]);
   const close = () => setRequest(null);
   return (
     <Modal
@@ -121,7 +152,8 @@ function MenuSheet({ request, onClose }: { request: MenuRequest; onClose: () => 
       <View
         style={[
           styles.sheet,
-          { backgroundColor: colors.surface, paddingBottom: insets.bottom + 8 },
+          // Bounded, so a long data-driven menu scrolls instead of running off the screen.
+          { backgroundColor: colors.surface, paddingBottom: insets.bottom + 8, maxHeight: '85%' },
         ]}
       >
         <View style={[styles.grabber, { backgroundColor: colors.lineStrong }]} />
@@ -130,24 +162,33 @@ function MenuSheet({ request, onClose }: { request: MenuRequest; onClose: () => 
             {request.title}
           </Text>
         )}
-        {request.options.map((option) => (
-          <Pressable
-            key={option.label}
-            accessibilityRole="button"
-            onPress={() => {
-              onClose();
-              option.onPress();
-            }}
-            style={({ pressed }) => [
-              styles.menuRow,
-              pressed && { backgroundColor: colors.surface2 },
-            ]}
-          >
-            <Text style={[type.body, { color: option.destructive ? colors.danger : colors.text }]}>
-              {option.label}
-            </Text>
-          </Pressable>
-        ))}
+        <ScrollView
+          style={styles.menuOptions}
+          accessibilityLabel={request.title}
+          bounces={false}
+          showsVerticalScrollIndicator
+        >
+          {request.options.map((option) => (
+            <Pressable
+              key={option.label}
+              accessibilityRole="button"
+              onPress={() => {
+                onClose();
+                option.onPress();
+              }}
+              style={({ pressed }) => [
+                styles.menuRow,
+                pressed && { backgroundColor: colors.surface2 },
+              ]}
+            >
+              <Text
+                style={[type.body, { color: option.destructive ? colors.danger : colors.text }]}
+              >
+                {option.label}
+              </Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
     </View>
   );
@@ -223,6 +264,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   menuTitle: { paddingHorizontal: 20, paddingVertical: 8 },
+  menuOptions: { flexGrow: 0, flexShrink: 1 },
   menuRow: { paddingHorizontal: 20, paddingVertical: 15 },
   dialog: { padding: 20, gap: 14 },
   input: { paddingHorizontal: 12, paddingVertical: 10 },

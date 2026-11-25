@@ -60,7 +60,7 @@ export default function TabsLayout() {
       </NativeTabs.Trigger>
       <NativeTabs.Trigger name="body">
         <NativeTabs.Trigger.Label>Body</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="figure.stand" md="accessibility_new" />
+        <NativeTabs.Trigger.Icon sf="scalemass" md="monitor_weight" />
       </NativeTabs.Trigger>
     </NativeTabs>
   );

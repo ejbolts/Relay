@@ -1,6 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
-import * as Haptics from 'expo-haptics';
 import * as Linking from 'expo-linking';
 import { useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Share, StyleSheet, Text, View } from 'react-native';
@@ -11,10 +10,11 @@ import {
 import { apiOrigin } from '../../data/api';
 import { useUser } from '../../session/SessionProvider';
 import { Button } from '../../ui/components';
+import { Segmented } from '../../ui/controls';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
-import { Segmented } from '../training/parts';
 import { Avatar } from './Avatar';
 import { socialIcons } from './icons';
 import { QrCode } from './QrCode';
@@ -106,7 +106,16 @@ export function FriendQrSheet({
         </View>
       ) : (
         <View style={{ gap: 16 }}>
-          <View style={[styles.card, { backgroundColor: '#fff', borderRadius: radius.card }]}>
+          <View
+            style={[
+              styles.card,
+              {
+                backgroundColor: '#fff',
+                borderColor: colors.line,
+                borderRadius: radius.card,
+              },
+            ]}
+          >
             <View style={styles.code}>
               {shareable === 'shared' ? (
                 <QrCode
@@ -120,7 +129,7 @@ export function FriendQrSheet({
             </View>
             <View style={styles.person}>
               <Avatar person={user} size={40} />
-              <View style={{ flex: 1 }}>
+              <View style={{ flexShrink: 1 }}>
                 <Text style={[type.headline, { color: '#14181c' }]} numberOfLines={1}>
                   {user.display_name}
                 </Text>
@@ -134,6 +143,7 @@ export function FriendQrSheet({
             label="Share link"
             icon={socialIcons.share}
             variant="secondary"
+            block
             disabled={shareable !== 'shared'}
             onPress={() => void share()}
           />
@@ -159,14 +169,14 @@ function QrScanner({ userId, onScanned }: { userId: string; onScanned: (id: stri
     const next: Notice = !id ? 'not-friend-code' : id === userId ? 'own-code' : null;
     if (id && !next) {
       done.current = true;
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       onScanned(id);
       return;
     }
     // The camera reports the same code many times a second; say so once.
     if (lastNotice.current === data) return;
     lastNotice.current = data;
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+    haptics.warning();
     setNotice(next);
   }
 
@@ -219,9 +229,9 @@ function QrScanner({ userId, onScanned }: { userId: string; onScanned: (id: stri
 
 const styles = StyleSheet.create({
   private: { alignItems: 'center', gap: 14, paddingVertical: 24 },
-  card: { padding: 20, gap: 16, alignItems: 'center' },
+  card: { padding: 20, gap: 16, alignItems: 'center', borderWidth: 1 },
   code: { width: 232, height: 232, alignItems: 'center', justifyContent: 'center' },
-  person: { flexDirection: 'row', alignItems: 'center', gap: 12, alignSelf: 'stretch' },
+  person: { flexDirection: 'row', alignItems: 'center', gap: 12, maxWidth: '100%' },
   frame: { aspectRatio: 1, width: '100%' },
   problem: { alignItems: 'center', justifyContent: 'center', gap: 14, padding: 24 },
   guide: {
