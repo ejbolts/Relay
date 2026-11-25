@@ -13,6 +13,7 @@ import {
 } from '../../../../frontend/src/muscleGoalEditing';
 import { setCredits } from '../../../../frontend/src/muscleSetRows';
 import type { MuscleSetGoals } from '../../../../frontend/src/muscleSetGoals';
+import { isPendingWorkoutId } from '../../../../frontend/src/pendingWorkoutPreview';
 import { shortDate } from '../../../../frontend/src/trainingSummary';
 import { Button, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
@@ -36,6 +37,8 @@ export function MuscleContributionSheet({
   goal,
   defaultGoal,
   goals,
+  liveWorkoutId = null,
+  onOpenLive,
   onClose,
 }: {
   muscle: Muscle | null;
@@ -44,6 +47,9 @@ export function MuscleContributionSheet({
   goal: number;
   defaultGoal: number;
   goals: MuscleSetGoals | undefined;
+  /** The workout in progress's contribution id; its row opens the logger, as on the web. */
+  liveWorkoutId?: string | null;
+  onOpenLive?: () => void;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -65,9 +71,17 @@ export function MuscleContributionSheet({
           goal={goal}
           defaultGoal={defaultGoal}
           goals={goals}
-          onOpenWorkout={(id) =>
-            closeThen(() => router.push({ pathname: '/training/session/[id]', params: { id } }))
-          }
+          onOpenWorkout={(id) => {
+            if (id === liveWorkoutId) closeThen(() => onOpenLive?.());
+            else if (isPendingWorkoutId(id)) showToast('This workout is waiting to sync.');
+            else
+              closeThen(() =>
+                router.push(
+                  { pathname: '/training/session/[id]', params: { id } },
+                  { withAnchor: true },
+                ),
+              );
+          }}
         />
       )}
     </HomeSheet>

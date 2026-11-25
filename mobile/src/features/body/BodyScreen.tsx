@@ -193,6 +193,7 @@ export function BodyScreen() {
         refreshing={refreshing}
         onRefresh={() => void refresh()}
       >
+        <CheckInSyncCard />
         {measurementsQuery.isPending ? (
           <Loading label="Loading body check-ins" />
         ) : !measurementsQuery.data ? (
@@ -202,7 +203,6 @@ export function BodyScreen() {
           />
         ) : (
           <>
-            <CheckInSyncCard />
             <MaintenanceTip
               goals={goals}
               latest={latest}

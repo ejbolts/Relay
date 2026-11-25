@@ -26,6 +26,7 @@ export default function SettingsLayout() {
       <Stack.Screen name="delete-account" options={{ title: 'Delete account' }} />
       <Stack.Screen name="feedback" options={{ title: 'Send feedback' }} />
       <Stack.Screen name="tips" options={{ title: 'Tips' }} />
+      <Stack.Screen name="youtube" options={{ title: 'YouTube' }} />
       {/* B4 (guides): the app guide and setup guides. */}
       <Stack.Screen name="guides" options={{ title: 'Guides' }} />
     </Stack>

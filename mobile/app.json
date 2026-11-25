@@ -19,6 +19,7 @@
       "expo-font",
       "expo-asset",
       "expo-sharing",
+      "expo-web-browser",
       "expo-notifications",
       "expo-video",
       [
@@ -36,7 +37,8 @@
           "cameraPermission": "Relay uses the camera to take your profile picture and workout photos.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "./modules/relay-live-activity/app.plugin.js"
     ]
   }
 }

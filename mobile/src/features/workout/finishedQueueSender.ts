@@ -22,6 +22,11 @@ export interface QueueStatus {
   conflicts: string[];
   /** The server needs a newer app before it accepts these saves. */
   outdated: boolean;
+  /**
+   * Saves the server acknowledged in this run, by queue key, even if storage could not drop
+   * them: they count as saved, not waiting.
+   */
+  sent?: string[];
 }
 
 export interface SenderDependencies {
@@ -91,6 +96,7 @@ export class FinishedQueueSender {
       refusals: { ...this.refusals },
       conflicts: [...this.conflicts],
       outdated: this.outdated,
+      sent: [...this.sent],
     };
   }
 

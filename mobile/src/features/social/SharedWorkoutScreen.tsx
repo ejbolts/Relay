@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+import { Stack, useRouter } from 'expo-router';
 import { HeaderHeightContext } from 'expo-router/react-navigation';
 import { useContext, useRef, type ComponentRef } from 'react';
 import {
@@ -25,6 +25,7 @@ import { Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/co
 import { Icon } from '../../ui/Icon';
 import { pushedScreenOptions } from '../../ui/navigation';
 import { useTheme } from '../../ui/theme';
+import { machineWorkoutsRoute } from '../training/MachinePhotos';
 import { WorkoutDetails } from '../training/WorkoutCard';
 import { Avatar } from './Avatar';
 import { CommentComposer, CommentList, useCommentThread } from './Comments';
@@ -56,6 +57,7 @@ export function SharedWorkoutScreen({
   const { colors, space, type } = useTheme();
   const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const insets = useSafeAreaInsets();
+  const router = useRouter();
   const nav = useSocialNavigation();
   const unit = useWeightUnit();
   const query = useSharedWorkout(workoutId, memberId, date);
@@ -186,6 +188,11 @@ export function SharedWorkoutScreen({
               personalRecords={data.records}
               bodyweight={null}
               unit={unit}
+              onFilterMachine={(filter) =>
+                own
+                  ? router.push(machineWorkoutsRoute(filter), { withAnchor: true })
+                  : nav.openProfileMachine({ id: memberId }, filter.photo.id)
+              }
             />
           </Card>
         )}

@@ -6,26 +6,28 @@ import type { ReactElement } from 'react';
 import { Alert, Linking, type AlertButton } from 'react-native';
 import type { User, WorkoutSession, YouTubeConnection } from '../../../../frontend/src/types';
 import { ApiError, apiGet, apiSend } from '../../data/api';
+import { forgetSessionTokenIf, sessionToken } from '../../data/session';
+import { UploadStopped } from '../../data/uploadFile';
+import { nextSessionEpoch, runBeforeSignOut } from '../../session/sessionEpoch';
 import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
-import { UploadStopped } from '../../data/uploadFile';
-import { nextSessionEpoch } from '../../session/sessionEpoch';
 import { startClipUpload } from './clipUpload';
 import { clipFromAsset } from './videoData';
 import { VideosScreen } from './VideosScreen';
+import { YouTubeSettingsScreen } from './YouTubeSettings';
+import {
+  resetVideoUploadStore,
+  syncVideoUploadSession,
+  videoUploadActions,
+  VideoUploadSessionSync,
+} from './videoUploadStore';
 
 // A full parallel run is slow to render the first screen.
 configure({ asyncUtilTimeout: 8000 });
 
-// The last leave guard the screen set: whether it blocks, and what it does when leaving is tried.
-let mockPrevent: { blocking: boolean; onLeave?: (event: { repeat: () => void }) => void } = {
-  blocking: false,
-};
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
-  usePreventRemove: (blocking: boolean, onLeave?: (event: { repeat: () => void }) => void) => {
-    mockPrevent = { blocking, onLeave };
-  },
+  useLocalSearchParams: () => ({}),
 }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
@@ -34,8 +36,16 @@ jest.mock('../../data/api', () => ({
   apiSend: jest.fn(),
 }));
 jest.mock('./clipUpload', () => ({ startClipUpload: jest.fn() }));
+jest.mock('../../data/session', () => ({
+  ...jest.requireActual<typeof import('../../data/session')>('../../data/session'),
+  sessionToken: jest.fn(),
+  forgetSessionTokenIf: jest.fn(),
+}));
 jest.mock('../../ui/prompts', () => ({ showMenu: jest.fn() }));
-jest.mock('../../ui/Toast', () => ({ showToast: jest.fn() }));
+jest.mock('../../ui/Toast', () => ({
+  showToast: jest.fn(),
+  toastAccount: () => 'user:owner#0',
+}));
 jest.mock('../body/DateField', () => ({ DateField: () => null }));
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
@@ -101,7 +111,8 @@ jest.mock('expo-video', () => {
     VideoView: (props: Record<string, unknown>) => createElement(View, props),
   };
 });
-const mockUser: User = {
+
+const defaultUser: User = {
   id: 'owner',
   username: 'preview',
   display_name: 'Preview',
@@ -111,7 +122,15 @@ const mockUser: User = {
   sex: null,
   profile_photo_url: null,
 };
-jest.mock('../../session/SessionProvider', () => ({ useUser: () => mockUser }));
+let mockUser: User = { ...defaultUser };
+let mockSessionStatus: { kind: 'signed-in'; user: User } | { kind: 'signed-out' } = {
+  kind: 'signed-in',
+  user: mockUser,
+};
+jest.mock('../../session/SessionProvider', () => ({
+  useUser: () => mockUser,
+  useOptionalSession: () => ({ status: mockSessionStatus }),
+}));
 
 const connected: YouTubeConnection = {
   status: 'connected',
@@ -143,6 +162,11 @@ let client: QueryClient;
 let youtube: YouTubeConnection;
 beforeEach(() => {
   jest.clearAllMocks();
+  mockUser = { ...defaultUser };
+  mockSessionStatus = { kind: 'signed-in', user: mockUser };
+  resetVideoUploadStore();
+  jest.mocked(sessionToken).mockResolvedValue('tok-A');
+  jest.mocked(forgetSessionTokenIf).mockResolvedValue(undefined);
   mockClipPlayers.length = 0;
   mockNextPlayerStatus = 'idle';
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -155,10 +179,13 @@ beforeEach(() => {
     throw new Error(`Unexpected ${path}`);
   });
 });
-afterEach(() => client.clear());
+afterEach(() => {
+  resetVideoUploadStore();
+  client.clear();
+});
 
 async function open(component: ReactElement) {
-  await render(<QueryClientProvider client={client}>{component}</QueryClientProvider>);
+  return render(<QueryClientProvider client={client}>{component}</QueryClientProvider>);
 }
 
 it('names picked and recorded videos and refuses other files', () => {
@@ -255,9 +282,9 @@ it('picks set videos, uploads them in order with labels, then follows processing
   expect(Linking.openURL).toHaveBeenCalledWith('https://youtu.be/v');
 });
 
-it('hands connecting YouTube to the web and disconnects in the app', async () => {
+// Connecting is covered by youtube.test.tsx.
+it('disconnects YouTube in the app', async () => {
   jest.spyOn(Alert, 'alert');
-  jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
   jest.mocked(apiSend).mockResolvedValue({
     ...connected,
     status: 'not_connected',
@@ -266,13 +293,7 @@ it('hands connecting YouTube to the web and disconnects in the app', async () =>
     message: 'YouTube disconnected.',
   });
   await open(<VideosScreen />);
-  await fireEvent.press(
-    await screen.findByRole('button', { name: 'Reconnect YouTube on the web' }),
-  );
-  const handOff = jest.mocked(Alert.alert).mock.lastCall?.[2] as AlertButton[];
-  await act(async () => handOff.find((button) => button.text === 'Continue')?.onPress?.());
-  expect(Linking.openURL).toHaveBeenCalledWith('https://relay.test/#videos');
-  await fireEvent.press(screen.getByRole('button', { name: 'Disconnect' }));
+  await fireEvent.press(await screen.findByRole('button', { name: 'Disconnect' }));
   const buttons = jest.mocked(Alert.alert).mock.lastCall?.[2] as AlertButton[];
   await act(async () =>
     buttons.find((button) => button.text === 'Disconnect YouTube')?.onPress?.(),
@@ -286,10 +307,7 @@ it('tells an account without video access to ask the administrator', async () =>
   mockUser.can_upload_videos = false;
   await open(<VideosScreen />);
   expect(screen.getByText(/Video uploads are disabled for this account/)).toBeTruthy();
-  mockUser.can_upload_videos = true;
 });
-
-// Review fixes (Sol review and re-check of #469).
 
 const clipAsset = (name: string) => ({
   uri: `file:///${name}`,
@@ -315,7 +333,7 @@ async function pickAndUpload(names = ['one.mp4', 'two.mp4']) {
     canceled: false,
     assets: names.map(clipAsset),
   } as ImagePicker.ImagePickerResult);
-  await open(<VideosScreen />);
+  const view = await open(<VideosScreen />);
   await screen.findByText('Sample Lifts');
   await fireEvent.changeText(screen.getByLabelText('Session name'), 'Leg day');
   await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
@@ -323,6 +341,7 @@ async function pickAndUpload(names = ['one.mp4', 'two.mp4']) {
   await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
   await screen.findByText(`${names.length} ${names.length === 1 ? 'clip' : 'clips'}`);
   await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  return view;
 }
 
 /** Transfers that run until stopped, then settle as stopped, as the real ones do. */
@@ -338,12 +357,228 @@ function stoppableTransfers() {
   return stops;
 }
 
+/** Transfers the test controls by hand: progress updates, completion, and stop spies. */
+function controllableTransfers() {
+  const controls: { progress: (percent: number) => void; finish: () => void; stop: jest.Mock }[] =
+    [];
+  jest.mocked(startClipUpload).mockImplementation((_path, _file, _fields, onProgress) => {
+    let resolve!: (value: never) => void;
+    let reject!: (reason: unknown) => void;
+    const done = new Promise<never>((doneFn, failFn) => {
+      resolve = doneFn;
+      reject = failFn;
+    });
+    const stop = jest.fn(() => reject(new UploadStopped()));
+    controls.push({ progress: onProgress, finish: () => resolve({} as never), stop });
+    return { done, stop };
+  });
+  return controls;
+}
+
 const alertButton = async (text: string) => {
   const buttons = jest.mocked(Alert.alert).mock.lastCall?.[2] as AlertButton[];
   await act(async () => buttons.find((button) => button.text === text)?.onPress?.());
 };
 
-it('leaves an upload only after the server confirms its cancel and delete', async () => {
+const WAKE_TAG = /^relay-video-upload-\d+$/;
+const lastActivatedTag = () => jest.mocked(activateKeepAwakeAsync).mock.lastCall![0] as string;
+const releasedTags = () => jest.mocked(deactivateKeepAwake).mock.calls.map(([tag]) => tag);
+
+it('keeps uploading and holds the wake lock after leaving Videos, and shows progress on return', async () => {
+  const transfers = controllableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/process') return { ...session, status: 'queued' };
+    throw new Error(`Unexpected ${path}`);
+  });
+  const view = await pickAndUpload(['one.mp4', 'two.mp4']);
+  await screen.findByText('UPLOADING SESSION');
+  const wakeTag = lastActivatedTag();
+  expect(wakeTag).toMatch(WAKE_TAG);
+
+  // Leave Videos mid-upload: transfers stay active and the wake lock is not released.
+  await act(async () => view.unmount());
+  expect(transfers.every((item) => item.stop.mock.calls.length === 0)).toBe(true);
+  expect(deactivateKeepAwake).not.toHaveBeenCalled();
+
+  // Progress continues while away, and returning shows the live progress.
+  await act(async () => {
+    transfers[0].progress(60);
+    transfers[1].progress(20);
+  });
+  const returned = await open(<VideosScreen />);
+  expect(await screen.findByText('UPLOADING SESSION')).toBeTruthy();
+  expect(screen.getByText('40%')).toBeTruthy();
+  expect(screen.getByText('uploading · 60%')).toBeTruthy();
+
+  // Leave again while clips finish: processing starts automatically and releases the wake lock.
+  await act(async () => returned.unmount());
+  await act(async () => transfers.forEach((item) => item.finish()));
+  await waitFor(() => expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/process', 'POST'));
+  await waitFor(() => expect(releasedTags()).toContain(wakeTag));
+
+  // Returning now shows the processing screen directly.
+  await open(<VideosScreen />);
+  expect(await screen.findByText('Queued')).toBeTruthy();
+});
+
+it("locks Settings' YouTube channel while a batch waits to start, until processing begins", async () => {
+  const transfers = controllableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/process') return { ...session, status: 'queued' };
+    throw new Error(`Unexpected ${path}`);
+  });
+  const view = await pickAndUpload(['one.mp4']);
+  await screen.findByText('UPLOADING SESSION');
+  await act(async () => view.unmount());
+
+  // Settings' channel panel, opened while the clip is still transferring.
+  await open(<YouTubeSettingsScreen />);
+  const locked = 'The channel can change once the video upload finishes or is discarded.';
+  expect(await screen.findByText(locked)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Disconnect' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Reconnect YouTube' })).toBeDisabled();
+
+  // Once processing begins, the server's own busy check takes over and the panel unlocks.
+  await act(async () => transfers[0].finish());
+  await waitFor(() => expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/process', 'POST'));
+  await waitFor(() => expect(screen.queryByText(locked)).toBeNull());
+  expect(screen.getByRole('button', { name: 'Disconnect' })).toBeEnabled();
+});
+
+it('keeps the channel locked after a failed clip until the batch is discarded', async () => {
+  jest.spyOn(Alert, 'alert');
+  jest.mocked(startClipUpload).mockImplementation(() => ({
+    done: Promise.reject(new Error('Network request failed')),
+    stop: jest.fn(),
+  }));
+  jest.mocked(apiSend).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1/cancel') return { ...session, status: 'cancelled' };
+    if (path === '/api/sessions/s1') return undefined;
+    throw new Error(`Unexpected ${path}`);
+  });
+  const videos = await pickAndUpload(['one.mp4']);
+  await screen.findByRole('button', { name: 'Retry failed uploads' });
+  await act(async () => videos.unmount());
+
+  // The clip needs retrying, so the batch still waits on this channel.
+  const settings = await open(<YouTubeSettingsScreen />);
+  const locked = 'The channel can change once the video upload finishes or is discarded.';
+  expect(await screen.findByText(locked)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Disconnect' })).toBeDisabled();
+  await act(async () => settings.unmount());
+
+  const back = await open(<VideosScreen />);
+  await fireEvent.press(await screen.findByRole('button', { name: 'Stop and discard' }));
+  await alertButton('Stop and discard');
+  expect(await screen.findByText('Upload your sets')).toBeTruthy();
+  await act(async () => back.unmount());
+
+  await open(<YouTubeSettingsScreen />);
+  expect(await screen.findByRole('button', { name: 'Disconnect' })).toBeEnabled();
+  expect(screen.queryByText(locked)).toBeNull();
+});
+
+it('keeps creating a session and starts clip uploads even after leaving Videos', async () => {
+  const created = deferred<WorkoutSession>();
+  const transfers = controllableTransfers();
+  jest.mocked(apiSend).mockImplementation((() => created.promise) as never);
+  const view = await pickAndUpload(['one.mp4']);
+  const wakeTag = lastActivatedTag();
+  expect(wakeTag).toMatch(WAKE_TAG);
+
+  // Leave while /api/sessions is still in flight.
+  await act(async () => view.unmount());
+  expect(deactivateKeepAwake).not.toHaveBeenCalled();
+
+  await act(async () => created.resolve(session));
+  await waitFor(() => expect(transfers).toHaveLength(1));
+  await act(async () => transfers[0].progress(50));
+
+  await open(<VideosScreen />);
+  expect(await screen.findByText('UPLOADING SESSION')).toBeTruthy();
+  expect(screen.getByText('50%')).toBeTruthy();
+});
+
+it('stops uploads, releases the wake lock, and clears state on sign-out or account switch', async () => {
+  const stops = stoppableTransfers();
+  jest.mocked(apiSend).mockResolvedValue(session);
+
+  const sync = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4'), clipAsset('two.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Leg day');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('2 clips');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  await screen.findByText('UPLOADING SESSION');
+  const wakeTag = lastActivatedTag();
+
+  // Leave Videos first (upload keeps running), then sign out via SessionProvider.
+  await sync.rerender(
+    <QueryClientProvider client={client}>
+      <VideoUploadSessionSync />
+    </QueryClientProvider>,
+  );
+  expect(stops.every((stop) => stop.mock.calls.length === 0)).toBe(true);
+  expect(deactivateKeepAwake).not.toHaveBeenCalled();
+
+  nextSessionEpoch();
+  mockSessionStatus = { kind: 'signed-out' };
+  await sync.rerender(
+    <QueryClientProvider client={client}>
+      <VideoUploadSessionSync />
+    </QueryClientProvider>,
+  );
+  expect(stops.length).toBeGreaterThan(0);
+  expect(stops.every((stop) => stop.mock.calls.length > 0)).toBe(true);
+  expect(releasedTags()).toContain(wakeTag);
+
+  // Another account signs in and opens Videos: fresh form, nothing from the first account.
+  nextSessionEpoch();
+  mockUser = { ...defaultUser, id: 'other', username: 'sam', display_name: 'Sam' };
+  mockSessionStatus = { kind: 'signed-in', user: mockUser };
+  await sync.rerender(
+    <QueryClientProvider client={client}>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText('Upload your sets')).toBeTruthy();
+  expect(screen.queryByText('UPLOADING SESSION')).toBeNull();
+  expect(screen.getByLabelText('Session name')).toHaveProp('value', '');
+});
+
+it('drops a late session-creation reply that arrives after an account switch', async () => {
+  const created = deferred<WorkoutSession>();
+  jest.mocked(apiSend).mockImplementation((() => created.promise) as never);
+  const view = await pickAndUpload(['one.mp4']);
+  await act(async () => view.unmount());
+
+  nextSessionEpoch();
+  syncVideoUploadSession('other', true);
+  await act(async () => created.resolve(session));
+  expect(startClipUpload).not.toHaveBeenCalled();
+
+  mockUser = { ...defaultUser, id: 'other', username: 'sam' };
+  mockSessionStatus = { kind: 'signed-in', user: mockUser };
+  await open(<VideosScreen />);
+  expect(await screen.findByText('Upload your sets')).toBeTruthy();
+});
+
+it('stops and discards an upload only after the server confirms cancel and delete', async () => {
   jest.spyOn(Alert, 'alert');
   // Three clips, two at a time: the third is still queued when the upload stops.
   const stops = stoppableTransfers();
@@ -355,23 +590,26 @@ it('leaves an upload only after the server confirms its cancel and delete', asyn
   });
   await pickAndUpload(['one.mp4', 'two.mp4', 'three.mp4']);
   expect(await screen.findByText('UPLOADING SESSION')).toBeTruthy();
-  expect(mockPrevent.blocking).toBe(true);
+  const wakeTag = lastActivatedTag();
   expect(startClipUpload).toHaveBeenCalledTimes(2);
 
-  const repeat = jest.fn();
-  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Stop and discard' }));
   await alertButton('Keep uploading');
-  expect(repeat).not.toHaveBeenCalled();
   expect(stops.every((stop) => stop.mock.calls.length === 0)).toBe(true);
+  expect(deactivateKeepAwake).not.toHaveBeenCalled();
 
-  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Stop and discard' }));
   await alertButton('Stop and discard');
-  await waitFor(() => expect(repeat).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText('Upload your sets')).toBeTruthy();
   expect(stops.every((stop) => stop.mock.calls.length > 0)).toBe(true);
   // The stopped workers settled without starting the queued third clip.
   expect(startClipUpload).toHaveBeenCalledTimes(2);
   expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/cancel', 'POST');
   expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1', 'DELETE');
+  expect(releasedTags()).toContain(wakeTag);
+  expect(showToast).toHaveBeenCalledWith('Upload discarded', undefined, {
+    account: 'user:owner#0',
+  });
 });
 
 it('stays with the error when the cancel fails, and shows the status if processing started', async () => {
@@ -391,11 +629,9 @@ it('stays with the error when the cancel fails, and shows the status if processi
     );
   await pickAndUpload();
   await screen.findByText('UPLOADING SESSION');
-  const repeat = jest.fn();
-  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Stop and discard' }));
   await alertButton('Stop and discard');
   expect(await screen.findByText(/Could not reach Relay/)).toBeTruthy();
-  expect(repeat).not.toHaveBeenCalled();
   expect(apiSend).not.toHaveBeenCalledWith('/api/sessions/s1', 'DELETE');
 
   // The server had already started processing: the screen follows it and stays.
@@ -405,28 +641,7 @@ it('stays with the error when the cancel fails, and shows the status if processi
   expect(screen.getByText(/Processing had already started/)).toBeTruthy();
 });
 
-it('holds leaving while the session is being created', async () => {
-  const created = deferred<WorkoutSession>();
-  jest.mocked(apiSend).mockImplementation((() => created.promise) as never);
-  await pickAndUpload();
-  expect(mockPrevent.blocking).toBe(true);
-  const repeat = jest.fn();
-  await act(async () => mockPrevent.onLeave?.({ repeat }));
-  expect(repeat).not.toHaveBeenCalled();
-  expect(showToast).toHaveBeenCalledWith('Wait while the session is created.');
-});
-
-it('stops the uploads when the screen closes, such as on signing out', async () => {
-  const stops = stoppableTransfers();
-  jest.mocked(apiSend).mockResolvedValue(session);
-  await pickAndUpload();
-  await screen.findByText('UPLOADING SESSION');
-  await act(async () => screen.unmount());
-  expect(stops.length).toBeGreaterThan(0);
-  expect(stops.every((stop) => stop.mock.calls.length > 0)).toBe(true);
-});
-
-it('holds Cancel and leaving while processing starts, then follows the reply', async () => {
+it('disables Cancel and Stop and discard while processing starts, then follows the reply', async () => {
   jest.mocked(startClipUpload).mockImplementation(() => ({
     done: Promise.resolve({} as never),
     stop: jest.fn(),
@@ -439,10 +654,7 @@ it('holds Cancel and leaving while processing starts, then follows the reply', a
   await pickAndUpload();
   expect(await screen.findByText('Starting processing…')).toBeTruthy();
   expect(screen.getByRole('button', { name: 'Cancel session' })).toBeDisabled();
-  const repeat = jest.fn();
-  await act(async () => mockPrevent.onLeave?.({ repeat }));
-  expect(repeat).not.toHaveBeenCalled();
-  expect(showToast).toHaveBeenCalledWith('Wait until processing has started.');
+  expect(screen.getByRole('button', { name: 'Stop and discard' })).toBeDisabled();
   // A reply already marked complete opens the completion screen.
   await act(async () =>
     started.resolve({ ...session, status: 'complete', youtube_url: 'https://youtu.be/v' }),
@@ -553,23 +765,6 @@ it('checks the status one request at a time', async () => {
   expect(await screen.findByText('Stitching your workout')).toBeTruthy();
 }, 30000);
 
-it('names the account before handing off, and says so if the browser will not open', async () => {
-  jest.spyOn(Alert, 'alert');
-  jest.spyOn(Linking, 'openURL').mockRejectedValue(new Error('No browser'));
-  await open(<VideosScreen />);
-  await fireEvent.press(
-    await screen.findByRole('button', { name: 'Reconnect YouTube on the web' }),
-  );
-  expect(jest.mocked(Alert.alert).mock.lastCall?.[1]).toBe(
-    'Sign in to the web as @preview to connect YouTube.',
-  );
-  await alertButton('Cancel');
-  expect(Linking.openURL).not.toHaveBeenCalled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Reconnect YouTube on the web' }));
-  await alertButton('Continue');
-  expect(await screen.findByText(/Could not open the browser/)).toBeTruthy();
-});
-
 it('drops a disconnect reply that arrives after signing out', async () => {
   jest.spyOn(Alert, 'alert');
   const reply = deferred<YouTubeConnection>();
@@ -586,23 +781,9 @@ it('drops a disconnect reply that arrives after signing out', async () => {
   expect(showToast).not.toHaveBeenCalled();
 });
 
-// Second re-check of #469.
-
-/** Transfers the test finishes by hand, as uploads that complete while a question is open. */
-function finishableTransfers() {
-  const finishers: (() => void)[] = [];
-  jest.mocked(startClipUpload).mockImplementation(() => {
-    let finish!: () => void;
-    const done = new Promise<never>((resolve) => (finish = () => resolve({} as never)));
-    finishers.push(finish);
-    return { done, stop: jest.fn() };
-  });
-  return finishers;
-}
-
 it('holds the start while Stop and discard is open, so a clip finishing behind it never races', async () => {
   jest.spyOn(Alert, 'alert');
-  const finishers = finishableTransfers();
+  const transfers = controllableTransfers();
   jest.mocked(apiSend).mockImplementation(async (path: string) => {
     if (path === '/api/sessions') return session;
     if (path === '/api/sessions/s1/cancel') return { ...session, status: 'cancelled' };
@@ -612,13 +793,12 @@ it('holds the start while Stop and discard is open, so a clip finishing behind i
   });
   await pickAndUpload();
   await screen.findByText('UPLOADING SESSION');
-  const repeat = jest.fn();
-  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Stop and discard' }));
   // Every clip finishes while the question is open: processing doesn't start.
-  await act(async () => finishers.forEach((finish) => finish()));
+  await act(async () => transfers.forEach((item) => item.finish()));
   expect(apiSend).not.toHaveBeenCalledWith('/api/sessions/s1/process', 'POST');
   await alertButton('Stop and discard');
-  await waitFor(() => expect(repeat).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText('Upload your sets')).toBeTruthy();
   expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/cancel', 'POST');
   expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1', 'DELETE');
   expect(apiSend).not.toHaveBeenCalledWith('/api/sessions/s1/process', 'POST');
@@ -626,7 +806,7 @@ it('holds the start while Stop and discard is open, so a clip finishing behind i
 
 it('starts the batch once Keep uploading is chosen, if it finished behind the question', async () => {
   jest.spyOn(Alert, 'alert');
-  const finishers = finishableTransfers();
+  const transfers = controllableTransfers();
   jest.mocked(apiSend).mockImplementation(async (path: string) => {
     if (path === '/api/sessions') return session;
     if (path === '/api/sessions/s1/process') return { ...session, status: 'queued' };
@@ -634,8 +814,8 @@ it('starts the batch once Keep uploading is chosen, if it finished behind the qu
   });
   await pickAndUpload();
   await screen.findByText('UPLOADING SESSION');
-  await act(async () => mockPrevent.onLeave?.({ repeat: jest.fn() }));
-  await act(async () => finishers.forEach((finish) => finish()));
+  await fireEvent.press(screen.getByRole('button', { name: 'Stop and discard' }));
+  await act(async () => transfers.forEach((item) => item.finish()));
   expect(apiSend).not.toHaveBeenCalledWith('/api/sessions/s1/process', 'POST');
   await alertButton('Keep uploading');
   expect(await screen.findByText('Queued')).toBeTruthy();
@@ -666,20 +846,16 @@ it('finishes discarding after a lost cancel reply, a refusal and a cancelled rea
     );
   await pickAndUpload();
   await screen.findByText('UPLOADING SESSION');
-  const repeat = jest.fn();
-  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Stop and discard' }));
   await alertButton('Stop and discard');
   expect(await screen.findByText(/Could not reach Relay/)).toBeTruthy();
-  expect(repeat).not.toHaveBeenCalled();
 
-  await act(async () => mockPrevent.onLeave?.({ repeat }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Stop and discard' }));
   await alertButton('Stop and discard');
-  await waitFor(() => expect(repeat).toHaveBeenCalledTimes(1));
+  expect(await screen.findByText('Upload your sets')).toBeTruthy();
   expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1', 'DELETE');
   expect(screen.queryByText(/Processing had already started/)).toBeNull();
 });
-
-// Journey report L6.
 
 it('counts a single clip in the singular', async () => {
   jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
@@ -770,49 +946,50 @@ it('falls back when the preview player failed before the screen subscribed', asy
   expect(screen.queryByTestId('clip-preview-missing.mp4')).toBeNull();
 });
 
-const WAKE_TAG = /^relay-video-upload-\d+$/;
-const lastActivatedTag = () => jest.mocked(activateKeepAwakeAsync).mock.lastCall![0] as string;
-const releasedTags = () => jest.mocked(deactivateKeepAwake).mock.calls.map(([tag]) => tag);
-
-it('keeps the screen awake while uploading and releases on finish, cancel or unmount', async () => {
-  const finishers = finishableTransfers();
+it('keeps the screen awake while uploading and releases on finish, cancel, or sign-out', async () => {
+  const transfers = controllableTransfers();
   jest.mocked(apiSend).mockImplementation(async (path: string) => {
     if (path === '/api/sessions') return session;
     if (path === '/api/sessions/s1/process') return { ...session, status: 'queued' };
     if (path === '/api/sessions/s1/cancel') return { ...session, status: 'cancelled' };
     throw new Error(`Unexpected ${path}`);
   });
-  await pickAndUpload(['one.mp4']);
+  const firstView = await pickAndUpload(['one.mp4']);
   await screen.findByText('UPLOADING SESSION');
   const first = lastActivatedTag();
   expect(first).toMatch(WAKE_TAG);
   expect(deactivateKeepAwake).not.toHaveBeenCalled();
 
   // Finishing the upload releases the wake lock.
-  await act(async () => finishers.forEach((finish) => finish()));
+  await act(async () => transfers.forEach((item) => item.finish()));
   expect(await screen.findByText('Queued')).toBeTruthy();
   await waitFor(() => expect(releasedTags()).toContain(first));
-  await act(async () => screen.unmount());
+  await act(async () => firstView.unmount());
+  resetVideoUploadStore();
 
   // Cancelling mid-upload releases the wake lock immediately.
   jest.clearAllMocks();
   stoppableTransfers();
-  await pickAndUpload(['one.mp4']);
+  const secondView = await pickAndUpload(['one.mp4']);
   await screen.findByText('UPLOADING SESSION');
   const second = lastActivatedTag();
   expect(second).toMatch(WAKE_TAG);
   expect(second).not.toBe(first);
   await fireEvent.press(screen.getByRole('button', { name: 'Cancel session' }));
   await waitFor(() => expect(releasedTags()).toContain(second));
-  await act(async () => screen.unmount());
+  await act(async () => secondView.unmount());
+  resetVideoUploadStore();
 
-  // Closing the screen mid-upload releases the wake lock too.
+  // Signing out mid-upload releases the wake lock (leaving the screen alone does not).
   jest.clearAllMocks();
   stoppableTransfers();
-  await pickAndUpload(['one.mp4']);
+  const thirdView = await pickAndUpload(['one.mp4']);
   await screen.findByText('UPLOADING SESSION');
   const third = lastActivatedTag();
-  await act(async () => screen.unmount());
+  await act(async () => thirdView.unmount());
+  expect(releasedTags()).not.toContain(third);
+  nextSessionEpoch();
+  syncVideoUploadSession(null, false);
   expect(releasedTags()).toContain(third);
 });
 
@@ -823,13 +1000,16 @@ it("never lets an earlier upload's late wake-lock activation release a retry's l
     .mocked(activateKeepAwakeAsync)
     .mockImplementationOnce(() => new Promise<void>((resolve) => (settleFirst = resolve)));
   stoppableTransfers();
-  await pickAndUpload(['one.mp4']);
+  const view = await pickAndUpload(['one.mp4']);
   await screen.findByText('UPLOADING SESSION');
   const first = lastActivatedTag();
-  await act(async () => screen.unmount());
+  await act(async () => view.unmount());
+  // Sign out ends the first run and releases its tag before activation resolves.
+  nextSessionEpoch();
+  syncVideoUploadSession(null, false);
 
   stoppableTransfers();
-  await pickAndUpload(['one.mp4']);
+  const retryView = await pickAndUpload(['one.mp4']);
   await screen.findByText('UPLOADING SESSION');
   const retry = lastActivatedTag();
   expect(retry).not.toBe(first);
@@ -838,6 +1018,345 @@ it("never lets an earlier upload's late wake-lock activation release a retry's l
   await act(async () => settleFirst());
   await waitFor(() => expect(releasedTags().filter((tag) => tag === first)).toHaveLength(2));
   expect(releasedTags()).not.toContain(retry);
-  await act(async () => screen.unmount());
+  await act(async () => retryView.unmount());
+  nextSessionEpoch();
+  syncVideoUploadSession(null, false);
   expect(releasedTags()).toContain(retry);
+});
+
+it('sends every clip with the token captured when the run started, even if it changes', async () => {
+  const created = deferred<WorkoutSession>();
+  const transfers = controllableTransfers();
+  jest.mocked(apiSend).mockImplementation((() => created.promise) as never);
+  await pickAndUpload(['one.mp4', 'two.mp4', 'three.mp4']);
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/sessions', 'POST', expect.anything()),
+  );
+  // The saved token changes after the run captured its own.
+  jest.mocked(sessionToken).mockResolvedValue('tok-B');
+  await act(async () => created.resolve(session));
+  await waitFor(() => expect(transfers).toHaveLength(2));
+  await act(async () => transfers[0].finish());
+  await waitFor(() => expect(transfers).toHaveLength(3));
+  const tokens = jest.mocked(startClipUpload).mock.calls.map((call) => call[4]);
+  expect(tokens).toEqual(['tok-A', 'tok-A', 'tok-A']);
+});
+
+it('forgets the captured token when a clip upload is refused with 401', async () => {
+  jest.mocked(apiSend).mockResolvedValue(session);
+  jest.mocked(startClipUpload).mockImplementation(() => ({
+    done: Promise.reject(new ApiError(401, 'Sign in again.')),
+    stop: jest.fn(),
+  }));
+  await pickAndUpload(['one.mp4']);
+  expect(await screen.findByText('Sign in again.')).toBeTruthy();
+  expect(forgetSessionTokenIf).toHaveBeenCalledWith('https://relay.test', 'tok-A');
+});
+
+it.each(['create', 'poll', 'cancel', 'delete'] as const)(
+  "never lets a late %s reply from the previous account touch the next account's upload",
+  async (kind) => {
+    const late = deferred<unknown>();
+    const transfers = controllableTransfers();
+    let account: 'A' | 'B' = 'A';
+    const bSession = { ...session, id: 's2', name: 'Leg day' };
+    jest.mocked(apiSend).mockImplementation((async (path: string, method: string) => {
+      if (path === '/api/sessions') {
+        if (account === 'B') return bSession;
+        return kind === 'create' ? late.promise : session;
+      }
+      if (path === '/api/sessions/s1/process')
+        return { ...session, status: kind === 'delete' ? 'complete' : 'queued' };
+      if (
+        path === '/api/sessions/s1/cancel' ||
+        (path === '/api/sessions/s1' && method === 'DELETE')
+      )
+        return late.promise;
+      throw new Error(`Unexpected ${path}`);
+    }) as never);
+    const baseGet = jest.mocked(apiGet).getMockImplementation()!;
+    jest
+      .mocked(apiGet)
+      .mockImplementation((async (path: string) =>
+        path === '/api/sessions/s1' ? late.promise : baseGet(path)) as never);
+
+    // Account A's run, driven through the store, left waiting on one request.
+    videoUploadActions.setName('A day');
+    videoUploadActions.addClips([clipFromAsset(clipAsset('a.mp4'), 0)!]);
+    void videoUploadActions.startUpload(2, true);
+    if (kind === 'create') {
+      await waitFor(() =>
+        expect(apiSend).toHaveBeenCalledWith('/api/sessions', 'POST', expect.anything()),
+      );
+    } else {
+      await waitFor(() => expect(transfers).toHaveLength(1));
+      if (kind === 'cancel') {
+        videoUploadActions.cancelSession();
+        await waitFor(() =>
+          expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/cancel', 'POST'),
+        );
+      } else {
+        await act(async () => transfers[0].finish());
+        if (kind === 'poll') {
+          await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/sessions/s1'));
+        } else {
+          await waitFor(() =>
+            expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1/process', 'POST'),
+          );
+          void videoUploadActions.deleteSession({ ...session, status: 'complete' });
+          await waitFor(() => expect(apiSend).toHaveBeenCalledWith('/api/sessions/s1', 'DELETE'));
+        }
+      }
+    }
+
+    // Account B signs in and starts its own upload.
+    account = 'B';
+    nextSessionEpoch();
+    mockUser = { ...defaultUser, id: 'other', username: 'sam', display_name: 'Sam' };
+    mockSessionStatus = { kind: 'signed-in', user: mockUser };
+    syncVideoUploadSession('other', true);
+    const startedBefore = jest.mocked(startClipUpload).mock.calls.length;
+    await pickAndUpload(['b.mp4']);
+    expect(await screen.findByText('UPLOADING SESSION')).toBeTruthy();
+    await waitFor(() => expect(transfers).toHaveLength(startedBefore + 1));
+    const bTransfer = transfers[startedBefore];
+    const bTag = lastActivatedTag();
+
+    // A's reply finally arrives.
+    await act(async () =>
+      late.resolve(
+        kind === 'create'
+          ? session
+          : kind === 'cancel'
+            ? { ...session, status: 'cancelled' }
+            : kind === 'poll'
+              ? { ...session, status: 'complete' }
+              : undefined,
+      ),
+    );
+    await act(async () => bTransfer.progress(40));
+
+    expect(screen.getByText('UPLOADING SESSION')).toBeTruthy();
+    expect(screen.getByText('uploading · 40%')).toBeTruthy();
+    expect(bTransfer.stop).not.toHaveBeenCalled();
+    expect(releasedTags()).not.toContain(bTag);
+    expect(
+      jest
+        .mocked(startClipUpload)
+        .mock.calls.slice(startedBefore)
+        .map((call) => call[0]),
+    ).toEqual(['/api/sessions/s2/clips']);
+  },
+);
+
+it('deletes an unfinished upload session with its captured token before sign-out revokes it', async () => {
+  const stops = stoppableTransfers();
+  const deleted = deferred<void>();
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1' && method === 'DELETE') return deleted.promise;
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  const view = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Signout test');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('1 clip');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  await screen.findByText('UPLOADING SESSION');
+
+  let cleanup!: Promise<void>;
+  await act(async () => {
+    cleanup = runBeforeSignOut();
+  });
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith(
+      '/api/sessions/s1',
+      'DELETE',
+      undefined,
+      expect.any(AbortSignal),
+      'tok-A',
+    ),
+  );
+  expect(stops.every((stop) => stop.mock.calls.length > 0)).toBe(true);
+  await act(async () => {
+    deleted.resolve();
+    await cleanup;
+  });
+
+  // Signing out afterwards does not send a duplicate DELETE.
+  await act(async () => {
+    nextSessionEpoch();
+    syncVideoUploadSession(null, false);
+  });
+  const deletes = jest
+    .mocked(apiSend)
+    .mock.calls.filter(([path, method]) => path === '/api/sessions/s1' && method === 'DELETE');
+  expect(deletes).toHaveLength(1);
+  await view.unmount();
+});
+
+it('never lets a failing session cleanup block sign-out and leaves Retry offered if sign-out fails', async () => {
+  stoppableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1' && method === 'DELETE') throw new Error('Network down');
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  const view = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Offline signout');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('1 clip');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  await screen.findByText('UPLOADING SESSION');
+
+  await act(async () => {
+    await expect(runBeforeSignOut()).resolves.toBeUndefined();
+  });
+  // If sign-out itself fails and the user stays signed in, the interrupted clip offers Retry.
+  expect(await screen.findByRole('button', { name: 'Retry failed uploads' })).toBeVisible();
+  await view.unmount();
+});
+
+it('does not delete a fully uploaded session on sign-out when Start processing failed', async () => {
+  jest.mocked(startClipUpload).mockImplementation((_path, _clip, _fields, onProgress) => {
+    onProgress(100);
+    return { done: Promise.resolve({} as never), stop: jest.fn() };
+  });
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return { ...session, expected_clip_count: 1 };
+    if (path === '/api/sessions/s1/process') throw new Error('Could not reach Relay.');
+    if (path === '/api/sessions/s1' && method === 'DELETE') return undefined;
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  const baseGet = jest.mocked(apiGet).getMockImplementation()!;
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/sessions/s1') throw new Error('Could not reach Relay.');
+    return baseGet(path);
+  });
+  const view = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Process failed');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('1 clip');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  await screen.findByRole('button', { name: 'Start processing' });
+
+  await act(async () => {
+    await runBeforeSignOut();
+    nextSessionEpoch();
+    syncVideoUploadSession(null, false);
+  });
+  const deletes = jest
+    .mocked(apiSend)
+    .mock.calls.filter(([path, method]) => path === '/api/sessions/s1' && method === 'DELETE');
+  expect(deletes).toHaveLength(0);
+  await view.unmount();
+});
+
+it('stops a mid-upload batch without deleting it when the account loses upload access', async () => {
+  const stops = stoppableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return session;
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  await pickAndUpload(['one.mp4']);
+  await screen.findByText('UPLOADING SESSION');
+  await act(async () => syncVideoUploadSession(mockUser.id, true));
+
+  // Still signed in, so the session stays on the server: only sign-out and switching delete.
+  await act(async () => syncVideoUploadSession(mockUser.id, false));
+  await waitFor(() => expect(stops.every((stop) => stop.mock.calls.length > 0)).toBe(true));
+  expect(jest.mocked(apiSend).mock.calls.filter(([, method]) => method === 'DELETE')).toHaveLength(
+    0,
+  );
+});
+
+it('switches accounts mid-upload with exactly one DELETE using the old token and none with the new one', async () => {
+  stoppableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1' && method === 'DELETE') return undefined;
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  const view = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Switch test');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('1 clip');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  await screen.findByText('UPLOADING SESSION');
+
+  // Account B signs in while A is mid-upload.
+  jest.mocked(sessionToken).mockResolvedValue('tok-B');
+  mockUser = { ...defaultUser, id: 'other', username: 'other' };
+  mockSessionStatus = { kind: 'signed-in', user: mockUser };
+  await act(async () => {
+    nextSessionEpoch();
+    syncVideoUploadSession('other', true);
+  });
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith(
+      '/api/sessions/s1',
+      'DELETE',
+      undefined,
+      expect.any(AbortSignal),
+      'tok-A',
+    ),
+  );
+  // A subsequent sign-out of B does not repeat the DELETE with B's token.
+  await act(async () => {
+    await runBeforeSignOut();
+  });
+  const deletes = jest
+    .mocked(apiSend)
+    .mock.calls.filter(([path, method]) => path === '/api/sessions/s1' && method === 'DELETE');
+  expect(deletes).toHaveLength(1);
+  expect(deletes[0][4]).toBe('tok-A');
+  await view.unmount();
 });

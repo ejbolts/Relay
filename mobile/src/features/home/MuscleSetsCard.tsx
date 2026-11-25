@@ -1,5 +1,5 @@
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import {
   muscleSetsView,
@@ -10,19 +10,27 @@ import {
   signedSetChange,
 } from '../../../../frontend/src/muscleSetRows';
 import { muscleSetGoal } from '../../../../frontend/src/muscleSetGoals';
-import { useDashboard, useTrainingPreferences } from '../../data/queries';
+import type { TrackedWorkout } from '../../../../frontend/src/types';
+import { localDate } from '../../../../frontend/src/utils';
+import { useDashboard, useTrainingPreferences, useWorkoutHistory } from '../../data/queries';
+import { useUser } from '../../session/SessionProvider';
 import { Button, Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { haptics } from '../../ui/haptics';
 import { mixColor } from './color';
 import { homeIcons } from './homeIcons';
+import { useLiveMuscleSources, withLiveMuscleSets } from '../review/liveMuscleSources';
+import { useOptionalWorkout } from '../workout/WorkoutProvider';
 import { MuscleContributionSheet } from './MuscleContributionSheet';
+
+const NO_WORKOUTS: TrackedWorkout[] = [];
 
 /**
  * Working sets per muscle against each muscle's weekly goal, with the week before behind it, as
  * on the web. Step back through earlier weeks; Show more lists every muscle. A muscle opens the
  * workouts and exercises that supplied its sets, and Muscle goals edits every muscle's goal.
+ * Like the web's, it counts the workout in progress and finished ones the dashboard doesn't yet.
  */
 export function MuscleSetsCard() {
   const { colors, type } = useTheme();
@@ -30,13 +38,27 @@ export function MuscleSetsCard() {
   const [selected, setSelected] = useState<string | null>(null);
   const dashboard = useDashboard();
   const preferences = useTrainingPreferences();
+  const user = useUser();
+  const workout = useOptionalWorkout();
+  const workouts = useWorkoutHistory().data ?? NO_WORKOUTS;
+  const live = useLiveMuscleSources(user.id, dashboard.data);
+  const today = localDate();
+  const weeks = useMemo(() => {
+    const data = dashboard.data;
+    const withLive = (week: NonNullable<typeof data>['weekly_sets']) =>
+      withLiveMuscleSets(week, live, workouts, today);
+    return {
+      current: data?.weekly_sets && withLive(data.weekly_sets),
+      history: data?.weekly_sets_history?.map(withLive),
+    };
+  }, [dashboard.data, live, workouts, today]);
   const [weeksAgo, setWeeksAgo] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const goal = preferences.data?.weekly_muscle_set_goal ?? 10;
   const goals = preferences.data?.weekly_muscle_set_goals;
   const view = muscleSetsView({
-    weeklySets: dashboard.data?.weekly_sets,
-    history: dashboard.data?.weekly_sets_history,
+    weeklySets: weeks.current,
+    history: weeks.history,
     weeksAgo,
     goal,
     goals,
@@ -267,6 +289,8 @@ export function MuscleSetsCard() {
         goal={muscle ? muscleSetGoal(muscle.muscle_group, goal, goals) : goal}
         defaultGoal={goal}
         goals={goals}
+        liveWorkoutId={live.liveWorkoutId}
+        onOpenLive={() => workout?.open()}
         onClose={() => setSelected(null)}
       />
     </Card>

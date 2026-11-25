@@ -1,8 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { Stack, useRouter } from 'expo-router';
-import { useState } from 'react';
-import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from 'react-native';
+import { useRef, useState, type ComponentRef } from 'react';
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text } from 'react-native';
 import { blockColor } from '../../../../frontend/src/blockColors';
+import { blocksCoachSteps } from '../../../../frontend/src/setupGuideCoach';
 import {
   blockFormDraft,
   blockFormInput,
@@ -32,6 +33,14 @@ import { nativeBlockColor } from './BlockScopeChip';
 import { ChoiceTiles, FieldLabel, HeaderTextButton } from './parts';
 import { haptics } from '../../ui/haptics';
 import { TextField } from '../../ui/controls';
+import { CoachSpacer, CoachTarget, GuideCoach } from '../guides/GuideCoach';
+import {
+  exitSetupGuide,
+  finishSetupGuide,
+  setupGuideTicket,
+  useExitGuideOnLeave,
+  useSetupGuide,
+} from '../guides/setupGuides';
 
 /** Starts a training block, or edits or removes a saved one, as the web's block form. */
 export function BlockFormScreen({ blockId }: { blockId?: string }) {
@@ -55,6 +64,12 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
   const [draft, setDraft] = useState<BlockFormDraft>(() => blockFormDraft(editing, today));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The training blocks guide coaches a new block's form, as the web's.
+  const guide = useSetupGuide('blocks');
+  const [guideStep, setGuideStep] = useState(0);
+  const scroll = useRef<ComponentRef<typeof ScrollView>>(null);
+  useExitGuideOnLeave('blocks');
+  const coachSteps = blocksCoachSteps(guide?.facts.lift, draft.name);
   const change = (values: Partial<BlockFormDraft>) => {
     setDraft((current) => ({ ...current, ...values }));
     setError(null);
@@ -77,8 +92,10 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
     }
   }
 
-  const save = () =>
-    run(async () => {
+  const save = () => {
+    // Only the guide running when the save starts can be finished by it.
+    const ticket = editing ? null : setupGuideTicket('blocks');
+    return run(async () => {
       const input = blockFormInput(draft);
       if (editing) {
         await updateBlock(client, editing.id, input);
@@ -87,11 +104,13 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
         const next = await createBlock(client, input);
         const selection = createdBlockSelection(next, draft.start, today);
         if (selection) selectBlock(selection);
+        finishSetupGuide(ticket);
         showToast('Training block started');
       }
       haptics.success();
       router.back();
     });
+  };
 
   const remove = () => {
     if (!editing) return;
@@ -119,23 +138,26 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
         options={{
           title: blockFormTitle(!!editing),
           headerRight: () => (
-            <HeaderTextButton
-              label={editing ? 'Save' : 'Start'}
-              accessibilityLabel={editing ? 'Save block' : 'Start block'}
-              busy={busy}
-              disabled={!draft.name.trim()}
-              onPress={() => void save()}
-            />
+            <CoachTarget id={!editing && 'blocks.submit'} header radius={10}>
+              <HeaderTextButton
+                label={editing ? 'Save' : 'Start'}
+                accessibilityLabel={editing ? 'Save block' : 'Start block'}
+                busy={busy}
+                disabled={!draft.name.trim()}
+                onPress={() => void save()}
+              />
+            </CoachTarget>
           ),
         }}
       />
       <ScrollView
+        ref={scroll}
         style={{ flex: 1, backgroundColor: colors.page }}
         contentInsetAdjustmentBehavior="automatic"
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: space.lg, gap: space.xl, paddingBottom: space.xxl * 2 }}
       >
-        <View style={{ gap: 8 }}>
+        <CoachTarget id={!editing && 'blocks.name'} style={{ gap: 8 }}>
           <FieldLabel>Block name</FieldLabel>
           <TextField
             accessibilityLabel="Block name"
@@ -146,14 +168,14 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
             autoFocus={!editing}
             onChangeText={(name) => change({ name })}
           />
-        </View>
+        </CoachTarget>
         <BlockColorField
           value={draft.color}
           automatic={automatic}
           disabled={busy}
           onChange={(color) => change({ color })}
         />
-        <View style={{ gap: 10 }}>
+        <CoachTarget id={!editing && 'blocks.start'} style={{ gap: 10 }}>
           <ChoiceTiles
             label="Starts"
             options={blockStartOptions(draft, today)}
@@ -173,8 +195,8 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
               onChange={(start) => change({ start })}
             />
           )}
-        </View>
-        <View style={{ gap: 10 }}>
+        </CoachTarget>
+        <CoachTarget id={!editing && 'blocks.end'} style={{ gap: 10 }}>
           <ChoiceTiles
             label="Ends"
             options={blockPlanOptions(draft)}
@@ -191,7 +213,7 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
               onChange={(planEnd) => change({ planEnd })}
             />
           )}
-        </View>
+        </CoachTarget>
         {!!error && (
           <Text accessibilityRole="alert" style={[type.callout, { color: colors.danger }]}>
             {error}
@@ -200,7 +222,19 @@ function BlockForm({ config, editing }: { config: TrainingBlocks; editing: Train
         {editing && (
           <Button label="Remove block" variant="danger" disabled={busy} onPress={remove} />
         )}
+        <CoachSpacer />
       </ScrollView>
+      {guide && !editing && (
+        <GuideCoach
+          step={coachSteps[guideStep]}
+          index={guideStep}
+          total={coachSteps.length}
+          scroll={scroll}
+          onNext={() => setGuideStep(guideStep + 1)}
+          onBack={guideStep > 0 ? () => setGuideStep(guideStep - 1) : undefined}
+          onExit={() => exitSetupGuide('blocks')}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }

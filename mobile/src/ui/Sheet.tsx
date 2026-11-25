@@ -44,6 +44,13 @@ export const sheetBackdropLayout = {
   },
 };
 
+let openSheets = 0;
+
+/** Whether any Sheet is open, so tips (as the web's) wait instead of showing behind it. */
+export function sheetShowing() {
+  return openSheets > 0;
+}
+
 /**
  * A sheet that doesn't need its own route: a native page sheet on iOS (swipe down to close), and
  * a bottom sheet over a dimmed backdrop on Android, where tapping the backdrop closes it.
@@ -75,6 +82,14 @@ export function Sheet({
   const keyboardCoords = useRef<{ screenY?: number; height?: number } | null>(null);
   const measureSeq = useRef(0);
   const [keyboardOverlap, setKeyboardOverlap] = useState(0);
+
+  useEffect(() => {
+    if (!visible) return;
+    openSheets += 1;
+    return () => {
+      openSheets -= 1;
+    };
+  }, [visible]);
 
   const updateOverlap = useCallback((coords: { screenY?: number; height?: number } | null) => {
     keyboardCoords.current = coords;

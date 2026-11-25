@@ -16,6 +16,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from .config import Settings
+from .expo_delivery import INACTIVE_WORKOUT_ALERT, ExpoAlert, LocalReminder, expo_dispatcher
 from .models import ActiveWorkoutReminder, ActiveWorkoutSync, PushSubscription, User
 from .push_security import MAX_PUSH_SUBSCRIPTIONS, PushSession, validate_push_endpoint
 
@@ -57,6 +58,10 @@ def push_available(settings: Settings) -> bool:
     return True
 
 
+def _aware(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 def send_push_notification(
     session_factory: Callable[[], Session],
     settings: Settings,
@@ -67,6 +72,58 @@ def send_push_notification(
     endpoint: str | None = None,
     url: str = "/",
     tag: str | None = None,
+    data: dict | None = None,
+    local_reminder: LocalReminder | None = None,
+    ttl_seconds: int | None = None,
+    native_title: str | None = None,
+    native_body: str | None = None,
+    dedupe_key: str | None = None,
+    native_expires_at_ms: int | None = None,
+) -> bool:
+    """Alerts one account's devices: its web push subscriptions and its native apps.
+
+    With an ``endpoint`` only that browser is alerted, as for the rest timer it started. The
+    native apps are alerted in the background (``expo_delivery``); the result is Web Push's alone,
+    so a native alert never changes when the browsers' alert is retried. ``native_title`` and
+    ``native_body`` replace text the phone would show even after its account signed out there.
+    """
+    if endpoint is None:
+        expo_dispatcher.submit(
+            session_factory,
+            settings,
+            ExpoAlert(
+                user_id=user_id,
+                title=native_title or title,
+                body=native_body or body,
+                data={"url": url, "tag": tag, **(data or {})},
+                local_reminder=local_reminder,
+                ttl_seconds=ttl_seconds,
+                dedupe_key=dedupe_key,
+                expires_at_ms=native_expires_at_ms,
+            ),
+        )
+    return _send_web_push(
+        session_factory,
+        settings,
+        title=title,
+        body=body,
+        user_id=user_id,
+        endpoint=endpoint,
+        url=url,
+        tag=tag,
+    )
+
+
+def _send_web_push(
+    session_factory: Callable[[], Session],
+    settings: Settings,
+    *,
+    title: str,
+    body: str,
+    user_id: str,
+    endpoint: str | None,
+    url: str,
+    tag: str | None,
 ) -> bool:
     try:
         from pywebpush import WebPushException, webpush
@@ -118,6 +175,17 @@ def send_push_notification(
             db.commit()
 
     return delivered
+
+
+INACTIVE_AFTER = timedelta(minutes=45)
+
+
+def workout_reminder_data(started_at: str | None) -> dict:
+    """Which workout a reminder is about, as the app's own reminder records it."""
+    try:
+        return {"kind": "workout", "startedAt": int(started_at) if started_at else None}
+    except ValueError:
+        return {"kind": "workout", "startedAt": None}
 
 
 class ActiveWorkoutReminderScheduler:
@@ -219,8 +287,7 @@ class ActiveWorkoutReminderScheduler:
                     select(ActiveWorkoutSync)
                     .join(User)
                     .where(
-                        ActiveWorkoutSync.last_activity_at
-                        <= datetime.now(UTC) - timedelta(minutes=45),
+                        ActiveWorkoutSync.last_activity_at <= datetime.now(UTC) - INACTIVE_AFTER,
                         ActiveWorkoutSync.reminder_delivered.is_(False),
                         User.disabled_at.is_(None),
                     )
@@ -241,6 +308,7 @@ class ActiveWorkoutReminderScheduler:
                 db.commit()
                 if claimed.rowcount != 1:
                     continue
+                due_ms = int((_aware(row.last_activity_at) + INACTIVE_AFTER).timestamp() * 1000)
                 delivered = send_push_notification(
                     self.session_factory,
                     self.settings,
@@ -251,7 +319,14 @@ class ActiveWorkoutReminderScheduler:
                     ),
                     user_id=row.user_id,
                     url="/#log",
-                    tag="inactive-workout",
+                    tag=INACTIVE_WORKOUT_ALERT,
+                    # The app opens the workout it is about, as for its own reminder.
+                    data=workout_reminder_data(row.started_at),
+                    local_reminder=LocalReminder(workout=row.started_at, due_ms=due_ms),
+                    # A reminder that reaches a phone long after it was due only confuses.
+                    native_expires_at_ms=due_ms + 30 * 60_000,
+                    # Retried for the browsers until they get it; the apps get it once.
+                    dedupe_key=f"inactive:{row.user_id}:{row.revision}",
                 )
                 if not delivered:
                     db.execute(
@@ -275,6 +350,7 @@ class ActiveWorkoutReminderScheduler:
                 self.settings,
                 title="Workout saved",
                 body=f"{saved.name} was saved automatically.",
+                native_body="Your workout was saved automatically.",
                 user_id=saved.user_id,
                 url="/#history",
                 # Replaces the earlier "Still working out?" alert on the phone.

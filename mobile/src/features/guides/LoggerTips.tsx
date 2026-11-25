@@ -40,6 +40,7 @@ import { useTheme } from '../../ui/theme';
 import * as prompts from '../../ui/prompts';
 import { toastShowing } from '../../ui/Toast';
 import { guideIcons } from './icons';
+import { tipSyncHoldUntil } from '../../../../frontend/src/tipSync';
 import { tipsFor, useTips } from './tips';
 
 /**
@@ -47,11 +48,13 @@ import { tipsFor, useTips } from './tips';
  * a first logged warm-up) asks for a nudge, which appears in a quiet moment between sets; a dot
  * beside an eligible control (the machine row) opens its tip. Tips use the account's tip state
  * on this phone (the web's format and key), so one dismissed here counts on Home's bulb and the
- * Tips page, and Show tips off stops them. Like the web's, that state stays on the device: it
- * does not follow the account to the web or another phone.
+ * Tips page, and Show tips off stops them. That state follows the account to the web and other
+ * devices (TipSyncHost).
  */
 
 const PAGE = 'log';
+/** A tip that is done with: dismissed or learned. */
+const retired = (status: string | undefined) => status === 'dismissed' || status === 'learned';
 const TICK_MS = 500;
 /** As the web's, the bottom of the screen is kept for the tab bar and docks. */
 const BOTTOM_RESERVED = 75;
@@ -234,11 +237,20 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
         if (shown.current) close();
         return;
       }
+      // Retired elsewhere (a synced dismissal, or a restore the sync adopted): it goes, and there
+      // is nothing to roll back.
+      if (shown.current && retired(tipState.seen[shown.current.id])) close();
       if (!current.ready || !quiet(holds.current)) {
         quietSince.current = 0;
         if (shown.current) {
           const currentNudge = shown.current.nudge;
-          if (currentNudge) {
+          // As on the web, a newer showing (here from a sync with the account) is left alone.
+          const stillOurs =
+            currentNudge &&
+            tipState.lastShown === currentNudge.at &&
+            (tipState.shows?.[currentNudge.id] ?? 0) === currentNudge.shownCount &&
+            tipState.seen[currentNudge.id] === currentNudge.seenAfter;
+          if (currentNudge && stillOurs) {
             const reverted = interruptedNudge(tipState, currentNudge, now);
             if (reverted) {
               tips.update(() => reverted.state);
@@ -271,14 +283,27 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
       if (!id) return;
       const previousLastShown = tipState.lastShown;
       const request = nudge ? pending.current.get(nudge) : undefined;
+      // A nudge's showing stays off the server while an interruption could still undo it.
+      if (nudge) tips.holdSync(tipSyncHoldUntil(now));
       tips.shown(id, now);
+      const after = tips.get();
       const slot = nudge ? null : (hint?.[0] ?? null);
       shown.current = {
         id,
         page: PAGE,
         at: now,
         slot,
-        nudge: nudge && request ? { id: nudge, at: now, previousLastShown, request } : null,
+        nudge:
+          nudge && request
+            ? {
+                id: nudge,
+                at: now,
+                previousLastShown,
+                request,
+                shownCount: after.shows?.[nudge] ?? 0,
+                seenAfter: after.seen[nudge],
+              }
+            : null,
       };
       pending.current.delete(id);
       setActive({ id, slot });
@@ -291,9 +316,10 @@ export function LoggerTipsProvider({ children }: { children: ReactNode }) {
     return () => clearInterval(timer);
   }, [account, close]);
 
-  // Show tips turned off (on the Tips page or the web) puts the showing tip away.
+  // Show tips turned off, or the showing tip dismissed or learned (on the Tips page, the web or
+  // another device), puts it away at once.
   const enabled = state.enabled;
-  const visibleActive = enabled ? active : null;
+  const visibleActive = enabled && active && !retired(state.seen[active.id]) ? active : null;
   const nudge =
     visibleActive && TIP_DEFINITIONS[visibleActive.id].surface === 'nudge'
       ? visibleActive.id

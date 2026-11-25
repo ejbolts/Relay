@@ -15,10 +15,13 @@ export function openTipTarget(
   switch (target) {
     case 'machine-weights':
       if (exerciseId)
-        router.push({
-          pathname: '/training/machine-weights/[id]',
-          params: { id: exerciseId },
-        });
+        router.push(
+          {
+            pathname: '/training/machine-weights/[id]',
+            params: { id: exerciseId },
+          },
+          { withAnchor: true },
+        );
       else router.navigate('/training');
       return;
     case 'weight-goal':

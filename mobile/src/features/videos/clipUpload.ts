@@ -54,6 +54,7 @@ export function startClipUpload(
   clip: ClipFile,
   fields: Record<string, string>,
   onProgress: (percent: number) => void,
+  boundToken?: string,
 ): ClipTransfer {
   let stopped = false;
   let task: UploadTask | null = null;
@@ -67,6 +68,7 @@ export function startClipUpload(
       timeoutMs: FALLBACK_TIMEOUT_MS,
       onProgress,
       signal: controller.signal,
+      ...(boundToken !== undefined ? { token: boundToken } : {}),
     });
   };
 
@@ -86,7 +88,7 @@ export function startClipUpload(
       }
     }
     try {
-      const token = await sessionToken(origin);
+      const token = boundToken ?? (await sessionToken(origin));
       if (stopped) throw new UploadStopped();
       let result: { body: string; status: number };
       try {

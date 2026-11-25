@@ -8,11 +8,16 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createQueryClient } from '../data/queryClient';
 // Mobile batch 4, records stream (B2).
 import { BodyCheckInSync } from '../features/body/BodyCheckInSync';
+import { CardioShareHost } from '../features/cardio/CardioShareSheet';
 // B5 (data): asks a new account whether to import its history.
 import { useImportPrompt } from '../features/data';
 import { AppTourHost } from '../features/guides/AppTourHost';
+import { TipSyncHost } from '../features/guides/TipSyncHost';
+import { RemotePushSync } from '../features/push/RemotePushSync';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
+import { VideoUploadSessionSync } from '../features/videos';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
+import { WorkoutLinkOpener } from '../features/workout/workoutLink';
 import { useDeferredFriendInvite } from '../session/friendInvite';
 import { SessionProvider, useSession } from '../session/SessionProvider';
 import { pushedScreenOptions, sheetScreenOptions } from '../ui/navigation';
@@ -64,6 +69,12 @@ function Navigation() {
         {/* Mobile batch 4, records stream (B2): sends check-ins saved offline. Before the
             screens, so their check-in queries start with the signed-in account. */}
         <BodyCheckInSync />
+        {/* A cold-start tap on the rest timer's Live Activity opens the logger once it can. */}
+        <WorkoutLinkOpener />
+        {/* Keeps app-level video uploads bound to the active account across navigation. */}
+        <VideoUploadSessionSync />
+        {/* Remote push (C5): registers this phone for Phone alerts and opens tapped alerts. */}
+        {signedIn && !mustChangePassword && <RemotePushSync userId={status.user.id} />}
         <Stack
           screenOptions={{
             headerShown: false,
@@ -127,6 +138,10 @@ function Navigation() {
         </Stack>
         {/* Mobile batch 4, B4: the quick tour, above the tabs so it stays open as it opens each. */}
         {signedIn && !mustChangePassword && <AppTourHost />}
+        {/* Opens a cardio share card from the save toast after returning from the log screen. */}
+        {signedIn && !mustChangePassword && <CardioShareHost />}
+        {/* Tips follow the account: this phone's tips merge with the server's and the web's. */}
+        {signedIn && !mustChangePassword && <TipSyncHost />}
         {/* Android's menu sheets and text dialogs for every screen. The logger, a separate native
             sheet, mounts its own. */}
         <PromptHost />

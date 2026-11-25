@@ -31,7 +31,9 @@ export function useSaveCheckIn() {
     // The save lands in the phone's queue first, so it must run offline too; the queue sends it.
     networkMode: 'always',
     mutationFn: (payload: BodyCheckInPayload) => bodyCheckInApi.saveBodyMeasurement(payload),
-    onSettled: () => refreshBodyMeasurements(client),
+    onSettled: () => {
+      void refreshBodyMeasurements(client);
+    },
   });
 }
 

@@ -70,6 +70,7 @@ from .database import get_db
 from .errors import api_error
 from .models import AccountBackup, AccountBackupKind, User, new_uuid, utc_now
 from .photo_storage import PhotoValidationError, _write_machine_variants
+from .tip_state import TIP_STATE_GENERATION_KEY, start_tip_state_generation
 from .training_metrics import rebuild_personal_records, set_setting
 
 logger = logging.getLogger(__name__)
@@ -90,7 +91,7 @@ NOT_RESTORED = frozenset(
 )
 # Settings this server manages for the account. Mirrors tracker.WORKOUT_CACHE_REVISION_KEY.
 CACHE_REVISION_KEY = "workout_cache_revision"
-SERVER_MANAGED_SETTINGS = frozenset({CACHE_REVISION_KEY})
+SERVER_MANAGED_SETTINGS = frozenset({CACHE_REVISION_KEY, TIP_STATE_GENERATION_KEY})
 SAFETY_LABEL = "Before restore"
 KEPT_SAFETY_SNAPSHOTS = 2
 
@@ -788,6 +789,8 @@ def restore_archive(
                     check_references(live, tables, user_id, kept, inserted)
                     clear_orphans(live, already_broken, tables)
                     restored = count_rows(live, user_id)
+                    # Devices adopt the restored tips instead of merging older copies back in.
+                    start_tip_state_generation(live, user_id)
                     live.execute("COMMIT")
                     committed = True
                 except sqlite3.IntegrityError as error:

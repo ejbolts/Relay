@@ -35,3 +35,22 @@ What the app covers compared with the web, and what's still web-only, is tracked
 - **Routes:** groups such as `(tabs)` are not part of a URL, so a sheet route can't share a tab's name. The Start tab is `/start` and its sheet is `/start-workout`.
 - **Sheets:** push sheet routes from the root layout (as `WorkoutProvider` does). On Android a pushed `formSheet` draws under the native tab bar, so the Start menu is a transparent modal there that draws its own bottom sheet.
 - **Clocks:** live clocks use `useNow` (`src/ui/useNow.ts`). Android's uiautomator never sees an idle screen while a clock redraws every second, so start a test Expo server with `EXPO_PUBLIC_RELAY_TEST_SLOW_CLOCK=1` to make clocks tick every 30 seconds during automated checks. Never set it for real use.
+
+## Native builds
+
+Expo Go needs none of this. A development or store build gets its identity from environment variables, set as EAS environment variables (or in the shell for a local build) so no installation's values are committed. `app.json` is the base config, and `app.config.js` adds each variable only when it is set (`nativeConfig.js`):
+
+| Variable                     | Sets                                                                                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `RELAY_IOS_BUNDLE_ID`        | `ios.bundleIdentifier`. The Live Activity extension is named after it                                                                                                     |
+| `RELAY_ANDROID_PACKAGE`      | `android.package`                                                                                                                                                         |
+| `RELAY_EAS_PROJECT_ID`       | `extra.eas.projectId`, which push tokens need                                                                                                                             |
+| `RELAY_GOOGLE_SERVICES_FILE` | `android.googleServicesFile`: the path to Firebase's `google-services.json` (a local path or an EAS file variable), which Android push tokens need. Never commit the file |
+| `RELAY_EXPO_OWNER`           | `owner`, the Expo account or organisation that owns the EAS project                                                                                                       |
+| `RELAY_APP_LINK_HOSTS`       | Comma-separated Relay hostnames for universal links and Android App Links                                                                                                 |
+
+`eas.json` has a `development` profile (a development client, distributed internally) and a `production` profile.
+
+**Friend links** open the app when `RELAY_APP_LINK_HOSTS` names the server's hostname and the server serves the matching files. Set `GYM_IOS_TEAM_ID` and `GYM_IOS_BUNDLE_ID` for `/.well-known/apple-app-site-association`, and `GYM_ANDROID_PACKAGE` and `GYM_ANDROID_SHA256_FINGERPRINTS` (the signing certificates' SHA-256 fingerprints, comma-separated) for `/.well-known/assetlinks.json`. Each file returns 404 until its values are set. Android can't match the `#friend=` fragment, so the app opens for the server's root address and routes the fragment itself (`src/session/webLinks.ts`).
+
+**YouTube** connects in a sign-in browser over the app. The app keeps a secret for each attempt and sends only its hash; the server returns the browser to `relay-mobile://youtube-return` with a one-time code, and only this app, signed in as the same session and holding the secret, can then save the channel (`POST /api/youtube/finish`). To try it in Expo Go, list the Metro host in the server's `GYM_YOUTUBE_APP_DEV_RETURN_HOSTS` (for example `127.0.0.1:8081`).

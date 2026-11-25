@@ -1,7 +1,8 @@
 import { useSyncExternalStore } from 'react';
 import type { TrackedWorkout } from './types';
 
-import { guideFacts, type GuideFacts, type SetupGuideId } from './setupGuideSteps';
+import { setupGuideRun, type ActiveGuide } from './setupGuideRun';
+import { guideFacts, type SetupGuideId } from './setupGuideSteps';
 
 export {
   favouriteLift,
@@ -25,60 +26,32 @@ export function onSetupGuide(listener: (id: SetupGuideId) => void): () => void {
   return () => window.removeEventListener(EVENT, handle);
 }
 
-export interface ActiveGuide {
-  id: SetupGuideId;
-  facts: GuideFacts;
-  /** Splits: a saved split still to be made active, after the editor closes. */
-  useRoutineId?: string;
-}
+export type { ActiveGuide } from './setupGuideRun';
 
-let active: ActiveGuide | null = null;
-const listeners = new Set<() => void>();
-const finishedListeners = new Set<(id: SetupGuideId) => void>();
-
-function emit(next: ActiveGuide | null) {
-  active = next;
-  for (const listener of listeners) listener();
-}
+const run = setupGuideRun();
 
 /** The running guide, outside React. */
-export const activeGuide = () => active;
+export const activeGuide = run.get;
 
 export function startGuide(id: SetupGuideId, workouts: TrackedWorkout[]) {
-  emit({ id, facts: guideFacts(workouts) });
+  run.start(id, guideFacts(workouts));
 }
 
-export function updateGuide(id: SetupGuideId, change: Partial<Omit<ActiveGuide, 'id'>>) {
-  if (active?.id === id) emit({ ...active, ...change });
-}
+export const updateGuide = run.update;
 
 /** Leaves a guide part way; nothing is marked as set up. */
-export function exitGuide(id?: SetupGuideId) {
-  if (active && (!id || active.id === id)) emit(null);
-}
+export const exitGuide = run.exit;
 
 /** The feature was saved: the guide is complete. */
-export function finishGuide(id: SetupGuideId) {
-  if (active?.id !== id) return;
-  emit(null);
-  for (const listener of finishedListeners) listener(id);
-}
+export const finishGuide = run.finish;
 
-export function onGuideFinished(listener: (id: SetupGuideId) => void): () => void {
-  finishedListeners.add(listener);
-  return () => finishedListeners.delete(listener);
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
+export const onGuideFinished = run.onFinished;
 
 /** The running guide, or only the named one when an id is given. */
 export function useActiveGuide(id?: SetupGuideId): ActiveGuide | null {
   const current = useSyncExternalStore(
-    subscribe,
-    () => active,
+    run.subscribe,
+    run.get,
     // Nothing runs a guide while the page is rendered on the server.
     () => null,
   );

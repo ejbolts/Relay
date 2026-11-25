@@ -4,7 +4,7 @@ import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { exitGuide, finishGuide, useActiveGuide } from './setupGuides';
-import { blocksGuideSteps } from './setupGuideSteps';
+import { blocksCoachSteps, type CoachTarget } from './setupGuideCoach';
 import {
   blockFormDraft,
   blockFormInput,
@@ -28,6 +28,14 @@ import './trainingBlocks.css';
 type View = 'blocks' | 'form' | 'remove';
 /** Where the dialog opens: the blocks overview, or straight into a new block. */
 export type TrainingBlockDialogStart = 'blocks' | 'new';
+
+/** The form's controls each step of the training blocks guide is about. */
+const BLOCK_COACH_TARGETS: Partial<Record<CoachTarget, string>> = {
+  'blocks.name': '.training-block-form fieldset > label:first-of-type input',
+  'blocks.start': '.training-block-starts:not(.plan)',
+  'blocks.end': '.training-block-starts.plan',
+  'blocks.submit': '.training-block-dialog .popup-dialog-footer button[type="submit"]',
+};
 
 /** Lists, creates, edits and removes training blocks. */
 export function TrainingBlockDialog({
@@ -144,29 +152,13 @@ export function TrainingBlockDialog({
         ? 'Remove training block?'
         : 'Training blocks';
 
-  const lift = guide?.facts.lift;
-  const copy = blocksGuideSteps(lift ?? null);
-  const coachSteps: CoachStep[] = [
-    {
-      ...copy[0],
-      target: '.training-block-form fieldset > label:first-of-type input',
-      next: { disabled: !name.trim(), onClick: () => setGuideStep(1) },
-    },
-    {
-      ...copy[1],
-      target: '.training-block-starts:not(.plan)',
-      next: { onClick: () => setGuideStep(2) },
-    },
-    {
-      ...copy[2],
-      target: '.training-block-starts.plan',
-      next: { onClick: () => setGuideStep(3) },
-    },
-    {
-      ...copy[3],
-      target: '.training-block-dialog .popup-dialog-footer button[type="submit"]',
-    },
-  ];
+  const coachSteps: CoachStep[] = blocksCoachSteps(guide?.facts.lift, name).map(
+    ({ target, next, ...copy }, index) => ({
+      ...copy,
+      target: BLOCK_COACH_TARGETS[target],
+      next: next && { disabled: next.disabled, onClick: () => setGuideStep(index + 1) },
+    }),
+  );
 
   return (
     <PopupDialog

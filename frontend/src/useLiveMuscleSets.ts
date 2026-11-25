@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useState } from 'react';
-import { LIVE_WORKOUT_ID, liveMuscleSets, type MuscleSetsWeek } from './liveMuscleSets';
+import {
+  LIVE_WORKOUT_ID,
+  liveMuscleSetsWithFinished,
+  type FinishedMuscleSource,
+  type MuscleSetsWeek,
+} from './liveMuscleSets';
 import {
   ACTIVE_WORKOUT_CHANGE_EVENT,
   ACTIVE_WORKOUT_DRAFT_KEY,
   readActiveWorkoutDraft,
-  type ActiveWorkoutDraft,
 } from './workoutDraft';
 import { localDate } from './utils';
 import type { DashboardData, Exercise, TrackedWorkout } from './types';
 
-/** A finished workout counted before the dashboard includes it, with its own contribution id. */
-export interface FinishedMuscleSource {
-  id: string;
-  draft: ActiveWorkoutDraft;
-}
+export type { FinishedMuscleSource };
 
 const NONE: FinishedMuscleSource[] = [];
 
@@ -43,17 +43,7 @@ export function useLiveMuscleSets(
   const today = localDate();
   return useMemo(() => {
     const withWorkouts = (week: MuscleSetsWeek) =>
-      liveMuscleSets(
-        finished.reduce(
-          (current, source) =>
-            liveMuscleSets(current, source.draft, exercises, workouts, today, source.id),
-          week,
-        ),
-        draft,
-        exercises,
-        workouts,
-        today,
-      );
+      liveMuscleSetsWithFinished(week, draft, exercises, workouts, today, finished);
     return {
       weeklySets: dashboard?.weekly_sets ? withWorkouts(dashboard.weekly_sets) : undefined,
       history: dashboard?.weekly_sets_history?.map(withWorkouts),

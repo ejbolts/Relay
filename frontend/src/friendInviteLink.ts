@@ -21,6 +21,18 @@ export function friendInviteIdFromHash(hash: string): string | null {
   return FRIEND_INVITE_HASH.exec(hash)?.[1] ?? null;
 }
 
+/** The registration code a friend link carries for a closed server, if it is well formed. */
+export function registrationInviteFromHash(hash: string): string | null {
+  const encoded = FRIEND_INVITE_HASH.exec(hash)?.[2];
+  if (!encoded) return null;
+  try {
+    const code = decodeURIComponent(encoded);
+    return code.length <= 200 ? code : null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Reads a scanned QR code as a friend link. Any Relay address is accepted, so a code made on
  * another of this server's addresses still works; an unknown account simply cannot be opened.

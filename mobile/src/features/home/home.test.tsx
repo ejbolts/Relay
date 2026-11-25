@@ -37,7 +37,11 @@ jest.mock('../../data/api', () => ({
   apiGet: jest.fn(),
   apiSend: jest.fn(),
 }));
-jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: jest.fn() }));
+jest.mock('../workout/WorkoutProvider', () => ({
+  useWorkout: jest.fn(),
+  useOptionalWorkout: () => null,
+  useLogger: () => null,
+}));
 const mockRouter = { navigate: jest.fn(), push: jest.fn() };
 jest.mock('expo-router', () => ({ useRouter: () => mockRouter, useIsFocused: () => true }));
 interface MockLongPressConfig {
@@ -946,10 +950,13 @@ test("a logged day's sheet opens, edits and adds workouts, replacing a live one"
   const tile = () => screen.getAllByRole('button', { name: /^View 1 workout for/ })[0];
   await fireEvent.press(tile());
   await fireEvent.press(await screen.findByRole('button', { name: 'Open Lower B' }));
-  expect(mockRouter.push).toHaveBeenLastCalledWith({
-    pathname: '/training/session/[id]',
-    params: { id: 'w2' },
-  });
+  expect(mockRouter.push).toHaveBeenLastCalledWith(
+    {
+      pathname: '/training/session/[id]',
+      params: { id: 'w2' },
+    },
+    { withAnchor: true },
+  );
   await fireEvent.press(tile());
   await fireEvent.press(await screen.findByRole('button', { name: 'Edit Lower B' }));
   expect(mockRouter.push).toHaveBeenLastCalledWith({
@@ -1027,10 +1034,13 @@ test('a muscle opens its contributions, and its goal can be changed there', asyn
       name: `View Hip Thrust in Lower B, ${shortDate(monday)}`,
     }),
   );
-  expect(mockRouter.push).toHaveBeenLastCalledWith({
-    pathname: '/training/session/[id]',
-    params: { id: 'w2' },
-  });
+  expect(mockRouter.push).toHaveBeenLastCalledWith(
+    {
+      pathname: '/training/session/[id]',
+      params: { id: 'w2' },
+    },
+    { withAnchor: true },
+  );
 });
 
 test('Sets per muscle opens the muscle goals; Recent records opens Progress', async () => {
@@ -1043,10 +1053,13 @@ test('Sets per muscle opens the muscle goals; Recent records opens Progress', as
     params: { section: 'exercises', request: expect.any(String) },
   });
   await fireEvent.press(screen.getByRole('button', { name: /^Barbell Bench Press, Weight PR/ }));
-  expect(mockRouter.push).toHaveBeenLastCalledWith({
-    pathname: '/training/exercise/[id]',
-    params: { id: 'bench' },
-  });
+  expect(mockRouter.push).toHaveBeenLastCalledWith(
+    {
+      pathname: '/training/exercise/[id]',
+      params: { id: 'bench' },
+    },
+    { withAnchor: true },
+  );
 });
 
 test('the check-in follows its saved mode: Weight only saves just the weight', async () => {

@@ -251,10 +251,13 @@ it('reviews last week against the week before, steps between weeks and opens rec
 
   await fireEvent.press(screen.getByRole('button', { name: /^Bench Press/ }));
   expect(mockRouter.back).toHaveBeenCalled();
-  expect(mockRouter.push).toHaveBeenCalledWith({
-    pathname: '/training/exercise/[id]',
-    params: { id: 'bench' },
-  });
+  expect(mockRouter.push).toHaveBeenCalledWith(
+    {
+      pathname: '/training/exercise/[id]',
+      params: { id: 'bench' },
+    },
+    { withAnchor: true },
+  );
 
   await fireEvent.press(screen.getByRole('button', { name: 'Previous week' }));
   expect(screen.getByText('2 weeks ago')).toBeVisible();

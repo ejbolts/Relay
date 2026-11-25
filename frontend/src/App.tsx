@@ -139,6 +139,7 @@ import {
   readdsRemovedSet,
   replacesRemovedExercise,
   savedWorkoutCount,
+  tipWorkoutCount,
   type TipRemoval,
 } from './tipTriggers';
 import { PlateCalculatorDialog } from './PlateCalculator';
@@ -146,7 +147,7 @@ import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import type { ExerciseMachineChoices } from './exerciseMachineChoices';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
-import type { MuscleSetsWeek } from './liveMuscleSets';
+import { finishedMuscleSourcesFor, type MuscleSetsWeek } from './liveMuscleSets';
 import { useLiveMuscleSets } from './useLiveMuscleSets';
 import {
   MachineFilterBanner,
@@ -368,7 +369,6 @@ import {
   dashboardWithPreview,
   isPendingWorkoutId,
   pendingWorkoutPreview,
-  previewIdFor,
   workoutsWithPreview,
 } from './pendingWorkoutPreview';
 import { PendingWorkoutSaveCard } from './PendingWorkoutSaveCard';
@@ -971,14 +971,16 @@ function AppContent() {
     );
   }, [awaitingDashboard, dashboard, finishedPreviews, workoutTypes.types]);
   const finishedMuscleSources = useMemo(
-    () => [
-      ...awaitingDashboard.map((preview) => ({ id: preview.workout.id, draft: preview.finished })),
-      ...waitingWorkouts.map((finished) => ({
-        id: previewIdFor(finished.pendingSave),
-        draft: finished,
-      })),
-    ],
-    [awaitingDashboard, waitingWorkouts],
+    () =>
+      finishedMuscleSourcesFor(
+        awaitingDashboard.map((preview) => ({
+          id: preview.workout.id,
+          finished: preview.finished,
+        })),
+        finishedQueue.items,
+        finishedQueue.refusals,
+      ),
+    [awaitingDashboard, finishedQueue.items, finishedQueue.refusals],
   );
   const muscleSets = useLiveMuscleSets(dashboard, exercises, workouts, finishedMuscleSources);
   const reviewMuscleWeeks = useMemo(() => {
@@ -2228,11 +2230,7 @@ function AppContent() {
         !workoutSaveBlocked &&
         finishedQueue.items.length === 0,
       resting: restEndsAt !== null && restEndsAt > Date.now(),
-      workoutCount: Math.max(
-        (dashboard?.history?.total_workouts ?? workouts.length) -
-          workouts.filter((workout) => workout.is_sample).length,
-        workouts.filter((workout) => !workout.is_sample).length,
-      ),
+      workoutCount: tipWorkoutCount(workouts, dashboard?.history?.total_workouts),
     });
   }, [
     configureTips,

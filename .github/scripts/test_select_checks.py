@@ -185,6 +185,11 @@ const greeting = 'hello from the app';
                     (selected.frontend, selected.backend, selected.mobile), ("full", True, True)
                 )
 
+    def test_shared_fixtures_the_backend_reads_run_the_backend_suite(self):
+        selected = select_paths(["frontend/src/tipSyncCases.json"])
+        self.assertTrue(selected.backend)
+        self.assertNotEqual(selected.frontend, "none")
+
     def test_docs_and_empty_diff_need_neither_suite(self):
         for paths in (
             [],

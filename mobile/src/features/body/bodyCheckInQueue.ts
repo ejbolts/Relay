@@ -37,6 +37,8 @@ let owner: string | null = null;
 /** Changes whenever the queue does, so an older list can't replace an acknowledged save. */
 let revision = 0;
 let syncing: Promise<number> | null = null;
+/** Whether the latest send failed because Relay could not be reached, so the card offers Retry. */
+let syncFailed = false;
 const listeners = new Set<() => void>();
 let status = { pending: 0, error: null as string | null };
 /**
@@ -59,6 +61,7 @@ function queueFor(account: string): BodyMeasurementQueue {
 
 function emit() {
   const next = bodyMeasurementQueueStatus(owner ? queueFor(owner) : { changes: [] });
+  if (next.pending === 0) syncFailed = false;
   if (next.pending !== status.pending || next.error !== status.error) status = next;
   for (const listener of listeners) listener();
 }
@@ -85,7 +88,10 @@ function signedInOwner(): string {
 
 /** Starts or ends the signed-in account's queue; another account's queue and copy are dropped. */
 export function setBodyCheckInOwner(account: string | null) {
-  if (account !== owner) acknowledged = [];
+  if (account !== owner) {
+    acknowledged = [];
+    syncFailed = false;
+  }
   owner = account;
   if (account) {
     if (
@@ -120,6 +126,16 @@ export const bodyCheckInQueueActive = () => owner !== null;
 
 /** How many check-ins wait on the phone, and why the server refused one. */
 export const bodyCheckInStatus = () => status;
+
+/** Whether the last sync attempt failed with a connection or server error (not a refusal). */
+export const bodyCheckInSyncFailed = () => syncFailed;
+
+/** Whether a sync attempt is currently running. */
+export const bodyCheckInSyncing = () => syncing !== null;
+
+/** Whether any queued check-in is sendable automatically (excludes refused changes waiting on Retry). */
+export const bodyCheckInHasSendable = () =>
+  owner !== null && nextBodyMeasurementChange(queueFor(owner)) !== null;
 
 /**
  * The account the phone's copy belongs to. Signing out removes the copy, so before the session
@@ -233,12 +249,20 @@ export function syncBodyCheckIns(retry = false): Promise<number> {
             owner: account,
             rows: acknowledgedBodyMeasurements(rows, change, saved),
           });
+        syncFailed = false;
         persist(withoutBodyMeasurementChange(queueFor(account), change.token));
         acknowledged = [...acknowledged.slice(-49), { revision, change, saved }];
         sent += 1;
       } catch (reason) {
         const code = reason instanceof ApiError ? reason.status : undefined;
-        if (owner !== account || !bodyMeasurementSendRefused(code)) throw reason;
+        if (owner !== account || !bodyMeasurementSendRefused(code)) {
+          if (owner === account) {
+            syncFailed = true;
+            emit();
+          }
+          throw reason;
+        }
+        syncFailed = false;
         persist(
           withRefusedBodyMeasurementChange(
             queueFor(account),
