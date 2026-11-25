@@ -26,6 +26,8 @@ import type {
   User,
 } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
+import { workoutTypeColor } from '../../../../frontend/src/dayColors';
+import { builtinTypeColors, DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
 import { apiGet, apiSend } from '../../data/api';
 import { ToastHost } from '../../ui/Toast';
 import { useWorkout } from '../workout/WorkoutProvider';
@@ -555,6 +557,52 @@ test('Profile, This week, Consistency and records show the account data', async 
   expect(screen.getByText(`Weight PR · ${shortDate(record.achieved_date)}`)).toBeVisible();
   expect(screen.getByText('at 83.5 kg BW')).toBeVisible();
   expect(screen.getByText('85 kg')).toBeVisible();
+});
+
+test('today’s outline shows its workout type before and during the workout', async () => {
+  const colourOf = (id: string) =>
+    workoutTypeColor(
+      DEFAULT_WORKOUT_TYPES.find((item) => item.id === id)!,
+      builtinTypeColors(DEFAULT_WORKOUT_TYPES),
+    );
+  // Nothing logged today, and the split plans Upper body.
+  responses['/api/dashboard'] = dashboard({ heatmap: [] });
+  const show = async () => {
+    await renderHome();
+    await screen.findByLabelText('Streak: 8 days');
+    // The calendar draws its months once it knows its width.
+    await fireEvent(screen.getByTestId('consistency-calendar'), 'layout', {
+      nativeEvent: { layout: { width: 326, height: 320 } },
+    });
+  };
+  /** The colour of today's outer outline (a single-colour ring). */
+  const outline = () => {
+    const [ring] = screen.getByTestId('today-outline').children as unknown as {
+      props: { style: Parameters<typeof StyleSheet.flatten>[0] };
+    }[];
+    return StyleSheet.flatten(ring.props.style) as { borderColor?: string };
+  };
+  await show();
+  expect(outline().borderColor).toBe(colourOf('upper'));
+  expect(colourOf('upper')).not.toBe(colourOf('lower'));
+  await screen.unmount();
+
+  // Once a Lower body workout starts, today takes the colour being logged.
+  jest.mocked(useWorkout).mockReturnValue({
+    ...workout,
+    live: {
+      name: 'Lower B',
+      startedAt: Date.now(),
+      workoutDate: today,
+      category: 'lower',
+      workoutTypeId: null,
+    },
+  } as unknown as ReturnType<typeof useWorkout>);
+  await show();
+  expect(outline().borderColor).toBe(colourOf('lower'));
+  expect(StyleSheet.flatten(screen.getByTestId('live-day-tint').props.style).backgroundColor).toBe(
+    colourOf('lower'),
+  );
 });
 
 test('a logged day opens its workouts in a sheet', async () => {

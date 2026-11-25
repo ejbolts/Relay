@@ -9,7 +9,7 @@ import {
 } from 'react';
 import type { DashboardData, WorkoutType, WorkoutTypeColors } from './types';
 import { useWorkoutTypes } from './workoutTypesContext';
-import { calendarDayLook, weekStripLabels } from './calendarDayLook';
+import { calendarDayLook, todayOutlineColors, weekStripLabels } from './calendarDayLook';
 import { calendarMonths, calendarWeekdays, monthCountFromOldestWorkout } from './calendarRange';
 import { useWeekStartDay } from './trainingPreferencesContext';
 import { Icon } from './Icon';
@@ -290,13 +290,18 @@ export function WorkoutCalendar({
                         });
                       const dayRingStyle =
                         ring.length && !inProgress ? dayRing(ring) : dayRing(scheduledRing);
-                      // Today's outer ring and ripple repeat the day's workout colours, split into
-                      // the same arcs as its outline on a mixed day.
-                      const todayRing = key === todayKey && ring.length > 0 && !inProgress;
+                      // Today's outer ring and ripple take its workout colours, split into arcs on
+                      // a mixed day: the types logged, or the split's plan before anything starts.
+                      // A live workout keeps the flat outline in the colour being logged.
+                      const todayColors =
+                        key === todayKey && !inProgress
+                          ? todayOutlineColors({ ring, scheduledRing })
+                          : [];
+                      const todayRing = todayColors.length > 0;
                       return (
                         <button
                           type="button"
-                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${scheduledRing.length ? 'scheduled' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${!previewMode && key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
+                          className={`calendar-day ${entry ? 'trained' : ''} ${planned ? 'planned' : ''} ${scheduledRing.length ? 'scheduled' : ''} ${filteredOut ? 'filtered-out' : ''} ${inProgress ? 'in-progress' : ''} ${key === todayKey ? 'today' : ''} ${todayRing ? 'today-ringed' : ''} ${!previewMode && key < todayKey ? 'past' : ''} ${key === selectedDate ? 'selected' : ''} ${key > todayKey ? 'future' : ''}`}
                           key={key}
                           data-date={key}
                           style={
@@ -335,7 +340,13 @@ export function WorkoutCalendar({
                                     : prettyDate(key)
                           }
                         >
-                          {todayRing && <span className="calendar-today-ring" aria-hidden="true" />}
+                          {todayRing && (
+                            <span
+                              className="calendar-today-ring"
+                              aria-hidden="true"
+                              style={{ '--day-ring': dayRing(todayColors) } as CSSProperties}
+                            />
+                          )}
                           <span className="calendar-day-number">{day.getDate()}</span>
                           <span className="calendar-day-dots" aria-hidden="true">
                             {planned ? (

@@ -115,6 +115,11 @@ export function HomeScreen() {
           visible={visible}
           layout={home.layout}
           liveDate={liveDate}
+          liveType={
+            workout.live?.category
+              ? { category: workout.live.category, workoutTypeId: workout.live.workoutTypeId }
+              : null
+          }
           onPressDay={pressDay}
           onOpenLive={workout.open}
           onHoldToEdit={

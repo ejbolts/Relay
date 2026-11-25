@@ -12,7 +12,7 @@ import { HomeTrainingBlockCard } from '../blocks';
 import { FriendsActivityCard } from '../social';
 import { CheckInCard } from './CheckInCard';
 import { HoldableCard } from './homeHold';
-import { ConsistencyCard } from './ConsistencyCard';
+import { ConsistencyCard, type LiveWorkoutType } from './ConsistencyCard';
 import { BodyweightTrendCard, CardioGoalCard } from './HalfCards';
 import {
   BodyGoalCard,
@@ -33,6 +33,8 @@ export interface HomeCardContext {
   /** The card's share of the six-column row; under 6 draws the compact version. */
   span: number;
   liveDate: string | null;
+  /** The live workout's type, for its day's colour on the calendar. */
+  liveType: LiveWorkoutType | null;
   onPressDay: (date: string, entry: HeatmapDay | undefined) => void;
   onOpenLive: () => void;
 }
@@ -57,8 +59,13 @@ export const HOME_CARDS: Record<HomeSectionId, ((context: HomeCardContext) => Re
   'this-week': ({ liveDate, onPressDay, onOpenLive }) => (
     <ThisWeekCard liveDate={liveDate} onPressDay={onPressDay} onOpenLive={onOpenLive} />
   ),
-  consistency: ({ liveDate, onPressDay, onOpenLive }) => (
-    <ConsistencyCard liveDate={liveDate} onPressDay={onPressDay} onOpenLive={onOpenLive} />
+  consistency: ({ liveDate, liveType, onPressDay, onOpenLive }) => (
+    <ConsistencyCard
+      liveDate={liveDate}
+      liveType={liveType}
+      onPressDay={onPressDay}
+      onOpenLive={onOpenLive}
+    />
   ),
   'muscle-sets': () => <MuscleSetsCard />,
   zone2: ({ layout }) => <CardioGoalCard settings={homeSectionSettings(layout, 'zone2')} />,

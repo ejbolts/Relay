@@ -1830,13 +1830,13 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   outline-color: var(--live-color, var(--accent));
 }
 
-/* Today with workouts logged swaps the flat outline and ripple for a ring in the day's own colours
-   (.calendar-today-ring), split into the same arcs as its outline on a mixed day. */
-.calendar-panel .calendar-day.today.trained:not(.in-progress) {
+/* Today with workouts logged, or a split day planned, swaps the flat outline and ripple for a ring
+   in the day's workout colours (.calendar-today-ring), split into arcs on a mixed day. */
+.calendar-panel .calendar-day.today-ringed {
   outline-color: transparent;
 }
 
-.calendar-panel .calendar-day.today.trained:not(.in-progress)::after {
+.calendar-panel .calendar-day.today-ringed::after {
   content: none;
 }
 

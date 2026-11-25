@@ -175,6 +175,9 @@ export interface LiveWorkout {
   startedAt: number;
   /** The day it is logged on: today, or the earlier day it was started for. */
   workoutDate: string;
+  /** Its workout type, which colours its day on the calendars. */
+  category: WorkoutCategory;
+  workoutTypeId: string | null;
   pause: WorkoutPause;
   loggedSets: number;
 }
@@ -1435,6 +1438,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
             previousDurationMinutes: logger.previousDurationMinutes,
             startedAt: logger.startedAt,
             workoutDate: logger.workoutDate,
+            category: logger.category,
+            workoutTypeId: logger.workoutTypeId,
             pause: logger.pause,
             loggedSets,
           }

@@ -55,6 +55,19 @@ export function calendarDayLook({
 }
 
 /**
+ * The colours of today's outline and its ripple, so today always shows the workout type it is
+ * for: the type being logged while a workout is live, the types logged today, or, before
+ * anything is started, the types the split plans for today. Empty means the plain accent outline.
+ */
+export function todayOutlineColors(
+  look: Pick<ReturnType<typeof calendarDayLook>, 'ring' | 'scheduledRing'>,
+  liveColor: string | null = null,
+): string[] {
+  if (liveColor) return [liveColor];
+  return look.ring.length ? look.ring : look.scheduledRing;
+}
+
+/**
  * The names a week strip tile shows: two fit, so with three or more types the second line counts
  * the rest instead ("+2"). "Upper body" and friends lose the repeated word to fit the tile. A
  * type switched off in the legend keeps its name but loses its colour (null).
