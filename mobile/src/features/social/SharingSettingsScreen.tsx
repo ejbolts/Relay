@@ -28,6 +28,7 @@ import { haptics } from '../../ui/haptics';
 import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { pushedScreenOptions } from '../../ui/navigation';
+import { syncLiftLeaderboardsForSharing } from '../training/exerciseInfoQueries';
 import { Avatar } from './Avatar';
 import { socialApi } from './socialApi';
 import { refreshSocial, socialKeys, useSharingChoices } from './socialQueries';
@@ -66,8 +67,9 @@ export function SharingSettingsScreen() {
       setDraft(null);
       haptics.success();
       showToast(message);
-      // Sharing opens or closes Social, the feed and every profile.
+      // Sharing opens or closes Social, the feed, every profile and friends' lift rankings.
       void refreshSocial(client);
+      syncLiftLeaderboardsForSharing(client, stored.visibility);
     },
     onError: () => setDraft(null),
   });
