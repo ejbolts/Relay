@@ -53,6 +53,20 @@ it('checks every five seconds and on return/reconnect, without overlapping reque
   await act(async () => vi.advanceTimersByTime(TRAINING_SYNC_INTERVAL_MS));
   expect(check).toHaveBeenCalledTimes(5);
 });
+it('tells the check whether it is a timed check or the app coming back', async () => {
+  const check = vi.fn().mockResolvedValue(undefined);
+  await act(async () => root.render(<Harness check={check} />));
+  await act(async () => vi.advanceTimersByTime(TRAINING_SYNC_INTERVAL_MS));
+  expect(check).toHaveBeenLastCalledWith(false);
+  for (const event of ['focus', 'online', 'visibilitychange']) {
+    await act(async () =>
+      (event === 'visibilitychange' ? document : window).dispatchEvent(new Event(event)),
+    );
+    expect(check).toHaveBeenLastCalledWith(true);
+  }
+  await act(async () => vi.advanceTimersByTime(TRAINING_SYNC_INTERVAL_MS));
+  expect(check).toHaveBeenLastCalledWith(false);
+});
 it('pauses in the background or offline and retries failures quietly', async () => {
   const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
   const online = vi.spyOn(navigator, 'onLine', 'get');

@@ -279,7 +279,8 @@ def _check_account(user: CurrentUser, account: str | None) -> None:
 
 
 def _busy(error: OperationalError) -> bool:
-    """SQLite gave up waiting for another connection's lock (a writer, or a reader at commit)."""
+    """SQLite gave up waiting for another connection's lock: another writer, since write-ahead
+    logging lets a save commit while others read."""
     message = str(error.orig).lower()
     return "locked" in message or "busy" in message
 
@@ -325,7 +326,7 @@ def save_tip_state(
         set_setting(db, user.id, TIP_STATE_KEY, text)
         db.commit()
     except OperationalError as error:
-        # Busy at any step, including a reader holding the database at commit: ask to retry.
+        # Busy at any step, from taking the write lock to the commit: ask to retry.
         db.rollback()
         if _busy(error):
             raise BUSY from error

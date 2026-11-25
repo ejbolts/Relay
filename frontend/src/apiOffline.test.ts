@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError, revisionAfterSave, SAVED_COPY_AFTER_MS } from './api';
 import {
   connectionState,
+  isSavedCopy,
   isUsingSavedData,
   reportServerReached,
   resetConnectionStatus,
@@ -83,6 +84,20 @@ describe('account reads without a connection', () => {
     expect(await api.listExercises()).toEqual([bench]);
     await vi.waitFor(() => expect(isUsingSavedData()).toBe(false));
     expect(await api.listExercises()).toEqual([bench, squat]);
+  });
+
+  it.each([
+    ['exercise list', () => api.listExercises()],
+    ['dashboard', () => api.dashboard()],
+    ['personal records', () => api.listPersonalRecords()],
+  ])('tells a saved %s apart from the server answer', async (_name, read) => {
+    fetchMock.mockResolvedValueOnce(json([bench]));
+    expect(isSavedCopy(await read())).toBe(false);
+    // The copy is written after the answer is returned.
+    await vi.waitFor(async () => {
+      fetchMock.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+      expect(isSavedCopy(await read())).toBe(true);
+    });
   });
 
   it('treats an unavailable server behind the proxy like no connection', async () => {
@@ -257,6 +272,15 @@ describe('workout history without a connection', () => {
     expect(await api.listWorkouts('2026-08-01')).toEqual([recent]);
     expect(isUsingSavedData()).toBe(true);
     await expect(api.listWorkouts('2026-01-01')).rejects.toThrow('Failed to fetch');
+  });
+
+  it('tells the saved snapshot apart from one the server confirmed is current', async () => {
+    await writeWorkoutCache({ revision: 'one', since: '2026-08-01', workouts: [recent] });
+    fetchMock.mockResolvedValueOnce(json({ revision: 'one' }));
+    expect(isSavedCopy(await api.listWorkouts('2026-08-01'))).toBe(false);
+
+    fetchMock.mockRejectedValue(new TypeError('Failed to fetch'));
+    expect(isSavedCopy(await api.listWorkouts('2026-08-01'))).toBe(true);
   });
 
   it('refreshes the saved snapshot from the server when online', async () => {

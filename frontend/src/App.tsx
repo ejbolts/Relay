@@ -481,8 +481,16 @@ import { setResult } from './historySetFormat';
 import { canResumeWorkout } from './workoutResume';
 import { loggedSetCount as loggedSetCountRule } from './workoutAutoSave';
 import { readDashboardCache, writeDashboardCache } from './workoutCache';
-import { isUsingSavedData, savedDataAnswerCount } from './connectionStatus';
+import { isSavedCopy, isUsingSavedData } from './connectionStatus';
 import { trainingDataActivityLabel } from './trainingDataRefresh';
+import {
+  TRAINING_READS,
+  readsToRequest,
+  unansweredRefresh,
+  type RefreshTarget,
+  type TrainingRead,
+  type UnansweredRefresh,
+} from './trainingRefreshRetry';
 import { TIME_RANGE_OPTIONS } from './dateRanges';
 import { exerciseHiddenNotice } from './exerciseEdit';
 import {
@@ -733,6 +741,8 @@ function AppContent() {
   const refreshGenerationRef = useRef(0);
   const refreshingDataRef = useRef(0);
   const trainingRevisionRef = useRef<string | null>(null);
+  /** The last refresh the server did not fully answer, until one is; see `readsToRequest`. */
+  const unansweredRefreshRef = useRef<UnansweredRefresh | null>(null);
   const dashboardDateRef = useRef(localDate());
   const [dataRevision, setDataRevision] = useState<string | null>(null);
   currentTabRef.current = tab;
@@ -1274,101 +1284,136 @@ function AppContent() {
       if (revision) onRevision?.(revision.revision);
       const windowStart = historyStartRef.current;
       const dashboardRequestDate = localDate();
-      const savedAnswersBefore = savedDataAnswerCount();
+      const target: RefreshTarget = {
+        revision: revision?.revision ?? null,
+        date: dashboardRequestDate,
+        windowStart,
+      };
+      // A quiet retry of a refresh the server only partly answered asks for what is still owed.
+      // The workout list is always read: at a revision this device already holds it answers
+      // from the device, and what follows a full answer needs the list.
+      const wanted = new Set<TrainingRead>(
+        silent
+          ? [...readsToRequest(unansweredRefreshRef.current, target), 'workouts']
+          : TRAINING_READS,
+      );
+      // The reads the server itself answered. A failed read, one answered from this device's
+      // saved copy, and an answer older than a change made here meanwhile are all left out.
+      const answered = new Set<TrainingRead>();
+      const fromServer = (read: TrainingRead, answer: unknown) => {
+        if (!isSavedCopy(answer)) answered.add(read);
+      };
+      const when = <T,>(read: TrainingRead, start: () => Promise<T>): Promise<T | void> =>
+        wanted.has(read) ? start() : Promise.resolve();
       const exerciseEditsBefore = exerciseEditsRef.current;
-      // Set when an answer was older than a change made here meanwhile, so it was not used.
-      let outpaced = false;
       let loadedWorkouts: TrackedWorkout[] = [];
       const results = await Promise.allSettled([
-        api.dashboard(windowStart).then((nextDashboard) => {
-          if (!current()) return;
-          dashboardDateRef.current = dashboardRequestDate;
-          startTransition(() =>
-            setDashboard((current) => {
-              const olderDays = keepLoadedBefore(
-                current?.heatmap ?? [],
-                windowStart,
-                historyStartRef.current,
-              );
-              return olderDays.length
-                ? { ...nextDashboard, heatmap: [...olderDays, ...nextDashboard.heatmap] }
-                : nextDashboard;
-            }),
-          );
-          void writeDashboardCache(nextDashboard, cacheScope);
-          if (hasOlderHistory(windowStart, nextDashboard.history)) {
-            // Logging compares sets with older history; its summary loads off the startup path.
-            void api
-              .exerciseHistoryBaselines(windowStart)
-              .then((baselines) => {
-                if (!current()) return;
-                setHistoryBaselines({
-                  before: windowStart,
-                  byExercise: new Map(
-                    baselines.map((baseline) => [baseline.exercise_id, baseline]),
-                  ),
-                });
-              })
-              .catch(() => undefined);
-          } else setHistoryBaselines(null);
-        }),
-        api
-          .listExercises()
-          .then((nextExercises) => {
+        when('dashboard', () =>
+          api.dashboard(windowStart).then((nextDashboard) => {
             if (!current()) return;
-            // An exercise was added or changed here after this read began. Its answer may not
-            // include that, so keep the list on screen and let the next check read it again.
-            if (exerciseEditsRef.current !== exerciseEditsBefore) {
-              outpaced = true;
-              return;
-            }
-            answeredRef.current.exercises = true;
-            // Publish readiness with the actual catalogue, so an urgent loading update cannot
-            // mount the logger against an empty or partial list and overwrite its stored draft.
-            setExerciseCatalogue({ exercises: nextExercises, loaded: true, error: null });
-          })
-          .catch((reason: unknown) => {
-            if (!current()) return;
-            setExerciseCatalogue((current) => ({
-              ...current,
-              error: reason instanceof Error ? reason.message : 'Could not load your exercises.',
-            }));
-            throw reason;
+            fromServer('dashboard', nextDashboard);
+            dashboardDateRef.current = dashboardRequestDate;
+            startTransition(() =>
+              setDashboard((current) => {
+                const olderDays = keepLoadedBefore(
+                  current?.heatmap ?? [],
+                  windowStart,
+                  historyStartRef.current,
+                );
+                return olderDays.length
+                  ? { ...nextDashboard, heatmap: [...olderDays, ...nextDashboard.heatmap] }
+                  : nextDashboard;
+              }),
+            );
+            void writeDashboardCache(nextDashboard, cacheScope);
+            if (hasOlderHistory(windowStart, nextDashboard.history)) {
+              // Logging compares sets with older history; its summary loads off the startup path.
+              void api
+                .exerciseHistoryBaselines(windowStart)
+                .then((baselines) => {
+                  if (!current()) return;
+                  setHistoryBaselines({
+                    before: windowStart,
+                    byExercise: new Map(
+                      baselines.map((baseline) => [baseline.exercise_id, baseline]),
+                    ),
+                  });
+                })
+                .catch(() => undefined);
+            } else setHistoryBaselines(null);
           }),
+        ),
+        when('exercises', () =>
+          api
+            .listExercises()
+            .then((nextExercises) => {
+              if (!current()) return;
+              // An exercise was added or changed here after this read began. Its answer may not
+              // include that, so keep the list on screen and let the next check read it again.
+              if (exerciseEditsRef.current !== exerciseEditsBefore) return;
+              fromServer('exercises', nextExercises);
+              answeredRef.current.exercises = true;
+              // Publish readiness with the actual catalogue, so an urgent loading update cannot
+              // mount the logger against an empty or partial list and overwrite its stored draft.
+              setExerciseCatalogue({ exercises: nextExercises, loaded: true, error: null });
+            })
+            .catch((reason: unknown) => {
+              if (!current()) return;
+              setExerciseCatalogue((current) => ({
+                ...current,
+                error: reason instanceof Error ? reason.message : 'Could not load your exercises.',
+              }));
+              throw reason;
+            }),
+        ),
         // The revision read above already precedes this read, so it is not asked for again.
-        (revision
-          ? api.listWorkouts(windowStart, revision.revision)
-          : api.listWorkouts(windowStart)
-        ).then((nextWorkouts) => {
-          if (!current()) return;
-          answeredRef.current.workouts = true;
-          loadedWorkouts = nextWorkouts;
-          startTransition(() =>
-            setWorkouts((current) => [
-              ...nextWorkouts,
-              ...keepLoadedBefore(current, windowStart, historyStartRef.current),
-            ]),
-          );
-        }),
-        api.listBodyMeasurements().then((nextMeasurements) => {
-          if (!current()) return;
-          answeredRef.current.checkIns = true;
-          startTransition(() => setMeasurements(nextMeasurements));
-        }),
-        api.listPersonalRecords().then((nextRecords) => {
-          if (!current()) return;
-          answeredRef.current.records = true;
-          startTransition(() => setPersonalRecords(nextRecords));
-        }),
+        when('workouts', () =>
+          (revision
+            ? api.listWorkouts(windowStart, revision.revision)
+            : api.listWorkouts(windowStart)
+          ).then((nextWorkouts) => {
+            if (!current()) return;
+            fromServer('workouts', nextWorkouts);
+            answeredRef.current.workouts = true;
+            loadedWorkouts = nextWorkouts;
+            startTransition(() =>
+              setWorkouts((current) => [
+                ...nextWorkouts,
+                ...keepLoadedBefore(current, windowStart, historyStartRef.current),
+              ]),
+            );
+          }),
+        ),
+        when('checkIns', () =>
+          api.listBodyMeasurements().then((nextMeasurements) => {
+            if (!current()) return;
+            fromServer('checkIns', nextMeasurements);
+            answeredRef.current.checkIns = true;
+            startTransition(() => setMeasurements(nextMeasurements));
+          }),
+        ),
+        when('records', () =>
+          api.listPersonalRecords().then((nextRecords) => {
+            if (!current()) return;
+            fromServer('records', nextRecords);
+            answeredRef.current.records = true;
+            startTransition(() => setPersonalRecords(nextRecords));
+          }),
+        ),
       ]);
       if (!current()) return;
       // Failed reads, and slow reads answered from this device's saved copy, do not acknowledge
       // the revision, so quiet sync retries them instead of keeping older data until a reload.
-      if (
-        results.every((result) => result.status === 'fulfilled') &&
-        savedDataAnswerCount() === savedAnswersBefore &&
-        !outpaced
-      ) {
+      const owed = TRAINING_READS.filter((read) => wanted.has(read) && !answered.has(read));
+      if (owed.length)
+        unansweredRefreshRef.current = unansweredRefresh(
+          unansweredRefreshRef.current,
+          target,
+          owed,
+          Date.now(),
+        );
+      else {
+        unansweredRefreshRef.current = null;
         trainingRevisionRef.current = revision?.revision ?? null;
         setDataRevision(revision?.revision ?? null);
         // Every read was just saved on this device at this revision, so the next opening can
@@ -1408,7 +1453,7 @@ function AppContent() {
   }
 
   useTrainingDataSync(
-    async () => {
+    async (resumed) => {
       if (
         refreshingDataRef.current ||
         workoutSaving ||
@@ -1416,6 +1461,11 @@ function AppContent() {
         loadingOlderHistoryRef.current
       )
         return;
+      // After refreshes the server could not fully answer, timed checks pause for longer each
+      // time: asking a slow server for everything again every few seconds keeps it slow.
+      // Coming back to the app or online still checks at once.
+      const owed = unansweredRefreshRef.current;
+      if (!resumed && owed && Date.now() < owed.retryAt) return;
       const generation = refreshGenerationRef.current;
       const { revision } = await api.workoutRevision();
       // A local save/refresh may have started while the revision request was in flight.
@@ -1425,7 +1475,8 @@ function AppContent() {
         (revision === trainingRevisionRef.current && dashboardDateRef.current === localDate())
       )
         return;
-      await refreshData({ silent: true, activityLabel: null });
+      // The revision just read precedes the reads, so the refresh does not ask for it again.
+      await refreshData({ silent: true, activityLabel: null, knownRevision: revision });
     },
     !loading && !workoutSaving && backgroundActivities.length === 0,
   );

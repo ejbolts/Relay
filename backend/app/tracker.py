@@ -1022,6 +1022,15 @@ def save_body_measurement(
         )
     )
     if measurement:
+        if not measurement.is_sample and (
+            measurement.weight_kg,
+            measurement.body_fat_pct,
+            measurement.notes,
+        ) == (payload.weight_kg, payload.body_fat_pct, payload.notes):
+            # The app sends a check-in again when the answer to an earlier save never reached
+            # it. Nothing changed, so there are no records to rebuild and no revision to bump:
+            # a new revision would make every open device reload its training data.
+            return measurement
         measurement.weight_kg = payload.weight_kg
         measurement.body_fat_pct = payload.body_fat_pct
         measurement.notes = payload.notes
