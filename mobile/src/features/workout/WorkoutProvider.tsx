@@ -84,7 +84,8 @@ import {
   useWorkoutTypes,
 } from '../../data/queries';
 import { useOptionalSession } from '../../session/SessionProvider';
-import { showToast, ToastHost } from '../../ui/Toast';
+import { isToastAccountCurrent, showToast, toastAccountFor, ToastHost } from '../../ui/Toast';
+import { rememberSavedWorkout } from '../review/justSavedWorkouts';
 import { restTimerPreference } from '../settings/devicePreferences';
 import { refreshFriendPresence, socialKeys, updateFriendPresence } from '../social/socialQueries';
 import { FinishedQueueSender, type QueueStatus } from './finishedQueueSender';
@@ -111,6 +112,15 @@ import {
 import { useHistoryBaselines, useWorkoutAutoSave } from './loggerQueries';
 import { forgetOfflineQueries, saveOfflineQueries, seedOfflineQueries } from './offlineQueries';
 import { askForRestAlerts, syncRestAlert } from './restAlerts';
+import { syncRestActivity, useRestActivity } from './restActivity';
+import {
+  holdReminder,
+  onWorkoutReminderOpened,
+  remindAboutRestAlerts,
+  syncInactiveReminder,
+  takeHeldReminder,
+  takeLaunchReminder,
+} from './workoutReminders';
 import { SyncConflictButton, SyncConflictSheet } from './SyncConflictSheet';
 import {
   adjustRest as adjustRestRule,
@@ -239,8 +249,15 @@ export interface LoggerApi {
   createExercise: (input: ExerciseCreateInput) => Promise<Exercise>;
   /** Changes the live workout; it is stored before the next frame. */
   change: (update: (state: LoggerState) => LoggerState) => void;
-  updateSet: (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => void;
-  addSet: (movementKey: string) => void;
+  /** `workoutBodyweight` (the workout day's weigh-in) stamps a newly logged strength set. */
+  updateSet: (
+    movementKey: string,
+    setKey: string,
+    update: Partial<WorkoutDraftSet>,
+    workoutBodyweight?: number | null,
+  ) => void;
+  /** Adds a set at the end, or at `position` (the "+" between sets). */
+  addSet: (movementKey: string, position?: number) => void;
   chooseType: (type: WorkoutType) => void;
   togglePause: () => void;
   startRest: (seconds: number) => void;
@@ -268,6 +285,11 @@ export function useWorkout() {
   const workout = useContext(WorkoutContext);
   if (!workout) throw new Error('useWorkout needs a WorkoutProvider');
   return workout;
+}
+
+/** The workout engine, or null outside a WorkoutProvider (as useLogger is). */
+export function useOptionalWorkout() {
+  return useContext(WorkoutContext);
 }
 
 /** The engine behind the logger sheet; null while signed out. */
@@ -306,6 +328,12 @@ export function WorkoutProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (signedOut) forgetOfflineQueries();
+  }, [signedOut]);
+  // Confirmed signed out, as when the app opens after the session ended: an iPhone rest Live
+  // Activity left from the last account goes. While the session is still loading it stays, so a
+  // restored rest can carry it on.
+  useEffect(() => {
+    if (signedOut) void syncRestActivity(null);
   }, [signedOut]);
 
   const idle = useMemo<WorkoutApi>(
@@ -593,6 +621,49 @@ const WorkoutEngine = memo(function WorkoutEngine({
     );
   }, [rest, weightUnit]);
   useEffect(() => () => void syncRestAlert(NO_REST, null), []);
+  // On iPhone the rest also shows on the Lock Screen and in the Dynamic Island.
+  useRestActivity(rest, logger, weightUnit, waiting !== null);
+
+  // "Still working out?" follows the live workout's last activity; tapping it opens the logger.
+  // It is cancelled when the workout is finished or discarded (no logger) and on sign-out.
+  const lastActiveAt = logger?.lastActiveAt ?? null;
+  const liveStartedAt = logger?.startedAt ?? null;
+  useEffect(() => {
+    void syncInactiveReminder(lastActiveAt, liveStartedAt);
+  }, [lastActiveAt, liveStartedAt]);
+  useEffect(() => () => void syncInactiveReminder(null), []);
+  const openFromReminder = useCallback(
+    (startedAt: number | null) => {
+      const live = loggerRef.current;
+      if (!live || (startedAt !== null && startedAt !== live.startedAt)) return false;
+      router.push('/workout');
+      return true;
+    },
+    [router],
+  );
+  // A reminder tapped before its workout has loaded here (such as one started on the web) waits
+  // for it, for this account only.
+  useEffect(
+    () =>
+      onWorkoutReminderOpened((startedAt) => {
+        if (!openFromReminder(startedAt)) holdReminder(startedAt);
+      }),
+    [openFromReminder],
+  );
+  // A tap that cold-launched Relay came before the listener: take it once the workout is back.
+  useEffect(() => {
+    if (liveStartedAt === null) return;
+    let active = true;
+    void takeLaunchReminder().then((startedAt) => {
+      if (!active) return;
+      if (startedAt !== undefined) holdReminder(startedAt);
+      const held = takeHeldReminder(liveStartedAt);
+      if (held !== undefined) openFromReminder(held);
+    });
+    return () => {
+      active = false;
+    };
+  }, [liveStartedAt, openFromReminder]);
 
   // Finished workouts send until the server confirms them, retrying when the connection or the
   // app comes back.
@@ -601,6 +672,10 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const finishedSessionRef = useRef<string | null>(null);
   const reviewRef = useRef<(key: string) => void>(() => undefined);
   useEffect(() => {
+    // The queue belongs to this signed-in session; its late toasts never show for another one.
+    // Taken from the engine's own user, as the toast hosts may not have caught up with a sign-in
+    // that has only just happened.
+    const account = toastAccountFor(user.id);
     const sender = new FinishedQueueSender({
       storage: deviceStorage,
       userId: user.id,
@@ -621,6 +696,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
           error instanceof ApiError && error.status === 409 && error.code === 'workout_conflict',
       }),
       onSaved: (workout, item, remaining) => {
+        // Counted in the weekly review until the refreshed dashboard includes it.
+        rememberSavedWorkout(client, user.id, workout.id, item);
         if (remaining === 0) void refreshTraining(client);
         // The queue no longer owns this session's shared copy.
         void syncRef.current?.sync();
@@ -630,7 +707,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
             : current,
         );
         // Finished a while ago (offline): say it reached the server.
-        if (Date.now() - item.pendingSave.finishedAt > 10_000) showToast('Workout saved');
+        if (Date.now() - item.pendingSave.finishedAt > 10_000)
+          showToast('Workout saved', undefined, { account });
         apiGet<PersonalRecord[]>(
           `/api/personal-records?workout_id=${encodeURIComponent(workout.id)}&include_blocks=true&include_fresh_start=true`,
         )
@@ -648,10 +726,11 @@ const WorkoutEngine = memo(function WorkoutEngine({
           const item = readFinishedWorkouts(deviceStorage).find(
             (entry) => finishedWorkoutKey(entry) === key,
           );
-          showToast(`${item?.pendingSave.payload.name ?? 'A workout'} wasn't saved`, {
-            label: 'Review',
-            run: () => reviewRef.current(key),
-          });
+          showToast(
+            `${item?.pendingSave.payload.name ?? 'A workout'} wasn't saved`,
+            { label: 'Review', run: () => reviewRef.current(key) },
+            { account },
+          );
         }
         refusalsSeen.current = next.refusals;
         setQueue(next);
@@ -698,12 +777,19 @@ const WorkoutEngine = memo(function WorkoutEngine({
   );
 
   const updateSet = useCallback(
-    (movementKey: string, setKey: string, update: Partial<WorkoutDraftSet>) => {
+    (
+      movementKey: string,
+      setKey: string,
+      update: Partial<WorkoutDraftSet>,
+      workoutBodyweight: number | null = null,
+    ) => {
       const current = loggerRef.current;
       if (!current) return;
+      // A logged set keeps the day's bodyweight, as on the web, so its ratio doesn't move when
+      // a weigh-in is later edited; a set that already has one keeps its own.
       const result = updateSetRule(current, movementKey, setKey, update, {
         addedByHand: addedSetKeys.current.has(setKey),
-        workoutBodyweight: null,
+        workoutBodyweight,
       });
       const wasPaused = current.pause.pausedAt !== null;
       commit(withActivity(result.state, Date.now()));
@@ -724,10 +810,10 @@ const WorkoutEngine = memo(function WorkoutEngine({
   );
 
   const addSet = useCallback(
-    (movementKey: string) => {
+    (movementKey: string, position?: number) => {
       const current = loggerRef.current;
       if (!current) return;
-      const { state, setKey } = addSetRule(current, movementKey, context);
+      const { state, setKey } = addSetRule(current, movementKey, context, position);
       if (setKey) addedSetKeys.current.add(setKey);
       commit(withActivity(state, Date.now()));
     },
@@ -813,6 +899,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
           ),
         );
         commitRest(NO_REST);
+        // As on the web, starting a workout asks to turn rest alerts on while they are off.
+        void remindAboutRestAlerts();
       }
       if (options?.replace) router.replace('/workout');
       else router.push('/workout');
@@ -1285,29 +1373,37 @@ const WorkoutEngine = memo(function WorkoutEngine({
     senderRef.current?.forget(key);
   }, []);
 
-  const keepMine = useCallback((key: string) => {
-    const item = readFinishedWorkouts(deviceStorage).find(
-      (entry) => finishedWorkoutKey(entry) === key,
-    );
-    const workoutId = item?.pendingSave.workoutId;
-    if (!item || !workoutId) return;
-    apiGet<TrackedWorkout>(`/api/workouts/${encodeURIComponent(workoutId)}`)
-      .then((latest) => {
-        if (!addFinishedWorkout(rebasedFinishedWorkout(item, latest.revision), deviceStorage))
-          throw new Error('Could not store the workout on the phone. Free some storage.');
-        senderRef.current?.forget(key);
-        senderRef.current?.wake();
-      })
-      .catch((reason) =>
-        showToast(
-          reason instanceof ApiError && reason.status === 404
-            ? 'This workout was deleted on another device.'
-            : reason instanceof Error
-              ? reason.message
-              : 'Could not check the latest version. Try again.',
-        ),
+  const keepMine = useCallback(
+    (key: string) => {
+      const item = readFinishedWorkouts(deviceStorage).find(
+        (entry) => finishedWorkoutKey(entry) === key,
       );
-  }, []);
+      const workoutId = item?.pendingSave.workoutId;
+      if (!item || !workoutId) return;
+      const account = toastAccountFor(user.id);
+      apiGet<TrackedWorkout>(`/api/workouts/${encodeURIComponent(workoutId)}`)
+        .then((latest) => {
+          // Signed out or switched account meanwhile: this phone no longer holds that save.
+          if (!isToastAccountCurrent(account)) return;
+          if (!addFinishedWorkout(rebasedFinishedWorkout(item, latest.revision), deviceStorage))
+            throw new Error('Could not store the workout on the phone. Free some storage.');
+          senderRef.current?.forget(key);
+          senderRef.current?.wake();
+        })
+        .catch((reason) =>
+          showToast(
+            reason instanceof ApiError && reason.status === 404
+              ? 'This workout was deleted on another device.'
+              : reason instanceof Error
+                ? reason.message
+                : 'Could not check the latest version. Try again.',
+            undefined,
+            { account },
+          ),
+        );
+    },
+    [user.id],
+  );
 
   const resume = useCallback(
     (workout: TrackedWorkout) => {

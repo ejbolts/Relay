@@ -14,9 +14,15 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineAliases } from '../../../../frontend/src/exerciseHistory';
+import { bodyweightOn, savedWorkoutBodyweight } from '../../../../frontend/src/relativeStrength';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
 import type { Exercise, TrackedWorkout, WorkoutInput } from '../../../../frontend/src/types';
-import { formatMinutesDuration, workoutTimeInputValue } from '../../../../frontend/src/utils';
+import {
+  formatMinutesDuration,
+  timesCanRecordDuration,
+  workoutDurationMinutes,
+  workoutTimeInputValue,
+} from '../../../../frontend/src/utils';
 import {
   isWorkoutConflictError,
   WORKOUT_CONFLICT_UNSAVED,
@@ -30,7 +36,8 @@ import { Icon } from '../../ui/Icon';
 import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
-import { useSavedWorkout } from '../training/trainingQueries';
+import { DateField, TimeField } from '../body/DateField';
+import { useBodyMeasurements, useSavedWorkout } from '../training/trainingQueries';
 import { ExercisePicker } from './ExercisePicker';
 import {
   addExercises,
@@ -41,6 +48,7 @@ import {
   completeExercise,
   deleteSet,
   editInput,
+  mergeMachines,
   moveMovement,
   moveSet,
   removeMovement,
@@ -49,7 +57,6 @@ import {
   setMachineSettings,
   setMovementNotes,
   setSetKind,
-  swapExercise,
   updateSet,
   workoutIdentity,
   type EditTimes,
@@ -58,6 +65,7 @@ import {
 import { MachineSheet } from './MachineSheet';
 import { MovementCard, type MovementActions } from './MovementCard';
 import { SwapSheet } from './SwapSheet';
+import { swapOntoMachine } from './swapMachineSetup';
 import { useLogger, type LoggerApi } from './WorkoutProvider';
 
 /**
@@ -93,6 +101,23 @@ function editState(workout: TrackedWorkout): LoggerState {
     resumingWorkoutId: null,
     previousDurationMinutes: 0,
   };
+}
+
+const pad = (value: number) => String(value).padStart(2, '0');
+
+/**
+ * Times to start from when a workout without them gets some: it ended when it was saved, if that
+ * was on its day, and started its duration earlier.
+ */
+function suggestedTimes(workout: TrackedWorkout, durationMinutes: number) {
+  const saved = new Date(workout.created_at);
+  const sameDay =
+    `${saved.getFullYear()}-${pad(saved.getMonth() + 1)}-${pad(saved.getDate())}` ===
+    workout.workout_date;
+  const end = sameDay ? saved.getHours() * 60 + saved.getMinutes() : 18 * 60;
+  const start = (((end - Math.max(durationMinutes, 1)) % 1440) + 1440) % 1440;
+  const hhmm = (minutes: number) => `${pad(Math.floor(minutes / 60))}:${pad(minutes % 60)}`;
+  return { startTime: hhmm(start), endTime: hhmm(end) };
 }
 
 /** Saves the edit, asking what to do whenever another device saved the workout meanwhile. */
@@ -213,6 +238,16 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
     () => new Set(state.movements.map((movement) => movement.exercise.id)),
     [state.movements],
   );
+  // The bodyweight the workout was logged at, taken from it as opened (as the web's editor does),
+  // so removing a set mid-edit changes nothing; the day's weigh-in only for workouts saved
+  // without one. A set's own snapshot always wins over this.
+  const [openedBodyweight] = useState(() => savedWorkoutBodyweight(workout));
+  const measurements = useBodyMeasurements().data;
+  const bodyweight = bodyweightOn(measurements ?? [], state.workoutDate, openedBodyweight);
+  const bodyweightRef = useRef(bodyweight);
+  useEffect(() => {
+    bodyweightRef.current = bodyweight;
+  }, [bodyweight]);
   const swapMovement = state.movements.find((item) => item.key === swapping) ?? null;
   const machineMovement = state.movements.find((item) => item.key === machinesFor) ?? null;
 
@@ -267,11 +302,13 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
           (latest) =>
             updateSet(latest, movementKey, setKey, values, {
               addedByHand: true,
-              workoutBodyweight: null,
+              workoutBodyweight: bodyweightRef.current,
               editing: true,
             }).state,
         ),
       addSet: (movementKey) => change((latest) => addSet(latest, movementKey, context).state),
+      insertSet: (movementKey, position) =>
+        change((latest) => addSet(latest, movementKey, context, position).state),
       deleteSet: (movementKey, setKey) => {
         const movement = stateRef.current.movements.find((item) => item.key === movementKey);
         if (movement?.sets.length === 1) {
@@ -281,8 +318,8 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         change((latest) => deleteSet(latest, movementKey, setKey));
       },
-      moveSet: (movementKey, from, to) =>
-        change((latest) => moveSet(latest, movementKey, from, to)),
+      moveSet: (movementKey, setKey, move) =>
+        change((latest) => moveSet(latest, movementKey, setKey, move)),
       setKind: (movementKey, setKey, kind: SetKind) =>
         change((latest) => setSetKind(latest, movementKey, setKey, kind)),
       completeExercise: (movementKey, isComplete) =>
@@ -312,6 +349,17 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         setDirty(true);
       },
     });
+  }
+
+  // Recorded start and end times set the duration, as on the web.
+  function editTimes(startTime: string, endTime: string) {
+    setTimes((current) => ({
+      ...current,
+      startTime,
+      endTime,
+      durationMinutes: workoutDurationMinutes(startTime, endTime) ?? current.durationMinutes,
+    }));
+    setDirty(true);
   }
 
   async function save() {
@@ -436,16 +484,48 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
               );
             }}
           />
+          <View style={styles.timing}>
+            <DateField
+              label="Date"
+              value={state.workoutDate}
+              onChange={(workoutDate) => change((latest) => ({ ...latest, workoutDate }))}
+            />
+            {timeRange ? (
+              <>
+                <TimeField
+                  label="Start time"
+                  value={times.startTime}
+                  onChange={(start) => editTimes(start, times.endTime)}
+                />
+                <TimeField
+                  label="End time"
+                  value={times.endTime}
+                  onChange={(end) => editTimes(times.startTime, end)}
+                />
+              </>
+            ) : null}
+          </View>
           <DetailRow
             label="Duration"
-            value={
-              timeRange
-                ? `${formatMinutesDuration(times.durationMinutes)} · ${timeRange}`
-                : formatMinutesDuration(times.durationMinutes)
-            }
+            value={formatMinutesDuration(times.durationMinutes)}
             // Recorded start and end times set the duration, as on the web.
             onPress={timeRange ? undefined : editDuration}
           />
+          {/* Times can't record a 24-hour workout, which keeps its duration instead. */}
+          {(timeRange || timesCanRecordDuration(times.durationMinutes)) && (
+            <Button
+              label={timeRange ? 'Clear start and end times' : 'Add start and end times'}
+              variant="link"
+              onPress={() => {
+                if (timeRange) editTimes('', '');
+                else {
+                  const suggested = suggestedTimes(workout, times.durationMinutes);
+                  editTimes(suggested.startTime, suggested.endTime);
+                }
+              }}
+              style={{ alignSelf: 'flex-start' }}
+            />
+          )}
           <TextInput
             value={state.notes}
             onChangeText={(notes) => change((latest) => ({ ...latest, notes }))}
@@ -456,14 +536,16 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
             style={[type.body, styles.notes, { color: colors.text, borderColor: colors.line }]}
           />
         </View>
-        {state.movements.map((movement) => (
+        {state.movements.map((movement, index) => (
           <MovementCard
             key={movement.key}
+            number={index + 1}
             movement={movement}
             supersetNames={supersetNames(movement.supersetKey)}
             history={history}
             excludedWorkoutId={workout.id}
             workoutDate={state.workoutDate}
+            bodyweight={bodyweight}
             weightUnit={weightUnit}
             skipHighRepWarning={state.skipHighRepWarning}
             actions={actions}
@@ -486,7 +568,8 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         lastDone={new Map()}
         onChoose={(replacement: Exercise) => {
           const key = swapping;
-          if (key) change((latest) => swapExercise(latest, key, replacement, context));
+          // Every swap goes through one path, so a newer swap supersedes an older one's loads.
+          if (key) void swapOntoMachine(change, key, replacement, context, {}, workout.id);
           setSwapping(null);
         }}
         onBrowseAll={() => {
@@ -523,6 +606,9 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
           const key = machinesFor;
           if (key) change((latest) => setMachineSettings(latest, key, settings));
         }}
+        onMerged={(mergedId, awayIds) =>
+          change((latest) => mergeMachines(latest, mergedId, awayIds))
+        }
         onClose={() => setMachinesFor(null)}
       />
       <ExercisePicker
@@ -532,12 +618,25 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         recentIds={recentIds}
         addedIds={addedIds}
         category={identity.category}
-        onAdd={(selected) => {
+        chooseMachines
+        onAdd={(selected, machineChoices, machineUse) => {
           const target = picker?.swapping;
           if (target) {
-            if (selected[0]) change((latest) => swapExercise(latest, target, selected[0], context));
-          } else change((latest) => addExercises(latest, selected, context));
+            if (selected[0])
+              void swapOntoMachine(
+                change,
+                target,
+                selected[0],
+                context,
+                machineChoices,
+                workout.id,
+                machineUse,
+              );
+          } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}
+        onCreateSuperset={(selected, machineChoices) =>
+          change((latest) => addExercises(latest, selected, context, machineChoices, newId()))
+        }
         onCreate={logger.createExercise}
         onClose={() => setPicker(null)}
       />
@@ -596,5 +695,6 @@ const styles = StyleSheet.create({
     minHeight: 48,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
+  timing: { gap: 8, paddingVertical: 10 },
   notes: { minHeight: 64, paddingVertical: 12, textAlignVertical: 'top' },
 });

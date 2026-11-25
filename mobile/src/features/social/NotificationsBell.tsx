@@ -1,19 +1,29 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { reactionEmoji } from '../../../../frontend/src/friendFeedData';
 import {
+  ADMIN_REQUEST_TEXT,
   commentNoticeText,
+  notificationCount,
   notificationDate,
   notificationKey,
   notificationReference,
+  notificationRows,
   notificationsInRows,
   notificationsLabel,
   NOTIFICATIONS_EMPTY,
   NOTIFICATIONS_PER_PAGE,
-  socialNotificationCount,
-  sortedSocialNotificationRows,
+  type NotificationRow as InboxRow,
   type SocialNotificationRow,
 } from '../../../../frontend/src/notificationInbox';
 import {
@@ -21,16 +31,21 @@ import {
   unreadNotificationReferences,
 } from '../../../../frontend/src/notificationReadState';
 import { profileBadgeText } from '../../../../frontend/src/profileButton';
+import { formatReleaseDate } from '../../../../frontend/src/releaseMetadata';
+import { dayMonth } from '../../../../frontend/src/trainingSummary';
 import type {
   NotificationReadReference,
   SharingConnection,
   SharingNotifications,
 } from '../../../../frontend/src/types';
 import { notificationWorkoutFocus } from '../../../../frontend/src/workoutFocusRequest';
-import { Button, errorMessage } from '../../ui/components';
-import { Icon } from '../../ui/Icon';
+import { Button, errorMessage, IconButton } from '../../ui/components';
+import { Icon, type IconPair } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
+import { reviewRoutes, useBellNotices } from '../review';
+import { reviewIcons } from '../review/routes';
 import { useTheme } from '../../ui/theme';
+import { adminRoutes } from '../admin';
 import { Avatar } from './Avatar';
 import { useFriendAction } from './FriendsSection';
 import { socialIcons } from './icons';
@@ -42,37 +57,33 @@ import { requestWorkoutFocus } from './workoutFocus';
 
 /**
  * The web's notifications bell, for Home's and Social's headers: friend requests, accepted
- * requests, reactions and comments, with a count of what's unread or waiting for an answer.
+ * requests, reactions and comments, the running release, last week's review and, for
+ * administrators, people waiting for a reset or their username, with a count of what's unread or
+ * waiting for an answer.
  */
-export function NotificationsBell({ size = 36 }: { size?: number }) {
-  const { colors } = useTheme();
+export function NotificationsBell({
+  style,
+}: {
+  /** Ignored: the bell is the shared 40 pt header button. Kept so older callers still compile. */
+  size?: number;
+  /** Restyles the button, such as Home's header buttons. */
+  style?: StyleProp<ViewStyle>;
+}) {
   const query = useNotifications();
+  const bell = useBellNotices();
   const [open, setOpen] = useState(false);
-  const count = socialNotificationCount(query.data);
+  const count = notificationCount(query.data, bell.rows);
   const badge = profileBadgeText(count);
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
+      <IconButton
+        icon="bell"
+        badge={badge}
         accessibilityLabel={notificationsLabel(count)}
-        hitSlop={6}
         onPress={() => setOpen(true)}
-        style={({ pressed }) => [
-          styles.round,
-          { width: size, height: size, borderRadius: size / 2, backgroundColor: colors.surface2 },
-          pressed && { opacity: 0.6 },
-        ]}
-      >
-        <Icon name="bell" size={Math.round(size * 0.52)} color={colors.text} />
-        {badge && (
-          <View
-            style={[styles.badge, { backgroundColor: colors.danger, borderColor: colors.page }]}
-          >
-            <Text style={styles.badgeText}>{badge}</Text>
-          </View>
-        )}
-      </Pressable>
-      {open && <NotificationsSheet onClose={() => setOpen(false)} />}
+        style={style}
+      />
+      {open && <NotificationsSheet notices={bell} onClose={() => setOpen(false)} />}
     </>
   );
 }
@@ -81,7 +92,13 @@ export function NotificationsBell({ size = 36 }: { size?: number }) {
  * The inbox. Opening it reads the notices on screen; they keep their highlight until it's opened
  * again. Friend requests stay until they're answered.
  */
-function NotificationsSheet({ onClose }: { onClose: () => void }) {
+function NotificationsSheet({
+  notices,
+  onClose,
+}: {
+  notices: ReturnType<typeof useBellNotices>;
+  onClose: () => void;
+}) {
   const { colors, type } = useTheme();
   const client = useQueryClient();
   const router = useRouter();
@@ -92,7 +109,7 @@ function NotificationsSheet({ onClose }: { onClose: () => void }) {
   // Notices that were unread while the inbox has been open.
   const [fresh, setFresh] = useState<ReadonlySet<string>>(() => new Set());
   const items = query.data;
-  const rows = items ? sortedSocialNotificationRows(items) : [];
+  const rows = notificationRows(items ?? NO_ITEMS, notices.rows);
   const visible = rows.slice(0, shown);
   const unreadKey = JSON.stringify(
     items ? unreadNotificationReferences(notificationsInRows(visible)) : [],
@@ -119,6 +136,18 @@ function NotificationsSheet({ onClose }: { onClose: () => void }) {
   const openPerson = (person: Pick<SharingConnection, 'id'>) => {
     onClose();
     nav.openProfile(person);
+  };
+  const openApp = (row: AppRow) => {
+    onClose();
+    if (row.kind === 'release') {
+      notices.readRelease();
+      router.push(reviewRoutes.releaseNotes);
+    } else if (row.kind === 'weekly-review') {
+      router.push(reviewRoutes.weeklyReview);
+    } else {
+      // An administrator's request opens that account in the app's admin console.
+      router.push(adminRoutes.account(row.item.user_id));
+    }
   };
   const openWorkout = (row: SocialNotificationRow) => {
     const focus = notificationWorkoutFocus(row);
@@ -152,35 +181,156 @@ function NotificationsSheet({ onClose }: { onClose: () => void }) {
           {query.error && <SmallButton label="Try again" onPress={() => void query.refetch()} />}
         </View>
       )}
-      {!items ? (
-        !query.error && (
-          <ActivityIndicator accessibilityLabel="Loading notifications" color={colors.accentText} />
+      {!items && !query.error && (
+        <ActivityIndicator accessibilityLabel="Loading notifications" color={colors.accentText} />
+      )}
+      {rows.length === 0 ? (
+        items && (
+          <Text style={[type.callout, { color: colors.secondary }]}>{NOTIFICATIONS_EMPTY}</Text>
         )
-      ) : rows.length === 0 ? (
-        <Text style={[type.callout, { color: colors.secondary }]}>{NOTIFICATIONS_EMPTY}</Text>
       ) : (
-        <View style={{ gap: 2 }}>
-          {visible.map((row) => (
-            <NotificationRow
-              key={notificationKey(notificationReference(row))}
-              row={row}
-              fresh={fresh.has(notificationKey(notificationReference(row)))}
-              busy={friend.isPending}
-              onOpenPerson={openPerson}
-              onOpenWorkout={() => openWorkout(row)}
-              onRespond={respond}
-            />
+        <View style={styles.list}>
+          {visible.map((row, index) => (
+            <View
+              key={isSocial(row) ? notificationKey(notificationReference(row)) : appRowKey(row)}
+              style={
+                index > 0 && {
+                  borderTopWidth: StyleSheet.hairlineWidth,
+                  borderTopColor: colors.line,
+                }
+              }
+            >
+              {isSocial(row) ? (
+                <NotificationRow
+                  row={row}
+                  fresh={fresh.has(notificationKey(notificationReference(row)))}
+                  busy={friend.isPending}
+                  onOpenPerson={openPerson}
+                  onOpenWorkout={() => openWorkout(row)}
+                  onRespond={respond}
+                />
+              ) : (
+                <AppNoticeRow
+                  row={row}
+                  releaseUnread={!!notices.rows.releaseUnread}
+                  onOpen={() => openApp(row)}
+                />
+              )}
+            </View>
           ))}
           {rows.length > shown && (
             <Button
               label="Show more"
               variant="secondary"
               onPress={() => setShown((current) => current + NOTIFICATIONS_PER_PAGE)}
+              style={{ marginTop: 12 }}
             />
           )}
         </View>
       )}
     </Sheet>
+  );
+}
+
+const NO_ITEMS: SharingNotifications = { requests: [], accepted: [] };
+
+type AppRow = Exclude<InboxRow, SocialNotificationRow>;
+
+const isSocial = (row: InboxRow): row is SocialNotificationRow =>
+  row.kind === 'comment' ||
+  row.kind === 'request' ||
+  row.kind === 'reaction' ||
+  row.kind === 'accepted';
+
+function appRowKey(row: AppRow): string {
+  if (row.kind === 'release') return `release-${row.item.version}`;
+  if (row.kind === 'weekly-review') return `weekly-review-${row.item.weekStart}`;
+  return `${row.kind}-${row.item.user_id}`;
+}
+
+/** The app's own notices: the release, the weekly review and administrators' requests. */
+function AppNoticeRow({
+  row,
+  releaseUnread,
+  onOpen,
+}: {
+  row: AppRow;
+  releaseUnread: boolean;
+  onOpen: () => void;
+}) {
+  const { colors, type } = useTheme();
+  const notice: {
+    icon: IconPair;
+    title: ReactNode;
+    detail?: string | null;
+    isNew: boolean;
+    action: string;
+    label: string;
+  } =
+    row.kind === 'release'
+      ? {
+          icon: reviewIcons.sparkle,
+          title: `Relay ${row.item.version}`,
+          detail: [row.item.title, row.item.date && formatReleaseDate(row.item.date)]
+            .filter(Boolean)
+            .join(' · '),
+          isNew: releaseUnread,
+          action: 'View',
+          label: `View Relay ${row.item.version} release notes`,
+        }
+      : row.kind === 'weekly-review'
+        ? {
+            icon: reviewIcons.trend,
+            title: 'Weekly review',
+            detail: `${dayMonth(row.item.weekStart)} – ${dayMonth(row.item.weekEnd)}`,
+            isNew: row.item.unread,
+            action: 'View',
+            label: 'View last week’s review',
+          }
+        : {
+            icon: row.kind === 'password-reset' ? reviewIcons.key : reviewIcons.person,
+            title: (
+              <>
+                {row.item.display_name}
+                <Text style={{ fontWeight: '400' }}>
+                  {ADMIN_REQUEST_TEXT[row.kind]}
+                  <Text style={{ color: colors.muted }}>
+                    {` · ${notificationDate(row.item.requested_at)}`}
+                  </Text>
+                </Text>
+              </>
+            ),
+            isNew: false,
+            action: 'Review',
+            label: `Review ${row.item.display_name}’s ${
+              row.kind === 'password-reset' ? 'password reset' : 'username'
+            } request`,
+          };
+  return (
+    <View accessibilityHint={notice.isNew ? 'New' : undefined} style={styles.row}>
+      <View style={styles.gutter}>
+        {notice.isNew && <View style={[styles.unreadDot, { backgroundColor: colors.accent }]} />}
+      </View>
+      <View style={[styles.noticeIcon, { backgroundColor: colors.accentSoft }]}>
+        <Icon name={notice.icon} size={18} color={colors.accentText} />
+      </View>
+      <View style={{ flex: 1, gap: 2 }}>
+        <View style={styles.noticeTitle}>
+          <Text style={[type.callout, { color: colors.text, fontWeight: '700', flexShrink: 1 }]}>
+            {notice.title}
+          </Text>
+          {notice.isNew && (
+            <Text style={[type.caption, { color: colors.accentText, fontWeight: '700' }]}>New</Text>
+          )}
+        </View>
+        {!!notice.detail && (
+          <Text style={[type.footnote, { color: colors.secondary }]} numberOfLines={2}>
+            {notice.detail}
+          </Text>
+        )}
+      </View>
+      <SmallButton label={notice.action} accessibilityLabel={notice.label} onPress={onOpen} />
+    </View>
   );
 }
 
@@ -199,11 +349,11 @@ function NotificationRow({
   onOpenWorkout: () => void;
   onRespond: (person: SharingConnection, action: 'accept' | 'decline') => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const person = row.item;
   const name = (
     <Text
-      style={{ fontWeight: '700' }}
+      style={{ color: colors.text, fontWeight: '700' }}
       onPress={() => onOpenPerson(person)}
       accessibilityRole="link"
     >
@@ -215,7 +365,7 @@ function NotificationRow({
   );
   const workout = row.kind === 'comment' || row.kind === 'reaction';
   const text = (
-    <Text style={[type.callout, { color: colors.text }]}>
+    <Text style={[type.footnote, styles.copy, { color: colors.secondary }]}>
       {name}
       {row.kind === 'request'
         ? ' sent you a friend request'
@@ -225,7 +375,7 @@ function NotificationRow({
             ? ' reacted to '
             : commentNoticeText(row.item.kind).verb}
       {workout && (
-        <Text style={{ color: colors.accentText, fontWeight: '600' }}>{row.item.workout_name}</Text>
+        <Text style={{ color: colors.text, fontWeight: '600' }}>{row.item.workout_name}</Text>
       )}
       {date}
     </Text>
@@ -245,20 +395,23 @@ function NotificationRow({
       row.item.reaction ? (
         <Text style={styles.emoji}>{reactionEmoji(row.item.reaction)}</Text>
       ) : (
-        <Icon name={socialIcons.reply} size={16} color={colors.secondary} />
+        <Icon name={socialIcons.reply} size={17} color={colors.muted} />
       )
     ) : row.kind === 'accepted' ? (
-      <Icon name={socialIcons.people} size={18} color={colors.secondary} />
+      <Icon name={socialIcons.people} size={18} color={colors.muted} />
     ) : null;
   const body = (
     <>
+      <View style={styles.gutter}>
+        {fresh && <View style={[styles.unreadDot, { backgroundColor: colors.accent }]} />}
+      </View>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`View ${person.display_name}’s profile`}
         onPress={() => onOpenPerson(person)}
         hitSlop={4}
       >
-        <Avatar person={person} size={40} />
+        <Avatar person={person} size={36} />
       </Pressable>
       <View style={{ flex: 1, gap: 4 }}>
         {text}
@@ -288,11 +441,7 @@ function NotificationRow({
       {trailing}
     </>
   );
-  const rowStyle = [
-    styles.row,
-    { borderRadius: radius.lg, overflow: 'hidden' as const },
-    fresh && { backgroundColor: colors.accentSoft },
-  ];
+  const rowStyle = [styles.row, row.kind === 'request' && styles.requestRow];
   return workout ? (
     <Pressable
       accessibilityRole="button"
@@ -311,28 +460,31 @@ function NotificationRow({
 }
 
 const styles = StyleSheet.create({
-  round: { alignItems: 'center', justifyContent: 'center' },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -6,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    paddingHorizontal: 3,
+  problem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  list: { paddingBottom: 16 },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 12,
+  },
+  requestRow: { alignItems: 'flex-start' },
+  gutter: {
+    width: 8,
+    minHeight: 36,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
-  problem: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 8,
-  },
-  actions: { flexDirection: 'row', gap: 8, marginTop: 2 },
+  unreadDot: { width: 7, height: 7, borderRadius: 3.5 },
+  copy: { lineHeight: 19 },
+  actions: { flexDirection: 'row', gap: 8, marginTop: 4 },
   emoji: { fontSize: 20 },
+  noticeIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noticeTitle: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
 });

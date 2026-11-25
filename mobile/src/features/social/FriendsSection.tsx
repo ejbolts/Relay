@@ -14,9 +14,11 @@ import type {
   SharingConnection,
 } from '../../../../frontend/src/types';
 import { Button, Card, errorMessage } from '../../ui/components';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { useNow } from '../../ui/useNow';
+import { socialIcons } from './icons';
 import { useSocialNavigation } from './navigation';
 import { EmptyLine, GroupTitle, PersonRow, SmallButton } from './parts';
 import { socialApi } from './socialApi';
@@ -43,8 +45,14 @@ export function useFriendAction() {
  * Social's Friends tab: requests, people search, your friends, suggestions, sent requests and
  * blocks, as the web's.
  */
-export function FriendsSection({ connections }: { connections: FriendConnections }) {
-  const { colors, type } = useTheme();
+export function FriendsSection({
+  connections,
+  onOpenQr,
+}: {
+  connections: FriendConnections;
+  onOpenQr?: () => void;
+}) {
+  const { colors, space, type } = useTheme();
   const nav = useSocialNavigation();
   const now = useNow(30_000);
   const friend = useFriendAction();
@@ -67,44 +75,50 @@ export function FriendsSection({ connections }: { connections: FriendConnections
       onPress={() => act(action, person)}
     />
   );
+  const divider = (index: number) =>
+    index > 0
+      ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.line, paddingTop: 4 }
+      : undefined;
   return (
-    <View style={{ gap: 16 }}>
+    <View style={{ gap: space.stack }}>
       {friend.error && (
         <Text accessibilityRole="alert" style={[type.callout, { color: colors.danger }]}>
           {errorMessage(friend.error)}
         </Text>
       )}
       {connections.requests.length > 0 && (
-        <Card style={{ borderColor: colors.accent, borderWidth: 1 }}>
+        <Card style={{ borderColor: colors.accent, borderWidth: 1.5, borderStyle: 'dashed' }}>
           <GroupTitle title="Friend requests" count={connections.requests.length} />
-          {connections.requests.map((person) => (
-            <PersonRow
-              key={person.id}
-              person={person}
-              detail={connectionDate('request', person.since)}
-              onOpen={open(person)}
-              actions={
-                <>
-                  {button('accept', 'Accept', person, 'primary')}
-                  {button('decline', 'Decline', person)}
-                </>
-              }
-            />
+          {connections.requests.map((person, index) => (
+            <View key={person.id} style={divider(index)}>
+              <PersonRow
+                person={person}
+                detail={connectionDate('request', person.since)}
+                onOpen={open(person)}
+                actions={
+                  <>
+                    {button('accept', 'Accept', person, 'primary')}
+                    {button('decline', 'Decline', person)}
+                  </>
+                }
+              />
+            </View>
           ))}
         </Card>
       )}
-      <PeopleSearch />
+      <PeopleSearch onOpenQr={onOpenQr} />
       {connections.friends.length > 0 && (
         <Card>
           <GroupTitle title="Friends" count={connections.friends.length} />
-          {byLiveActivity(connections.friends, (item) => item.presence).map((item) => (
-            <PersonRow
-              key={item.id}
-              person={item}
-              status={presenceStatus(item.presence)}
-              detail={friendListDetail(item, now)}
-              onOpen={open(item)}
-            />
+          {byLiveActivity(connections.friends, (item) => item.presence).map((item, index) => (
+            <View key={item.id} style={divider(index)}>
+              <PersonRow
+                person={item}
+                status={presenceStatus(item.presence)}
+                detail={friendListDetail(item, now)}
+                onOpen={open(item)}
+              />
+            </View>
           ))}
         </Card>
       )}
@@ -112,20 +126,21 @@ export function FriendsSection({ connections }: { connections: FriendConnections
       {connections.sent.length > 0 && (
         <Card>
           <GroupTitle title="Sent requests" count={connections.sent.length} />
-          {connections.sent.map((person) => (
-            <PersonRow
-              key={person.id}
-              person={person}
-              detail={connectionDate('sent', person.since)}
-              onOpen={open(person)}
-              actions={button(
-                'cancel',
-                'Cancel',
-                person,
-                'secondary',
-                `Cancel request to ${person.display_name}`,
-              )}
-            />
+          {connections.sent.map((person, index) => (
+            <View key={person.id} style={divider(index)}>
+              <PersonRow
+                person={person}
+                detail={connectionDate('sent', person.since)}
+                onOpen={open(person)}
+                actions={button(
+                  'cancel',
+                  'Cancel',
+                  person,
+                  'secondary',
+                  `Cancel request to ${person.display_name}`,
+                )}
+              />
+            </View>
           ))}
         </Card>
       )}
@@ -185,45 +200,88 @@ function ProfileAction({ profile }: { profile: SharedProfileSummary }) {
   );
 }
 
-function PeopleSearch() {
-  const { colors, type, radius } = useTheme();
+function PeopleSearch({ onOpenQr }: { onOpenQr?: () => void }) {
+  const { colors, scheme, type, radius } = useTheme();
   const nav = useSocialNavigation();
   const [input, setInput] = useState('');
   const [term, setTerm] = useState('');
+  const [focused, setFocused] = useState(false);
   const search = usePeopleSearch(term);
   const submit = () => setTerm(input.trim());
   return (
     <Card>
-      <GroupTitle title="Search people" />
+      <GroupTitle
+        title="Search people"
+        action={
+          onOpenQr && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="QR code"
+              hitSlop={4}
+              onPress={() => {
+                haptics.tap();
+                onOpenQr();
+              }}
+              style={({ pressed }) => [
+                styles.qrChip,
+                {
+                  backgroundColor: colors.surface2,
+                  borderColor: colors.lineStrong,
+                  borderRadius: radius.pill,
+                },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Icon name={socialIcons.qr} size={15} color={colors.secondary} />
+              <Text style={[type.caption, { color: colors.secondary, fontWeight: '600' }]}>
+                QR code
+              </Text>
+            </Pressable>
+          )
+        }
+      />
       <View style={styles.searchRow}>
         <View
-          style={[styles.searchBox, { backgroundColor: colors.surface2, borderRadius: radius.md }]}
+          style={[
+            styles.searchBox,
+            {
+              backgroundColor: scheme === 'light' ? colors.surface : colors.surface2,
+              borderColor: focused ? colors.accent : colors.lineStrong,
+              borderRadius: radius.md,
+            },
+          ]}
         >
-          <Icon name="search" size={16} color={colors.muted} />
           <TextInput
             accessibilityLabel="Account name or UUID"
             placeholder="Account name or UUID"
             placeholderTextColor={colors.muted}
+            selectionColor={colors.accent}
+            cursorColor={colors.accent}
+            keyboardAppearance={scheme}
             value={input}
             maxLength={100}
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="search"
             clearButtonMode="while-editing"
+            onFocus={() => setFocused(true)}
+            onBlur={() => setFocused(false)}
             onChangeText={(next) => {
               setInput(next);
               if (!next.trim()) setTerm('');
             }}
             onSubmitEditing={submit}
-            style={[type.body, { color: colors.text, flex: 1, paddingVertical: 10 }]}
+            style={[type.callout, { color: colors.text, flex: 1, paddingVertical: 10 }]}
           />
         </View>
         <SmallButton
           label="Search"
+          icon="search"
           variant="primary"
           disabled={!input.trim()}
           busy={search.isFetching && input.trim() === term}
           onPress={submit}
+          style={styles.searchButton}
         />
       </View>
       {term.length > 0 &&
@@ -330,18 +388,26 @@ function Pager({
   disabled: boolean;
   onPress: () => void;
 }) {
-  const { colors } = useTheme();
+  const { colors, radius } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${label} page of suggested friends`}
       accessibilityState={{ disabled }}
       disabled={disabled}
-      hitSlop={8}
-      onPress={onPress}
-      style={[
+      hitSlop={6}
+      onPress={() => {
+        haptics.tap();
+        onPress();
+      }}
+      style={({ pressed }) => [
         styles.pagerButton,
-        { backgroundColor: colors.surface2 },
+        {
+          backgroundColor: colors.surface2,
+          borderColor: colors.lineStrong,
+          borderRadius: radius.sm,
+        },
+        pressed && !disabled && { opacity: 0.7 },
         disabled && { opacity: 0.4 },
       ]}
     >
@@ -351,14 +417,30 @@ function Pager({
 }
 
 const styles = StyleSheet.create({
+  qrChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+  },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10 },
+  searchBox: {
+    flex: 1,
+    minHeight: 44,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  searchButton: { minHeight: 44 },
   friendsLabel: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 16 },
   pagerButton: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 38,
+    height: 38,
+    borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
   },

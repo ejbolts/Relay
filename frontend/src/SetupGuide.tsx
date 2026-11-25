@@ -12,18 +12,11 @@ import {
   useActiveGuide,
   type SetupGuideId,
 } from './setupGuides';
+import { guideDone, GUIDE_TIPS, NORMALISE_GUIDE_WAIT, SETUP_GUIDE_TITLES } from './setupGuideSteps';
 import { useTips } from './Tips';
 import { useTrainingBlocks } from './trainingBlocksContext';
-import type { TipId } from './tipsState';
 import type { TrackedWorkout } from './types';
 import './setupGuide.css';
-
-/** The tips a finished guide has taught, so they stop suggesting the feature. */
-const GUIDE_TIPS: Record<SetupGuideId, TipId[]> = {
-  normalise: ['normalise'],
-  blocks: ['blocks'],
-  split: ['split', 'repRange'],
-};
 
 /**
  * Starts a guide in the feature's own screen, where the screen's coach takes over, and ends a
@@ -77,7 +70,7 @@ export function SetupGuideHost({ workouts }: { workouts: TrackedWorkout[] }) {
   if (!needsMachines) return null;
   return (
     <PopupDialog
-      title="Compare machines"
+      title={NORMALISE_GUIDE_WAIT.title}
       className="setup-guide-wait"
       size="compact"
       onClose={() => setNeedsMachines(false)}
@@ -91,26 +84,16 @@ export function SetupGuideHost({ workouts }: { workouts: TrackedWorkout[] }) {
         </button>
       }
     >
-      <p>
-        This needs one exercise logged on two saved machines. Save a machine photo on an exercise
-        while you log it, then use the other machine next time.
-      </p>
+      <p>{NORMALISE_GUIDE_WAIT.body}</p>
     </PopupDialog>
   );
 }
 
-const GUIDE_ROWS: Record<SetupGuideId, { title: string; icon: IconName }> = {
-  normalise: { title: 'Compare machines', icon: 'level' },
-  blocks: { title: 'Training blocks', icon: 'calendar' },
-  split: { title: 'Splits and rep ranges', icon: 'up' },
+const GUIDE_ICONS: Record<SetupGuideId, IconName> = {
+  normalise: 'level',
+  blocks: 'calendar',
+  split: 'up',
 };
-
-/** Whether the feature a guide sets up is already in use. */
-function guideDone(id: SetupGuideId, seen: Partial<Record<TipId, string>>, hasBlocks: boolean) {
-  if (id === 'normalise') return seen.normalise === 'learned';
-  if (id === 'blocks') return hasBlocks || seen.blocks === 'learned';
-  return seen.split === 'learned' && seen.repRange === 'learned';
-}
 
 export function SetupGuidesSettings() {
   const tips = useTips();
@@ -123,15 +106,14 @@ export function SetupGuidesSettings() {
       </header>
       <ul className="setup-guide-list">
         {SETUP_GUIDE_IDS.map((id) => {
-          const row = GUIDE_ROWS[id];
           const done = guideDone(id, tips.state.seen, hasBlocks);
           return (
             <li key={id}>
               <button type="button" onClick={() => openSetupGuide(id)}>
                 <span className="setup-guide-list-glyph">
-                  <Icon name={row.icon} />
+                  <Icon name={GUIDE_ICONS[id]} />
                 </span>
-                <strong>{row.title}</strong>
+                <strong>{SETUP_GUIDE_TITLES[id]}</strong>
                 {done && <span className="setup-guide-list-done">Set up</span>}
                 <Icon name="chevron-right" />
               </button>

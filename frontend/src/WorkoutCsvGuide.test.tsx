@@ -3,11 +3,11 @@ import { act, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { WorkoutCsvGuide } from './WorkoutCsvGuide';
-import { downloadWorkoutCsvTemplate } from './workoutCsvTemplate';
+import { downloadWorkoutCsvTemplate } from './workoutCsvTemplateDownload';
 import type { WorkoutImportOptions } from './types';
 
 vi.mock('./trainingPreferencesContext', () => ({ useWeightUnit: () => 'lb' }));
-vi.mock('./workoutCsvTemplate', () => ({ downloadWorkoutCsvTemplate: vi.fn() }));
+vi.mock('./workoutCsvTemplateDownload', () => ({ downloadWorkoutCsvTemplate: vi.fn() }));
 
 let root: Root;
 let container: HTMLDivElement;

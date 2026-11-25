@@ -12,6 +12,7 @@ import { weeklyTrainingTotals, weekStartDayFrom } from '../../../../frontend/src
 import { localDate } from '../../../../frontend/src/utils';
 import { weightFromKg } from '../../../../frontend/src/weightUnits';
 import { useDashboard, useWeightUnit, useWorkoutHistory } from '../../data/queries';
+import { cardSurface } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { trainingRoute } from '../training/routes';
 import { useBodyMeasurements } from '../body/bodyQueries';
@@ -133,7 +134,8 @@ function Stat({
       onPress={onPress}
       style={({ pressed }) => [
         styles.stat,
-        { backgroundColor: colors.surface, borderRadius: radius.lg, borderColor: colors.line },
+        cardSurface(colors),
+        { borderRadius: radius.lg },
         pressed && { opacity: 0.7 },
       ]}
     >
@@ -158,7 +160,6 @@ const styles = StyleSheet.create({
     minWidth: 0,
     padding: 12,
     gap: 3,
-    borderWidth: StyleSheet.hairlineWidth,
   },
   value: { fontSize: 22, fontWeight: '700', letterSpacing: -0.3 },
 });

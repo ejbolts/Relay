@@ -9,6 +9,7 @@ import {
   itemsInSelectionOrder,
   localDateOf,
   reorder,
+  timesCanRecordDuration,
   workoutDurationMinutes,
   workoutTimeInputValue,
 } from './utils';
@@ -125,5 +126,12 @@ describe('localDateOf', () => {
 
   it('falls back to the leading date of an unreadable value', () => {
     expect(localDateOf('2026-11-16 later')).toBe('2026-11-16');
+  });
+});
+
+describe('timesCanRecordDuration', () => {
+  it('records anything shorter than a day, but not a 24-hour workout', () => {
+    expect(timesCanRecordDuration(1439)).toBe(true);
+    expect(timesCanRecordDuration(1440)).toBe(false);
   });
 });

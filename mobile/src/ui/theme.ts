@@ -14,6 +14,8 @@ const dark = {
   surface: '#15181b',
   surface2: '#1d2125',
   surface3: '#272c31',
+  /** Floating surfaces such as toasts (--p-surface-raised). */
+  surfaceRaised: '#15181b',
   line: 'rgba(255,255,255,0.07)',
   lineStrong: 'rgba(255,255,255,0.12)',
   text: '#f3f5f6',
@@ -24,12 +26,36 @@ const dark = {
   accentSoft: 'rgba(44,116,208,0.20)',
   onAccent: '#ffffff',
   good: '#2fb84a',
+  /** A soft tint of `good`, for current or finished states. */
+  goodSoft: 'rgba(47,184,74,0.15)',
   gold: '#e9b44a',
   goldSoft: 'rgba(201,133,0,0.15)',
+  onGold: '#1c1404',
   danger: '#e66767',
+  /** A soft tint of `danger` (the web's danger-soft fill). Follows each style's `danger`. */
+  dangerSoft: 'rgba(230,103,103,0.10)',
   dangerFill: '#c53b3b',
   grid: '#22272b',
+  axis: '#3a4046',
   deemph: '#353b41',
+  /** A card's outline (--p-card-border): the line colour, brighter in OLED. */
+  cardBorder: 'rgba(255,255,255,0.07)',
+  /** Stained dark lifts cards with a shadow (--p-card-shadow); the other styles are flat. */
+  cardShadow: false as boolean,
+  /** The toast and floating surfaces' drop shadow. */
+  shadow: 'rgba(0,0,0,0.45)',
+  /** Effort colours from workoutSetColours.css, by RPE. */
+  rpe: {
+    low: '#8ed4a1',
+    '6.5': '#abd68b',
+    '7': '#c8d775',
+    '7.5': '#d6d36e',
+    '8': '#e4cf66',
+    '8.5': '#f2bf69',
+    '9': '#ffae6b',
+    '9.5': '#ff9577',
+    '10': '#ff7c83',
+  },
 };
 
 const light: typeof dark = {
@@ -37,31 +63,55 @@ const light: typeof dark = {
   surface: '#ffffff',
   surface2: '#eef1f3',
   surface3: '#e2e6ea',
+  surfaceRaised: '#ffffff',
   line: 'rgba(16,24,32,0.09)',
   lineStrong: 'rgba(16,24,32,0.16)',
   text: '#14181c',
   secondary: '#48515a',
-  muted: '#69727a',
+  // The web's #69727a falls just under 4.5:1 on the raised surfaces and Stained tints, so the
+  // app's small muted text is a shade darker.
+  muted: '#5d666e',
   accent: '#2c74d0',
   accentText: '#1f5fb0',
   accentSoft: 'rgba(44,116,208,0.12)',
   onAccent: '#ffffff',
   good: '#1d8534',
+  goodSoft: 'rgba(29,133,52,0.12)',
   gold: '#a36800',
   goldSoft: 'rgba(201,133,0,0.14)',
+  onGold: '#ffffff',
   danger: '#c53b3b',
+  dangerSoft: 'rgba(197,59,59,0.10)',
   dangerFill: '#c53b3b',
   grid: '#e4e8eb',
+  axis: '#c3cad0',
   deemph: '#cdd3d8',
+  cardBorder: 'rgba(16,24,32,0.09)',
+  cardShadow: false,
+  shadow: 'rgba(16,24,32,0.18)',
+  rpe: {
+    low: '#256b39',
+    '6.5': '#48651d',
+    '7': '#586319',
+    '7.5': '#696117',
+    '8': '#786000',
+    '8.5': '#8b510c',
+    '9': '#a04708',
+    '9.5': '#ac3520',
+    '10': '#b32336',
+  },
 };
 
 export type Palette = typeof dark;
 export const palettes = { dark, light };
 
-export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28 };
-export const radius = { sm: 10, md: 12, lg: 14, card: 20, pill: 999 };
+// Spacing and radii from pulse.css: a 14 pt page gutter and 12 pt between cards, 12 pt buttons
+// and inputs, 20 pt cards, 16 pt toasts.
+export const space = { xs: 4, sm: 8, md: 12, lg: 16, xl: 20, xxl: 28, gutter: 14, stack: 12 };
+export const radius = { sm: 10, md: 12, lg: 14, toast: 16, card: 20, sheet: 28, pill: 999 };
 export const type = {
-  largeTitle: { fontSize: 34, fontWeight: '700' as const, letterSpacing: -0.6 },
+  /** The web's page title (.page-header h1): 30 px bold, tight. */
+  largeTitle: { fontSize: 30, fontWeight: '700' as const, letterSpacing: -0.75, lineHeight: 33 },
   title: { fontSize: 22, fontWeight: '700' as const, letterSpacing: -0.3 },
   headline: { fontSize: 17, fontWeight: '600' as const },
   body: { fontSize: 16 },
@@ -69,6 +119,10 @@ export const type = {
   footnote: { fontSize: 13 },
   caption: { fontSize: 12 },
   eyebrow: { fontSize: 12, fontWeight: '700' as const, letterSpacing: 1.1 },
+  /** A card's heading (.pulse-card-header h2). */
+  cardTitle: { fontSize: 15, fontWeight: '600' as const, letterSpacing: -0.15 },
+  /** A button's label (.pulse-button). */
+  button: { fontSize: 15, fontWeight: '600' as const },
   number: { fontVariant: ['tabular-nums' as const] },
 };
 
@@ -107,6 +161,14 @@ export function themedPalette(
       surface: mixHex(theme.accent, '#ffffff', 4),
       surface2: mixHex(theme.accent, '#eef1f3', 9),
       surface3: mixHex(theme.accent, '#e2e6ea', 14),
+      surfaceRaised: mixHex(theme.accent, '#ffffff', 4),
+      line: mixOver(theme.accent, [16, 24, 32, 0.09], 16),
+      lineStrong: mixOver(theme.accent, [16, 24, 32, 0.16], 26),
+      cardBorder: mixOver(theme.accent, [16, 24, 32, 0.09], 16),
+      secondary: mixHex(theme.accent, '#48515a', 14),
+      muted: mixHex(theme.accent, '#5d666e', 14),
+      grid: mixHex(theme.accent, '#e4e8eb', 12),
+      deemph: mixHex(theme.accent, '#cdd3d8', 18),
     };
   }
   if (scheme === 'dark' && dark === 'stained') {
@@ -116,8 +178,18 @@ export function themedPalette(
       surface: mixHex(theme.accent, '#151a21', 13),
       surface2: mixHex(theme.accent, '#1d242d', 17),
       surface3: mixHex(theme.accent, '#262e38', 23),
+      surfaceRaised: mixHex(theme.accent, '#1a2129', 17),
       line: `${accentText}24`,
       lineStrong: `${accentText}42`,
+      cardBorder: `${accentText}24`,
+      cardShadow: true,
+      secondary: mixHex(accentText, '#ccd3d9', 18),
+      muted: mixHex(accentText, '#a1abb3', 18),
+      grid: mixHex(theme.accent, '#262d35', 18),
+      axis: mixHex(theme.accent, '#3e4750', 20),
+      deemph: mixHex(theme.accent, '#37404a', 20),
+      danger: '#f47a7a',
+      dangerSoft: 'rgba(244,122,122,0.10)',
     };
   }
   if (scheme === 'dark' && dark === 'oled') {
@@ -127,12 +199,31 @@ export function themedPalette(
       surface: '#000000',
       surface2: '#121417',
       surface3: '#1f2226',
+      surfaceRaised: '#000000',
       line: '#ffffff24',
       lineStrong: '#ffffff3d',
       text: '#ffffff',
       secondary: '#d4d9dd',
       muted: '#a8b0b6',
+      cardBorder: '#ffffff38',
+      grid: '#1f2327',
+      axis: '#3d434a',
+      deemph: '#33393f',
+      danger: '#f47a7a',
+      dangerSoft: 'rgba(244,122,122,0.10)',
     };
   }
   return colors;
+}
+
+/**
+ * CSS `color-mix(in srgb, hex pct%, rgba(...))` for an opaque colour and a translucent one, as the
+ * web's light Stained lines mix the accent into a translucent ink.
+ */
+export function mixOver(hex: string, [r, g, b, a]: [number, number, number, number], pct: number) {
+  const p = pct / 100;
+  const channel = (i: number) => parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16);
+  const alpha = p + (1 - p) * a;
+  const mix = (c1: number, c2: number) => Math.round((p * c1 + (1 - p) * a * c2) / alpha);
+  return `rgba(${mix(channel(0), r)},${mix(channel(1), g)},${mix(channel(2), b)},${+alpha.toFixed(3)})`;
 }

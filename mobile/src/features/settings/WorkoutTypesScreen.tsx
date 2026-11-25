@@ -25,7 +25,6 @@ type Colouring = { kind: 'existing'; type: WorkoutType } | { kind: 'new'; name: 
 export function WorkoutTypesScreen() {
   const router = useRouter();
   const types = useWorkoutTypes();
-  const { colors } = useTheme();
   const actions = useWorkoutTypeActions();
   const [error, setError] = useState<string | null>(null);
   const [colouring, setColouring] = useState<Colouring | null>(null);
@@ -128,7 +127,6 @@ export function WorkoutTypesScreen() {
           <Row
             label="Add workout type"
             icon="plus"
-            iconTint={colors.accent}
             chevron={false}
             disabled={busy}
             onPress={addType}

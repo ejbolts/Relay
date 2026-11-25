@@ -3,9 +3,13 @@ import type {
   FriendConnections,
   FriendFeed,
   FriendStatus,
+  LiftComparisons,
   NotificationReadReference,
   SharedProfile,
   SharedProfileSummary,
+  Routine,
+  SharedWorkoutFilterOptions,
+  SharedWorkoutFilters,
   SharedWorkoutKind,
   SharedWorkoutPage,
   SharingChoices,
@@ -45,11 +49,13 @@ export const socialApi = {
     apiGet<SuggestedProfilePage>(`/api/sharing/suggestions?page=${page}`, signal),
   profile: (userId: string, signal?: AbortSignal) =>
     apiGet<SharedProfile>(`/api/sharing/profiles/${id(userId)}`, signal),
+  lifts: (userId: string, signal?: AbortSignal) =>
+    apiGet<LiftComparisons>(`/api/sharing/profiles/${id(userId)}/lifts`, signal),
   workouts: (
     userId: string,
     offset: number,
     limit: number,
-    filters: { kind?: SharedWorkoutKind; start_date?: string; end_date?: string } = {},
+    filters: Partial<SharedWorkoutFilters> & { kind?: SharedWorkoutKind } = {},
     signal?: AbortSignal,
   ) =>
     apiGet<SharedWorkoutPage>(
@@ -60,6 +66,15 @@ export const socialApi = {
       })}`,
       signal,
     ),
+  /** The exercises, machines and workout types a profile's history can be filtered by. */
+  workoutFilters: (userId: string, signal?: AbortSignal) =>
+    apiGet<SharedWorkoutFilterOptions>(
+      `/api/sharing/profiles/${id(userId)}/workout-filters`,
+      signal,
+    ),
+  /** The splits a member shows on their profile. */
+  splits: (userId: string, signal?: AbortSignal) =>
+    apiGet<Routine[]>(`/api/routines/profile/${id(userId)}`, signal),
   /** Sends a friend request, or accepts theirs when they already asked you. */
   addFriend: (userId: string) =>
     apiSend<{ status: FriendStatus }>(`/api/sharing/friends/${id(userId)}`, 'POST'),
@@ -123,4 +138,17 @@ export function sharingRequired(error: unknown) {
 
 export function notFound(error: unknown) {
   return error instanceof ApiError && error.status === 404;
+}
+
+/**
+ * The server refused a member's data: they share with friends only, their profile is no longer
+ * shared, or your own profile is private.
+ */
+export function accessRevoked(error: unknown) {
+  return (
+    error instanceof ApiError &&
+    ((error.status === 403 && error.code === 'friend_required') ||
+      (error.status === 404 && error.code === 'profile_not_found') ||
+      error.code === 'sharing_required')
+  );
 }

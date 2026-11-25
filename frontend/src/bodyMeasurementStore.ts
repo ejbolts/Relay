@@ -1,30 +1,32 @@
 import { captureAccountCacheScope, type AccountCacheScope } from './accountCacheScope';
 import { browserAccountStorage, type AccountStorage } from './deviceAccount';
 import { readOffline, writeOffline } from './offlineStore';
+import {
+  BODY_MEASUREMENT_QUEUE_KEY,
+  acknowledgedBodyMeasurements,
+  bodyMeasurementDate,
+  bodyMeasurementInputError,
+  bodyMeasurementQueueBelongsElsewhere,
+  bodyMeasurementQueueStatus,
+  bodyMeasurementSendRefused,
+  nextBodyMeasurementChange,
+  overlayBodyMeasurements as overlay,
+  parseBodyMeasurementQueue,
+  withBodyMeasurementChange,
+  withRefusedBodyMeasurementChange,
+  withRetriedBodyMeasurementChanges,
+  withoutBodyMeasurementChange,
+  type BodyMeasurementInput,
+  type BodyMeasurementQueue as Queue,
+} from './bodyMeasurementQueue';
 import type { BodyMeasurement } from './types';
 
-export type BodyMeasurementInput = Pick<
-  BodyMeasurement,
-  'measurement_date' | 'weight_kg' | 'body_fat_pct' | 'notes'
->;
+export { BODY_MEASUREMENT_QUEUE_KEY, type BodyMeasurementInput };
 
 // Like finished workout drafts, only unsynced changes are kept in localStorage for recovery
 // after session expiry. Server history stays in the encrypted IndexedDB cache.
-export const BODY_MEASUREMENT_QUEUE_KEY = 'relay-body-measurement-queue';
 export const BODY_MEASUREMENTS_CHANGED = 'relay-body-measurements-changed';
 const CACHE_KEY = 'response:/api/body-measurements';
-const LOCAL_ID = 'local-body:';
-interface Change {
-  token: string;
-  date: string;
-  createdAt: string;
-  payload: BodyMeasurementInput | null;
-  error?: string;
-}
-interface Queue {
-  owner: string;
-  changes: Change[];
-}
 export interface BodyMeasurementTransport {
   list(signal?: AbortSignal): Promise<BodyMeasurement[]>;
   save(payload: BodyMeasurementInput, signal: AbortSignal): Promise<BodyMeasurement>;
@@ -48,11 +50,7 @@ function check(scope: AccountCacheScope): string {
   return scope.owner;
 }
 function queue(owner: string, storage = browserAccountStorage()): Queue {
-  const raw = storage?.getItem(BODY_MEASUREMENT_QUEUE_KEY);
-  if (!raw) return { owner, changes: [] };
-  const saved = JSON.parse(raw) as Queue;
-  if (!saved || !Array.isArray(saved.changes)) throw new Error('Could not read saved check-ins.');
-  return saved.owner === owner ? saved : { owner, changes: [] };
+  return parseBodyMeasurementQueue(storage?.getItem(BODY_MEASUREMENT_QUEUE_KEY) ?? null, owner);
 }
 function publish(rows?: BodyMeasurement[]) {
   ++revision;
@@ -77,29 +75,17 @@ export function clearBodyMeasurementQueue(
   storage?.removeItem(BODY_MEASUREMENT_QUEUE_KEY);
 }
 export function reconcileBodyMeasurementQueue(owner: string, storage: AccountStorage | null) {
-  const raw = storage?.getItem(BODY_MEASUREMENT_QUEUE_KEY);
-  if (raw && (JSON.parse(raw) as Queue).owner !== owner) clearBodyMeasurementQueue(storage);
+  if (
+    bodyMeasurementQueueBelongsElsewhere(
+      storage?.getItem(BODY_MEASUREMENT_QUEUE_KEY) ?? null,
+      owner,
+    )
+  )
+    clearBodyMeasurementQueue(storage);
 }
 export function bodyMeasurementSyncStatus() {
   const scope = captureAccountCacheScope();
-  const changes = scope.owner ? queue(scope.owner).changes : [];
-  return { pending: changes.length, error: changes.find((item) => item.error)?.error ?? null };
-}
-
-function overlay(rows: BodyMeasurement[], changes: Change[]): BodyMeasurement[] {
-  const byDate = new Map(rows.map((row) => [row.measurement_date, row]));
-  for (const change of changes) {
-    if (change.payload) {
-      const previous = byDate.get(change.date);
-      byDate.set(change.date, {
-        id: previous?.id ?? `${LOCAL_ID}${change.date}`,
-        created_at: previous?.created_at ?? change.createdAt,
-        is_sample: false,
-        ...change.payload,
-      });
-    } else byDate.delete(change.date);
-  }
-  return [...byDate.values()].sort((a, b) => b.measurement_date.localeCompare(a.measurement_date));
+  return bodyMeasurementQueueStatus(scope.owner ? queue(scope.owner) : { changes: [] });
 }
 
 async function readLocal(scope: AccountCacheScope) {
@@ -115,32 +101,15 @@ export function localBodyMeasurements() {
 }
 
 export async function saveLocalBodyMeasurement(payload: BodyMeasurementInput) {
-  if (
-    !/^\d{4}-\d{2}-\d{2}$/.test(payload.measurement_date) ||
-    !Number.isFinite(Date.parse(`${payload.measurement_date}T00:00:00Z`)) ||
-    new Date(`${payload.measurement_date}T00:00:00Z`).toISOString().slice(0, 10) !==
-      payload.measurement_date ||
-    !Number.isFinite(payload.weight_kg) ||
-    payload.weight_kg <= 0 ||
-    payload.weight_kg > 500 ||
-    (payload.body_fat_pct !== null &&
-      (!Number.isFinite(payload.body_fat_pct) ||
-        payload.body_fat_pct < 1 ||
-        payload.body_fat_pct > 70)) ||
-    (payload.notes?.length ?? 0) > 2000
-  )
-    throw new Error(
-      'Enter a valid date, body weight and body-fat percentage. Notes can contain up to 2,000 characters.',
-    );
+  const invalid = bodyMeasurementInputError(payload);
+  if (invalid) throw new Error(invalid);
   const scope = captureAccountCacheScope();
   return locked(async () => {
     const owner = check(scope);
-    const next = queue(owner);
     const row = (await readLocal(scope)).find(
       (item) => item.measurement_date === payload.measurement_date,
     );
-    next.changes = next.changes.filter((item) => item.date !== payload.measurement_date);
-    next.changes.push({
+    const next = withBodyMeasurementChange(queue(owner), {
       token: crypto.randomUUID(),
       date: payload.measurement_date,
       createdAt: row?.created_at ?? new Date().toISOString(),
@@ -157,12 +126,9 @@ export async function deleteLocalBodyMeasurement(id: string) {
   const scope = captureAccountCacheScope();
   return locked(async () => {
     const owner = check(scope);
-    const row = (await readLocal(scope)).find((item) => item.id === id);
-    const date = id.startsWith(LOCAL_ID) ? id.slice(LOCAL_ID.length) : row?.measurement_date;
+    const date = bodyMeasurementDate(id, await readLocal(scope));
     if (!date) throw new Error('This check-in no longer exists. Refresh before trying again.');
-    const next = queue(owner);
-    next.changes = next.changes.filter((item) => item.date !== date);
-    next.changes.push({
+    const next = withBodyMeasurementChange(queue(owner), {
       token: crypto.randomUUID(),
       date,
       createdAt: new Date().toISOString(),
@@ -225,12 +191,10 @@ export function syncBodyMeasurements(
     const owner = check(scope);
     if (retry)
       await locked(async () => {
-        const next = queue(owner);
-        next.changes.forEach((item) => delete item.error);
-        persist(next, scope);
+        persist(withRetriedBodyMeasurementChanges(queue(owner)), scope);
       });
     while (scope.isCurrent() && navigator.onLine !== false) {
-      const change = queue(owner).changes.find((item) => !item.error);
+      const change = nextBodyMeasurementChange(queue(owner));
       if (!change) return;
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 20_000);
@@ -246,30 +210,18 @@ export function syncBodyMeasurements(
         await locked(async () => {
           check(scope);
           const rows = (await readOffline<BodyMeasurement[]>(CACHE_KEY, owner))?.value ?? [];
-          const updated = rows.filter((item) => item.measurement_date !== change.date);
-          if (saved) updated.push(saved);
+          const updated = acknowledgedBodyMeasurements(rows, change, saved);
           await writeOffline(CACHE_KEY, updated, owner, scope.isCurrent, true);
-          const next = queue(owner);
-          next.changes = next.changes.filter((item) => item.token !== change.token);
-          persist(next, scope);
+          persist(withoutBodyMeasurementChange(queue(owner), change.token), scope);
         });
       } catch (reason) {
         const status = (reason as { status?: number })?.status;
-        if (
-          scope.isCurrent() &&
-          status &&
-          status >= 400 &&
-          status < 500 &&
-          // 426: this release is too old to save; the updated app syncs the change instead.
-          ![401, 408, 426, 429].includes(status)
-        ) {
+        // 426: this release is too old to save; the updated app syncs the change instead.
+        if (scope.isCurrent() && bodyMeasurementSendRefused(status)) {
           await locked(async () => {
-            const next = queue(owner);
-            const current = next.changes.find((item) => item.token === change.token);
-            if (current)
-              current.error =
-                reason instanceof Error ? reason.message : 'Could not sync this check-in.';
-            persist(next, scope);
+            const message =
+              reason instanceof Error ? reason.message : 'Could not sync this check-in.';
+            persist(withRefusedBodyMeasurementChange(queue(owner), change.token, message), scope);
           });
         }
         throw reason;

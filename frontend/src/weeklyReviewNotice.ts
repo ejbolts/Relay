@@ -1,14 +1,7 @@
 import { useSyncExternalStore } from 'react';
+import type { WeeklyReviewNotice } from './weeklyReview';
 
-/** Last week's review, as listed in the notifications inbox until the next week begins. */
-export interface WeeklyReviewNotice {
-  /** First day of the reviewed week. */
-  weekStart: string;
-  /** Last day of the reviewed week. */
-  weekEnd: string;
-  /** False once the review popup has been shown for this week. */
-  unread: boolean;
-}
+export type { WeeklyReviewNotice } from './weeklyReview';
 
 let current: WeeklyReviewNotice | null = null;
 const noticeListeners = new Set<() => void>();

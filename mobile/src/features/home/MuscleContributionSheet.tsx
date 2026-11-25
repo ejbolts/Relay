@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -14,11 +13,13 @@ import {
 } from '../../../../frontend/src/muscleGoalEditing';
 import { setCredits } from '../../../../frontend/src/muscleSetRows';
 import type { MuscleSetGoals } from '../../../../frontend/src/muscleSetGoals';
+import { isPendingWorkoutId } from '../../../../frontend/src/pendingWorkoutPreview';
 import { shortDate } from '../../../../frontend/src/trainingSummary';
 import { Button, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
+import { haptics } from '../../ui/haptics';
 import { useSaveMuscleGoal } from './homeData';
 import { HomeSheet, useCloseThen } from './HomeSheet';
 import { Meter } from './Sparks';
@@ -36,6 +37,8 @@ export function MuscleContributionSheet({
   goal,
   defaultGoal,
   goals,
+  liveWorkoutId = null,
+  onOpenLive,
   onClose,
 }: {
   muscle: Muscle | null;
@@ -44,6 +47,9 @@ export function MuscleContributionSheet({
   goal: number;
   defaultGoal: number;
   goals: MuscleSetGoals | undefined;
+  /** The workout in progress's contribution id; its row opens the logger, as on the web. */
+  liveWorkoutId?: string | null;
+  onOpenLive?: () => void;
   onClose: () => void;
 }) {
   const router = useRouter();
@@ -65,9 +71,17 @@ export function MuscleContributionSheet({
           goal={goal}
           defaultGoal={defaultGoal}
           goals={goals}
-          onOpenWorkout={(id) =>
-            closeThen(() => router.push({ pathname: '/training/session/[id]', params: { id } }))
-          }
+          onOpenWorkout={(id) => {
+            if (id === liveWorkoutId) closeThen(() => onOpenLive?.());
+            else if (isPendingWorkoutId(id)) showToast('This workout is waiting to sync.');
+            else
+              closeThen(() =>
+                router.push(
+                  { pathname: '/training/session/[id]', params: { id } },
+                  { withAnchor: true },
+                ),
+              );
+          }}
         />
       )}
     </HomeSheet>
@@ -107,7 +121,7 @@ function MuscleWeek({
     setError(null);
     try {
       await save.mutateAsync({ muscle: muscle.muscle_group, goal: value });
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       setEditing(false);
       showToast(muscleGoalSavedMessage(muscle.muscle_group, value));
     } catch (reason) {
@@ -116,7 +130,7 @@ function MuscleWeek({
   }
 
   const step = (by: number) => {
-    void Haptics.selectionAsync();
+    haptics.selection();
     setDraft(stepMuscleSetGoal(draft, goal, by));
     setError(null);
   };

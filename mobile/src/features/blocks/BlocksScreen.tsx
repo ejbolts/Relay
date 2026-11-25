@@ -3,12 +3,10 @@ import { useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { blockColor } from '../../../../frontend/src/blockColors';
 import {
-  blockYearSegments,
   blocksInYear,
   firstBlockYear,
   joinedDetails,
   lastBlockYear,
-  segmentInYear,
   toggledBlock,
   workoutCountLabel,
 } from '../../../../frontend/src/trainingBlockSegments';
@@ -21,7 +19,6 @@ import {
   weeklyVolumeChange,
 } from '../../../../frontend/src/trainingBlockStats';
 import {
-  MONTHS,
   blockDay,
   blockOn,
   blockProgress,
@@ -30,13 +27,17 @@ import {
 } from '../../../../frontend/src/trainingBlocks';
 import type { TrainingBlock, TrainingBlocks } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
-import { Button, Card, ErrorState, errorMessage, Loading } from '../../ui/components';
+import { Button, Card, ErrorState, errorMessage, IconButton, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
-import { Badge, Divider } from '../training/parts';
+import { cellInk } from '../training/contrast';
+import { trainingIcons } from '../training/icons';
+import { Badge } from '../training/parts';
 import { useBlockSummary, useTrainingBlocks } from './blockQueries';
 import { nativeBlockColor } from './BlockScopeChip';
+import { BlockTimeline } from './BlockTimeline';
 import { blockRoutes } from './routes';
+import { LandscapeChartView } from '../body/LandscapeChart';
 
 /**
  * Every training block, one year at a time, as the web's overview: the year's bar, the block in
@@ -50,7 +51,14 @@ export function BlocksScreen() {
   const thisYear = Number(today.slice(0, 4));
   const [year, setYear] = useState(thisYear);
   const [selected, setSelected] = useState<string | null>(null);
+  const [scrollRequest, setScrollRequest] = useState<{ date: string; key: number } | null>(null);
+  const [landscape, setLandscape] = useState(false);
   const config = blocks.data;
+  // The arrows move the timeline to a year; scrolling it moves the year and list along.
+  const goToYear = (next: number) => {
+    setYear(next);
+    setScrollRequest((request) => ({ date: `${next}-01-01`, key: (request?.key ?? 0) + 1 }));
+  };
 
   const header = (
     <Stack.Screen
@@ -115,50 +123,50 @@ export function BlocksScreen() {
         ) : (
           <>
             <Card accessibilityLabel="Training timeline">
+              {/* The web's timeline header: year arrows either side, full screen at the end. */}
               <View style={styles.years}>
-                <Pressable
-                  accessibilityRole="button"
+                <IconButton
+                  icon="chevronLeft"
                   accessibilityLabel="Previous year"
-                  accessibilityState={{ disabled: shownYear <= first }}
                   disabled={shownYear <= first}
-                  hitSlop={8}
-                  onPress={() => setYear(shownYear - 1)}
-                  style={{ opacity: shownYear <= first ? 0.3 : 1 }}
-                >
-                  <Icon name="chevronLeft" size={18} color={colors.accentText} />
-                </Pressable>
-                <View style={{ alignItems: 'center' }} accessibilityLiveRegion="polite">
-                  <Text style={[type.headline, type.number, { color: colors.text }]}>
-                    {shownYear}
-                  </Text>
-                  <Text style={[type.caption, { color: colors.muted }]}>
+                  onPress={() => goToYear(shownYear - 1)}
+                />
+                <View style={styles.yearTitle} accessibilityLiveRegion="polite">
+                  <Text style={[type.title, type.number, { color: colors.text }]}>{shownYear}</Text>
+                  <Text style={[type.footnote, { color: colors.muted, fontWeight: '600' }]}>
                     {count} block{count === 1 ? '' : 's'}
                   </Text>
                 </View>
-                <Pressable
-                  accessibilityRole="button"
+                <IconButton
+                  icon="chevronRight"
                   accessibilityLabel="Next year"
-                  accessibilityState={{ disabled: shownYear >= last }}
                   disabled={shownYear >= last}
-                  hitSlop={8}
-                  onPress={() => setYear(shownYear + 1)}
-                  style={{ opacity: shownYear >= last ? 0.3 : 1 }}
-                >
-                  <Icon name="chevronRight" size={18} color={colors.accentText} />
-                </Pressable>
+                  onPress={() => goToYear(shownYear + 1)}
+                />
+                <IconButton
+                  icon={trainingIcons.expand}
+                  accessibilityLabel="View Training timeline full screen in landscape"
+                  onPress={() => setLandscape(true)}
+                  style={{ backgroundColor: colors.surface2, borderColor: colors.lineStrong }}
+                />
               </View>
-              <YearBar
+              <BlockTimeline
                 config={config}
-                year={shownYear}
                 today={today}
                 selected={highlighted}
                 onSelect={choose}
+                onCentreYear={setYear}
+                scrollRequest={scrollRequest}
               />
             </Card>
             {current && !current.end_date && shownYear === thisYear && (
               <View style={{ gap: 8 }}>
-                <Text accessibilityRole="header" style={[type.headline, { color: colors.text }]}>
-                  Now
+                <Text
+                  accessibilityRole="header"
+                  accessibilityLabel="Now"
+                  style={[type.eyebrow, styles.eyebrow, { color: colors.muted }]}
+                >
+                  NOW
                 </Text>
                 <BlockNowCard
                   key={current.id}
@@ -169,31 +177,27 @@ export function BlocksScreen() {
                 />
               </View>
             )}
-            <Card accessibilityLabel={`${shownYear} training blocks`} style={styles.list}>
-              {listed.map((item, index) => (
-                <View key={item.id}>
-                  {index > 0 && <Divider inset={44} />}
-                  <BlockRow
-                    config={config}
-                    block={item}
-                    today={today}
-                    current={item.id === current?.id}
-                    highlighted={item.id === highlighted}
-                    onOpen={() => router.push(blockRoutes.summary(item.id))}
-                    onEdit={() => router.push(blockRoutes.edit(item.id))}
-                  />
-                </View>
+            {/* Each block on its own card, with its colour as a stripe down the side. */}
+            <View accessibilityLabel={`${shownYear} training blocks`} style={{ gap: 10 }}>
+              {listed.map((item) => (
+                <BlockRow
+                  key={item.id}
+                  config={config}
+                  block={item}
+                  today={today}
+                  current={item.id === current?.id}
+                  highlighted={item.id === highlighted}
+                  onOpen={() => router.push(blockRoutes.summary(item.id))}
+                  onEdit={() => router.push(blockRoutes.edit(item.id))}
+                />
               ))}
               {earlier && (
-                <View>
-                  {listed.length > 0 && <Divider inset={44} />}
+                <Card style={styles.blockCard}>
                   <View style={styles.row}>
-                    <View style={[styles.swatch, { backgroundColor: colors.surface3 }]} />
+                    <View style={[styles.stripe, { backgroundColor: colors.deemph }]} />
                     <View style={{ flex: 1, gap: 2 }}>
-                      <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]}>
-                        Before blocks
-                      </Text>
-                      <Text style={[type.caption, { color: colors.secondary }]}>
+                      <Text style={[type.headline, { color: colors.text }]}>Before blocks</Text>
+                      <Text style={[type.footnote, { color: colors.secondary }]}>
                         {joinedDetails(
                           blockRange(config.history_start!, config.blocks[0].start_date),
                           workoutCountLabel(config.earlier_workout_count),
@@ -201,92 +205,78 @@ export function BlocksScreen() {
                       </Text>
                     </View>
                   </View>
-                </View>
+                </Card>
               )}
               {!listed.length && !earlier && (
-                <Text style={[type.callout, styles.empty, { color: colors.secondary }]}>
-                  No blocks in {shownYear}.
-                </Text>
+                <Card>
+                  <Text style={[type.callout, styles.empty, { color: colors.secondary }]}>
+                    No blocks in {shownYear}.
+                  </Text>
+                </Card>
               )}
-            </Card>
+            </View>
           </>
         )}
       </ScrollView>
+      {config.blocks.length > 0 && (
+        <LandscapeChartView
+          title="Training timeline"
+          visible={landscape}
+          onClose={() => setLandscape(false)}
+        >
+          {(size) => (
+            <View style={{ gap: 10 }}>
+              <BlockTimeline
+                config={config}
+                today={today}
+                selected={highlighted}
+                onSelect={choose}
+                barHeight={Math.max(40, Math.min(120, size.height - 70))}
+              />
+              <SelectedBlockDetail config={config} blockId={highlighted} today={today} />
+            </View>
+          )}
+        </LandscapeChartView>
+      )}
     </>
   );
 }
 
-/** One year of the overview's bar: each block in its colour, the planned rest paler. */
-function YearBar({
+/** The landscape view's line for the chosen block: its colour, name, dates and workouts. */
+function SelectedBlockDetail({
   config,
-  year,
+  blockId,
   today,
-  selected,
-  onSelect,
 }: {
   config: TrainingBlocks;
-  year: number;
+  blockId: string | null;
   today: string;
-  selected: string | null;
-  onSelect: (blockId: string) => void;
 }) {
-  const { colors, type, radius } = useTheme();
-  const segments = blockYearSegments(config, today).flatMap((segment) => {
-    const place = segmentInYear(segment, year);
-    return place ? [{ segment, place }] : [];
-  });
-  // Today's place along the year, when the bar shows this year.
-  const todayLeft =
-    today.slice(0, 4) === String(year)
-      ? segmentInYear({ start: today, end: `${year + 1}-01-01` }, year)?.left
-      : undefined;
+  const { colors, type } = useTheme();
+  const block = config.blocks.find((item) => item.id === blockId);
   return (
-    <View style={{ gap: 4 }}>
-      <View style={[styles.yearBar, { backgroundColor: colors.surface2, borderRadius: radius.sm }]}>
-        {segments.map(({ segment, place }) => {
-          const color = segment.color ? nativeBlockColor(segment.color, colors) : colors.surface3;
-          const block = config.blocks.find((item) => item.id === segment.blockId);
-          const isSelected = !!segment.blockId && segment.blockId === selected;
-          const style = [
-            styles.yearSegment,
-            {
-              left: `${place.left * 100}%`,
-              width: `${place.width * 100}%`,
-              backgroundColor: color,
-              opacity: segment.planned ? 0.35 : 1,
-              borderColor: isSelected ? colors.text : 'transparent',
-            },
-          ] as const;
-          if (!block || segment.planned)
-            return <View key={segment.key} pointerEvents="none" style={style} />;
-          return (
-            <Pressable
-              key={segment.key}
-              accessibilityRole="button"
-              accessibilityLabel={`${block.name}, ${blockRange(block.start_date, block.end_date)}`}
-              accessibilityState={{ selected: isSelected }}
-              onPress={() => onSelect(block.id)}
-              style={style}
-            />
-          );
-        })}
-        {todayLeft !== undefined && (
+    <View style={styles.fullDetail} accessibilityLiveRegion="polite">
+      {block && (
+        <>
           <View
-            pointerEvents="none"
             style={[
-              styles.todayLine,
-              { left: `${todayLeft * 100}%`, backgroundColor: colors.text },
+              styles.dot,
+              {
+                backgroundColor: nativeBlockColor(blockColor(config.blocks, block, today), colors),
+              },
             ]}
           />
-        )}
-      </View>
-      <View style={styles.months} importantForAccessibility="no-hide-descendants">
-        {MONTHS.map((month) => (
-          <Text key={month} style={[type.caption, styles.month, { color: colors.muted }]}>
-            {month.charAt(0)}
+          <Text style={[type.callout, { color: colors.text, fontWeight: '700' }]}>
+            {block.name}
           </Text>
-        ))}
-      </View>
+          <Text style={[type.callout, { color: colors.secondary }]}>
+            {joinedDetails(
+              blockRange(block.start_date, block.end_date),
+              workoutCountLabel(block.workout_count),
+            )}
+          </Text>
+        </>
+      )}
     </View>
   );
 }
@@ -308,7 +298,7 @@ function BlockRow({
   onOpen: () => void;
   onEdit: () => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const plan =
     current && block.planned_end_date
       ? joinedDetails(
@@ -319,50 +309,64 @@ function BlockRow({
   const range = blockRange(block.start_date, block.end_date);
   const workouts = workoutCountLabel(block.workout_count);
   return (
-    <View
+    <Card
       style={[
-        styles.row,
-        highlighted && { backgroundColor: colors.accentSoft, borderRadius: radius.md },
+        styles.blockCard,
+        highlighted && { borderColor: colors.accent, backgroundColor: colors.accentSoft },
       ]}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${block.name}${current ? ', current' : ''}${block.deload ? ', deload' : ''}, ${range}. Open summary`}
-        onPress={onOpen}
-        style={({ pressed }) => [styles.rowMain, pressed && { opacity: 0.6 }]}
-      >
-        <View
-          style={[
-            styles.swatch,
-            { backgroundColor: nativeBlockColor(blockColor(config.blocks, block, today), colors) },
-          ]}
-        />
-        <View style={{ flex: 1, gap: 2 }}>
-          <View style={styles.title}>
-            <Text
-              style={[type.callout, { color: colors.text, fontWeight: '600', flexShrink: 1 }]}
-              numberOfLines={1}
-            >
-              {block.name}
-            </Text>
-            {current && <Badge label="Current" />}
-            {block.deload && <Badge label="Deload" />}
+      <View style={styles.row}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${block.name}${current ? ', current' : ''}${block.deload ? ', deload' : ''}, ${range}. Open summary`}
+          onPress={onOpen}
+          style={({ pressed }) => [styles.rowMain, pressed && { opacity: 0.6 }]}
+        >
+          <View
+            style={[
+              styles.stripe,
+              {
+                backgroundColor: nativeBlockColor(blockColor(config.blocks, block, today), colors),
+              },
+            ]}
+          />
+          <View style={{ flex: 1, gap: 2 }}>
+            <View style={styles.title}>
+              <Text
+                style={[type.headline, { color: colors.text, flexShrink: 1 }]}
+                numberOfLines={2}
+              >
+                {block.name}
+              </Text>
+              {current && <Badge label="Current" tone="good" sentence />}
+              {block.deload && <Badge label="Deload" tone="gold" sentence />}
+            </View>
+            <Text style={[type.footnote, { color: colors.secondary }]}>{range}</Text>
+            {!!plan && (
+              <Text style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}>
+                {plan}
+              </Text>
+            )}
+            {!!workouts && (
+              <Text style={[type.footnote, { color: colors.secondary }]}>{workouts}</Text>
+            )}
           </View>
-          <Text style={[type.caption, { color: colors.secondary }]}>{range}</Text>
-          {!!plan && <Text style={[type.caption, { color: colors.accentText }]}>{plan}</Text>}
-          {!!workouts && <Text style={[type.caption, { color: colors.muted }]}>{workouts}</Text>}
-        </View>
-      </Pressable>
-      <Button
-        label="Edit"
-        variant="secondary"
-        accessibilityLabel={`Edit ${block.name}`}
-        onPress={onEdit}
-        style={styles.edit}
-      />
-    </View>
+        </Pressable>
+        <Button
+          label="Edit"
+          variant="secondary"
+          size="small"
+          accessibilityLabel={`Edit ${block.name}`}
+          onPress={onEdit}
+        />
+      </View>
+    </Card>
   );
 }
+
+/** A block colour at an opacity (a two-digit hex alpha); colours that aren't #rrggbb stay solid. */
+const tint = (color: string, alpha: string) =>
+  /^#[0-9a-f]{6}$/i.test(color) ? `${color}${alpha}` : color;
 
 /** The block in progress: its weeks so far and how it compares with the last regular block. */
 function BlockNowCard({
@@ -401,7 +405,7 @@ function BlockNowCard({
           <Text style={[type.headline, { color: colors.text, flex: 1 }]} numberOfLines={1}>
             {block.name}
           </Text>
-          <Text style={[type.footnote, { color: colors.secondary }]}>
+          <Text style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}>
             {joinedDetails(
               weeks ? `Week ${week} of ${weeks}` : `Week ${week}`,
               daysLeft !== null ? daysLeftLabel(daysLeft) : '',
@@ -409,36 +413,35 @@ function BlockNowCard({
           </Text>
         </View>
         {cells.length > 0 && (
-          <View style={styles.weeks} importantForAccessibility="no-hide-descendants">
-            {cells.map((cell, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.week,
-                  {
-                    borderRadius: radius.sm / 2,
-                    backgroundColor:
-                      cell.state === 'done'
-                        ? color
-                        : cell.state === 'now'
-                          ? colors.accentSoft
-                          : colors.surface2,
-                    borderColor: cell.state === 'now' ? color : 'transparent',
-                  },
-                ]}
-              >
-                {!!cell.label && (
-                  <Text
-                    style={[
-                      styles.weekLabel,
-                      { color: cell.state === 'done' ? colors.page : colors.secondary },
-                    ]}
-                  >
-                    {cell.label}
-                  </Text>
-                )}
-              </View>
-            ))}
+          // One connected strip, as the web's: weeks done in the block's colour, this week lighter.
+          <View
+            style={[styles.weeks, { borderRadius: radius.sm, backgroundColor: colors.surface2 }]}
+            importantForAccessibility="no-hide-descendants"
+          >
+            {cells.map((cell, index) => {
+              const fill =
+                cell.state === 'done'
+                  ? tint(color, 'b3')
+                  : cell.state === 'now'
+                    ? tint(color, '4d')
+                    : null;
+              return (
+                <View key={index} style={[styles.week, fill !== null && { backgroundColor: fill }]}>
+                  {!!cell.label && (
+                    <Text
+                      style={[
+                        styles.weekLabel,
+                        // Ink chosen against the block colour as painted, for any custom colour.
+                        { color: fill === null ? colors.secondary : cellInk(colors, fill) },
+                      ]}
+                      numberOfLines={1}
+                    >
+                      {cell.label}
+                    </Text>
+                  )}
+                </View>
+              );
+            })}
           </View>
         )}
         {now && before && previous && before.block.workout_count > 0 && (
@@ -463,22 +466,19 @@ function BlockNowCard({
 }
 
 const styles = StyleSheet.create({
-  years: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  yearBar: { height: 28, overflow: 'hidden' },
-  yearSegment: { position: 'absolute', top: 2, bottom: 2, borderRadius: 4, borderWidth: 2 },
-  todayLine: { position: 'absolute', top: 0, bottom: 0, width: 2 },
-  months: { flexDirection: 'row' },
-  month: { flex: 1, textAlign: 'center' },
-  list: { paddingVertical: 4, gap: 0 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 },
-  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12 },
-  swatch: { width: 32, height: 32, borderRadius: 8 },
-  title: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  edit: { minHeight: 34, paddingHorizontal: 12 },
+  years: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  yearTitle: { flex: 1, alignItems: 'center' },
+  eyebrow: { paddingHorizontal: 6 },
+  fullDetail: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 28 },
+  dot: { width: 10, height: 10, borderRadius: 5 },
+  blockCard: { paddingVertical: 14 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  rowMain: { flex: 1, flexDirection: 'row', alignItems: 'stretch', gap: 12 },
+  stripe: { width: 4, borderRadius: 2, alignSelf: 'stretch', minHeight: 36 },
+  title: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   empty: { paddingVertical: 16, textAlign: 'center' },
   nowTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  weeks: { flexDirection: 'row', gap: 3 },
-  week: { flex: 1, height: 22, alignItems: 'center', justifyContent: 'center', borderWidth: 1 },
-  weekLabel: { fontSize: 9, fontWeight: '700' },
+  weeks: { flexDirection: 'row', overflow: 'hidden' },
+  week: { flex: 1, height: 30, alignItems: 'center', justifyContent: 'center' },
+  weekLabel: { fontSize: 11, fontWeight: '700' },
 });

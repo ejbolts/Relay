@@ -1,6 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
-import * as ImagePicker from 'expo-image-picker';
 import { useState } from 'react';
 import {
   ActivityIndicator,
@@ -13,18 +12,27 @@ import {
   View,
 } from 'react-native';
 import { machineLastUsedLabel } from '../../../../frontend/src/machineHistory';
+import { mergedAwayIds, pinnedAfterMerge } from '../../../../frontend/src/machinePhotoMerge';
 import { cleanMachineSettings } from '../../../../frontend/src/setMachines';
 import type { Exercise, MachinePhotoUsage, MachineSetting } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { apiSend } from '../../data/api';
 import { useAuthorisedImage } from '../../data/authorisedImage';
-import { Button } from '../../ui/components';
+import { Button, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { promptText, showMenu } from '../../ui/prompts';
 import { Sheet } from '../../ui/Sheet';
+import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { loggerKeys, machineSettings, useMachinePhotos } from './loggerQueries';
-import { uploadMachinePhoto } from './machineMedia';
+import { PhotoViewer } from '../social/PhotoViewer';
+import {
+  askForMachinePhoto,
+  deleteMachinePhoto,
+  renameMachinePhoto,
+  uploadMachinePhoto,
+} from './machineMedia';
+import { MachineMerge } from './MachineMerge';
 
 export interface MachineTarget {
   movementKey: string;
@@ -42,12 +50,19 @@ export function MachineSheet({
   target,
   onChoose,
   onSettings,
+  onMerged,
   onClose,
 }: {
   target: MachineTarget | null;
   /** `chosen` marks machines the person picked rather than ones restored automatically. */
   onChoose: (machinePhotoIds: string[], photos: MachinePhotoUsage[]) => void;
   onSettings: (settings: MachineSetting[]) => void;
+  /**
+   * Duplicates were merged into `mergedId`: every id in `awayIds` now means it. Given, it moves
+   * the pins and set assignments together, so a logged set keeps its machine; otherwise the pins
+   * alone move through `onChoose`.
+   */
+  onMerged?: (mergedId: string, awayIds: string[], photos: MachinePhotoUsage[]) => void;
   onClose: () => void;
 }) {
   return (
@@ -58,6 +73,7 @@ export function MachineSheet({
           target={target}
           onChoose={onChoose}
           onSettings={onSettings}
+          onMerged={onMerged}
         />
       )}
     </Sheet>
@@ -68,16 +84,25 @@ function MachineChoices({
   target,
   onChoose,
   onSettings,
+  onMerged,
 }: {
   target: MachineTarget;
   onChoose: (machinePhotoIds: string[], photos: MachinePhotoUsage[]) => void;
   onSettings: (settings: MachineSetting[]) => void;
+  /**
+   * Duplicates were merged into `mergedId`: every id in `awayIds` now means it. Given, it moves
+   * the pins and set assignments together, so a logged set keeps its machine; otherwise the pins
+   * alone move through `onChoose`.
+   */
+  onMerged?: (mergedId: string, awayIds: string[], photos: MachinePhotoUsage[]) => void;
 }) {
   const { colors, type } = useTheme();
   const client = useQueryClient();
   const query = useMachinePhotos(target.exercise.id);
   const photos = query.data ?? [];
   const [uploading, setUploading] = useState(false);
+  const [merging, setMerging] = useState(false);
+  const [viewing, setViewing] = useState<MachinePhotoUsage | null>(null);
   const [today] = useState(localDate);
   const pinned = target.machinePhotoIds;
   const primary = pinned.at(-1);
@@ -93,67 +118,123 @@ function MachineChoices({
         .catch(() => undefined);
   };
 
-  async function addPhoto(source: 'camera' | 'library') {
-    const permission =
-      source === 'camera'
-        ? await ImagePicker.requestCameraPermissionsAsync()
-        : await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert(
-        source === 'camera' ? 'Camera access is off' : 'Photo access is off',
-        source === 'camera'
-          ? 'Allow camera access in Settings to photograph a machine.'
-          : 'Allow photo access in Settings to choose a machine photo.',
-      );
-      return;
-    }
-    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ['images'], quality: 0.6 };
-    const result =
-      source === 'camera'
-        ? await ImagePicker.launchCameraAsync(options)
-        : await ImagePicker.launchImageLibraryAsync(options);
-    const asset = result.canceled ? null : result.assets[0];
-    if (!asset) return;
+  const setPhotos = (list: MachinePhotoUsage[]) => {
+    client.setQueryData(loggerKeys.machines(target.exercise.id), list);
+    void client.invalidateQueries({ queryKey: loggerKeys.allMachines, exact: true });
+  };
+
+  function rename(photo: MachinePhotoUsage) {
     promptText({
-      title: 'Machine name',
-      value: '',
-      placeholder: 'Such as Cybex leg press',
+      title: 'Rename machine',
+      value: photo.caption,
+      placeholder: 'Machine name',
       submitLabel: 'Save',
-      onSubmit: (caption) => {
-        if (!caption.trim()) {
-          Alert.alert('Name the machine', 'Enter the machine name before saving the photo.');
-          return;
-        }
-        setUploading(true);
-        void uploadMachinePhoto(
-          target.exercise.id,
-          {
-            uri: asset.uri,
-            name: asset.fileName ?? 'machine.jpg',
-            type: asset.mimeType ?? 'image/jpeg',
-          },
-          caption.trim(),
-          target.machineSettings ?? [],
-        )
-          .then((photo) => {
-            const added: MachinePhotoUsage = {
-              ...photo,
-              exercise_name: target.exercise.name,
-              workout_count: 0,
-              last_used_date: null,
-            };
-            const list = [added, ...photos];
-            client.setQueryData(loggerKeys.machines(target.exercise.id), list);
-            choose([...new Set([...pinned, photo.id])], list);
+      onSubmit: (text) => {
+        const caption = text.trim();
+        if (!caption || caption === photo.caption) return;
+        void renameMachinePhoto(photo.id, caption)
+          .then((updated) => {
+            setPhotos(
+              photos.map((item) => (item.id === updated.id ? { ...item, ...updated } : item)),
+            );
+            showToast('Machine name saved');
           })
-          .catch((reason) =>
-            Alert.alert(
-              'Photo not saved',
-              reason instanceof Error ? reason.message : 'Could not save the photo.',
-            ),
-          )
-          .finally(() => setUploading(false));
+          .catch((reason) => Alert.alert('Name not saved', errorMessage(reason)));
       },
+    });
+  }
+
+  function remove(photo: MachinePhotoUsage) {
+    const several = (photo.images?.length ?? 0) > 1;
+    Alert.alert(
+      several ? `Delete ${photo.caption || 'this machine'} and all its photos?` : 'Delete photo?',
+      several
+        ? 'Also removes these photos from saved workouts.'
+        : 'Also removes this photo from saved workouts.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: several ? 'Delete machine' : 'Delete',
+          style: 'destructive',
+          onPress: () =>
+            void deleteMachinePhoto(photo.id)
+              .then(() => {
+                const list = photos.filter((item) => item.id !== photo.id);
+                setPhotos(list);
+                if (pinned.includes(photo.id))
+                  onChoose(
+                    pinned.filter((id) => id !== photo.id),
+                    list,
+                  );
+                showToast(several ? 'Machine deleted' : 'Photo deleted');
+              })
+              .catch((reason) => Alert.alert('Not deleted', errorMessage(reason))),
+        },
+      ],
+    );
+  }
+
+  function openActions(photo: MachinePhotoUsage) {
+    const count = photo.images?.length ?? 1;
+    showMenu(photo.caption || 'Machine', [
+      {
+        label: count > 1 ? `View ${count} photos` : 'View photo',
+        onPress: () => setViewing(photo),
+      },
+      { label: 'Rename', onPress: () => rename(photo) },
+      {
+        label: count > 1 ? 'Delete machine' : 'Delete',
+        destructive: true,
+        onPress: () => remove(photo),
+      },
+    ]);
+  }
+
+  if (merging)
+    return (
+      <MachineMerge
+        exerciseId={target.exercise.id}
+        photos={photos}
+        onCancel={() => setMerging(false)}
+        onMerged={(merged, sourceIds) => {
+          const sources = new Set(sourceIds);
+          const list = [merged, ...photos.filter((photo) => !sources.has(photo.id))];
+          setPhotos(list);
+          const away = mergedAwayIds(photos, sourceIds);
+          if (onMerged) onMerged(merged.id, away, list);
+          else {
+            const next = pinnedAfterMerge(pinned, merged.id, away);
+            if (next.join(',') !== pinned.join(',')) onChoose(next, list);
+          }
+          setMerging(false);
+          showToast('Machines merged');
+        }}
+      />
+    );
+
+  function addPhoto() {
+    askForMachinePhoto((file, caption) => {
+      setUploading(true);
+      void uploadMachinePhoto(target.exercise.id, file, caption, target.machineSettings ?? [])
+        .then((photo) => {
+          const added: MachinePhotoUsage = {
+            ...photo,
+            exercise_name: target.exercise.name,
+            workout_count: 0,
+            last_used_date: null,
+          };
+          const list = [added, ...photos];
+          client.setQueryData(loggerKeys.machines(target.exercise.id), list);
+          void client.invalidateQueries({ queryKey: loggerKeys.allMachines, exact: true });
+          choose([...new Set([...pinned, photo.id])], list);
+        })
+        .catch((reason) =>
+          Alert.alert(
+            'Photo not saved',
+            reason instanceof Error ? reason.message : 'Could not save the photo.',
+          ),
+        )
+        .finally(() => setUploading(false));
     });
   }
 
@@ -184,21 +265,27 @@ function MachineChoices({
               onPress={() =>
                 choose(on ? pinned.filter((id) => id !== photo.id) : [...pinned, photo.id])
               }
+              onView={() => setViewing(photo)}
+              onActions={() => openActions(photo)}
             />
           );
         })
+      )}
+      {photos.length >= 2 && (
+        <Button
+          label="Merge duplicates"
+          icon={{ sf: 'square.on.square', md: 'merge-type' }}
+          variant="link"
+          style={styles.leading}
+          onPress={() => setMerging(true)}
+        />
       )}
       <Button
         label={uploading ? 'Saving photo…' : 'Add machine photo'}
         icon={{ sf: 'camera', md: 'photo-camera' }}
         variant="secondary"
         disabled={uploading}
-        onPress={() =>
-          showMenu('Add machine photo', [
-            { label: 'Take photo', onPress: () => void addPhoto('camera') },
-            { label: 'Choose photo', onPress: () => void addPhoto('library') },
-          ])
-        }
+        onPress={addPhoto}
       />
       {primary && (
         <SettingsEditor
@@ -210,6 +297,19 @@ function MachineChoices({
           onSaved={onSettings}
         />
       )}
+      {viewing && (
+        <PhotoViewer
+          photos={(viewing.images?.length ? viewing.images : [viewing]).map(
+            (image, index, all) => ({
+              id: image.id,
+              url: image.full_url,
+              label: `${viewing.caption || 'Machine'}, photo ${index + 1} of ${all.length}`,
+            }),
+          )}
+          title={() => viewing.caption || 'Machine'}
+          onClose={() => setViewing(null)}
+        />
+      )}
     </View>
   );
 }
@@ -219,11 +319,17 @@ function MachineRow({
   on,
   detail,
   onPress,
+  onView,
+  onActions,
 }: {
   photo: MachinePhotoUsage;
   on: boolean;
   detail: string;
   onPress: () => void;
+  /** Shows the machine's photos full screen. */
+  onView: () => void;
+  /** Rename, delete or view the machine. */
+  onActions: () => void;
 }) {
   const { colors, type, radius } = useTheme();
   const image = useAuthorisedImage(photo.thumbnail_url);
@@ -243,13 +349,18 @@ function MachineRow({
         pressed && { opacity: 0.7 },
       ]}
     >
-      <View style={[styles.thumb, { backgroundColor: colors.surface3, borderRadius: radius.sm }]}>
+      <Pressable
+        accessibilityRole="imagebutton"
+        accessibilityLabel={`Enlarge ${photo.caption || 'machine'}`}
+        onPress={onView}
+        style={[styles.thumb, { backgroundColor: colors.surface3, borderRadius: radius.sm }]}
+      >
         {image ? (
           <Image source={{ uri: image }} style={styles.thumbImage} />
         ) : (
           <Icon name={{ sf: 'photo', md: 'photo' }} size={18} color={colors.muted} />
         )}
-      </View>
+      </Pressable>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={[type.headline, { color: colors.text }]} numberOfLines={1}>
           {photo.caption || 'Machine'}
@@ -260,6 +371,15 @@ function MachineRow({
           </Text>
         )}
       </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Actions for ${photo.caption || 'machine'}`}
+        hitSlop={8}
+        onPress={onActions}
+        style={styles.more}
+      >
+        <Icon name="more" size={18} color={colors.secondary} />
+      </Pressable>
       <View
         style={[
           styles.check,
@@ -292,7 +412,12 @@ function SettingsEditor({
   const field = [
     styles.field,
     type.body,
-    { backgroundColor: colors.surface2, borderRadius: radius.md, color: colors.text },
+    {
+      backgroundColor: colors.surface2,
+      borderColor: colors.lineStrong,
+      borderRadius: radius.md,
+      color: colors.text,
+    },
   ];
   const changeRow = (index: number, values: Partial<MachineSetting>) => {
     setError(null);
@@ -352,7 +477,7 @@ function SettingsEditor({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Remove setting ${index + 1}`}
-            hitSlop={8}
+            style={styles.remove}
             onPress={() =>
               setRows((current) =>
                 current.length > 1
@@ -375,6 +500,7 @@ function SettingsEditor({
           label="Add setting"
           icon="plus"
           variant="link"
+          style={styles.leading}
           onPress={() => setRows((current) => [...current, { name: '', value: '' }])}
         />
         <Button
@@ -398,6 +524,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   thumbImage: { width: 52, height: 52 },
+  more: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   check: {
     width: 24,
     height: 24,
@@ -406,7 +533,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  field: { paddingHorizontal: 12, paddingVertical: 8, minHeight: 42 },
+  field: { paddingHorizontal: 12, paddingVertical: 8, minHeight: 44, borderWidth: 1 },
+  remove: {
+    width: 44,
+    height: 44,
+    marginHorizontal: -6,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  leading: { alignSelf: 'flex-start', paddingHorizontal: 0 },
   settingRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   settingActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
 });

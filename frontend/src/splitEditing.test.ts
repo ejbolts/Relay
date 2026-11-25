@@ -27,6 +27,9 @@ import {
   withSplitDayExtraType,
   withSplitDayType,
   withSplitProgress,
+  cardioBarWidth,
+  MAX_SET_PIPS,
+  splitSetPips,
 } from './splitEditing';
 import { CARDIO_ROW, splitVolumeRows } from './splitTargets';
 import { SPLIT_TEMPLATES } from './trainingSplit';
@@ -280,5 +283,19 @@ describe('mixed split days', () => {
         SPLIT_TEMPLATES[0],
       ),
     ).toBe(false);
+  });
+});
+
+describe('split cycle drawing', () => {
+  it('draws a block per set up to the cap, then counts the rest', () => {
+    expect(splitSetPips(3)).toEqual({ shown: 3, more: 0 });
+    expect(splitSetPips(MAX_SET_PIPS)).toEqual({ shown: 10, more: 0 });
+    expect(splitSetPips(12)).toEqual({ shown: 10, more: 2 });
+  });
+
+  it('sizes a cardio bar by its minutes, within a floor and a cap', () => {
+    expect(cardioBarWidth(0)).toBe(6);
+    expect(cardioBarWidth(30)).toBe(18);
+    expect(cardioBarWidth(500)).toBe(72);
   });
 });

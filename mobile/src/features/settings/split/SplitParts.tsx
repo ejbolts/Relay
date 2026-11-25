@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { calendarWeekdays } from '../../../../../frontend/src/calendarRange';
@@ -18,17 +17,18 @@ import {
 import type { RoutineDay, TrainingSplit, WorkoutType } from '../../../../../frontend/src/types';
 import { localDate } from '../../../../../frontend/src/utils';
 import { useTrainingPreferences } from '../../../data/queries';
+import { haptics } from '../../../ui/haptics';
 import { Icon } from '../../../ui/Icon';
 import { useTheme } from '../../../ui/theme';
 import { settingsIcons } from '../icons';
 
-/** A split's cycle as a row of coloured pips, rest days hollow. */
+/** A split's cycle as a row of coloured horizontal dashes, matching the web's split cards. */
 export function SplitPattern({
   days,
-  size = 10,
+  dashWidth = 24,
 }: {
   days: Pick<RoutineDay, 'workout_type' | 'extra_workout_types'>[];
-  size?: number;
+  dashWidth?: number;
 }) {
   const { colors } = useTheme();
   return (
@@ -36,18 +36,17 @@ export function SplitPattern({
       {days.map((day, index) => (
         <View
           key={index}
-          style={{
-            width: size,
-            height: size,
-            borderRadius: size / 2,
-            backgroundColor: day.workout_type?.color ?? 'transparent',
-            borderWidth: day.workout_type ? 0 : 1.5,
-            borderColor: colors.deemph,
-            flexDirection: 'row',
-            overflow: 'hidden',
-          }}
+          style={[
+            styles.dash,
+            {
+              width: dashWidth,
+              backgroundColor: day.workout_type?.color ?? colors.surface3,
+              borderWidth: day.workout_type ? 0 : 1,
+              borderColor: colors.lineStrong,
+            },
+          ]}
         >
-          {/* A mixed day splits its pip between its types' colours. */}
+          {/* A mixed day splits its dash between its types' colours. */}
           {!!day.workout_type &&
             !!day.extra_workout_types?.length &&
             [day.workout_type, ...day.extra_workout_types].map((type) => (
@@ -82,7 +81,7 @@ export function DateStepper({
 }) {
   const { colors, type } = useTheme();
   const step = (days: number) => {
-    void Haptics.selectionAsync();
+    haptics.selection();
     onChange(addDays(date, days));
   };
   const today = localDate();
@@ -144,7 +143,7 @@ export function StepButton({
       accessibilityLabel={label}
       accessibilityState={{ disabled: !!disabled }}
       disabled={disabled}
-      hitSlop={6}
+      hitSlop={8}
       onPress={onPress}
       style={({ pressed }) => [
         styles.stepButton,
@@ -170,36 +169,75 @@ export function SplitPreview({ split, types }: { split: TrainingSplit; types: Wo
   const days = splitPreview(split, start);
   const colourFor = (id: string | null | undefined) =>
     types.find((item) => item.id === id)?.color ?? colors.deemph;
+  const rangeLabel = `${shortDate(start)} – ${shortDate(addDays(start, 6))}`;
   return (
     <View style={{ gap: 10 }}>
       <View style={styles.previewHeader}>
-        <Text style={[type.footnote, { color: colors.muted, flex: 1, fontWeight: '600' }]}>
-          {calendar
-            ? 'SPLIT CALENDAR'
-            : week === 0
-              ? 'NEXT 7 DAYS'
-              : `${shortDate(start)} – ${shortDate(addDays(start, 6))}`}
+        <Text style={[type.cardTitle, { color: colors.text }]} numberOfLines={1}>
+          {calendar ? 'Split calendar' : 'Next 7 days'}
         </Text>
-        <StepButton
-          icon={calendar ? settingsIcons.list : settingsIcons.calendar}
-          label={calendar ? 'Show next 7 days' : 'Show two-month calendar'}
-          onPress={() => setCalendar(!calendar)}
-        />
-        {!calendar && (
-          <>
-            <StepButton
-              icon="chevronLeft"
-              label="Previous preview week"
-              disabled={week === 0}
-              onPress={() => setWeek((value) => Math.max(0, value - 1))}
+        <View style={styles.previewControls}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={calendar ? 'Show next 7 days' : 'Show two-month calendar'}
+            accessibilityState={{ selected: calendar }}
+            hitSlop={8}
+            onPress={() => {
+              haptics.selection();
+              setCalendar(!calendar);
+            }}
+            style={({ pressed }) => [
+              styles.iconControl,
+              calendar && { backgroundColor: colors.accentSoft },
+              pressed && { opacity: 0.6 },
+            ]}
+          >
+            <Icon
+              name={calendar ? settingsIcons.list : settingsIcons.calendar}
+              size={15}
+              color={calendar ? colors.accentText : colors.secondary}
             />
-            <StepButton
-              icon="chevronRight"
-              label="Next preview week"
-              onPress={() => setWeek((value) => value + 1)}
-            />
-          </>
-        )}
+          </Pressable>
+          {!calendar && (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Previous preview week"
+                accessibilityState={{ disabled: week === 0 }}
+                disabled={week === 0}
+                hitSlop={8}
+                onPress={() => {
+                  haptics.selection();
+                  setWeek((value) => Math.max(0, value - 1));
+                }}
+                style={({ pressed }) => [
+                  styles.iconControl,
+                  (pressed || week === 0) && { opacity: week === 0 ? 0.3 : 0.6 },
+                ]}
+              >
+                <Icon name="chevronLeft" size={14} color={colors.secondary} />
+              </Pressable>
+              <Text
+                style={[type.caption, type.number, { color: colors.muted, flexShrink: 1 }]}
+                numberOfLines={1}
+              >
+                {rangeLabel}
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Next preview week"
+                hitSlop={8}
+                onPress={() => {
+                  haptics.selection();
+                  setWeek((value) => value + 1);
+                }}
+                style={({ pressed }) => [styles.iconControl, pressed && { opacity: 0.6 }]}
+              >
+                <Icon name="chevronRight" size={14} color={colors.secondary} />
+              </Pressable>
+            </>
+          )}
+        </View>
       </View>
       {calendar ? (
         <SplitCalendar split={split} types={types} today={today} />
@@ -207,45 +245,50 @@ export function SplitPreview({ split, types }: { split: TrainingSplit; types: Wo
         <View style={styles.previewDays}>
           {days.map(({ date, typeId, typeIds }) => {
             const name = splitPreviewDayLabel(types, typeId, typeIds);
+            const isToday = date === today;
             return (
               <View
                 key={date}
                 accessible
                 accessibilityLabel={`${dayLabel(date, 'long')}: ${name}`}
-                style={[styles.previewDay, { backgroundColor: colors.surface2 }]}
+                style={[
+                  styles.previewDay,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: isToday ? colors.accent : colors.line,
+                  },
+                ]}
               >
-                <Text style={[type.caption, { color: colors.muted }]}>
-                  {parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'narrow' })}
+                <Text style={[styles.previewWeekday, { color: colors.muted }]} numberOfLines={1}>
+                  {parseLocalDate(date).toLocaleDateString(undefined, { weekday: 'short' })}
                 </Text>
                 <Text
                   style={[
                     type.callout,
                     type.number,
-                    { color: date === today ? colors.accentText : colors.text, fontWeight: '700' },
+                    { color: isToday ? colors.accentText : colors.text, fontWeight: '700' },
                   ]}
                 >
                   {parseLocalDate(date).getDate()}
                 </Text>
                 <View
                   style={[
-                    styles.previewPip,
-                    typeId
-                      ? {
-                          backgroundColor: colourFor(typeId),
-                          flexDirection: 'row',
-                          overflow: 'hidden',
-                        }
-                      : { borderWidth: 1.5, borderColor: colors.deemph },
+                    styles.previewBar,
+                    {
+                      backgroundColor: typeId ? colourFor(typeId) : colors.muted,
+                      flexDirection: 'row',
+                      overflow: 'hidden',
+                    },
                   ]}
                 >
-                  {/* A mixed day splits the pip between its types' colours. */}
+                  {/* A mixed day splits the dash between its types' colours. */}
                   {typeIds.length > 1 &&
                     typeIds.map((id) => (
                       <View key={id} style={{ flex: 1, backgroundColor: colourFor(id) }} />
                     ))}
                 </View>
                 <Text
-                  numberOfLines={2}
+                  numberOfLines={1}
                   style={[styles.previewLabel, { color: typeId ? colors.secondary : colors.muted }]}
                 >
                   {splitPreviewLabel(name)}
@@ -380,7 +423,13 @@ function SplitCalendar({
 const styles = StyleSheet.create({
   calendarRow: { flexDirection: 'row', gap: 2 },
   calendarDay: { flex: 1, minHeight: 33, alignItems: 'center', justifyContent: 'center', gap: 3 },
-  pattern: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
+  pattern: { flexDirection: 'row', flexWrap: 'wrap', gap: 5 },
+  dash: {
+    height: 5,
+    borderRadius: 3,
+    flexDirection: 'row',
+    overflow: 'hidden',
+  },
   stepperRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -396,16 +445,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  previewHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  previewHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  previewControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    flexShrink: 1,
+  },
+  iconControl: {
+    width: 28,
+    height: 28,
+    borderRadius: 7,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   previewDays: { flexDirection: 'row', gap: 4 },
   previewDay: {
     flex: 1,
     alignItems: 'center',
-    gap: 3,
+    gap: 4,
     paddingVertical: 8,
     paddingHorizontal: 2,
-    borderRadius: 10,
+    borderRadius: 11,
+    borderWidth: 1,
   },
+  previewWeekday: { fontSize: 11, fontWeight: '500' },
+  previewBar: { width: 18, height: 3.5, borderRadius: 2 },
   previewPip: { width: 10, height: 10, borderRadius: 5 },
   previewLabel: { fontSize: 10, fontWeight: '600', textAlign: 'center' },
 });

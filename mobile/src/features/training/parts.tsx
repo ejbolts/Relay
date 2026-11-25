@@ -1,54 +1,12 @@
-import SegmentedControl, {
-  type SegmentedControlProps,
-} from '@react-native-segmented-control/segmented-control';
-import * as Haptics from 'expo-haptics';
-import type { ComponentType, ReactNode } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
+import type { ReactNode } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../../ui/Icon';
+import { toneBadge } from './contrast';
 import { useTheme } from '../../ui/theme';
+import { haptics } from '../../ui/haptics';
 
-// The package's class typings predate React 19's JSX types; the component itself is fine.
-const NativeSegmentedControl = SegmentedControl as unknown as ComponentType<SegmentedControlProps>;
-
-/** A native segmented control in Pulse's colours. */
-export function Segmented({
-  values,
-  selectedIndex,
-  onChange,
-  accessibilityLabel,
-  style,
-}: {
-  values: readonly string[];
-  selectedIndex: number;
-  onChange: (index: number) => void;
-  accessibilityLabel: string;
-  style?: StyleProp<ViewStyle>;
-}) {
-  const { scheme, colors } = useTheme();
-  return (
-    <NativeSegmentedControl
-      accessibilityLabel={accessibilityLabel}
-      values={[...values]}
-      selectedIndex={selectedIndex}
-      appearance={scheme}
-      fontStyle={{ color: colors.secondary, fontSize: 13 }}
-      activeFontStyle={{ color: colors.text, fontSize: 13, fontWeight: '600' }}
-      onChange={(event) => {
-        void Haptics.selectionAsync();
-        onChange(event.nativeEvent.selectedSegmentIndex);
-      }}
-      style={[{ height: 34 }, style]}
-    />
-  );
-}
+/** Training's segmented control is the shared native one. */
+export { Segmented } from '../../ui/controls';
 
 /** A toggle pill, as the web's filter chips. */
 export function Chip({
@@ -73,15 +31,20 @@ export function Chip({
       accessibilityLabel={accessibilityLabel ?? label}
       accessibilityState={{ selected }}
       onPress={() => {
-        void Haptics.selectionAsync();
+        haptics.selection();
         onPress();
       }}
+      hitSlop={{ top: 5, bottom: 5 }}
+      // The web's .exercise-muscle-filters pills: outlined, and on a raised fill with a 2 pt accent
+      // ring once chosen.
       style={({ pressed }) => [
         styles.chip,
         {
           borderRadius: radius.pill,
-          backgroundColor: selected ? colors.accentSoft : colors.surface2,
-          borderColor: selected ? colors.accent : 'transparent',
+          backgroundColor: selected ? colors.surface3 : 'transparent',
+          borderColor: selected ? colors.accent : colors.lineStrong,
+          borderWidth: selected ? 2 : 1,
+          paddingHorizontal: selected ? 11 : 12,
           opacity: pressed ? 0.7 : 1,
         },
       ]}
@@ -91,7 +54,7 @@ export function Chip({
         style={[
           type.footnote,
           {
-            color: selected ? colors.accentText : colors.secondary,
+            color: selected ? colors.text : colors.muted,
             fontWeight: '600',
           },
         ]}
@@ -103,27 +66,40 @@ export function Chip({
   );
 }
 
-export function Badge({ label, tone = 'neutral' }: { label: string; tone?: 'neutral' | 'gold' }) {
+/**
+ * A small status label. Neutral and gold read as the web's uppercase tags; `good` and `gold` with
+ * `sentence` are the web's tinted badges, such as a block's Current and Deload.
+ */
+export function Badge({
+  label,
+  tone = 'neutral',
+  sentence,
+}: {
+  label: string;
+  tone?: 'neutral' | 'gold' | 'good';
+  sentence?: boolean;
+}) {
   const { colors, radius } = useTheme();
+  // Tinted badges keep 4.5:1 on their fill on every theme (contrast.ts).
+  const toned = tone === 'neutral' ? null : toneBadge(colors, tone);
+  const ink = toned?.ink ?? colors.muted;
+  const fill = toned?.fill ?? colors.surface2;
   return (
     <View
       style={[
         styles.badge,
-        {
-          borderRadius: radius.sm,
-          backgroundColor: tone === 'gold' ? colors.goldSoft : colors.surface2,
-        },
+        { borderRadius: sentence ? 7 : radius.sm, backgroundColor: fill },
+        sentence && styles.sentenceBadge,
       ]}
     >
       <Text
-        style={{
-          fontSize: 10,
-          fontWeight: '700',
-          letterSpacing: 0.8,
-          color: tone === 'gold' ? colors.gold : colors.muted,
-        }}
+        style={
+          sentence
+            ? { fontSize: 12, fontWeight: '600', color: ink }
+            : { fontSize: 10, fontWeight: '700', letterSpacing: 0.8, color: ink }
+        }
       >
-        {label.toUpperCase()}
+        {sentence ? label : label.toUpperCase()}
       </Text>
     </View>
   );
@@ -214,11 +190,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    minHeight: 32,
-    borderWidth: 1,
+    minHeight: 35,
   },
   badge: { paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'center' },
+  sentenceBadge: { paddingHorizontal: 7, paddingVertical: 3 },
   more: {
     minHeight: 44,
     flexDirection: 'row',

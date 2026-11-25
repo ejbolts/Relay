@@ -301,6 +301,19 @@ export function plannedMinutes(movement: RoutineMovement): number {
   );
 }
 
+/** A split cycle draws a block per planned set, up to this many, then counts the rest. */
+export const MAX_SET_PIPS = 10;
+
+/** The set blocks a planned exercise draws in a split's cycle, and how many more are counted. */
+export function splitSetPips(count: number): { shown: number; more: number } {
+  return { shown: Math.min(count, MAX_SET_PIPS), more: Math.max(0, count - MAX_SET_PIPS) };
+}
+
+/** The width (px or pt) of a planned cardio exercise's bar in a split's cycle, for its minutes. */
+export function cardioBarWidth(minutes: number): number {
+  return Math.max(6, Math.min(minutes, 120) * 0.6);
+}
+
 /** At its smallest plan, the minus control removes the exercise instead. */
 export function atPlannedMinimum(movement: RoutineMovement): boolean {
   return movement.exercise.kind === 'cardio'

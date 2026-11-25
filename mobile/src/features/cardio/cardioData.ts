@@ -1,3 +1,4 @@
+import type { CardioDeletion } from '../../../../frontend/src/cardioHistory';
 import type {
   CardioMetricsInput,
   CardioPreferences,
@@ -11,6 +12,18 @@ import { uploadFile } from '../../data/uploadFile';
 
 export const createCardioSession = (session: CardioSessionInput) =>
   apiSend<CardioSession>('/api/cardio', 'POST', session);
+
+export const updateCardioSession = (id: string, session: CardioSessionInput) =>
+  apiSend<CardioSession>(`/api/cardio/${encodeURIComponent(id)}`, 'PUT', session);
+
+/** Deletes a session logged on its own, or (`workout`) the cardio-only workout holding it. */
+export const deleteCardioEntry = ({ kind, id }: CardioDeletion) =>
+  apiSend<void>(
+    kind === 'workout'
+      ? `/api/workouts/${encodeURIComponent(id)}`
+      : `/api/cardio/${encodeURIComponent(id)}`,
+    'DELETE',
+  );
 
 export const saveCardioMetrics = (id: string, metrics: CardioMetricsInput) =>
   apiSend<CardioSession>(`/api/cardio/${encodeURIComponent(id)}/metrics`, 'PATCH', metrics);

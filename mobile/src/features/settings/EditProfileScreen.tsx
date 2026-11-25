@@ -1,9 +1,6 @@
-import SegmentedControl, {
-  type SegmentedControlProps,
-} from '@react-native-segmented-control/segmented-control';
 import * as ImagePicker from 'expo-image-picker';
 import { Stack, useRouter } from 'expo-router';
-import { useState, type ComponentType } from 'react';
+import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -25,6 +22,7 @@ import type { Sex } from '../../../../frontend/src/types';
 import { ApiError } from '../../data/api';
 import { useSession, useUser } from '../../session/SessionProvider';
 import { errorMessage } from '../../ui/components';
+import { Segmented } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
@@ -35,8 +33,6 @@ import { removeProfilePhoto, updateProfile, uploadProfilePhoto } from './setting
 import { Row, Section, SettingsPage } from './SettingsList';
 
 const SEXES: Sex[] = ['male', 'female'];
-// The library's class typing predates React 19's JSX types.
-const NativeSegmentedControl = SegmentedControl as unknown as ComponentType<SegmentedControlProps>;
 type PickedPhoto = { uri: string; mimeType?: string | null };
 
 /** Name, photo and (once) sex, as Edit profile on the web; saved together from the header. */
@@ -238,15 +234,13 @@ export function EditProfileScreen() {
             <Row
               label="Sex"
               accessory={
-                <NativeSegmentedControl
+                <Segmented
                   accessibilityLabel="Sex"
                   style={{ width: 170 }}
                   values={SEXES.map((option) => SEX_LABELS[option])}
                   selectedIndex={sex ? SEXES.indexOf(sex) : -1}
                   enabled={!saving}
-                  onChange={(event) =>
-                    setSex(SEXES[event.nativeEvent.selectedSegmentIndex] ?? null)
-                  }
+                  onChange={(index) => setSex(SEXES[index] ?? null)}
                 />
               }
             />

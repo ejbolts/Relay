@@ -37,6 +37,7 @@ from .auth import (
 from .config import Settings
 from .database import get_db
 from .errors import api_error
+from .expo_push import remove_account_tokens
 from .models import (
     MachinePhoto,
     PushSubscription,
@@ -374,6 +375,7 @@ def update_user(
         user.disabled_at = utc_now()
         # Sign the account out everywhere and stop any alerts it has scheduled.
         db.execute(delete(UserSession).where(UserSession.user_id == user.id))
+        remove_account_tokens(db, user.id)
         endpoints = list(
             db.scalars(select(PushSubscription.endpoint).where(PushSubscription.user_id == user.id))
         )

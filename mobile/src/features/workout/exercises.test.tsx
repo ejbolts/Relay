@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { useEffect, type ReactNode } from 'react';
+import { useEffect, type ComponentProps, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 import type { Exercise, ExerciseCreateInput } from '../../../../frontend/src/types';
 import { readActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
@@ -11,7 +11,15 @@ import { SessionProvider } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { showMenu, type MenuOption } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
-import { chooseMachines, startLogger, swapExercise } from './loggerState';
+import { restTimesPreference } from '../settings/devicePreferences';
+import { ExercisePicker } from './ExercisePicker';
+import {
+  addExercises,
+  chooseMachines,
+  mergeMachines,
+  startLogger,
+  swapExercise,
+} from './loggerState';
 import {
   bench,
   context,
@@ -22,6 +30,11 @@ import {
   startedAt,
   types,
 } from './testFixtures';
+import {
+  onWorkoutReminderOpened,
+  syncInactiveReminder,
+  takeLaunchReminder,
+} from './workoutReminders';
 import { useWorkout, WorkoutProvider } from './WorkoutProvider';
 import { WorkoutSheet } from './WorkoutSheet';
 
@@ -43,16 +56,38 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => children,
 }));
+jest.mock('react-native-gesture-handler', () => ({
+  ...jest.requireActual<typeof import('react-native-gesture-handler')>(
+    'react-native-gesture-handler',
+  ),
+  usePanGesture: (config: unknown) => config,
+  GestureDetector: ({ children }: { children: ReactNode }) => children,
+}));
 jest.mock('./restAlerts', () => ({
   askForRestAlerts: jest.fn(async () => undefined),
   syncRestAlert: jest.fn(async () => undefined),
+}));
+jest.mock('./workoutReminders', () => ({
+  remindAboutRestAlerts: jest.fn(async () => undefined),
+  syncInactiveReminder: jest.fn(async () => undefined),
+  takeLaunchReminder: jest.fn(async () => undefined),
+  onWorkoutReminderOpened: jest.fn(() => () => undefined),
+  holdReminder: jest.requireActual('./workoutReminders').holdReminder,
+  takeHeldReminder: jest.requireActual('./workoutReminders').takeHeldReminder,
 }));
 jest.mock('../../ui/prompts', () => ({
   promptText: jest.fn(),
   showMenu: jest.fn(),
   PromptHost: () => null,
 }));
-jest.mock('../../ui/Toast', () => ({ showToast: jest.fn(), ToastHost: () => null }));
+jest.mock('../../ui/Toast', () => ({
+  showToast: jest.fn(),
+  ToastHost: () => null,
+  toastShowing: () => false,
+  toastAccount: () => 'u1',
+  toastAccountFor: () => 'u1',
+  isToastAccountCurrent: () => true,
+}));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
@@ -91,6 +126,7 @@ jest.mock('../../data/queries', () => {
   };
 });
 
+let liveWorkout: ReturnType<typeof useWorkout> | null = null;
 const user = { id: 'u1', username: 'preview' } as Awaited<ReturnType<typeof currentUser>>;
 let client: QueryClient;
 
@@ -108,13 +144,14 @@ beforeEach(() => {
 });
 afterEach(() => client?.clear());
 
-async function openLogger() {
+async function openLogger(beforeStart?: () => void) {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const captured: { start?: ReturnType<typeof useWorkout>['start'] } = {};
   function Probe() {
     const workout = useWorkout();
     useEffect(() => {
       captured.start = workout.start;
+      liveWorkout = workout;
     });
     return null;
   }
@@ -130,6 +167,7 @@ async function openLogger() {
   );
   await waitFor(() => expect(currentUser).toHaveBeenCalled());
   await waitFor(() => expect(captured.start).toBeDefined());
+  if (beforeStart) await act(async () => beforeStart());
   await act(async () => captured.start!({ kind: 'up-next' }));
   expect(await screen.findByText('Bench Press')).toBeVisible();
 }
@@ -192,8 +230,32 @@ describe('swapping an exercise', () => {
     expect(screen.getByText('2 planned sets move across')).toBeVisible();
     // Nothing in the sample library trains the same muscles, so browse every exercise.
     expect(screen.getByText('No close alternatives')).toBeVisible();
+    // The saved machines: one, for another exercise, so the list shows once they have loaded.
+    jest.mocked(apiGet).mockImplementation(async (path: string) =>
+      path === '/api/machine-photos'
+        ? [
+            {
+              id: 'rower',
+              exercise_id: 'row',
+              caption: 'Concept rower',
+              thumbnail_url: '',
+              full_url: '',
+              width: 1,
+              height: 1,
+              created_at: '',
+              exercise_name: 'Rowing Machine',
+              workout_count: 1,
+              last_used_date: '2026-11-18',
+            },
+          ]
+        : [],
+    );
     await fireEvent.press(screen.getByRole('button', { name: 'Browse all exercises' }));
     expect(screen.getByText('Swap exercise')).toBeVisible();
+    // One tap swaps once the saved machines are known to have none for it.
+    expect(
+      await screen.findByRole('button', { name: 'Show machines for Rowing Machine' }),
+    ).toBeVisible();
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' }));
     expect(screen.getByText('Swapped from Bench Press')).toBeVisible();
     expect(readActiveWorkoutDraft(deviceStorage)?.movements.map((item) => item.exerciseId)).toEqual(
@@ -340,5 +402,238 @@ describe('machines', () => {
     await openLogger();
     expect(await screen.findByRole('button', { name: 'Machine: Cybex' })).toBeVisible();
     expect(readActiveWorkoutDraft(deviceStorage)?.movements[0].machinePhotoIds).toEqual(['cybex']);
+  });
+});
+
+describe('rest times between sets', () => {
+  it('adds a rest between two sets, changes it, removes it, and slots a set in', async () => {
+    await openLogger();
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Add rest after set 1' })),
+    );
+    const [, adding] = jest.mocked(showMenu).mock.calls.at(-1)!;
+    await act(async () => option(adding, '1:30').onPress());
+    expect(await screen.findByRole('button', { name: 'Rest after set 1: 1:30' })).toBeVisible();
+
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Rest after set 1: 1:30' })),
+    );
+    const [, changing] = jest.mocked(showMenu).mock.calls.at(-1)!;
+    await act(async () => option(changing, '2:00').onPress());
+    expect(await screen.findByRole('button', { name: 'Rest after set 1: 2:00' })).toBeVisible();
+
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Rest after set 1: 2:00' })),
+    );
+    const [, removing] = jest.mocked(showMenu).mock.calls.at(-1)!;
+    await act(async () => option(removing, 'No rest').onPress());
+    expect(showToast).toHaveBeenCalledWith(
+      'Rest removed',
+      expect.objectContaining({ label: 'Undo' }),
+    );
+    expect(await screen.findByRole('button', { name: 'Add rest after set 1' })).toBeVisible();
+
+    await act(async () =>
+      fireEvent.press(screen.getByRole('button', { name: 'Add set before set 2' })),
+    );
+    expect(await screen.findByRole('button', { name: 'Complete set 3' })).toBeVisible();
+  });
+
+  it('hides the rest rows when Show rest times is off', async () => {
+    restTimesPreference.set(false);
+    await openLogger();
+    expect(screen.queryByRole('button', { name: 'Add rest after set 1' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add set before set 2' })).toBeVisible();
+    restTimesPreference.set(true);
+  });
+});
+
+describe('picking exercises', () => {
+  const cybex = {
+    id: 'cybex',
+    exercise_id: 'bench',
+    exercise_name: 'Bench Press',
+    caption: 'Cybex',
+    thumbnail_url: '',
+    full_url: '',
+    width: 1,
+    height: 1,
+    created_at: '',
+    workout_count: 2,
+    last_used_date: '2026-11-18',
+  };
+
+  async function openPicker(props: Partial<ComponentProps<typeof ExercisePicker>> = {}) {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
+    const onAdd = jest.fn();
+    const onCreateSuperset = jest.fn();
+    await render(
+      <QueryClientProvider client={client}>
+        <ExercisePicker
+          visible
+          exercises={[bench, press]}
+          recentIds={[]}
+          addedIds={new Set()}
+          chooseMachines
+          onAdd={onAdd}
+          onCreateSuperset={onCreateSuperset}
+          onClose={jest.fn()}
+          {...props}
+        />
+      </QueryClientProvider>,
+    );
+    return { onAdd, onCreateSuperset };
+  }
+
+  it('starts a picked exercise on its last-used machine, and tapping it again uses none', async () => {
+    jest
+      .mocked(apiGet)
+      .mockImplementation(async (path: string) => (path === '/api/machine-photos' ? [cybex] : []));
+    const { onAdd } = await openPicker();
+    expect(
+      await screen.findByRole('button', { name: 'Show machines for Bench Press' }),
+    ).toBeVisible();
+    await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Bench Press' })));
+    expect(screen.getByRole('checkbox', { name: 'Cybex' })).toBeChecked();
+    await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Cybex' })));
+    expect(screen.getByText('Baseline exercise')).toBeVisible();
+    await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Cybex' })));
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Add 1' })));
+    expect(onAdd).toHaveBeenCalledWith([bench], { bench: 'cybex' });
+  });
+
+  it('adds two or more picks as a superset', async () => {
+    jest.mocked(apiGet).mockImplementation(async () => []);
+    const { onCreateSuperset } = await openPicker();
+    // The superset bar only appears once there are two picks to group.
+    expect(screen.queryByRole('button', { name: 'Add superset' })).toBeNull();
+    await act(async () =>
+      fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })),
+    );
+    expect(screen.queryByRole('button', { name: 'Add superset' })).toBeNull();
+    await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Bench Press' })));
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Add superset' })));
+    expect(onCreateSuperset).toHaveBeenCalledWith([press, bench], {});
+  });
+
+  it('adds the picks to the workout on their machines, grouped as a superset', () => {
+    const state = startLogger(
+      {
+        template: null,
+        startCategory: null,
+        startType: null,
+        recommendationCategory: 'push',
+        types,
+        date: '2026-11-22',
+        now: startedAt,
+        clientSessionId: sessionId,
+      },
+      context(),
+    );
+    const onMachine = {
+      ...lastPush,
+      id: 'on-machine',
+      movements: [
+        {
+          ...lastPush.movements[0],
+          machine_photos: [cybex],
+          sets: lastPush.movements[0].sets.map((item) => ({ ...item, weight_kg: 60 })),
+        },
+      ],
+    };
+    const next = addExercises(
+      state,
+      [bench, press],
+      context({ workouts: [lastPush, onMachine] }),
+      { bench: 'cybex' },
+      'group',
+    );
+    expect(next.movements.map((item) => item.machinePhotoIds)).toEqual([['cybex'], []]);
+    expect(next.movements[0].sets.map((item) => item.weight_kg)).toEqual([60, 60]);
+    expect(next.movements.map((item) => item.supersetKey)).toEqual(['group', 'group']);
+  });
+});
+
+test('merging machines keeps a logged set on its machine, with a third machine still pinned', () => {
+  const started = startLogger(
+    {
+      template: pushDay,
+      startCategory: null,
+      startType: null,
+      recommendationCategory: 'push',
+      types,
+      date: '2026-11-22',
+      now: startedAt,
+      clientSessionId: sessionId,
+    },
+    context(),
+  );
+  const key = started.movements[0].key;
+  const pinned = chooseMachines(
+    started,
+    key,
+    ['a', 'b', 'c'],
+    { chosen: true, aliases: new Map() },
+    context(),
+  );
+  const logged = {
+    ...pinned,
+    movements: pinned.movements.map((movement, index) =>
+      index === 0
+        ? {
+            ...movement,
+            sets: movement.sets.map((set, setIndex) =>
+              setIndex === 0 ? { ...set, completed: true, machine_photo_id: 'a' } : set,
+            ),
+          }
+        : movement,
+    ),
+  };
+  const merged = mergeMachines(logged, 'b', ['a', 'b']);
+  expect(merged.movements[0].machinePhotoIds).toEqual(['b', 'c']);
+  expect(merged.movements[0].sets[0]).toMatchObject({ completed: true, machine_photo_id: 'b' });
+  expect(mergeMachines(logged, 'x', ['y'])).toBe(logged);
+});
+
+describe('the Still working out? reminder', () => {
+  it('opens the logger when it launched the app for this workout', async () => {
+    jest.mocked(takeLaunchReminder).mockResolvedValue(null);
+    await openLogger();
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledTimes(2));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/workout');
+  });
+
+  it('opens a reminder tapped before its workout had loaded once it loads', async () => {
+    await openLogger(() => {
+      // Relay was running but had no workout yet, as when it was started on the web.
+      const opened = jest.mocked(onWorkoutReminderOpened).mock.calls.at(-1)![0];
+      opened(null);
+      expect(mockRouter.push).not.toHaveBeenCalledWith('/workout');
+    });
+    // Once by starting the workout, once more by the held reminder.
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledTimes(2));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/workout');
+  });
+
+  it("ignores a launch from another workout's reminder", async () => {
+    jest.mocked(takeLaunchReminder).mockResolvedValue(1);
+    await openLogger();
+    await waitFor(() => expect(takeLaunchReminder).toHaveBeenCalled());
+    await act(async () => undefined);
+    expect(mockRouter.push).toHaveBeenCalledTimes(1);
+  });
+
+  it('follows the live workout and is cancelled when it is discarded', async () => {
+    await openLogger();
+    expect(jest.mocked(syncInactiveReminder).mock.calls.at(-1)?.[0]).toEqual(expect.any(Number));
+    await act(async () => liveWorkout!.discard());
+    expect(syncInactiveReminder).toHaveBeenLastCalledWith(null, null);
+  });
+
+  it('is cancelled on sign-out, when the workout engine goes', async () => {
+    await openLogger();
+    jest.mocked(syncInactiveReminder).mockClear();
+    await act(async () => screen.unmount());
+    expect(syncInactiveReminder).toHaveBeenLastCalledWith(null);
   });
 });

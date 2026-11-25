@@ -23,16 +23,17 @@ export function WeeklySetsShelf({
   update,
   goal,
   goals,
-  bottom,
+  joined,
   onDismiss,
 }: {
   update: WeeklySetsUpdate;
   goal: number;
   goals?: MuscleSetGoals;
-  bottom: number;
+  /** Sits on top of the rest pill: square bottom corners and no bottom outline, as one card. */
+  joined: boolean;
   onDismiss: () => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   // Keyed to the update, so a newly logged set lets go of a hold and restarts the countdown.
   const [heldFor, setHeldFor] = useState<number | null>(null);
   const held = heldFor === update.id;
@@ -57,16 +58,27 @@ export function WeeklySetsShelf({
       onPress={() => (held ? onDismiss() : setHeldFor(update.id))}
       style={[
         styles.shelf,
-        { bottom, backgroundColor: colors.surface3, borderRadius: radius.card },
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.lineStrong,
+          shadowColor: colors.shadow,
+        },
+        joined && styles.joined,
       ]}
     >
-      {update.gains.map((item) => {
+      {update.gains.map((item, index) => {
         const target = muscleSetGoal(item.muscle, goal, goals);
         const percent = (value: number) =>
           target > 0 ? Math.min(100, (value / target) * 100) : 100;
         const met = item.after >= target;
         return (
-          <View key={item.muscle} style={styles.cell}>
+          <View
+            key={item.muscle}
+            style={[
+              styles.cell,
+              index > 0 && { borderLeftWidth: 1, borderLeftColor: colors.lineStrong },
+            ]}
+          >
             <View style={styles.nameRow}>
               <Text
                 style={[type.caption, { color: colors.secondary, flexShrink: 1 }]}
@@ -74,26 +86,44 @@ export function WeeklySetsShelf({
               >
                 {item.muscle}
               </Text>
-              <Text
-                style={[type.caption, type.number, { color: colors.accentText, fontWeight: '700' }]}
+              <View
+                style={[
+                  styles.gain,
+                  { backgroundColor: met ? colors.goodSoft : colors.accentSoft },
+                ]}
               >
-                +{credits(item.gain)}
-              </Text>
+                <Text
+                  style={[
+                    styles.gainText,
+                    type.number,
+                    { color: met ? colors.good : colors.accentText },
+                  ]}
+                >
+                  +{credits(item.gain)}
+                </Text>
+              </View>
             </View>
             <View style={styles.valueRow}>
-              <Text style={[type.headline, type.number, { color: colors.text }]}>
+              <Text style={[styles.value, type.number, { color: met ? colors.good : colors.text }]}>
                 {credits(item.after)}
               </Text>
               <Text style={[type.caption, type.number, { color: colors.muted }]}>
                 /{credits(target)}
               </Text>
-              {met && <Icon name="check" size={12} color={colors.good} />}
+              {met && (
+                <View style={[styles.met, { backgroundColor: colors.good }]}>
+                  <Icon name="check" size={10} color={colors.onAccent} />
+                </View>
+              )}
             </View>
-            <View style={[styles.bar, { backgroundColor: colors.surface2 }]}>
+            <View style={[styles.bar, { backgroundColor: colors.surface3 }]}>
               <View
                 style={[
                   styles.fill,
-                  { width: `${percent(item.before)}%`, backgroundColor: colors.lineStrong },
+                  {
+                    width: `${percent(item.before)}%`,
+                    backgroundColor: met ? colors.good : `${colors.accent}8C`,
+                  },
                 ]}
               />
               <View
@@ -102,7 +132,7 @@ export function WeeklySetsShelf({
                   {
                     left: `${percent(item.before)}%`,
                     width: `${percent(item.after) - percent(item.before)}%`,
-                    backgroundColor: met ? colors.good : colors.accent,
+                    backgroundColor: met ? colors.good : colors.accentText,
                   },
                 ]}
               />
@@ -115,23 +145,39 @@ export function WeeklySetsShelf({
 }
 
 const styles = StyleSheet.create({
+  // The web's shelf: one outlined card, a column per muscle split by vertical rules.
   shelf: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
     flexDirection: 'row',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    shadowColor: '#000',
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 7,
+    borderWidth: 1,
+    borderRadius: 20,
+    overflow: 'hidden',
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
-  cell: { flex: 1, gap: 2 },
+  joined: {
+    borderBottomWidth: 0,
+    borderTopLeftRadius: 22,
+    borderTopRightRadius: 22,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  cell: { flex: 1, gap: 2, paddingLeft: 12, paddingRight: 10, paddingTop: 10, paddingBottom: 12 },
   nameRow: { flexDirection: 'row', alignItems: 'center', gap: 4, justifyContent: 'space-between' },
+  gain: { borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
+  gainText: { fontSize: 11, fontWeight: '800' },
   valueRow: { flexDirection: 'row', alignItems: 'baseline', gap: 2 },
-  bar: { height: 4, borderRadius: 2, overflow: 'hidden', marginTop: 4 },
-  fill: { position: 'absolute', top: 0, bottom: 0, left: 0 },
+  value: { fontSize: 19, fontWeight: '800', letterSpacing: -0.3 },
+  met: {
+    width: 15,
+    height: 15,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'center',
+    marginLeft: 2,
+  },
+  bar: { height: 5, borderRadius: 999, overflow: 'hidden', marginTop: 6 },
+  fill: { position: 'absolute', top: 0, bottom: 0, left: 0, borderRadius: 999 },
 });

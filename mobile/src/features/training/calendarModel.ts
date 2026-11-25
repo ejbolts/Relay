@@ -3,10 +3,11 @@ import {
   calendarWeekdays,
   entriesInMonths,
 } from '../../../../frontend/src/calendarRange';
+import { calendarDayLook } from '../../../../frontend/src/calendarDayLook';
 import { RING_GAP_DEG, workoutTypeColor } from '../../../../frontend/src/dayColors';
 import { isoLocalDate } from '../../../../frontend/src/trainingSummary';
 import type { HeatmapDay, WorkoutType, WorkoutTypeColors } from '../../../../frontend/src/types';
-import { calendarDayTypes, calendarLegendTypes } from '../../../../frontend/src/workoutTypes';
+import { calendarLegendTypes } from '../../../../frontend/src/workoutTypes';
 
 /** A calendar month as `YYYY-MM`. */
 export type MonthKey = string;
@@ -17,6 +18,72 @@ export function shiftMonth(month: MonthKey, delta: number): MonthKey {
   const [year, index] = month.split('-').map(Number);
   const shifted = new Date(year, index - 1 + delta, 1, 12);
   return isoLocalDate(shifted).slice(0, 7);
+}
+
+/**
+ * The page a horizontal pager settled on, from its scroll event. In a right-to-left layout the
+ * first page sits at the right, so the offset is measured from there, as React Native's own
+ * lists do.
+ */
+export function settledPage(
+  {
+    contentOffset,
+    contentSize,
+    layoutMeasurement,
+  }: {
+    contentOffset: { x: number };
+    contentSize: { width: number };
+    layoutMeasurement: { width: number };
+  },
+  rtl: boolean,
+  count: number,
+): number {
+  const width = layoutMeasurement.width;
+  if (width <= 0 || count <= 0) return 0;
+  const offset = rtl ? contentSize.width - (contentOffset.x + width) : contentOffset.x;
+  return Math.max(0, Math.min(count - 1, Math.round(offset / width)));
+}
+
+/** History grouped by month once, so each month's page reads only its own days. */
+export function entriesByMonth(
+  entries: readonly HeatmapDay[],
+): ReadonlyMap<MonthKey, HeatmapDay[]> {
+  const months = new Map<MonthKey, HeatmapDay[]>();
+  for (const entry of entries) {
+    const key = monthOf(entry.workout_date);
+    const list = months.get(key);
+    if (list) list.push(entry);
+    else months.set(key, [entry]);
+  }
+  return months;
+}
+
+/**
+ * Month views built at most once each for one set of inputs: the pager's pages and the legend
+ * share the month on show.
+ */
+export function monthViews(
+  options: Omit<Parameters<typeof calendarMonthView>[0], 'month' | 'entries'> & {
+    byMonth: ReadonlyMap<MonthKey, HeatmapDay[]>;
+  },
+): (month: MonthKey) => CalendarMonthView {
+  const { byMonth, ...rest } = options;
+  const views = new Map<MonthKey, CalendarMonthView>();
+  return (month) => {
+    let view = views.get(month);
+    if (!view) {
+      view = calendarMonthView({ ...rest, month, entries: byMonth.get(month) ?? [] });
+      views.set(month, view);
+    }
+    return view;
+  };
+}
+
+/** Every month from `first` to `last`, oldest first: the pages of the calendar's month pager. */
+export function monthsBetween(first: MonthKey, last: MonthKey): MonthKey[] {
+  const months: MonthKey[] = [];
+  for (let month = first; month <= last; month = shiftMonth(month, 1)) months.push(month);
+  return months;
 }
 
 /**
@@ -47,6 +114,10 @@ export interface CalendarDay {
   dots: (string | null)[];
   /** Trained, but every type it holds is switched off in the legend. */
   filteredOut: boolean;
+  /** The split's types planned on a day ahead, or missed on a past one: several on a mixed day. */
+  scheduled: string[];
+  /** "Upper body + Cardio planned" or "… missed", for the day's label. */
+  scheduledNote: string | null;
   today: boolean;
   future: boolean;
 }
@@ -61,7 +132,10 @@ export interface CalendarMonthView {
   legend: WorkoutType[];
 }
 
-/** One month of the calendar, each day ringed by the colours of the workouts it holds. */
+/**
+ * One month of the calendar, each day ringed by the colours of the workouts it holds, and the
+ * split's planned or missed days outlined in their types' colours, as the web's calendar does.
+ */
 export function calendarMonthView({
   month,
   entries,
@@ -70,6 +144,7 @@ export function calendarMonthView({
   hidden,
   weekStartDay,
   today,
+  splitDays,
 }: {
   month: MonthKey;
   entries: HeatmapDay[];
@@ -78,6 +153,8 @@ export function calendarMonthView({
   hidden: ReadonlySet<string>;
   weekStartDay: number;
   today: string;
+  /** The types a split plans on each date (trainingSplit's `splitCalendarDays`). */
+  splitDays?: ReadonlyMap<string, readonly string[]>;
 }): CalendarMonthView {
   const [geometry] = calendarMonths(`${month}-01`, 1, 0, weekStartDay);
   const byDate = new Map(entries.map((entry) => [entry.workout_date, entry]));
@@ -85,19 +162,26 @@ export function calendarMonthView({
     if (!cell) return null;
     const date = isoLocalDate(cell);
     const entry = byDate.get(date);
-    const dayTypes = entry ? calendarDayTypes(entry, types) : [];
-    const ring = dayTypes
-      .filter((type) => !hidden.has(type.id))
-      .map((type) => workoutTypeColor(type, categoryColors));
+    const look = calendarDayLook({
+      date,
+      today,
+      entry,
+      types,
+      categoryColors,
+      hiddenCategories: hidden,
+      splitDays,
+    });
     return {
       date,
       day: cell.getDate(),
       entry,
-      ring,
-      dots: dayTypes.map((type) =>
+      ring: look.ring,
+      dots: look.dayTypes.map((type) =>
         hidden.has(type.id) ? null : workoutTypeColor(type, categoryColors),
       ),
-      filteredOut: dayTypes.length > 0 && ring.length === 0,
+      filteredOut: look.filteredOut,
+      scheduled: look.scheduledRing,
+      scheduledNote: look.scheduledNote,
       today: date === today,
       future: date > today,
     };

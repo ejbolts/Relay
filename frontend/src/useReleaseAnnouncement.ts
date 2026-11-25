@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import releaseHistory from '../release-history.json';
 import releaseMetadata from '../release.json';
-import { releaseAtLeast, type AppNoticesState } from './appNotices';
+import type { AppNoticesState } from './appNotices';
+import { releaseNoticeState } from './appNoticeRules';
 import {
   hasReadReleaseNotice,
   hasSeenRelease,
@@ -21,10 +22,8 @@ const ALWAYS_READY: Pick<AppNoticesState, 'ready' | 'notices' | 'record'> = {
 };
 
 /**
- * Announces the release actually running, once per account; a silent patch announces the release
- * it follows instead. It is skipped when the account dismissed it on another device, and for an
- * account created on or after the release date: nothing in it is new to someone who has only
- * ever used this release.
+ * Announces the release actually running, once per account (see `releaseNoticeState`); a silent
+ * patch announces the release it follows instead.
  */
 export function useReleaseAnnouncement(
   userId: string | null,
@@ -37,12 +36,16 @@ export function useReleaseAnnouncement(
     open: null,
   });
   const version = bundledRelease.version;
-  const seenElsewhere = releaseAtLeast(notices.notices?.release_seen, version);
-  const newerAccount =
-    !!accountCreatedAt &&
-    !!bundledRelease.date &&
-    accountCreatedAt.slice(0, 10) >= bundledRelease.date;
-  const nothingNew = seenElsewhere || newerAccount;
+  const state = releaseNoticeState({
+    version,
+    releaseDate: bundledRelease.date,
+    accountCreatedAt,
+    releaseSeen: notices.notices?.release_seen,
+    ready: notices.ready,
+    seenOnDevice: userId !== null && hasSeenRelease(userId, version),
+    noticeReadOnDevice: userId !== null && hasReadReleaseNotice(userId, version),
+  });
+  const { nothingNew } = state;
 
   // Remember it here too, so a later offline visit does not announce it after all.
   useEffect(() => {
@@ -53,15 +56,14 @@ export function useReleaseAnnouncement(
   }, [userId, notices.ready, nothingNew, version]);
 
   const chosen = choice.userId === userId ? choice.open : null;
-  const automatic =
-    userId !== null && notices.ready && !nothingNew && !hasSeenRelease(userId, version);
+  const automatic = userId !== null && state.automatic;
   return {
     release: bundledRelease,
     history: bundledHistory,
     open: userId !== null && (chosen ?? automatic),
     /** False until the account has said what it has already seen, so nothing opens too early. */
     checked: notices.ready,
-    noticeUnread: userId !== null && !nothingNew && !hasReadReleaseNotice(userId, version),
+    noticeUnread: userId !== null && state.noticeUnread,
     readNotice: () => {
       if (userId) {
         rememberReleaseNoticeRead(userId, version);
