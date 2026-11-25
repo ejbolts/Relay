@@ -81,7 +81,7 @@ export function UpNextCard() {
     try {
       await moveSplit.mutateAsync({ step: skip.to, restSaved });
     } catch (error) {
-      showToast(errorMessage(error) || 'Could not skip this day.');
+      showToast(errorMessage(error) || 'Could not skip this day.', undefined, { variant: 'error' });
       return;
     }
     haptics.success();
@@ -90,7 +90,7 @@ export function UpNextCard() {
       run: () => {
         moveSplit
           .mutateAsync({ step: skip.from, restSaved })
-          .catch((error) => showToast(errorMessage(error)));
+          .catch((error) => showToast(errorMessage(error), undefined, { variant: 'error' }));
       },
     });
   }

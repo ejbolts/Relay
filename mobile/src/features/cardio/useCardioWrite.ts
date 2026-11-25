@@ -3,9 +3,16 @@ import { useNavigation, useRouter } from 'expo-router';
 import { useRef, useState } from 'react';
 import { refreshTraining } from '../../data/queries';
 import { errorMessage } from '../../ui/components';
-import { isToastAccountCurrent, showToast, toastAccount, type ToastAction } from '../../ui/Toast';
+import {
+  isToastAccountCurrent,
+  showToast,
+  toastAccount,
+  type ToastAction,
+  type ToastOptions,
+} from '../../ui/Toast';
 
-export type CardioWriteToast = string | { message: string; action?: ToastAction };
+export type CardioWriteToast =
+  string | { message: string; action?: ToastAction; variant?: ToastOptions['variant'] };
 
 export function useCardioWrite() {
   const client = useQueryClient();
@@ -32,7 +39,7 @@ export function useCardioWrite() {
       const resolved = typeof message === 'string' ? message : await message(saved, account);
       if (!isToastAccountCurrent(account)) return;
       if (typeof resolved === 'string') showToast(resolved, undefined, { account });
-      else showToast(resolved.message, resolved.action, { account });
+      else showToast(resolved.message, resolved.action, { account, variant: resolved.variant });
     } catch (reason) {
       if (isToastAccountCurrent(account)) setSaveError(errorMessage(reason));
     } finally {

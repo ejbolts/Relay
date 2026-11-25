@@ -14,25 +14,14 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
-import { POPUP_MS, type PopupDuration } from './popupTiming';
+import { POPUP_MS, toastDuration, type PopupDuration, type ToastVariant } from './popupTiming';
 import './toast.css';
 
-export type ToastVariant = 'status' | 'action' | 'warning' | 'error' | 'celebrate';
+export type { ToastVariant };
 
 /** Toast times: the app's pop-up times. An Undo hook waits as long as its toast. */
 export const TOAST_MS = POPUP_MS;
 
-/** How long each variant stays unless its owner picks a `duration`. */
-const VARIANT_DURATION: Record<ToastVariant, PopupDuration> = {
-  status: 'standard',
-  action: 'standard',
-  warning: 'important',
-  celebrate: 'important',
-  error: 'critical',
-};
-
-/** A message longer than this gets at least `important`, so there is time to read it. */
-const LONG_MESSAGE_LENGTH = 90;
 const MAX_LINES = 3;
 
 export interface ToastAction {
@@ -82,11 +71,6 @@ type ToastEdge = 'top' | 'bottom';
 
 function toastVariant({ variant, action }: Pick<ToastProps, 'variant' | 'action'>): ToastVariant {
   return variant ?? (action ? 'action' : 'status');
-}
-
-function toastDuration(variant: ToastVariant, message: string, duration?: PopupDuration): number {
-  const ms = TOAST_MS[duration ?? VARIANT_DURATION[variant]];
-  return message.length > LONG_MESSAGE_LENGTH ? Math.max(ms, TOAST_MS.important) : ms;
 }
 
 /** What ends a toast without the close button: the owner's timeout, or dismissal by default. */

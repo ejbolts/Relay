@@ -312,7 +312,9 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
       deleteSet: (movementKey, setKey) => {
         const movement = stateRef.current.movements.find((item) => item.key === movementKey);
         if (movement?.sets.length === 1) {
-          showToast('An exercise needs at least one set. Remove the exercise instead.');
+          showToast('An exercise needs at least one set. Remove the exercise instead.', undefined, {
+            variant: 'warning',
+          });
           return;
         }
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -342,7 +344,9 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
       onSubmit: (text) => {
         const minutes = Number(text.trim());
         if (!Number.isInteger(minutes) || minutes < 1 || minutes > 1440) {
-          showToast('Enter a whole number of minutes, up to 24 hours.');
+          showToast('Enter a whole number of minutes, up to 24 hours.', undefined, {
+            variant: 'warning',
+          });
           return;
         }
         setTimes((current) => ({ ...current, durationMinutes: minutes }));

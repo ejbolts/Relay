@@ -126,7 +126,7 @@ function CheckInForm({
           run: () =>
             void undo().then(
               () => refreshBodyMeasurements(client),
-              (reason) => showToast(errorMessage(reason)),
+              (reason) => showToast(errorMessage(reason), undefined, { variant: 'error' }),
             ),
         },
       );

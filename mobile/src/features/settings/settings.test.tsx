@@ -450,7 +450,10 @@ describe('Workout types', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Arms & abs options' }));
     await pickMenu('Remove');
     await waitFor(() =>
-      expect(showToast).toHaveBeenCalledWith('Arms & abs removed', expect.anything()),
+      // Hard to redo, so its Undo gets the web's longer time.
+      expect(showToast).toHaveBeenCalledWith('Arms & abs removed', expect.anything(), {
+        duration: 'important',
+      }),
     );
     expect(apiSend).toHaveBeenCalledWith('/api/workout-types/arms', 'DELETE');
     expect(await screen.findByRole('button', { name: 'Restore Arms & abs' })).toBeTruthy();

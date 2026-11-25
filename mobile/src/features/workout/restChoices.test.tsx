@@ -61,7 +61,9 @@ test('Custom… asks for a time and explains a time it cannot use', () => {
   expect(onPick).toHaveBeenCalledWith(195);
   request.onSubmit('9:99');
   expect(onPick).toHaveBeenCalledTimes(1);
-  expect(showToast).toHaveBeenCalledWith('Enter a rest such as 2:30, up to 2 hours.');
+  expect(showToast).toHaveBeenCalledWith('Enter a rest such as 2:30, up to 2 hours.', undefined, {
+    variant: 'warning',
+  });
 });
 
 test('away from iOS the menu opens as a sheet, and a submenu as a second sheet', async () => {

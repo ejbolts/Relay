@@ -16,7 +16,7 @@ export function ProfileAccountId({ accountId }: { accountId: string }) {
       await Clipboard.setStringAsync(accountId);
       showToast('UUID copied.', undefined, { account });
     } catch {
-      showToast('Could not copy the UUID.', undefined, { account });
+      showToast('Could not copy the UUID.', undefined, { account, variant: 'error' });
     }
   }
   return (

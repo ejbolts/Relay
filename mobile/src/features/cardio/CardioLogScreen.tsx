@@ -319,6 +319,8 @@ function CardioLogForm({
         return {
           message: celebration?.message ?? (reminderOn ? 'Workout saved' : 'Cardio saved'),
           action,
+          // A record stays as long as the web's celebration.
+          variant: celebration ? ('celebrate' as const) : undefined,
         };
       },
     );

@@ -573,7 +573,9 @@ const WorkoutEngine = memo(function WorkoutEngine({
         const stored = writeActiveWorkoutDraft(loggerToDraft(next, Date.now()), deviceStorage);
         if (!stored && !storageWarned.current) {
           storageWarned.current = true;
-          showToast('Could not store this workout on the phone. Keep the app open.');
+          showToast('Could not store this workout on the phone. Keep the app open.', undefined, {
+            variant: 'error',
+          });
         }
         writeJson(DRAFT_OWNER_KEY, user.id);
         rememberExercises(next);
@@ -729,7 +731,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
           showToast(
             `${item?.pendingSave.payload.name ?? 'A workout'} wasn't saved`,
             { label: 'Review', run: () => reviewRef.current(key) },
-            { account },
+            { account, variant: 'warning' },
           );
         }
         refusalsSeen.current = next.refusals;
@@ -1147,7 +1149,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
         if (previous) {
           commitRest(NO_REST);
           addedSetKeys.current.clear();
-          showToast('Workout ended on another device');
+          showToast('Workout ended on another device', undefined, { variant: 'warning' });
         }
         return;
       }
@@ -1336,7 +1338,9 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const review = useCallback(
     (key: string) => {
       if (loggerRef.current) {
-        showToast('Finish your current workout to review this one.');
+        showToast('Finish your current workout to review this one.', undefined, {
+          variant: 'warning',
+        });
         return;
       }
       const item = readFinishedWorkouts(deviceStorage).find(
@@ -1346,12 +1350,18 @@ const WorkoutEngine = memo(function WorkoutEngine({
       const draft = reviewedFinishedWorkout(item, Date.now());
       const state = loggerFromDraft(draft, allExercises);
       if (!state) {
-        showToast('This workout can only be reviewed on the web for now.');
+        showToast('This workout can only be reviewed on the web for now.', undefined, {
+          variant: 'warning',
+        });
         return;
       }
       // Stored as the live workout before it leaves the queue, so it is never lost in between.
       if (!writeActiveWorkoutDraft(draft, deviceStorage)) {
-        showToast('Could not open the workout for review. Free some storage and try again.');
+        showToast(
+          'Could not open the workout for review. Free some storage and try again.',
+          undefined,
+          { variant: 'error' },
+        );
         return;
       }
       removeFinishedWorkout(key, deviceStorage);
@@ -1398,7 +1408,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
                 ? reason.message
                 : 'Could not check the latest version. Try again.',
             undefined,
-            { account },
+            { account, variant: 'error' },
           ),
         );
     },
@@ -1410,7 +1420,9 @@ const WorkoutEngine = memo(function WorkoutEngine({
       const current = loggerRef.current;
       if (current) {
         if (current.resumingWorkoutId !== workout.id)
-          showToast('Finish your current workout to resume this one.');
+          showToast('Finish your current workout to resume this one.', undefined, {
+            variant: 'warning',
+          });
         router.push('/workout');
         return;
       }

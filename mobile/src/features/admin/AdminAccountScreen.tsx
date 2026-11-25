@@ -83,7 +83,7 @@ function AccountDetails({ account }: { account: AdminUser }) {
     // separately), so leaving waits from the moment the confirmation opens.
     if (confirmingReset) return;
     if (resetting) {
-      showToast('Wait for the password reset to finish.');
+      showToast('Wait for the password reset to finish.', undefined, { variant: 'warning' });
       return;
     }
     Alert.alert(

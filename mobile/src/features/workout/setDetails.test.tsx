@@ -194,6 +194,8 @@ test('a set that beats a record shows its badge and is celebrated once', async (
   expect(jest.mocked(showToast).mock.calls[0][0]).toBe(
     '🏆 Weight PR\nBench Press · 8 reps at 85 kg',
   );
+  // A record stays as long as the web's celebration.
+  expect(jest.mocked(showToast).mock.calls[0][2]).toEqual({ variant: 'celebrate' });
 
   // Unticking and ticking the same set again is not a new record.
   await fireEvent.press(screen.getByRole('button', { name: 'Mark set 1 incomplete' }));

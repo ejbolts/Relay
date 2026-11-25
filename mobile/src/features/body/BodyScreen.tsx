@@ -79,11 +79,12 @@ function useGoalRemoval() {
                 done();
                 showToast('Could not remove this goal. It has been restored.', undefined, {
                   account,
+                  variant: 'error',
                 });
               },
             ),
         },
-        { account },
+        { account, duration: 'important' },
       );
     },
     [client],
@@ -161,13 +162,14 @@ export function BodyScreen() {
                   () => {
                     if (isToastAccountCurrent(account)) void refreshBodyMeasurements(client);
                   },
-                  (reason) => showToast(errorMessage(reason), undefined, { account }),
+                  (reason) =>
+                    showToast(errorMessage(reason), undefined, { account, variant: 'error' }),
                 ),
           },
-          { account },
+          { account, duration: 'important' },
         );
       },
-      (reason) => showToast(errorMessage(reason), undefined, { account }),
+      (reason) => showToast(errorMessage(reason), undefined, { account, variant: 'error' }),
     );
   }
 

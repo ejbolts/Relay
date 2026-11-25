@@ -440,7 +440,9 @@ it('keeps the screen and Reset locked until a reset answers, then asks before le
   const repeat = jest.fn();
   await act(async () => mockPrevent.onLeave?.({ repeat }));
   expect(repeat).not.toHaveBeenCalled();
-  expect(showToast).toHaveBeenCalledWith('Wait for the password reset to finish.');
+  expect(showToast).toHaveBeenCalledWith('Wait for the password reset to finish.', undefined, {
+    variant: 'warning',
+  });
 
   await act(async () => reset.resolve({ temporary_password: 'brisk-otter-42' }));
   expect(await screen.findByText('brisk-otter-42')).toBeTruthy();
@@ -518,7 +520,9 @@ it('holds leaving the username screen while its save is on its way', async () =>
   expect(apiSend).toHaveBeenCalledTimes(1);
   expect(mockPrevent.blocking).toBe(true);
   await act(async () => mockPrevent.onLeave?.({ repeat: jest.fn() }));
-  expect(showToast).toHaveBeenCalledWith('Wait for the username to save.');
+  expect(showToast).toHaveBeenCalledWith('Wait for the username to save.', undefined, {
+    variant: 'warning',
+  });
   await act(async () => rename.resolve({ ...riley, username: 'riley.r' }));
   await waitFor(() => expect(mockRouter.back).toHaveBeenCalledTimes(1));
   expect(mockPrevent.blocking).toBe(false);

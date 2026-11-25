@@ -571,7 +571,7 @@ function AccountSection() {
           onPress={() => {
             void Clipboard.setStringAsync(user.id).then(
               () => showToast('UUID copied.'),
-              () => showToast('Could not copy the UUID.'),
+              () => showToast('Could not copy the UUID.', undefined, { variant: 'error' }),
             );
           }}
         />

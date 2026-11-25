@@ -48,7 +48,7 @@ it('settles an action toast once: on expiry, not after Undo', async () => {
 
   const second = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
   await act(async () => showToast('Goal removed', second));
-  await act(async () => jest.advanceTimersByTime(6000));
+  await act(async () => jest.advanceTimersByTime(2000));
   await fireEvent.press(screen.getByRole('button', { name: 'Undo' }));
   await act(async () => jest.advanceTimersByTime(10000));
   expect(second.run).toHaveBeenCalledTimes(1);
@@ -146,7 +146,7 @@ it('never lets an old timer or Undo finish the toast that replaced it', async ()
   const first = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
   const second = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
   await act(async () => showToast('First', first));
-  await act(async () => jest.advanceTimersByTime(7900));
+  await act(async () => jest.advanceTimersByTime(2900));
   // The first toast's timer comes due in the same batch that replaces it.
   await act(async () => {
     showToast('Second', second);
@@ -209,6 +209,35 @@ it('drops an old toast and its callbacks when the same account signs in again', 
   // Late work from the old session shows nothing in the new one.
   await act(async () => showToast('Friend request sent', removal, { account }));
   expect(screen.queryByText('Friend request sent')).toBeNull();
+});
+
+it('stays as long as the web’s toast: by what it is for, or the time its caller picks', async () => {
+  await render(host());
+  const undoAction = () => ({ label: 'Undo', run: jest.fn() });
+  /** Shows a toast and checks it is there just before `ms`, and gone at `ms`. */
+  const lasts = async (ms: number, ...toast: Parameters<typeof showToast>) => {
+    await act(async () => showToast(...toast));
+    await act(async () => jest.advanceTimersByTime(ms - 1));
+    expect(screen.getByText(toast[0])).toBeOnTheScreen();
+    await act(async () => jest.advanceTimersByTime(1));
+    expect(screen.queryByText(toast[0])).toBeNull();
+  };
+  // A confirmation and an everyday Undo: standard.
+  await lasts(3000, 'Split saved.');
+  await lasts(3000, 'Check-in saved', undoAction());
+  // Frequent small undos mid-workout: quick. What is hard to redo: important.
+  await lasts(2500, 'Set deleted', undoAction(), { duration: 'quick' });
+  await lasts(5000, 'Goal removed', undoAction(), { duration: 'important' });
+  // Warnings and records get longer, and errors longest.
+  await lasts(5000, 'This workout is waiting to sync.', undefined, { variant: 'warning' });
+  await lasts(5000, 'All-time weight PR', undefined, { variant: 'celebrate' });
+  await lasts(7000, 'Could not reach Relay.', undefined, { variant: 'error' });
+  // A long message always gets time to be read, and a longer time is never shortened.
+  const long = 'Imported 42 workouts. '.repeat(5);
+  expect(long.length).toBeGreaterThan(90);
+  await lasts(5000, long);
+  await lasts(5000, long, undoAction(), { duration: 'quick' });
+  await lasts(7000, long, undefined, { variant: 'error' });
 });
 
 it('lets only its own token clear a pending removal', () => {

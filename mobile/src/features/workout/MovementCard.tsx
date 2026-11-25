@@ -437,10 +437,11 @@ export const MovementCard = memo(function MovementCard({
             const removeRest = () => {
               const before = item.rest_seconds;
               update({ rest_seconds: null });
-              showToast('Rest removed', {
-                label: 'Undo',
-                run: () => update({ rest_seconds: before }),
-              });
+              showToast(
+                'Rest removed',
+                { label: 'Undo', run: () => update({ rest_seconds: before }) },
+                { duration: 'quick' },
+              );
             };
             const dragging = setDrag.drag?.key === item.key;
             const dropTarget = !!setDrag.drag && !dragging && setDrag.drag.target === index;

@@ -231,15 +231,15 @@ describe('Toast', () => {
 
   const undo = { label: 'Undo', run: jest.fn() };
 
-  it('announces the action and keeps an action toast long enough to reach it', async () => {
+  it('announces the action and keeps an action toast for the web’s standard time', async () => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
     await wrap(<ToastHost />);
     await act(async () => showToast('Goal removed', undo));
     expect(announce).toHaveBeenCalledWith('Goal removed. Undo available.');
     expect(toastAnnouncement('Saved')).toBe('Saved');
-    await act(async () => jest.advanceTimersByTime(6000));
+    await act(async () => jest.advanceTimersByTime(2900));
     expect(screen.getByRole('button', { name: 'Undo' })).toBeTruthy();
-    await act(async () => jest.advanceTimersByTime(2500));
+    await act(async () => jest.advanceTimersByTime(200));
     expect(screen.queryByRole('button', { name: 'Undo' })).toBeNull();
   });
 

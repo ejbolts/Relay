@@ -280,7 +280,9 @@ test("another device's change shows up here, and its finish closes the workout",
   await reconnect();
   expect(await screen.findByText('No workout in progress')).toBeVisible();
   expect(readActiveWorkoutDraft(deviceStorage)).toBeNull();
-  expect(showToast).toHaveBeenCalledWith('Workout ended on another device');
+  expect(showToast).toHaveBeenCalledWith('Workout ended on another device', undefined, {
+    variant: 'warning',
+  });
 });
 
 test('finishing consumes the shared copy it agreed with, exactly once', async () => {
