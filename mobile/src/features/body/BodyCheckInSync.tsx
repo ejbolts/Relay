@@ -29,8 +29,10 @@ export function retryBodyCheckIns(): Promise<number> {
 
 /**
  * Sends check-ins saved on this phone whenever it can: on sign-in, on reconnecting and on
- * returning to the app, as the web's useBodyMeasurementSync does. Every screen showing check-ins
- * sees a waiting change at once, and the server's copy once the queue has gone through.
+ * returning to the app, as the web's useBodyMeasurementSync does. Those send at once; the timed
+ * sends in between wait out the pause that follows sends the server did not answer. Every screen
+ * showing check-ins sees a waiting change at once, and the server's copy once the queue has gone
+ * through.
  */
 export function BodyCheckInSync() {
   const client = useQueryClient();
@@ -68,9 +70,9 @@ export function BodyCheckInSync() {
         timer = null;
       }
     };
-    const send = (retry = false) => {
+    const send = (retry = false, immediate = false) => {
       inFlight += 1;
-      return syncBodyCheckIns(retry)
+      return syncBodyCheckIns(retry, immediate)
         .then(
           (sent) => {
             if (active && sent > 0 && bodyCheckInStatus().pending === 0)
@@ -92,15 +94,15 @@ export function BodyCheckInSync() {
       if (rows) client.setQueryData(bodyKeys.measurements, rows);
     });
     const offline = onlineManager.subscribe((online) => {
-      if (online) void send();
+      if (online) void send(false, true);
     });
     const app = AppState.addEventListener('change', (state) => {
       appActive = state === 'active';
       syncTimer();
-      if (state === 'active') void send();
+      if (state === 'active') void send(false, true);
     });
     syncTimer();
-    void send();
+    void send(false, true);
     return () => {
       active = false;
       activeRetry = null;

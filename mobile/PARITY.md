@@ -50,7 +50,7 @@ What the native app covers compared with the web app, which it will replace. Upd
 - **Videos:** a picked clip's preview is full width and opens on tap, one at a time; the web shows a small inline player for each clip.
 - **Training: Exercises:** the list shows more as you scroll instead of the web's per-page setting.
 - **Cardio screenshots:** Paste screenshot appears beside Choose screenshot and Take photo only when the clipboard holds an image; the web's paste always works.
-- **Body:** the check-in sync card shows at the top of Home, Training, Social and Body, not on pushed screens such as Settings, Videos or a profile, and says "saved on this phone" where the web says "saved locally".
+- **Body:** the check-in sync card shows at the top of Home, Training, Social and Body, not on pushed screens such as Settings, Videos or a profile, and says "saved on this phone" where the web says "saved locally". After a send the server did not answer, both apps space their timed sends out to 15, 30 and then 60 seconds and stop waiting once a read of the history shows the server holds the check-in (`frontend/src/syncBackoff.ts`, `frontend/src/checkInSync.ts`). The web also asks for the history before sending again; the app sends again without asking, because the server treats a repeated save as no change and the save is the smaller request on a phone connection.
 - **Videos uploads:** an upload keeps going when you leave Videos; Stop and discard is its own button (the web has Cancel session).
 - **Guides:** a setup guide coaches each step in a docked card with a fold grabber, rings the control it's about and scrolls it into view.
 - **Phone alerts:** Settings › Notifications registers this phone for remote push. Rest alerts and "Still working out?" for a workout on this phone stay local notifications, and alerts shown by the phone use neutral text without names. Send test alert is app-only.
@@ -67,7 +67,6 @@ What the native app covers compared with the web app, which it will replace. Upd
 
   See `mobile/README.md` ("Native builds") for the variables and steps.
 
-- **Check-in sync on a slow server:** when a save gets no answer, the web asks whether the server already holds the check-in before sending it again, and spaces automatic sends out to 15, 30 and then 60 seconds (`frontend/src/checkInSync.ts`, `frontend/src/syncBackoff.ts`). The app's queue still sends every five seconds until it is answered. The server treats a repeated save as no change, so the repeats cost it little. A follow-up can make the app's queue use the same shared rules.
 - **Uploads after the OS stops Relay:** an upload stops if the OS suspends or kills the app, and its session stays on the server where neither app lists it. A follow-up could offer to resume or discard it on launch.
 - **Remote push duplicates** are avoided in normal use, not ruled out: a phone clock far off, a report that never reached the server, several server processes, or Expo's acceptance window can still double an alert, and a server restart can drop a phone's reminder after a browser received its copy.
 - **Expo Go:** Android can't receive remote push, and tapping a background rest alert on Android opens Expo Go's own home screen.

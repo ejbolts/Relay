@@ -18,6 +18,8 @@ import {
   type BodyMeasurementInput,
   type BodyMeasurementQueue,
 } from '../../../../frontend/src/bodyMeasurementQueue';
+import { serverHasCheckIn } from '../../../../frontend/src/checkInSync';
+import { syncRetryDelay } from '../../../../frontend/src/syncBackoff';
 import type { BodyMeasurement } from '../../../../frontend/src/types';
 import { ApiError, apiGet, apiSend } from '../../data/api';
 import { deviceStorage, newId, readJson, writeJson } from '../../data/deviceStorage';
@@ -39,6 +41,19 @@ let revision = 0;
 let syncing: Promise<number> | null = null;
 /** Whether the latest send failed because Relay could not be reached, so the card offers Retry. */
 let syncFailed = false;
+/**
+ * Sends in a row that ended without a usable answer: a timeout, a dropped connection or a server
+ * error. Automatic sends then wait until `retryAfter`, as the web's do, so a server that is
+ * struggling is not asked for the same save every few seconds, which keeps it struggling.
+ */
+let unanswered = 0;
+let retryAfter = 0;
+
+/** Forgets earlier unanswered sends, so the next one goes at once. */
+function resetBackoff() {
+  unanswered = 0;
+  retryAfter = 0;
+}
 const listeners = new Set<() => void>();
 let status = { pending: 0, error: null as string | null };
 /**
@@ -91,6 +106,7 @@ export function setBodyCheckInOwner(account: string | null) {
   if (account !== owner) {
     acknowledged = [];
     syncFailed = false;
+    resetBackoff();
   }
   owner = account;
   if (account) {
@@ -166,8 +182,17 @@ export async function fetchBodyMeasurements(signal?: AbortSignal): Promise<BodyM
   }
   if (!account) return rows;
   let base = rows;
-  if (started === revision) writeJson(ROWS_KEY, { owner: account, rows });
-  else {
+  if (started === revision) {
+    writeJson(ROWS_KEY, { owner: account, rows });
+    // A save can reach the server without its answer reaching the phone. What the server already
+    // holds is done: stop waiting to send it, instead of sending it again.
+    const waiting = queueFor(account);
+    const unsent = waiting.changes.filter((change) => !serverHasCheckIn(change, rows));
+    if (unsent.length !== waiting.changes.length) {
+      resetBackoff();
+      persist({ ...waiting, changes: unsent });
+    }
+  } else {
     // A list that started before a local save or a send must not replace its acknowledged
     // result: use the copy, or (before there is one) this list with what was sent since.
     base =
@@ -194,6 +219,8 @@ export function saveBodyCheckIn(payload: BodyMeasurementInput): BodyMeasurement 
     createdAt: row?.created_at ?? new Date().toISOString(),
     payload,
   });
+  // A change just made here is sent at once, even during a pause left by earlier sends.
+  retryAfter = 0;
   persist(queue);
   void syncBodyCheckIns().catch(() => undefined);
   return overlayBodyMeasurements(row ? [row] : [], queue.changes).find(
@@ -214,6 +241,7 @@ export function deleteBodyCheckIn(id: string) {
       payload: null,
     }),
   );
+  retryAfter = 0;
   void syncBodyCheckIns().catch(() => undefined);
 }
 
@@ -221,13 +249,18 @@ export function deleteBodyCheckIn(id: string) {
  * Sends the waiting changes one at a time, oldest first, while online. A refused change waits
  * for `retry` without blocking the others; a connection failure stops until the next attempt.
  * Resolves with how many changes the server acknowledged.
+ *
+ * `retry` is the person asking again. `immediate` is the app coming back to the foreground or
+ * online. Other calls are automatic, and wait out the pause that follows unanswered sends.
  */
-export function syncBodyCheckIns(retry = false): Promise<number> {
+export function syncBodyCheckIns(retry = false, immediate = false): Promise<number> {
   // A run already going may have stopped looking (offline, or past the change just saved), so
   // another starts once it ends.
-  if (syncing) return syncing.catch(() => 0).then(() => syncing ?? syncBodyCheckIns(retry));
+  if (syncing)
+    return syncing.catch(() => 0).then(() => syncing ?? syncBodyCheckIns(retry, immediate));
   const account = owner;
   if (!account) return Promise.resolve(0);
+  if (!retry && !immediate && Date.now() < retryAfter) return Promise.resolve(0);
   const run = async () => {
     let sent = 0;
     if (retry) persist(withRetriedBodyMeasurementChanges(queueFor(account)));
@@ -250,6 +283,7 @@ export function syncBodyCheckIns(retry = false): Promise<number> {
             rows: acknowledgedBodyMeasurements(rows, change, saved),
           });
         syncFailed = false;
+        resetBackoff();
         persist(withoutBodyMeasurementChange(queueFor(account), change.token));
         acknowledged = [...acknowledged.slice(-49), { revision, change, saved }];
         sent += 1;
@@ -257,6 +291,9 @@ export function syncBodyCheckIns(retry = false): Promise<number> {
         const code = reason instanceof ApiError ? reason.status : undefined;
         if (owner !== account || !bodyMeasurementSendRefused(code)) {
           if (owner === account) {
+            // No usable answer. Leave a growing pause before the next automatic send.
+            unanswered += 1;
+            retryAfter = Date.now() + syncRetryDelay(unanswered);
             syncFailed = true;
             emit();
           }
