@@ -14,10 +14,11 @@ import { localDate } from '../../../../frontend/src/utils';
 import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
 import { Button } from '../../ui/components';
+import { Segmented } from '../../ui/controls';
+import { haptics } from '../../ui/haptics';
 import { Sheet } from '../../ui/Sheet';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
-import { Segmented } from '../training/parts';
 import { bodyGoalApi, bodyKeys } from './bodyQueries';
 import { DateField } from './DateField';
 import { WeightStepper } from './NumberStepper';
@@ -82,7 +83,7 @@ function GoalForm({
   onDone: () => void;
   onRemove: (goal: BodyWeightGoal) => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const unit = useWeightUnit();
   const client = useQueryClient();
   const editing = request.goal;
@@ -124,28 +125,34 @@ function GoalForm({
       unit,
     });
     if (checked.error !== null) {
+      haptics.error();
       setError(checked.error);
       return;
     }
     save.mutate(checked.payload, {
       onSuccess: () => {
+        haptics.success();
         onDone();
         showToast(editing ? 'Goal saved' : 'Goal set');
       },
-      onError: (reason) =>
-        setError(reason instanceof Error ? reason.message : 'Could not save this target.'),
+      onError: (reason) => {
+        haptics.error();
+        setError(reason instanceof Error ? reason.message : 'Could not save this target.');
+      },
     });
   }
 
+  const exampleWeight = unit === 'lb' ? 'e.g. 175' : 'e.g. 80';
   const weightField = (label: string, value: number | null, set: (kg: number | null) => void) => (
-    <View style={{ gap: 6 }}>
-      <Text style={[type.footnote, { color: colors.secondary }]}>
+    <View style={styles.field}>
+      <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
         {label} ({unit})
       </Text>
       <WeightStepper
         weightKg={value}
         unit={unit}
         step={0.5}
+        placeholder={exampleWeight}
         label={`${label} in ${unit}`}
         disabled={save.isPending}
         onChange={(kg) => {
@@ -158,19 +165,19 @@ function GoalForm({
   );
 
   return (
-    <View style={{ gap: 16 }}>
+    <View style={{ gap: 14 }}>
       {active && latestKg !== null && (
-        <View
-          style={[styles.progress, { backgroundColor: colors.surface2, borderRadius: radius.lg }]}
-        >
-          <Text style={[type.title, type.number, { color: colors.text }]}>
-            {formatWeight(latestKg, unit)}
-          </Text>
-          <Text style={[type.footnote, { color: colors.secondary }]}>
-            {bodyGoalKind(active) === 'maintain'
-              ? `Maintaining ${bodyGoalTarget(active, unit)} until ${prettyDate(active.target_date)}`
-              : `→ ${formatWeight(active.target_weight_kg, unit)} by ${prettyDate(active.target_date)}`}
-          </Text>
+        <View style={styles.progress}>
+          <View style={styles.progressRow}>
+            <Text style={[type.title, type.number, { color: colors.text }]}>
+              {formatWeight(latestKg, unit)}
+            </Text>
+            <Text style={[type.footnote, { color: colors.secondary, flexShrink: 1 }]}>
+              {bodyGoalKind(active) === 'maintain'
+                ? `Maintaining ${bodyGoalTarget(active, unit)} until ${prettyDate(active.target_date)}`
+                : `→ ${formatWeight(active.target_weight_kg, unit)} by ${prettyDate(active.target_date)}`}
+            </Text>
+          </View>
           {bodyGoalKind(active) !== 'maintain' && (
             <View style={[styles.track, { backgroundColor: colors.surface3 }]}>
               <View
@@ -220,17 +227,21 @@ function GoalForm({
           {error}
         </Text>
       )}
-      <Button
-        label={save.isPending ? 'Saving…' : editing ? 'Save goal' : 'Set goal'}
-        disabled={save.isPending}
-        onPress={submit}
-      />
+      <View style={styles.actions}>
+        <Button
+          label={save.isPending ? 'Saving…' : editing ? 'Save goal' : 'Set goal'}
+          loading={save.isPending}
+          disabled={save.isPending}
+          onPress={submit}
+        />
+        <Button label="Cancel" variant="secondary" disabled={save.isPending} onPress={onDone} />
+      </View>
       {editing && (
         <Pressable
           accessibilityRole="button"
           disabled={save.isPending}
-          hitSlop={8}
           onPress={() => {
+            haptics.warning();
             onDone();
             onRemove(editing);
           }}
@@ -246,8 +257,17 @@ function GoalForm({
 }
 
 const styles = StyleSheet.create({
-  progress: { padding: 14, gap: 6 },
-  track: { height: 6, borderRadius: 3, overflow: 'hidden', marginTop: 4 },
+  field: { gap: 6 },
+  progress: { gap: 8 },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  track: { height: 6, borderRadius: 3, overflow: 'hidden' },
   fill: { height: 6, borderRadius: 3 },
-  remove: { alignSelf: 'center', paddingVertical: 6 },
+  actions: { gap: 8, marginTop: 2 },
+  remove: { minHeight: 44, alignSelf: 'center', justifyContent: 'center', paddingHorizontal: 12 },
 });

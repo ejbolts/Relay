@@ -2,23 +2,25 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
-import { Appearance, Platform } from 'react-native';
+import { Appearance } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { createQueryClient } from '../data/queryClient';
 // Mobile batch 4, records stream (B2).
 import { BodyCheckInSync } from '../features/body/BodyCheckInSync';
-// W3 (Home): header options for Home's pushed screens.
-import { homeScreenOptions } from '../features/home/routes';
-// B3 (weekly review and notices): header options for the review and What's new.
-import { reviewScreenOptions } from '../features/review/routes';
+import { CardioShareHost } from '../features/cardio/CardioShareSheet';
 // B5 (data): asks a new account whether to import its history.
 import { useImportPrompt } from '../features/data';
+import { AppTourHost } from '../features/guides/AppTourHost';
+import { TipSyncHost } from '../features/guides/TipSyncHost';
+import { RemotePushSync } from '../features/push/RemotePushSync';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
+import { VideoUploadSessionSync } from '../features/videos';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
+import { WorkoutLinkOpener } from '../features/workout/workoutLink';
 import { useDeferredFriendInvite } from '../session/friendInvite';
 import { SessionProvider, useSession } from '../session/SessionProvider';
-import { AppTourHost } from '../features/guides/AppTourHost';
+import { pushedScreenOptions, sheetScreenOptions } from '../ui/navigation';
 import { PromptHost } from '../ui/prompts';
 import { useTheme } from '../ui/theme';
 
@@ -67,6 +69,12 @@ function Navigation() {
         {/* Mobile batch 4, records stream (B2): sends check-ins saved offline. Before the
             screens, so their check-in queries start with the signed-in account. */}
         <BodyCheckInSync />
+        {/* A cold-start tap on the rest timer's Live Activity opens the logger once it can. */}
+        <WorkoutLinkOpener />
+        {/* Keeps app-level video uploads bound to the active account across navigation. */}
+        <VideoUploadSessionSync />
+        {/* Remote push (C5): registers this phone for Phone alerts and opens tapped alerts. */}
+        {signedIn && !mustChangePassword && <RemotePushSync userId={status.user.id} />}
         <Stack
           screenOptions={{
             headerShown: false,
@@ -78,22 +86,9 @@ function Navigation() {
             <Stack.Screen name="(tabs)" />
             {/* The logger: a page sheet that drags down to minimise the workout, not end it. */}
             <Stack.Screen name="workout" options={{ presentation: 'modal' }} />
-            {/* The Start menu, like the web's: Cardio, Up next, Empty. A native sheet on iOS; on
-                Android a pushed formSheet draws under the native tab bar, so it is a transparent
-                modal that draws its own bottom sheet. */}
-            <Stack.Screen
-              name="start-workout"
-              options={{
-                presentation: Platform.OS === 'ios' ? 'formSheet' : 'transparentModal',
-                sheetAllowedDetents: 'fitToContents',
-                sheetGrabberVisible: true,
-                sheetCornerRadius: 28,
-                ...(Platform.OS !== 'ios' && {
-                  animation: reducedMotion ? 'none' : 'fade',
-                  contentStyle: { backgroundColor: 'transparent' },
-                }),
-              }}
-            />
+            {/* The Start menu, like the web's: Cardio, Up next, Empty. A native form sheet on iOS;
+                on Android a transparent modal that draws its own bottom sheet (ui/navigation). */}
+            <Stack.Screen name="start-workout" options={sheetScreenOptions({ reducedMotion })} />
             {/* Settings and the split editor: pushed screens with their own stacks and headers. */}
             <Stack.Screen name="settings" />
             <Stack.Screen name="split" />
@@ -107,8 +102,11 @@ function Navigation() {
                 and blocks stream). */}
             <Stack.Screen name="blocks" />
             {/* W3 (Home): per-muscle weekly goals and the Home layout editor, with headers. */}
-            <Stack.Screen name="muscle-goals" options={homeScreenOptions(colors, 'Muscle goals')} />
-            <Stack.Screen name="home-layout" options={homeScreenOptions(colors, 'Edit Home')} />
+            <Stack.Screen
+              name="muscle-goals"
+              options={pushedScreenOptions(colors, 'Muscle goals')}
+            />
+            <Stack.Screen name="home-layout" options={pushedScreenOptions(colors, 'Edit Home')} />
             {/* Training Cardio: standalone logging, metrics and zone preferences. */}
             <Stack.Screen name="cardio/log" />
             <Stack.Screen name="cardio/metrics/[id]" />
@@ -119,11 +117,11 @@ function Navigation() {
                 themselves from Home or from the bell. */}
             <Stack.Screen
               name="weekly-review"
-              options={reviewScreenOptions(colors, 'Weekly review')}
+              options={pushedScreenOptions(colors, 'Weekly review')}
             />
             <Stack.Screen
               name="release-notes"
-              options={reviewScreenOptions(colors, "What's new")}
+              options={pushedScreenOptions(colors, "What's new")}
             />
             {/* Mobile batch 4, data stream: CSV import with review and undo, and data export. */}
             <Stack.Screen name="data" />
@@ -140,6 +138,10 @@ function Navigation() {
         </Stack>
         {/* Mobile batch 4, B4: the quick tour, above the tabs so it stays open as it opens each. */}
         {signedIn && !mustChangePassword && <AppTourHost />}
+        {/* Opens a cardio share card from the save toast after returning from the log screen. */}
+        {signedIn && !mustChangePassword && <CardioShareHost />}
+        {/* Tips follow the account: this phone's tips merge with the server's and the web's. */}
+        {signedIn && !mustChangePassword && <TipSyncHost />}
         {/* Android's menu sheets and text dialogs for every screen. The logger, a separate native
             sheet, mounts its own. */}
         <PromptHost />

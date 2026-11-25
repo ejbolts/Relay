@@ -6,16 +6,25 @@ import {
   useQuery,
   useQueryClient,
   type InfiniteData,
+  type Query,
   type QueryClient,
 } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { useIsFocused } from 'expo-router';
 import type { FriendPresenceEvent } from '../../../../frontend/src/presenceProtocol';
+import {
+  NO_SHARED_WORKOUT_FILTERS,
+  sharedWorkoutFilterCount,
+  sharedWorkoutQuery,
+} from '../../../../frontend/src/sharedHistoryFilters';
 import { SHARED_WORKOUT_PAGE_SIZE } from '../../../../frontend/src/sharedProfileDisplay';
 import type {
   CommentPage,
   FriendConnections,
   FriendFeed,
   PersonalRecord,
+  SharedProfile,
+  SharedWorkoutFilters,
   SharedWorkoutKind,
   SharedWorkoutPage,
   Timeline,
@@ -26,7 +35,8 @@ import type {
   WorkoutReactions,
 } from '../../../../frontend/src/types';
 import { ApiError } from '../../data/api';
-import { socialApi } from './socialApi';
+import { sessionEpoch } from '../../session/sessionEpoch';
+import { accessRevoked, socialApi } from './socialApi';
 
 /** Every Social query sits under `social`, so a friendship change refreshes all of them. */
 export const socialKeys = {
@@ -38,8 +48,19 @@ export const socialKeys = {
   search: (term: string) => ['social', 'search', term] as const,
   suggestions: (page: number) => ['social', 'suggestions', page] as const,
   profile: (id: string) => ['social', 'profile', id] as const,
-  workouts: (id: string, kind?: SharedWorkoutKind, date?: string) =>
-    ['social', 'profile', id, 'workouts', kind ?? 'all', date ?? ''] as const,
+  lifts: (id: string) => ['social', 'profile', id, 'lifts'] as const,
+  /** One history tab's workouts; filtered lists add their filters, so no filter shares one key. */
+  workouts: (id: string, kind?: SharedWorkoutKind, filters?: SharedWorkoutFilters) =>
+    [
+      'social',
+      'profile',
+      id,
+      'workouts',
+      kind ?? 'all',
+      filters && sharedWorkoutFilterCount(filters) ? JSON.stringify(filters) : '',
+    ] as const,
+  workoutFilters: (id: string) => ['social', 'profile', id, 'workout-filters'] as const,
+  splits: (id: string) => ['social', 'profile', id, 'splits'] as const,
   workout: (workoutId: string) => ['social', 'workout', workoutId] as const,
   comments: (workoutId: string) => ['social', 'comments', workoutId] as const,
   reactionPeople: (workoutId: string) => ['social', 'reactions', workoutId] as const,
@@ -155,22 +176,151 @@ export function sharedProfileQuery(id: string) {
 }
 
 export function useSharedProfile(id: string) {
+  useMemberAccessWatch();
   return useQuery(sharedProfileQuery(id));
 }
 
-/** A profile's shared workouts, a page at a time, for one history tab or one day. */
+/** Member data under a profile's key: their lifts, workouts and anything else loaded for it. */
+function isMemberData(query: Query) {
+  const [root, scope, id] = query.queryKey;
+  return (
+    root === 'social' && scope === 'profile' && typeof id === 'string' && query.queryKey.length > 3
+  );
+}
+
+/**
+ * Where a member's refusal is kept: outside `social`, so it outlives their evicted data and a
+ * Social refresh, and in the query cache, which every sign-in and sign-out clears.
+ */
+const memberAccessKey = (id: string) => ['memberAccess', id] as const;
+
+interface MemberRefusal {
+  error: ApiError;
+  /** The session it was recorded in; a refusal never carries over to another session. */
+  epoch: number;
+}
+
+function currentRefusal(value: MemberRefusal | null | undefined) {
+  return value && value.epoch === sessionEpoch() ? value.error : null;
+}
+
+/** The server's refusal of this member's data in this session, until their profile confirms access. */
+export function memberRefusal(client: QueryClient, id: string) {
+  return currentRefusal(client.getQueryData<MemberRefusal | null>(memberAccessKey(id)));
+}
+
+/**
+ * Whether the server has said this member is off limits: a recorded refusal, or a profile that is
+ * friends-only now.
+ */
+function memberLocked(client: QueryClient, id: string) {
+  if (memberRefusal(client, id)) return true;
+  const profile = client.getQueryData<SharedProfile>(socialKeys.profile(id));
+  return profile?.can_view === false;
+}
+
+/** Drops a locked member's data that nothing on screen is using. */
+function dropLockedMemberData(client: QueryClient, id: string) {
+  if (!memberLocked(client, id)) return;
+  const cache = client.getQueryCache();
+  for (const query of cache.findAll({ queryKey: socialKeys.profile(id) })) {
+    if (isMemberData(query) && !query.isActive()) cache.remove(query);
+  }
+}
+
+const watchedClients = new WeakSet<QueryClient>();
+
+/**
+ * When the server refuses a member's profile, lifts or workouts (`403 friend_required`, `404
+ * profile_not_found` or `sharing_required`), records the refusal for this session and member, and
+ * revalidates their profile. While it stands, every view of the member hides their data (read it
+ * with `useMemberRefusal`), and their cached data is evicted as soon as no screen is using it.
+ * Later network errors don't lift it; only a freshly fetched profile that is viewable does, or a
+ * new session. Without a refusal, network errors keep the cache.
+ */
+export function watchMemberAccess(client: QueryClient) {
+  if (watchedClients.has(client)) return;
+  watchedClients.add(client);
+  client.setQueryDefaults(['memberAccess'], { gcTime: Infinity, staleTime: Infinity });
+  client.getQueryCache().subscribe((event) => {
+    const id = event.query.queryKey[2];
+    if (event.query.queryKey[0] !== 'social' || event.query.queryKey[1] !== 'profile') return;
+    if (typeof id !== 'string') return;
+    const isProfile = event.query.queryKey.length === 3;
+    if (event.type === 'updated') {
+      const { action } = event;
+      if (action.type === 'error') {
+        if (!accessRevoked(action.error)) return;
+        const refusal: MemberRefusal = { error: action.error as ApiError, epoch: sessionEpoch() };
+        client.setQueryData(memberAccessKey(id), refusal);
+        if (!isProfile) {
+          void client.invalidateQueries({ queryKey: socialKeys.profile(id), exact: true });
+        }
+      } else if (action.type === 'success') {
+        // Only the server confirming access lifts a refusal, not data written locally.
+        const viewable = isProfile && !action.manual && (action.data as SharedProfile)?.can_view;
+        if (viewable && memberRefusal(client, id)) {
+          client.setQueryData(memberAccessKey(id), null);
+        }
+      } else {
+        return;
+      }
+    } else if (event.type !== 'observerRemoved' && event.type !== 'observerOptionsUpdated') {
+      return;
+    }
+    // After the cache has finished this change, so a removal never interrupts it.
+    setTimeout(() => dropLockedMemberData(client, id), 0);
+  });
+}
+
+function useMemberAccessWatch() {
+  const client = useQueryClient();
+  useEffect(() => watchMemberAccess(client), [client]);
+}
+
+/**
+ * The server's refusal of this member's data in this session, or null. While it's set, hide
+ * everything of theirs, whatever the cache holds and whatever the latest error says.
+ */
+export function useMemberRefusal(id: string) {
+  useMemberAccessWatch();
+  const { data } = useQuery<MemberRefusal | null>({
+    queryKey: memberAccessKey(id),
+    queryFn: () => null,
+    enabled: false,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+  return currentRefusal(data);
+}
+
+/** Your best lifts beside a member's; fails silently on profiles or servers without it. */
+export function useSharedLifts(id: string, enabled: boolean) {
+  useMemberAccessWatch();
+  return useQuery({
+    queryKey: socialKeys.lifts(id),
+    queryFn: ({ signal }) => socialApi.lifts(id, signal),
+    enabled,
+    retry: false,
+  });
+}
+
+/** A profile's shared workouts, a page at a time, for one history tab and the filters set. */
 export function sharedWorkoutsQuery(
   id: string,
-  { kind, date }: { kind?: SharedWorkoutKind; date?: string } = {},
+  {
+    kind,
+    filters = NO_SHARED_WORKOUT_FILTERS,
+  }: { kind?: SharedWorkoutKind; filters?: SharedWorkoutFilters } = {},
 ) {
   return infiniteQueryOptions({
-    queryKey: socialKeys.workouts(id, kind, date),
+    queryKey: socialKeys.workouts(id, kind, filters),
     queryFn: ({ pageParam, signal }) =>
       socialApi.workouts(
         id,
         pageParam,
         SHARED_WORKOUT_PAGE_SIZE,
-        { kind, start_date: date, end_date: date },
+        sharedWorkoutQuery(filters, kind),
         signal,
       ),
     initialPageParam: 0,
@@ -184,9 +334,32 @@ export function sharedWorkoutsQuery(
 
 export function useSharedWorkouts(
   id: string,
-  { kind, date, enabled }: { kind?: SharedWorkoutKind; date?: string; enabled: boolean },
+  {
+    kind,
+    filters,
+    enabled,
+  }: { kind?: SharedWorkoutKind; filters?: SharedWorkoutFilters; enabled: boolean },
 ) {
-  return useInfiniteQuery({ ...sharedWorkoutsQuery(id, { kind, date }), enabled });
+  useMemberAccessWatch();
+  return useInfiniteQuery({ ...sharedWorkoutsQuery(id, { kind, filters }), enabled });
+}
+
+/** The exercises, machines and workout types a profile's history can be filtered by. */
+export function useSharedWorkoutFilters(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: socialKeys.workoutFilters(id),
+    queryFn: ({ signal }) => socialApi.workoutFilters(id, signal),
+    enabled,
+  });
+}
+
+/** The splits a member shows on their profile. */
+export function useProfileSplits(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: socialKeys.splits(id),
+    queryFn: ({ signal }) => socialApi.splits(id, signal),
+    enabled,
+  });
 }
 
 /** Every loaded page of a profile's workouts as one list, with their records and reactions. */

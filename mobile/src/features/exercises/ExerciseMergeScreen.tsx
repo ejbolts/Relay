@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { Stack, useRouter } from 'expo-router';
 import { useRef, useState, type ComponentRef } from 'react';
 import {
@@ -29,6 +28,7 @@ import { useTheme } from '../../ui/theme';
 import { FieldLabel, RadioRow } from '../blocks/parts';
 import { Divider, MoreButton } from '../training/parts';
 import { mergeExercise, updateExercise } from './exerciseQueries';
+import { haptics } from '../../ui/haptics';
 
 const PAGE = 20;
 
@@ -93,7 +93,7 @@ function MergeForm({
     run('merge', async () => {
       if (!source || !target || !canMergeExercises(source, target)) return;
       const kept = await mergeExercise(client, source.id, target.id);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       showToast('Exercises merged');
       // Opened from the custom exercise, which is gone now: show the one it merged into.
       if (initialSource) {

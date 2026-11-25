@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import { useCallback, useState } from 'react';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import {
   bodyGoalTarget,
   maintenanceRange,
@@ -10,14 +11,18 @@ import { dayMonth } from '../../../../frontend/src/trainingSummary';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
 import { formatWeight } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
-import { Button, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
+import { useUser } from '../../session/SessionProvider';
+import { AccountHeaderActions } from '../../ui/AccountHeaderActions';
+import { Button, Card, ErrorState, errorMessage, Loading, Screen } from '../../ui/components';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
-import { showToast } from '../../ui/Toast';
+import { pendingActions, usePendingActions } from '../../ui/pendingActions';
+import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
+import { NotificationsBell, socialRoutes } from '../social';
 import { BodyHistory } from './BodyHistory';
 import { syncBodyCheckIns } from './bodyCheckInQueue';
 import { CheckInSyncCard, MaintenanceTip } from './BodyNotices';
-import { bodyIcons } from './bodyIcons';
 import {
   bodyCheckInApi,
   bodyGoalApi,
@@ -32,54 +37,58 @@ import { GoalSheet, type GoalRequest } from './GoalSheet';
 import { clearMaintainGoalRequest, useMaintainGoalRequested } from './maintainGoalRequest';
 import { WeighInSheet } from './WeighInSheet';
 
-/** How long a removed goal can be brought back: the Undo toast's time on screen. */
-const GOAL_UNDO_MS = 5000;
 /** The goal form on Maintain, as Home's maintenance tip asks for. */
 const MAINTAIN_GOAL: GoalRequest = { goal: null, kind: 'maintain' };
 
 /**
- * Removes a goal from view at once and deletes it only when its Undo window closes, as the
- * web's goal removal does, so Undo never has to recreate it. A newer removal sends the
- * waiting one straight away.
+ * Removes a goal from view at once and deletes it only when its Undo toast ends without Undo
+ * (it times out, is dismissed or a newer toast replaces it), as the web's goal removal does, so
+ * Undo never has to recreate it and the goal is never deleted while Undo is still on screen.
  */
 function useGoalRemoval() {
   const client = useQueryClient();
-  const [pendingId, setPendingId] = useState<string | null>(null);
-  const pending = useRef<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  const commit = useCallback(() => {
-    const id = pending.current;
-    clearTimeout(timer.current);
-    if (!id) return;
-    pending.current = null;
-    bodyGoalApi.remove(id).then(
-      () => client.invalidateQueries({ queryKey: bodyKeys.goals }).then(() => setPendingId(null)),
-      () => {
-        setPendingId(null);
-        showToast('Could not remove this goal. It has been restored.');
-      },
-    );
-  }, [client]);
-  useEffect(() => commit, [commit]);
-
-  const undo = useCallback(() => {
-    clearTimeout(timer.current);
-    pending.current = null;
-    setPendingId(null);
-  }, []);
-
+  // Shared across mounts, so a Body opened again while the Undo shows still hides the goal.
+  const pendingIds = usePendingActions('goal');
   const start = useCallback(
     (goal: BodyWeightGoal) => {
-      commit();
-      pending.current = goal.id;
-      setPendingId(goal.id);
-      timer.current = setTimeout(commit, GOAL_UNDO_MS);
-      showToast('Goal removed', { label: 'Undo', run: undo });
+      const account = toastAccount();
+      const token = pendingActions.add('goal', goal.id, account);
+      if (!token) return;
+      const done = () => pendingActions.remove(token);
+      showToast(
+        'Goal removed',
+        {
+          label: 'Undo',
+          run: done,
+          onDismiss: () =>
+            void bodyGoalApi.remove(goal.id).then(
+              () => {
+                // A session that has ended keeps nothing of this; its cache is already gone.
+                if (isToastAccountCurrent(account)) {
+                  // Deleted for certain: drop it from the cache before the pending mark goes, so
+                  // a refresh that fails can't show it again.
+                  client.setQueryData<BodyWeightGoal[]>(bodyKeys.goals, (cached) =>
+                    cached?.filter((entry) => entry.id !== goal.id),
+                  );
+                }
+                done();
+                if (isToastAccountCurrent(account))
+                  void client.invalidateQueries({ queryKey: bodyKeys.goals });
+              },
+              () => {
+                done();
+                showToast('Could not remove this goal. It has been restored.', undefined, {
+                  account,
+                });
+              },
+            ),
+        },
+        { account },
+      );
     },
-    [commit, undo],
+    [client],
   );
-  return { pendingId, start };
+  return { pendingIds, start };
 }
 
 /**
@@ -87,7 +96,9 @@ function useGoalRemoval() {
  * goal, the trend, body measurements on a figure and the check-in history.
  */
 export function BodyScreen() {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
+  const router = useRouter();
+  const user = useUser();
   const client = useQueryClient();
   const unit = useWeightUnit();
   const measurementsQuery = useBodyMeasurements();
@@ -98,11 +109,21 @@ export function BodyScreen() {
   const [goalRequest, setGoalRequest] = useState<GoalRequest | null>(null);
   const maintainRequested = useMaintainGoalRequested();
   const measurements = measurementsQuery.data ?? [];
-  const goals = (goalsQuery.data ?? []).filter((goal) => goal.id !== removal.pendingId);
+  const goals = (goalsQuery.data ?? []).filter((goal) => !removal.pendingIds.includes(goal.id));
   const latest = measurements[0];
   // The newest reading, which may come from an earlier check-in than the latest weigh-in.
   const latestBodyFat = measurements.find((item) => item.body_fat_pct !== null);
   const activeGoal = goals.find((goal) => goal.active) ?? null;
+  const { width: screenWidth, fontScale } = useWindowDimensions();
+  const wideGoal = !summaryFits(
+    [
+      latest ? formatWeight(latest.weight_kg, unit) : '–',
+      activeGoal ? bodyGoalTarget(activeGoal, unit) : '–',
+      latestBodyFat ? `${latestBodyFat.body_fat_pct}%` : '–',
+    ],
+    screenWidth,
+    fontScale,
+  );
 
   async function refresh() {
     setRefreshing(true);
@@ -117,26 +138,36 @@ export function BodyScreen() {
 
   /** Deletes a check-in at once; Undo saves it back as it was. */
   function deleteCheckIn(measurement: BodyMeasurement) {
+    // The account deleting it: if the session changes before the delete answers, the result is
+    // not shown and its Undo never saves into another account.
+    const account = toastAccount();
     bodyCheckInApi.deleteBodyMeasurement(measurement.id).then(
       () => {
+        if (!isToastAccountCurrent(account)) return;
         void refreshBodyMeasurements(client);
-        showToast('Check-in deleted', {
-          label: 'Undo',
-          run: () =>
-            void bodyCheckInApi
-              .saveBodyMeasurement({
-                measurement_date: measurement.measurement_date,
-                weight_kg: measurement.weight_kg,
-                body_fat_pct: measurement.body_fat_pct,
-                notes: measurement.notes,
-              })
-              .then(
-                () => refreshBodyMeasurements(client),
-                (reason) => showToast(errorMessage(reason)),
-              ),
-        });
+        showToast(
+          'Check-in deleted',
+          {
+            label: 'Undo',
+            run: () =>
+              void bodyCheckInApi
+                .saveBodyMeasurement({
+                  measurement_date: measurement.measurement_date,
+                  weight_kg: measurement.weight_kg,
+                  body_fat_pct: measurement.body_fat_pct,
+                  notes: measurement.notes,
+                })
+                .then(
+                  () => {
+                    if (isToastAccountCurrent(account)) void refreshBodyMeasurements(client);
+                  },
+                  (reason) => showToast(errorMessage(reason), undefined, { account }),
+                ),
+          },
+          { account },
+        );
       },
-      (reason) => showToast(errorMessage(reason)),
+      (reason) => showToast(errorMessage(reason), undefined, { account }),
     );
   }
 
@@ -150,9 +181,19 @@ export function BodyScreen() {
             ? `${count} ${count === 1 ? 'check-in' : 'check-ins'}${latest ? ` · latest ${dayMonth(latest.measurement_date)}` : ''}`
             : undefined
         }
+        actions={
+          <AccountHeaderActions
+            notifications={<NotificationsBell />}
+            profile={{
+              user,
+              onPress: () => router.push(socialRoutes.profile(user.id)),
+            }}
+          />
+        }
         refreshing={refreshing}
         onRefresh={() => void refresh()}
       >
+        <CheckInSyncCard />
         {measurementsQuery.isPending ? (
           <Loading label="Loading body check-ins" />
         ) : !measurementsQuery.data ? (
@@ -162,84 +203,171 @@ export function BodyScreen() {
           />
         ) : (
           <>
-            <CheckInSyncCard />
             <MaintenanceTip
               goals={goals}
               latest={latest}
               ready={!!goalsQuery.data}
               onSetGoal={() => setGoalRequest({ goal: null, kind: 'maintain' })}
             />
-            <View style={styles.stats} accessibilityLabel="Bodyweight summary">
-              <Stat
-                label="Bodyweight"
-                value={latest ? formatWeight(latest.weight_kg, unit) : '–'}
-              />
-              {activeGoal ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Edit goal, ${bodyGoalTarget(activeGoal, unit)}`}
-                  onPress={() => setGoalRequest({ goal: activeGoal })}
-                  style={({ pressed }) => [
-                    styles.stat,
-                    {
-                      backgroundColor: colors.surface,
-                      borderRadius: radius.lg,
-                      borderColor: colors.line,
-                    },
-                    pressed && { opacity: 0.7 },
-                  ]}
-                >
-                  <View style={styles.statLabel}>
-                    <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
-                      {new Date(`${activeGoal.target_date}T12:00:00`).toLocaleDateString(
-                        undefined,
-                        {
-                          month: 'long',
-                        },
-                      )}{' '}
-                      goal
-                    </Text>
-                    <Icon name="chevronRight" size={11} color={colors.muted} />
+            <Card
+              style={[styles.statsCard, wideGoal && styles.statsCardStacked]}
+              accessibilityLabel="Bodyweight summary"
+            >
+              {wideGoal ? (
+                <>
+                  <View style={styles.statsRow}>
+                    <Stat
+                      label="Bodyweight"
+                      value={latest ? formatWeight(latest.weight_kg, unit) : '–'}
+                    />
+                    <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
+                    <Stat
+                      label="Body fat"
+                      value={latestBodyFat ? `${latestBodyFat.body_fat_pct}%` : '–'}
+                      detail={
+                        latestBodyFat && latestBodyFat !== latest
+                          ? dayMonth(latestBodyFat.measurement_date)
+                          : undefined
+                      }
+                    />
                   </View>
-                  <Text
-                    style={[type.headline, type.number, { color: colors.text }]}
-                    numberOfLines={1}
-                    adjustsFontSizeToFit
-                  >
-                    {bodyGoalTarget(activeGoal, unit)}
-                  </Text>
-                  {latest && maintenanceRange(activeGoal) && (
-                    <Text style={[type.caption, { color: colors.secondary }]}>
-                      {maintenanceStatus(activeGoal, latest.weight_kg)}
-                    </Text>
+                  <View style={[styles.statRule, { backgroundColor: colors.line }]} />
+                  {activeGoal ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit goal, ${bodyGoalTarget(activeGoal, unit)}`}
+                      onPress={() => {
+                        haptics.tap();
+                        setGoalRequest({ goal: activeGoal });
+                      }}
+                      style={({ pressed }) => [
+                        styles.stat,
+                        pressed && { backgroundColor: colors.surface2 },
+                      ]}
+                    >
+                      <View style={styles.statLabel}>
+                        <Text
+                          style={[type.caption, { color: colors.muted, fontWeight: '600' }]}
+                          numberOfLines={1}
+                        >
+                          {new Date(`${activeGoal.target_date}T12:00:00`).toLocaleDateString(
+                            undefined,
+                            {
+                              month: 'long',
+                            },
+                          )}{' '}
+                          goal
+                        </Text>
+                        <Icon name="chevronRight" size={12} color={colors.muted} />
+                      </View>
+                      <Text
+                        style={[type.title, type.number, { color: colors.text }]}
+                        {...(wideGoal
+                          ? {}
+                          : {
+                              numberOfLines: 1,
+                              adjustsFontSizeToFit: true,
+                              minimumFontScale: 0.75,
+                            })}
+                      >
+                        {bodyGoalTarget(activeGoal, unit)}
+                      </Text>
+                      {latest && maintenanceRange(activeGoal) && (
+                        <Text
+                          style={[type.caption, { color: colors.muted }]}
+                          numberOfLines={wideGoal ? undefined : 1}
+                        >
+                          {maintenanceStatus(activeGoal, latest.weight_kg)}
+                        </Text>
+                      )}
+                    </Pressable>
+                  ) : (
+                    <Stat label="Weight goal" value="–" />
                   )}
-                </Pressable>
+                </>
               ) : (
-                <Stat label="Weight goal" value="–" />
+                <>
+                  <Stat
+                    label="Bodyweight"
+                    value={latest ? formatWeight(latest.weight_kg, unit) : '–'}
+                  />
+                  <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
+                  {activeGoal ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Edit goal, ${bodyGoalTarget(activeGoal, unit)}`}
+                      onPress={() => {
+                        haptics.tap();
+                        setGoalRequest({ goal: activeGoal });
+                      }}
+                      style={({ pressed }) => [
+                        styles.stat,
+                        pressed && { backgroundColor: colors.surface2 },
+                      ]}
+                    >
+                      <View style={styles.statLabel}>
+                        <Text
+                          style={[type.caption, { color: colors.muted, fontWeight: '600' }]}
+                          numberOfLines={1}
+                        >
+                          {new Date(`${activeGoal.target_date}T12:00:00`).toLocaleDateString(
+                            undefined,
+                            {
+                              month: 'long',
+                            },
+                          )}{' '}
+                          goal
+                        </Text>
+                        <Icon name="chevronRight" size={12} color={colors.muted} />
+                      </View>
+                      <Text
+                        style={[type.title, type.number, { color: colors.text }]}
+                        {...(wideGoal
+                          ? {}
+                          : {
+                              numberOfLines: 1,
+                              adjustsFontSizeToFit: true,
+                              minimumFontScale: 0.75,
+                            })}
+                      >
+                        {bodyGoalTarget(activeGoal, unit)}
+                      </Text>
+                      {latest && maintenanceRange(activeGoal) && (
+                        <Text
+                          style={[type.caption, { color: colors.muted }]}
+                          numberOfLines={wideGoal ? undefined : 1}
+                        >
+                          {maintenanceStatus(activeGoal, latest.weight_kg)}
+                        </Text>
+                      )}
+                    </Pressable>
+                  ) : (
+                    <Stat label="Weight goal" value="–" />
+                  )}
+                  <View style={[styles.statDivider, { backgroundColor: colors.line }]} />
+                  <Stat
+                    label="Body fat"
+                    value={latestBodyFat ? `${latestBodyFat.body_fat_pct}%` : '–'}
+                    detail={
+                      latestBodyFat && latestBodyFat !== latest
+                        ? dayMonth(latestBodyFat.measurement_date)
+                        : undefined
+                    }
+                  />
+                </>
               )}
-              <Stat
-                label="Body fat"
-                value={latestBodyFat ? `${latestBodyFat.body_fat_pct}%` : '–'}
-                detail={
-                  latestBodyFat && latestBodyFat !== latest
-                    ? dayMonth(latestBodyFat.measurement_date)
-                    : undefined
-                }
-              />
-            </View>
+            </Card>
             <View style={styles.actions}>
               <Button
                 label="Log weigh-in"
-                icon={bodyIcons.scale}
                 onPress={() => setEntry({ editing: null })}
                 style={{ flex: 1 }}
               />
               <Button
                 label={activeGoal ? 'New goal' : 'Set a goal'}
                 variant="secondary"
-                icon={bodyIcons.flag}
                 onPress={() => setGoalRequest({ goal: null })}
-                style={{ flex: 1 }}
+                style={{ flex: 1, backgroundColor: colors.surface }}
               />
             </View>
             {count > 1 && <BodyTrendChart measurements={measurements} goals={goals} />}
@@ -275,41 +403,59 @@ export function BodyScreen() {
   );
 }
 
+/**
+ * Whether the three summary values fit side by side at this width and text size: each third of
+ * the card leaves its value about (screen − gutters) / 3 − insets, and 22 pt figures average
+ * about 12 pt a character, down to the 0.75 minimum scale. A long maintenance range in pounds
+ * ("176.4–198.4 lb") on a narrow phone or with larger text doesn't, so its goal gets a full row.
+ */
+export function summaryFits(values: string[], screenWidth: number, fontScale: number) {
+  const cell = (screenWidth - 28) / 3 - 28;
+  const longest = Math.max(...values.map((value) => value.length));
+  return longest * 12 * fontScale * 0.75 <= cell;
+}
+
 function Stat({ label, value, detail }: { label: string; value: string; detail?: string }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   return (
     <View
       accessible
       accessibilityLabel={`${label}: ${value}${detail ? `, ${detail}` : ''}`}
-      style={[
-        styles.stat,
-        { backgroundColor: colors.surface, borderRadius: radius.lg, borderColor: colors.line },
-      ]}
+      style={styles.stat}
     >
-      <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
+      <Text style={[type.caption, { color: colors.muted, fontWeight: '600' }]} numberOfLines={1}>
         {label}
       </Text>
       <Text
-        style={[type.headline, type.number, { color: colors.text }]}
+        style={[type.title, type.number, { color: colors.text }]}
         numberOfLines={1}
         adjustsFontSizeToFit
+        minimumFontScale={0.75}
       >
         {value}
       </Text>
-      {!!detail && <Text style={[type.caption, { color: colors.secondary }]}>{detail}</Text>}
+      {!!detail && (
+        <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
+          {detail}
+        </Text>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  stats: { flexDirection: 'row', gap: 8 },
+  statsCard: { flexDirection: 'row', padding: 0, gap: 0, overflow: 'hidden' },
+  statsCardStacked: { flexDirection: 'column' },
+  statsRow: { flexDirection: 'row' },
+  statRule: { height: StyleSheet.hairlineWidth },
+  statDivider: { width: StyleSheet.hairlineWidth, alignSelf: 'stretch' },
   stat: {
     flex: 1,
     minWidth: 0,
-    padding: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
     gap: 4,
-    borderWidth: StyleSheet.hairlineWidth,
   },
-  statLabel: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  actions: { flexDirection: 'row', gap: 10 },
+  statLabel: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  actions: { flexDirection: 'row', gap: 8 },
 });

@@ -1,6 +1,5 @@
-import * as Haptics from 'expo-haptics';
 import { useEffect, useRef, useState, type ComponentProps } from 'react';
-import { Platform, StyleSheet, Switch, Text, View, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 import type Svg from 'react-native-svg';
 import { SvgXml } from 'react-native-svg';
 import type { TrackedWorkout } from '../../../../frontend/src/types';
@@ -14,9 +13,9 @@ import {
 } from '../../../../frontend/src/workoutCardDrawing';
 import { useWeightUnit } from '../../data/queries';
 import { Button, errorMessage } from '../../ui/components';
+import { Segmented, Switch } from '../../ui/controls';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
-import { Segmented } from '../training/parts';
 import { socialIcons } from './icons';
 import {
   exportWorkoutCsv,
@@ -128,8 +127,13 @@ export function ShareWorkoutSheet({
         accessibilityRole="image"
         style={[
           styles.preview,
-          { width: previewWidth, height: previewHeight, borderRadius: radius.lg },
-          { backgroundColor: colors.surface2 },
+          {
+            width: previewWidth,
+            height: previewHeight,
+            borderRadius: radius.lg,
+            backgroundColor: colors.surface2,
+            borderColor: colors.line,
+          },
         ]}
       >
         {svg !== null && <SvgXml {...xmlProps} />}
@@ -175,6 +179,7 @@ export function ShareWorkoutSheet({
         <Button
           label={action === 'share' ? 'Sharing…' : 'Share image'}
           icon={socialIcons.share}
+          loading={action === 'share'}
           disabled={busy || svg === null}
           onPress={shareImage}
         />
@@ -182,6 +187,7 @@ export function ShareWorkoutSheet({
           <Button
             label={action === 'export' ? 'Exporting…' : 'Export CSV'}
             variant="secondary"
+            loading={action === 'export'}
             disabled={busy}
             onPress={() => void exportCsv()}
           />
@@ -211,23 +217,12 @@ function ToggleRow({
       {!!detail && (
         <Text style={[type.callout, type.number, { color: colors.secondary }]}>{detail}</Text>
       )}
-      <Switch
-        accessibilityLabel={label}
-        value={value}
-        disabled={disabled}
-        onValueChange={(next) => {
-          void Haptics.selectionAsync();
-          onChange(next);
-        }}
-        trackColor={{ true: colors.good, false: colors.surface3 }}
-        thumbColor={Platform.OS === 'android' ? '#ffffff' : undefined}
-        ios_backgroundColor={colors.surface3}
-      />
+      <Switch accessibilityLabel={label} value={value} disabled={disabled} onChange={onChange} />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  preview: { alignSelf: 'center', overflow: 'hidden' },
+  preview: { alignSelf: 'center', overflow: 'hidden', borderWidth: 1 },
   toggle: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
 });

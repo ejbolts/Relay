@@ -21,6 +21,72 @@ export function shiftMonth(month: MonthKey, delta: number): MonthKey {
 }
 
 /**
+ * The page a horizontal pager settled on, from its scroll event. In a right-to-left layout the
+ * first page sits at the right, so the offset is measured from there, as React Native's own
+ * lists do.
+ */
+export function settledPage(
+  {
+    contentOffset,
+    contentSize,
+    layoutMeasurement,
+  }: {
+    contentOffset: { x: number };
+    contentSize: { width: number };
+    layoutMeasurement: { width: number };
+  },
+  rtl: boolean,
+  count: number,
+): number {
+  const width = layoutMeasurement.width;
+  if (width <= 0 || count <= 0) return 0;
+  const offset = rtl ? contentSize.width - (contentOffset.x + width) : contentOffset.x;
+  return Math.max(0, Math.min(count - 1, Math.round(offset / width)));
+}
+
+/** History grouped by month once, so each month's page reads only its own days. */
+export function entriesByMonth(
+  entries: readonly HeatmapDay[],
+): ReadonlyMap<MonthKey, HeatmapDay[]> {
+  const months = new Map<MonthKey, HeatmapDay[]>();
+  for (const entry of entries) {
+    const key = monthOf(entry.workout_date);
+    const list = months.get(key);
+    if (list) list.push(entry);
+    else months.set(key, [entry]);
+  }
+  return months;
+}
+
+/**
+ * Month views built at most once each for one set of inputs: the pager's pages and the legend
+ * share the month on show.
+ */
+export function monthViews(
+  options: Omit<Parameters<typeof calendarMonthView>[0], 'month' | 'entries'> & {
+    byMonth: ReadonlyMap<MonthKey, HeatmapDay[]>;
+  },
+): (month: MonthKey) => CalendarMonthView {
+  const { byMonth, ...rest } = options;
+  const views = new Map<MonthKey, CalendarMonthView>();
+  return (month) => {
+    let view = views.get(month);
+    if (!view) {
+      view = calendarMonthView({ ...rest, month, entries: byMonth.get(month) ?? [] });
+      views.set(month, view);
+    }
+    return view;
+  };
+}
+
+/** Every month from `first` to `last`, oldest first: the pages of the calendar's month pager. */
+export function monthsBetween(first: MonthKey, last: MonthKey): MonthKey[] {
+  const months: MonthKey[] = [];
+  for (let month = first; month <= last; month = shiftMonth(month, 1)) months.push(month);
+  return months;
+}
+
+/**
  * The months the calendar pages through: from the oldest workout the account has (or the oldest
  * day loaded) up to the current month, as the web's calendar scrolls.
  */

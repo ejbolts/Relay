@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .models import ClipUploadStatus, SessionStatus
-from .push_security import validate_push_endpoint
+from .push_security import validate_expo_push_token, validate_push_endpoint
 
 
 class SessionCreate(BaseModel):
@@ -102,6 +103,32 @@ class PushSubscriptionCreate(BaseModel):
 
 class PushSubscriptionDelete(BaseModel):
     endpoint: str = Field(min_length=1, max_length=2_000)
+
+
+class ExpoPushTokenCreate(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+    platform: Literal["ios", "android"] | None = None
+    # Alert kinds this app schedules on the phone itself. Unknown kinds are kept but unused.
+    local_alerts: list[str] = Field(default_factory=list, max_length=10)
+
+    _token = field_validator("token")(validate_expo_push_token)
+
+    @field_validator("local_alerts")
+    @classmethod
+    def short_kinds(cls, value: list[str]) -> list[str]:
+        return sorted({kind for kind in value if 0 < len(kind) <= 40})
+
+
+class ExpoPushTokenDelete(BaseModel):
+    token: str = Field(min_length=1, max_length=200)
+
+
+class ExpoLocalReminderUpdate(BaseModel):
+    """The "Still working out?" reminder the phone has scheduled, or none (both null)."""
+
+    token: str = Field(min_length=1, max_length=200)
+    workout_started_at: str | None = Field(default=None, max_length=30)
+    due_at_ms: int | None = Field(default=None, ge=0)
 
 
 class RestTimerNotificationCreate(BaseModel):

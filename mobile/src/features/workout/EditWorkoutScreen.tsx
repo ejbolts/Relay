@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineAliases } from '../../../../frontend/src/exerciseHistory';
+import { bodyweightOn, savedWorkoutBodyweight } from '../../../../frontend/src/relativeStrength';
 import type { SetKind } from '../../../../frontend/src/setFieldValues';
 import type { Exercise, TrackedWorkout, WorkoutInput } from '../../../../frontend/src/types';
 import {
@@ -36,7 +37,7 @@ import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prom
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
 import { DateField, TimeField } from '../body/DateField';
-import { useSavedWorkout } from '../training/trainingQueries';
+import { useBodyMeasurements, useSavedWorkout } from '../training/trainingQueries';
 import { ExercisePicker } from './ExercisePicker';
 import {
   addExercises,
@@ -56,7 +57,6 @@ import {
   setMachineSettings,
   setMovementNotes,
   setSetKind,
-  swapExercise,
   updateSet,
   workoutIdentity,
   type EditTimes,
@@ -65,6 +65,7 @@ import {
 import { MachineSheet } from './MachineSheet';
 import { MovementCard, type MovementActions } from './MovementCard';
 import { SwapSheet } from './SwapSheet';
+import { swapOntoMachine } from './swapMachineSetup';
 import { useLogger, type LoggerApi } from './WorkoutProvider';
 
 /**
@@ -237,6 +238,16 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
     () => new Set(state.movements.map((movement) => movement.exercise.id)),
     [state.movements],
   );
+  // The bodyweight the workout was logged at, taken from it as opened (as the web's editor does),
+  // so removing a set mid-edit changes nothing; the day's weigh-in only for workouts saved
+  // without one. A set's own snapshot always wins over this.
+  const [openedBodyweight] = useState(() => savedWorkoutBodyweight(workout));
+  const measurements = useBodyMeasurements().data;
+  const bodyweight = bodyweightOn(measurements ?? [], state.workoutDate, openedBodyweight);
+  const bodyweightRef = useRef(bodyweight);
+  useEffect(() => {
+    bodyweightRef.current = bodyweight;
+  }, [bodyweight]);
   const swapMovement = state.movements.find((item) => item.key === swapping) ?? null;
   const machineMovement = state.movements.find((item) => item.key === machinesFor) ?? null;
 
@@ -291,7 +302,7 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
           (latest) =>
             updateSet(latest, movementKey, setKey, values, {
               addedByHand: true,
-              workoutBodyweight: null,
+              workoutBodyweight: bodyweightRef.current,
               editing: true,
             }).state,
         ),
@@ -307,8 +318,8 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         change((latest) => deleteSet(latest, movementKey, setKey));
       },
-      moveSet: (movementKey, from, to) =>
-        change((latest) => moveSet(latest, movementKey, from, to)),
+      moveSet: (movementKey, setKey, move) =>
+        change((latest) => moveSet(latest, movementKey, setKey, move)),
       setKind: (movementKey, setKey, kind: SetKind) =>
         change((latest) => setSetKind(latest, movementKey, setKey, kind)),
       completeExercise: (movementKey, isComplete) =>
@@ -525,14 +536,16 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
             style={[type.body, styles.notes, { color: colors.text, borderColor: colors.line }]}
           />
         </View>
-        {state.movements.map((movement) => (
+        {state.movements.map((movement, index) => (
           <MovementCard
             key={movement.key}
+            number={index + 1}
             movement={movement}
             supersetNames={supersetNames(movement.supersetKey)}
             history={history}
             excludedWorkoutId={workout.id}
             workoutDate={state.workoutDate}
+            bodyweight={bodyweight}
             weightUnit={weightUnit}
             skipHighRepWarning={state.skipHighRepWarning}
             actions={actions}
@@ -555,7 +568,8 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         lastDone={new Map()}
         onChoose={(replacement: Exercise) => {
           const key = swapping;
-          if (key) change((latest) => swapExercise(latest, key, replacement, context));
+          // Every swap goes through one path, so a newer swap supersedes an older one's loads.
+          if (key) void swapOntoMachine(change, key, replacement, context, {}, workout.id);
           setSwapping(null);
         }}
         onBrowseAll={() => {
@@ -605,10 +619,19 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         addedIds={addedIds}
         category={identity.category}
         chooseMachines
-        onAdd={(selected, machineChoices) => {
+        onAdd={(selected, machineChoices, machineUse) => {
           const target = picker?.swapping;
           if (target) {
-            if (selected[0]) change((latest) => swapExercise(latest, target, selected[0], context));
+            if (selected[0])
+              void swapOntoMachine(
+                change,
+                target,
+                selected[0],
+                context,
+                machineChoices,
+                workout.id,
+                machineUse,
+              );
           } else change((latest) => addExercises(latest, selected, context, machineChoices));
         }}
         onCreateSuperset={(selected, machineChoices) =>

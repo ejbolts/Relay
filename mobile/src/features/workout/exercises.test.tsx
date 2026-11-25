@@ -30,7 +30,11 @@ import {
   startedAt,
   types,
 } from './testFixtures';
-import { takeLaunchReminder, syncInactiveReminder } from './workoutReminders';
+import {
+  onWorkoutReminderOpened,
+  syncInactiveReminder,
+  takeLaunchReminder,
+} from './workoutReminders';
 import { useWorkout, WorkoutProvider } from './WorkoutProvider';
 import { WorkoutSheet } from './WorkoutSheet';
 
@@ -52,6 +56,13 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => children,
 }));
+jest.mock('react-native-gesture-handler', () => ({
+  ...jest.requireActual<typeof import('react-native-gesture-handler')>(
+    'react-native-gesture-handler',
+  ),
+  usePanGesture: (config: unknown) => config,
+  GestureDetector: ({ children }: { children: ReactNode }) => children,
+}));
 jest.mock('./restAlerts', () => ({
   askForRestAlerts: jest.fn(async () => undefined),
   syncRestAlert: jest.fn(async () => undefined),
@@ -61,13 +72,22 @@ jest.mock('./workoutReminders', () => ({
   syncInactiveReminder: jest.fn(async () => undefined),
   takeLaunchReminder: jest.fn(async () => undefined),
   onWorkoutReminderOpened: jest.fn(() => () => undefined),
+  holdReminder: jest.requireActual('./workoutReminders').holdReminder,
+  takeHeldReminder: jest.requireActual('./workoutReminders').takeHeldReminder,
 }));
 jest.mock('../../ui/prompts', () => ({
   promptText: jest.fn(),
   showMenu: jest.fn(),
   PromptHost: () => null,
 }));
-jest.mock('../../ui/Toast', () => ({ showToast: jest.fn(), ToastHost: () => null }));
+jest.mock('../../ui/Toast', () => ({
+  showToast: jest.fn(),
+  ToastHost: () => null,
+  toastShowing: () => false,
+  toastAccount: () => 'u1',
+  toastAccountFor: () => 'u1',
+  isToastAccountCurrent: () => true,
+}));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
@@ -124,7 +144,7 @@ beforeEach(() => {
 });
 afterEach(() => client?.clear());
 
-async function openLogger() {
+async function openLogger(beforeStart?: () => void) {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   const captured: { start?: ReturnType<typeof useWorkout>['start'] } = {};
   function Probe() {
@@ -147,6 +167,7 @@ async function openLogger() {
   );
   await waitFor(() => expect(currentUser).toHaveBeenCalled());
   await waitFor(() => expect(captured.start).toBeDefined());
+  if (beforeStart) await act(async () => beforeStart());
   await act(async () => captured.start!({ kind: 'up-next' }));
   expect(await screen.findByText('Bench Press')).toBeVisible();
 }
@@ -209,8 +230,32 @@ describe('swapping an exercise', () => {
     expect(screen.getByText('2 planned sets move across')).toBeVisible();
     // Nothing in the sample library trains the same muscles, so browse every exercise.
     expect(screen.getByText('No close alternatives')).toBeVisible();
+    // The saved machines: one, for another exercise, so the list shows once they have loaded.
+    jest.mocked(apiGet).mockImplementation(async (path: string) =>
+      path === '/api/machine-photos'
+        ? [
+            {
+              id: 'rower',
+              exercise_id: 'row',
+              caption: 'Concept rower',
+              thumbnail_url: '',
+              full_url: '',
+              width: 1,
+              height: 1,
+              created_at: '',
+              exercise_name: 'Rowing Machine',
+              workout_count: 1,
+              last_used_date: '2026-11-18',
+            },
+          ]
+        : [],
+    );
     await fireEvent.press(screen.getByRole('button', { name: 'Browse all exercises' }));
     expect(screen.getByText('Swap exercise')).toBeVisible();
+    // One tap swaps once the saved machines are known to have none for it.
+    expect(
+      await screen.findByRole('button', { name: 'Show machines for Rowing Machine' }),
+    ).toBeVisible();
     await fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' }));
     expect(screen.getByText('Swapped from Bench Press')).toBeVisible();
     expect(readActiveWorkoutDraft(deviceStorage)?.movements.map((item) => item.exerciseId)).toEqual(
@@ -460,13 +505,14 @@ describe('picking exercises', () => {
   it('adds two or more picks as a superset', async () => {
     jest.mocked(apiGet).mockImplementation(async () => []);
     const { onCreateSuperset } = await openPicker();
-    const add = screen.getByRole('button', { name: 'Add superset' });
-    expect(add).toBeDisabled();
+    // The superset bar only appears once there are two picks to group.
+    expect(screen.queryByRole('button', { name: 'Add superset' })).toBeNull();
     await act(async () =>
       fireEvent.press(screen.getByRole('checkbox', { name: 'Overhead Press' })),
     );
+    expect(screen.queryByRole('button', { name: 'Add superset' })).toBeNull();
     await act(async () => fireEvent.press(screen.getByRole('checkbox', { name: 'Bench Press' })));
-    await act(async () => fireEvent.press(add));
+    await act(async () => fireEvent.press(screen.getByRole('button', { name: 'Add superset' })));
     expect(onCreateSuperset).toHaveBeenCalledWith([press, bench], {});
   });
 
@@ -553,6 +599,18 @@ describe('the Still working out? reminder', () => {
   it('opens the logger when it launched the app for this workout', async () => {
     jest.mocked(takeLaunchReminder).mockResolvedValue(null);
     await openLogger();
+    await waitFor(() => expect(mockRouter.push).toHaveBeenCalledTimes(2));
+    expect(mockRouter.push).toHaveBeenLastCalledWith('/workout');
+  });
+
+  it('opens a reminder tapped before its workout had loaded once it loads', async () => {
+    await openLogger(() => {
+      // Relay was running but had no workout yet, as when it was started on the web.
+      const opened = jest.mocked(onWorkoutReminderOpened).mock.calls.at(-1)![0];
+      opened(null);
+      expect(mockRouter.push).not.toHaveBeenCalledWith('/workout');
+    });
+    // Once by starting the workout, once more by the held reminder.
     await waitFor(() => expect(mockRouter.push).toHaveBeenCalledTimes(2));
     expect(mockRouter.push).toHaveBeenLastCalledWith('/workout');
   });

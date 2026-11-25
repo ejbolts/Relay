@@ -50,12 +50,15 @@ export const videoApi = {
     apiSend<WorkoutSession>(`${session(id)}/retry-youtube-processing`, 'POST'),
   cancel: (id: string) => apiSend<WorkoutSession>(`${session(id)}/cancel`, 'POST'),
   remove: (id: string) => apiSend<void>(session(id), 'DELETE'),
+  removeWithToken: (id: string, token: string, signal?: AbortSignal) =>
+    apiSend<void>(session(id), 'DELETE', undefined, signal, token),
   /** Streams one clip from its file, with the web's form fields; `stop` cancels it. */
   uploadClip: (
     sessionId: string,
     clip: PhoneClip,
     orderIndex: number,
     onProgress: (percent: number) => void,
+    token?: string,
   ) =>
     startClipUpload(
       `${session(sessionId)}/clips`,
@@ -66,6 +69,7 @@ export const videoApi = {
         exercise_label: clip.exerciseLabel,
       },
       onProgress,
+      token,
     ),
 };
 

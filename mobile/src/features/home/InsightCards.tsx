@@ -177,10 +177,13 @@ export function ExerciseSpotlightCard({ settings }: { settings: ExerciseSpotligh
             label="Progress"
             onPress={() =>
               summary
-                ? router.push({
-                    pathname: '/training/exercise/[id]',
-                    params: { id: summary.exercise_id },
-                  })
+                ? router.push(
+                    {
+                      pathname: '/training/exercise/[id]',
+                      params: { id: summary.exercise_id },
+                    },
+                    { withAnchor: true },
+                  )
                 : router.navigate(trainingRoute('exercises'))
             }
           />

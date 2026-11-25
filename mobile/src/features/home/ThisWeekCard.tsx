@@ -139,7 +139,7 @@ export function ThisWeekCard({
 }
 
 const styles = StyleSheet.create({
-  strip: { flexDirection: 'row', gap: 6 },
+  strip: { flexDirection: 'row', gap: 8 },
   slot: { flex: 1, minWidth: 0 },
   todayOutline: {
     position: 'absolute',

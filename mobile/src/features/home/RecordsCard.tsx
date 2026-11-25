@@ -53,10 +53,13 @@ export function RecordsCard() {
                   .filter(Boolean)
                   .join(', ')}
                 onPress={() =>
-                  router.push({
-                    pathname: '/training/exercise/[id]',
-                    params: { id: record.exercise_id },
-                  })
+                  router.push(
+                    {
+                      pathname: '/training/exercise/[id]',
+                      params: { id: record.exercise_id },
+                    },
+                    { withAnchor: true },
+                  )
                 }
                 style={({ pressed }) => [
                   styles.row,

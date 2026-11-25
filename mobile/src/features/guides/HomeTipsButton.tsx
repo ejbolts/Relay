@@ -16,24 +16,26 @@ import { useUser } from '../../session/SessionProvider';
 import { Button } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
+import { haptics } from '../../ui/haptics';
 import { useTheme } from '../../ui/theme';
 import { useBodyGoals, useBodyMeasurements } from '../body/bodyQueries';
 import { useTrainingBlocks } from '../blocks';
 import { guideIcons } from './icons';
 import { SetupGuideSheet } from './SetupGuideSheet';
+import { tipPillColors } from './tipPill';
 import { openTipTarget } from './tipTargets';
 import { useTips } from './tips';
 
 /**
- * The web's tips at the end of Home's date line, beside Home's header buttons: amber with a count
- * while tips are unread, grey once read. Each tip opens its feature, or its setup guide first.
+ * The web's tips pill at the end of Home's date line: amber with a count while tips are unread,
+ * grey once read. Each tip opens its feature, or its setup guide first.
  */
 export function HomeTipsButton() {
   const router = useRouter();
   const user = useUser();
   const tips = useTips();
   const { learn, readHome } = tips;
-  const { colors, type } = useTheme();
+  const { colors, scheme, type } = useTheme();
   const workouts = useWorkoutHistory().data;
   const blocks = useTrainingBlocks();
   const hasSplit = !!useDashboard().data?.recommendation?.split_name;
@@ -103,30 +105,50 @@ export function HomeTipsButton() {
     });
   };
   const amber = unread.length > 0;
+  const pill = tipPillColors(colors, scheme, amber);
   return (
     <>
+      {/* The web's pill at the end of the date line: amber with the count while tips are unread.
+          The 22 pt pill sits centred in a real 44 x 44 pt (or wider) touch box. */}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={amber ? `Tips, ${unread.length} new` : 'Tips'}
-        hitSlop={6}
-        onPress={toggle}
-        style={({ pressed }) => [
-          styles.bulb,
-          { backgroundColor: amber ? colors.goldSoft : colors.surface2 },
-          pressed && { opacity: 0.7 },
-        ]}
+        onPress={() => {
+          haptics.tap();
+          toggle();
+        }}
+        style={styles.pillTouch}
       >
-        <Icon name={guideIcons.bulb} size={19} color={amber ? colors.gold : colors.text} />
-        {amber && (
-          <View style={[styles.badge, { backgroundColor: colors.gold, borderColor: colors.page }]}>
-            <Text style={styles.badgeText}>{homeTipCount(unread.length)}</Text>
+        {({ pressed }) => (
+          <View style={[styles.pill, { backgroundColor: pill.fill }, pressed && { opacity: 0.7 }]}>
+            <Icon name={guideIcons.bulb} size={14} color={pill.ink} />
+            <Text style={[styles.pillText, { color: pill.ink }]}>
+              {amber ? homeTipCount(unread.length) : 'Tips'}
+            </Text>
           </View>
         )}
       </Pressable>
-      <Sheet visible={showing} title={tip.title} kicker="TIP" onClose={() => setOpen(false)}>
+      <Sheet visible={showing} title={tip.title} onClose={() => setOpen(false)}>
         <Text style={[type.body, { color: colors.secondary }]}>{tip.body}</Text>
         {current && (guideId || action) && (
-          <Button label={guideId ? 'Show me how' : action!.label} onPress={run} />
+          // The web's full-width action with a trailing chevron: it opens somewhere else.
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => {
+              haptics.tap();
+              run();
+            }}
+            style={({ pressed }) => [
+              styles.action,
+              { backgroundColor: colors.accent },
+              pressed && { opacity: 0.8 },
+            ]}
+          >
+            <Text style={[type.button, { color: colors.onAccent }]}>
+              {guideId ? 'Show me how' : action!.label}
+            </Text>
+            <Icon name="chevronRight" size={15} color={colors.onAccent} />
+          </Pressable>
         )}
         <View style={styles.footer}>
           {current && eligible.length > 1 && (
@@ -140,7 +162,7 @@ export function HomeTipsButton() {
                   key={id}
                   style={[
                     styles.dot,
-                    { backgroundColor: id === current ? colors.accent : colors.surface3 },
+                    { backgroundColor: id === current ? colors.gold : colors.lineStrong },
                   ]}
                 />
               ))}
@@ -172,23 +194,30 @@ export function HomeTipsButton() {
 }
 
 const styles = StyleSheet.create({
-  // Like the bell beside it: a round button, with the count of new tips as a badge.
-  bulb: { width: 38, height: 38, borderRadius: 19, alignItems: 'center', justifyContent: 'center' },
-  badge: {
-    position: 'absolute',
-    top: -4,
-    right: -6,
-    minWidth: 18,
-    height: 18,
-    borderRadius: 9,
-    borderWidth: 2,
-    paddingHorizontal: 3,
+  pillTouch: { minWidth: 44, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  // 22 pt at the default size; grows with large text instead of clipping the count.
+  pill: {
+    minHeight: 22,
+    paddingVertical: 2,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingLeft: 6,
+    paddingRight: 8,
+    borderRadius: 999,
+  },
+  pillText: { fontSize: 12, fontWeight: '700', fontVariant: ['tabular-nums'] },
+  action: {
+    minHeight: 44,
+    borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
   },
-  badgeText: { color: '#fff', fontSize: 10, fontWeight: '700' },
   footer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   dots: { flexDirection: 'row', gap: 5 },
-  dot: { width: 7, height: 7, borderRadius: 4 },
+  dot: { width: 6, height: 6, borderRadius: 3 },
   footerActions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto' },
 });

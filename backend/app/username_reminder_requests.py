@@ -112,6 +112,7 @@ def request_username_reminder(
             user_id=user_id,
             title="Username request",
             body=f"{display_name} asked for their username: @{username}.",
+            native_body="Someone asked for their username.",
             tag=f"username-reminder-{user_id}",
         )
 

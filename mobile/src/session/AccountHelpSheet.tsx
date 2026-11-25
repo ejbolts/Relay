@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Keyboard, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Keyboard, StyleSheet, Text, View } from 'react-native';
 import type { AccountHelpRequest } from '../../../frontend/src/accountHelpRequests';
 import { authErrorText } from '../../../frontend/src/authRules';
 import { ApiError, request } from '../data/api';
 import { Button, errorMessage } from '../ui/components';
+import { TextField } from '../ui/controls';
 import { Icon } from '../ui/Icon';
 import { Sheet } from '../ui/Sheet';
 import { useTheme } from '../ui/theme';
@@ -58,7 +59,7 @@ function AccountHelpForm({
   initialValue: string;
   onClose: () => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const [value, setValue] = useState(initialValue.trim());
   const [sending, setSending] = useState(false);
   const [sentFor, setSentFor] = useState<string | null>(null);
@@ -90,7 +91,7 @@ function AccountHelpForm({
     return (
       <>
         <View accessibilityRole="summary" style={styles.sent}>
-          <View style={[styles.sentIcon, { backgroundColor: colors.surface2 }]}>
+          <View style={[styles.sentIcon, { backgroundColor: colors.accentSoft }]}>
             <Icon name="check" size={18} color={colors.good} />
           </View>
           <View style={{ flex: 1, gap: 4 }}>
@@ -98,64 +99,50 @@ function AccountHelpForm({
             <Text style={[type.callout, { color: colors.secondary }]}>{help.sentMessage}</Text>
           </View>
         </View>
-        <Button label="Done" onPress={onClose} />
+        <Button label="Done" block onPress={onClose} />
       </>
     );
   }
   return (
     <>
-      <View style={{ gap: 8 }}>
-        <Text style={[type.callout, { color: colors.secondary }]}>{help.label}</Text>
-        <TextInput
-          style={[
-            styles.input,
-            {
-              color: colors.text,
-              backgroundColor: colors.surface2,
-              borderColor: fieldError ? colors.danger : colors.lineStrong,
-              borderRadius: radius.md,
-            },
-          ]}
-          accessibilityLabel={help.label}
-          autoFocus
-          autoCapitalize={help.autoCapitalize}
-          autoCorrect={false}
-          autoComplete={help.autoComplete}
-          textContentType={help.autoComplete === 'username' ? 'username' : 'name'}
-          maxLength={help.maxLength}
-          editable={!sending}
-          value={value}
-          onChangeText={(text) => {
-            setValue(text);
-            // The empty-field error no longer applies once something is typed.
-            setFieldError(null);
-          }}
-          returnKeyType="send"
-          onSubmitEditing={() => void submit()}
-        />
-        {!!fieldError && (
-          <Text accessibilityRole="alert" style={[type.callout, { color: colors.danger }]}>
-            {fieldError}
-          </Text>
-        )}
-      </View>
+      <TextField
+        label={help.label}
+        accessibilityLabel={help.label}
+        error={fieldError}
+        autoFocus
+        autoCapitalize={help.autoCapitalize}
+        autoCorrect={false}
+        autoComplete={help.autoComplete}
+        textContentType={help.autoComplete === 'username' ? 'username' : 'name'}
+        maxLength={help.maxLength}
+        editable={!sending}
+        value={value}
+        onChangeText={(text) => {
+          setValue(text);
+          // The empty-field error no longer applies once something is typed.
+          setFieldError(null);
+        }}
+        returnKeyType="send"
+        onSubmitEditing={() => void submit()}
+      />
       {!!error && (
-        <Text accessibilityRole="alert" style={[type.callout, { color: colors.danger }]}>
+        <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
           {error}
         </Text>
       )}
       <Button
         label={sending ? 'Sending…' : help.submitLabel}
+        block
+        loading={sending}
         disabled={sending}
         onPress={() => void submit()}
       />
-      <Button label="Cancel" variant="secondary" disabled={sending} onPress={onClose} />
+      <Button label="Cancel" variant="secondary" block disabled={sending} onPress={onClose} />
     </>
   );
 }
 
 const styles = StyleSheet.create({
-  input: { minHeight: 50, paddingHorizontal: 14, borderWidth: 1, fontSize: 18 },
   sent: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   sentIcon: {
     width: 36,

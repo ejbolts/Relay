@@ -33,6 +33,13 @@ jest.mock('react-native-gesture-handler/ReanimatedSwipeable', () => ({
   __esModule: true,
   default: ({ children }: { children: ReactNode }) => children,
 }));
+jest.mock('react-native-gesture-handler', () => ({
+  ...jest.requireActual<typeof import('react-native-gesture-handler')>(
+    'react-native-gesture-handler',
+  ),
+  usePanGesture: (config: unknown) => config,
+  GestureDetector: ({ children }: { children: ReactNode }) => children,
+}));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
@@ -167,13 +174,13 @@ test('with the rest timer off, a logged set starts no rest, and turning it off e
   await fireEvent.press(screen.getByRole('button', { name: 'Up next: Push day' }));
   expect(await screen.findByText('Bench Press')).toBeVisible();
   await fireEvent.press(screen.getByRole('button', { name: 'Complete set 1' }));
-  expect(screen.getByRole('button', { name: 'Skip rest' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'End rest timer' })).toBeVisible();
   try {
     await act(async () => restTimerPreference.set(false));
-    expect(screen.queryByRole('button', { name: 'Skip rest' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'End rest timer' })).toBeNull();
     expect(screen.queryByLabelText('Rest timer')).toBeNull();
     await fireEvent.press(screen.getByRole('button', { name: 'Complete set 2' }));
-    expect(screen.queryByRole('button', { name: 'Skip rest' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'End rest timer' })).toBeNull();
   } finally {
     restTimerPreference.set(true);
   }
@@ -194,7 +201,7 @@ test('logs Up next, starts the rest, and finishes into a saved summary', async (
   await fireEvent.changeText(weight, '85');
   await fireEvent.press(screen.getByRole('button', { name: 'Complete set 1' }));
   expect(screen.getByRole('button', { name: 'Mark set 1 incomplete' })).toBeVisible();
-  expect(screen.getByRole('button', { name: 'Skip rest' })).toBeVisible();
+  expect(screen.getByRole('button', { name: 'End rest timer' })).toBeVisible();
   // The untouched next set now suggests what was just lifted.
   expect(screen.getByLabelText('Weight kilograms for set 2, suggested value').props.value).toBe(
     '85',
@@ -263,6 +270,34 @@ test('a workout survives the app closing, finishes offline and saves once back o
     onlineManager.setOnline(true);
   });
   expect(saved).toHaveLength(1);
+  expect(readFinishedWorkouts(deviceStorage)).toEqual([]);
+});
+
+test('a workout saved after the app was offline says so to its own account', async () => {
+  // Signed in and finished straight away, before the toast hosts have seen anything else.
+  jest.mocked(apiSend).mockRejectedValue(new Error('Could not reach Relay.'));
+  await open(<WorkoutSheet />);
+  const { start } = await captureWorkout();
+  await act(async () => start({ kind: 'up-next' }));
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Complete set 1' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Finish workout' }));
+  await waitFor(() => expect(screen.getByText('Waiting to sync')).toBeVisible());
+
+  // Back online a while later: the save reaches the server and the toast says so.
+  jest.mocked(apiSend).mockImplementation(async () => ({ id: 'saved-1' }) as TrackedWorkout);
+  const later = Date.now() + 11_000;
+  const clock = jest.spyOn(Date, 'now').mockImplementation(() => later);
+  try {
+    await act(async () => {
+      onlineManager.setOnline(false);
+      onlineManager.setOnline(true);
+    });
+    await waitFor(() => expect(screen.getByText('Saved')).toBeVisible());
+    expect(await screen.findByText('Workout saved')).toBeOnTheScreen();
+  } finally {
+    clock.mockRestore();
+  }
   expect(readFinishedWorkouts(deviceStorage)).toEqual([]);
 });
 

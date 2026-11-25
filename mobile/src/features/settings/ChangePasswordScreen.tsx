@@ -1,5 +1,6 @@
 import { useRouter } from 'expo-router';
 import { KeyboardAvoidingView, Platform } from 'react-native';
+import { Card } from '../../ui/components';
 import { showToast } from '../../ui/Toast';
 import { PasswordForm } from './PasswordForm';
 import { SettingsPage } from './SettingsList';
@@ -12,14 +13,16 @@ export function ChangePasswordScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       <SettingsPage>
-        <PasswordForm
-          submitLabel="Update password"
-          busyLabel="Updating…"
-          onChanged={() => {
-            showToast('Password updated. Other devices were signed out.');
-            router.back();
-          }}
-        />
+        <Card>
+          <PasswordForm
+            submitLabel="Update password"
+            busyLabel="Updating…"
+            onChanged={() => {
+              showToast('Password updated. Other devices were signed out.');
+              router.back();
+            }}
+          />
+        </Card>
       </SettingsPage>
     </KeyboardAvoidingView>
   );

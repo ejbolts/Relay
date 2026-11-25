@@ -21,13 +21,21 @@ import { effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
 import { calendarDayTarget } from '../../../../frontend/src/plannedDay';
 import { splitCalendarDays } from '../../../../frontend/src/trainingSplit';
 import { useDashboard } from '../../data/queries';
-import { Button, Card, CardHeader } from '../../ui/components';
+import { Button, Card, CardHeader, IconButton } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { useCreateWorkoutOn } from '../home/calendarActions';
 import { PlannedDaySheet } from '../home/PlannedDaySheet';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { CalendarDaySheet } from './CalendarDaySheet';
-import { calendarBounds, calendarMonthView, monthOf, shiftMonth } from './calendarModel';
+import { MachineFilterSheet } from './MachineFilterSheet';
+import { machineWorkoutsRoute, type MachineFilter } from './MachinePhotos';
+import {
+  calendarBounds,
+  entriesByMonth,
+  monthOf,
+  monthsBetween,
+  monthViews,
+} from './calendarModel';
 import { Divider, MoreButton, Note } from './parts';
 import { RepeatWorkoutButton } from './RepeatWorkoutButton';
 import { trainingKeys, type useTrainingHistory } from './trainingQueries';
@@ -58,20 +66,17 @@ export function SessionsSection({ history }: { history: History }) {
   // The split's planned days ahead and missed days behind, as the web's calendar shows them.
   const split = useDashboard().data?.training_split;
   const splitDays = useMemo(() => splitCalendarDays(split, today, 42), [split, today]);
-  const view = useMemo(
-    () =>
-      calendarMonthView({
-        month: shownMonth,
-        entries: heatmap,
-        types,
-        categoryColors,
-        hidden,
-        weekStartDay,
-        today,
-        splitDays,
-      }),
-    [shownMonth, heatmap, types, categoryColors, hidden, weekStartDay, today, splitDays],
+  // History is grouped by month once; each month's view is then built at most once.
+  const byMonth = useMemo(() => entriesByMonth(heatmap), [heatmap]);
+  const viewFor = useMemo(
+    () => monthViews({ byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays }),
+    [byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays],
   );
+  const months = useMemo(
+    () => monthsBetween(bounds.first, bounds.last),
+    [bounds.first, bounds.last],
+  );
+  const view = useMemo(() => viewFor(shownMonth), [viewFor, shownMonth]);
   const [selectedDay, setSelectedDay] = useState<HeatmapDay | null>(null);
   const [plannedDate, setPlannedDate] = useState<string | null>(null);
   const createOn = useCreateWorkoutOn();
@@ -141,6 +146,13 @@ export function SessionsSection({ history }: { history: History }) {
     router.push({ pathname: '/training/exercise/[id]', params: { id } });
   }
 
+  // Filter by machine lists every workout on one machine, as the web's filtered Sessions do.
+  const [machinePicker, setMachinePicker] = useState(false);
+  function filterByMachine(filter: MachineFilter) {
+    setMachinePicker(false);
+    router.push(machineWorkoutsRoute(filter));
+  }
+
   if (history.loading) return <Note>Loading your training…</Note>;
   if (history.error && !workouts.length)
     return (
@@ -157,13 +169,23 @@ export function SessionsSection({ history }: { history: History }) {
   return (
     <View style={{ gap: 20 }}>
       <Card accessibilityLabel="Workout calendar">
-        <CardHeader title="Calendar" />
+        <CardHeader
+          title="Calendar"
+          action={
+            (workouts.length > 0 || hasOlder) && (
+              <IconButton
+                icon="filter"
+                accessibilityLabel="Filter by machine"
+                onPress={() => setMachinePicker(true)}
+              />
+            )
+          }
+        />
         <WorkoutCalendar
-          view={view}
-          canGoBack={shownMonth > bounds.first}
-          canGoForward={shownMonth < bounds.last}
-          onBack={() => setMonth(shiftMonth(shownMonth, -1))}
-          onForward={() => setMonth(shiftMonth(shownMonth, 1))}
+          months={months}
+          month={shownMonth}
+          viewFor={viewFor}
+          onMonthChange={setMonth}
           selectedDate={selectedDay?.workout_date ?? plannedDate}
           onSelectDay={(day) => pressDay(day.date, day.entry)}
           loadingOlder={loadingOlder && `${shownMonth}-01` < historyStart}
@@ -235,6 +257,7 @@ export function SessionsSection({ history }: { history: History }) {
                           bodyweight={context.bodyweightOn(item.workout_date)}
                           unit={unit}
                           onOpenExercise={openExercise}
+                          onFilterMachine={filterByMachine}
                         />
                         <View style={styles.actions}>
                           <RepeatWorkoutButton workout={item} unit={unit} />
@@ -275,6 +298,11 @@ export function SessionsSection({ history }: { history: History }) {
         onOpenWorkout={openWorkout}
       />
       <PlannedDaySheet date={plannedDate} onClose={() => setPlannedDate(null)} />
+      <MachineFilterSheet
+        visible={machinePicker}
+        onSelect={filterByMachine}
+        onClose={() => setMachinePicker(false)}
+      />
     </View>
   );
 }

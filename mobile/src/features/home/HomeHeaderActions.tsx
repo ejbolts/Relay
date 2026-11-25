@@ -1,60 +1,39 @@
 import { useRouter } from 'expo-router';
-import { Pressable, StyleSheet, View } from 'react-native';
-import { profileButtonLabel } from '../../../../frontend/src/profileButton';
+import { canUploadVideos } from '../../../../frontend/src/videoAccess';
 import { useUser } from '../../session/SessionProvider';
-import { Icon } from '../../ui/Icon';
-import { ProfilePhoto } from '../../ui/ProfilePhoto';
-import { useTheme } from '../../ui/theme';
+import { AccountHeaderActions } from '../../ui/AccountHeaderActions';
+import { IconButton } from '../../ui/components';
 import { NotificationsBell, socialRoutes } from '../social';
-import { VideosButton } from '../videos';
-
-const SIZE = 38;
+import { videoRoutes } from '../videos';
+import { videoIcons } from '../videos/icons';
 
 /**
- * Home's header buttons, as on the web: the Video logger (for accounts that can upload), the
- * notifications bell (which counts friend requests waiting for an answer), your profile, then
- * Settings.
+ * Home's header buttons, as on the web: the layout pencil and the Video logger (for accounts that
+ * can upload), then the account trio every tab shares: the bell, your profile and Settings.
  */
-export function HomeHeaderActions() {
-  const { colors } = useTheme();
+export function HomeHeaderActions({ canEdit }: { canEdit: boolean }) {
   const router = useRouter();
   const user = useUser();
   return (
-    <View style={styles.row}>
-      <VideosButton size={SIZE} />
-      <NotificationsBell size={SIZE} />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={profileButtonLabel(user.display_name.trim() || user.username, 0, 0)}
-        hitSlop={6}
-        onPress={() => router.push(socialRoutes.profile(user.id))}
-        style={({ pressed }) => pressed && { opacity: 0.7 }}
-      >
-        <ProfilePhoto user={user} size={SIZE} />
-      </Pressable>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Settings"
-        hitSlop={6}
-        onPress={() => router.push('/settings')}
-        style={({ pressed }) => [
-          styles.button,
-          { backgroundColor: colors.surface2, opacity: pressed ? 0.7 : 1 },
-        ]}
-      >
-        <Icon name="settings" size={20} color={colors.text} />
-      </Pressable>
-    </View>
+    <AccountHeaderActions
+      notifications={<NotificationsBell />}
+      profile={{ user, onPress: () => router.push(socialRoutes.profile(user.id)) }}
+      onSettings={() => router.push('/settings')}
+    >
+      {/* Editing waits for the server's layout, so an older copy is never saved over a newer one. */}
+      <IconButton
+        icon="edit"
+        accessibilityLabel="Edit Home layout"
+        disabled={!canEdit}
+        onPress={() => router.push('/home-layout')}
+      />
+      {canUploadVideos(user) && (
+        <IconButton
+          icon={videoIcons.video}
+          accessibilityLabel="Video logger"
+          onPress={() => router.push(videoRoutes.videos)}
+        />
+      )}
+    </AccountHeaderActions>
   );
 }
-
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  button: {
-    width: SIZE,
-    height: SIZE,
-    borderRadius: SIZE / 2,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});

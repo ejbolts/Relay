@@ -40,9 +40,8 @@ export function TipsScreen() {
     <SettingsPage>
       <Section>
         <SwitchRow
-          label="Show tips on this device"
+          label="Show tips"
           icon={settingsIcons.tips}
-          iconTint="#f59e0b"
           value={tips.state.enabled}
           onChange={tips.enable}
         />
@@ -62,11 +61,15 @@ export function TipsScreen() {
                 ) : undefined
               }
             />
-            <Text style={[type.body, { color: colors.secondary }]}>{tip.body}</Text>
+            <Text style={[type.callout, { color: colors.secondary, lineHeight: 21 }]}>
+              {tip.body}
+            </Text>
             {action && (
               <Button
                 label={action.label}
-                variant="link"
+                variant="tonal"
+                size="small"
+                style={{ alignSelf: 'flex-start' }}
                 onPress={() => {
                   tips.engage(id);
                   openTipTarget(router, action.target, { userId: user.id });

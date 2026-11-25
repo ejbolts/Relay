@@ -1,16 +1,9 @@
 import { useState } from 'react';
-import {
-  Image,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { AuthBackdrop, AuthBrand } from '../../session/AuthChrome';
 import { useSession, useUser } from '../../session/SessionProvider';
-import { Button } from '../../ui/components';
+import { Button, Card } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
 import { PasswordForm } from './PasswordForm';
 import { currentAccount } from './settingsData';
@@ -25,46 +18,56 @@ export function PasswordRequiredScreen() {
   const { colors, type } = useTheme();
   const [signingOut, setSigningOut] = useState(false);
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.page }}>
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
-          <View style={styles.brand}>
-            <Image style={styles.logo} source={require('../../../assets/icon.png')} />
-            <Text style={[type.title, { color: colors.text }]}>Relay</Text>
-          </View>
-          <Text accessibilityRole="header" style={[type.largeTitle, { color: colors.text }]}>
-            Choose a new password
-          </Text>
-          <PasswordForm
-            temporary
-            submitLabel="Save password"
-            busyLabel="Saving…"
-            onChanged={async () => {
-              // The password is saved; a failed refresh only means the next check confirms it.
-              const refreshed = await currentAccount().catch(() => null);
-              updateUser(refreshed ?? { ...user, must_change_password: false });
-            }}
-          />
-          <Button
-            label={signingOut ? 'Signing out…' : 'Sign out'}
-            variant="link"
-            disabled={signingOut}
-            onPress={() => {
-              setSigningOut(true);
-              void signOut().catch(() => setSigningOut(false));
-            }}
-          />
-        </ScrollView>
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+    <View style={{ flex: 1 }}>
+      <AuthBackdrop />
+      <SafeAreaView style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          style={{ flex: 1 }}
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        >
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.content}>
+            <AuthBrand showTagline={false} />
+            <Card style={{ gap: 16 }}>
+              <Text accessibilityRole="header" style={[type.title, { color: colors.text }]}>
+                Choose a new password
+              </Text>
+              <PasswordForm
+                temporary
+                submitLabel="Save password"
+                busyLabel="Saving…"
+                onChanged={async () => {
+                  // The password is saved; a failed refresh only means the next check confirms it.
+                  const refreshed = await currentAccount().catch(() => null);
+                  updateUser(refreshed ?? { ...user, must_change_password: false });
+                }}
+              />
+              <Button
+                label={signingOut ? 'Signing out…' : 'Sign out'}
+                variant="link"
+                align="center"
+                disabled={signingOut}
+                onPress={() => {
+                  setSigningOut(true);
+                  void signOut().catch(() => setSigningOut(false));
+                }}
+              />
+            </Card>
+          </ScrollView>
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { width: '100%', maxWidth: 600, alignSelf: 'center', padding: 20, gap: 16 },
-  brand: { flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 14 },
-  logo: { width: 35, height: 35, borderRadius: 9 },
+  content: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    paddingHorizontal: 18,
+    paddingVertical: 24,
+    gap: 20,
+  },
 });

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { liveMuscleSets, type MuscleSetsWeek } from './liveMuscleSets';
+import type { FinishedWorkout } from './finishedWorkoutQueue';
+import {
+  finishedMuscleSourcesFor,
+  liveMuscleSets,
+  liveMuscleSetsWithFinished,
+  type MuscleSetsWeek,
+} from './liveMuscleSets';
 import { createWorkoutSet } from './workoutSets';
 import type { ActiveWorkoutDraft } from './workoutDraft';
 import type { Exercise, TrackedWorkout } from './types';
@@ -180,5 +186,66 @@ describe('live muscle set credits', () => {
         ),
       ),
     ).toEqual({ Pectorals: 2, Triceps: 1 });
+  });
+  it('combines finished and active workouts without double-counting once saved', () => {
+    const finishedDraft: ActiveWorkoutDraft = {
+      ...draft,
+      clientSessionId: 'finished-session',
+      name: 'Earlier push',
+    };
+    const combined = liveMuscleSetsWithFinished(
+      week,
+      { ...draft, clientSessionId: 'live-session' },
+      [exercise],
+      [],
+      '2026-11-05',
+      [{ id: 'pending:finished-session', draft: finishedDraft }],
+    );
+    expect(totals(combined)).toEqual({ Pectorals: 4, Triceps: 1 });
+
+    // Once the finished workout reaches the dashboard, its contribution replaces rather than doubles.
+    const withSaved = liveMuscleSets(week, finishedDraft, [exercise], [], '2026-11-05', 'saved-1');
+    const afterSave = liveMuscleSetsWithFinished(
+      withSaved,
+      null,
+      [exercise],
+      [
+        {
+          id: 'saved-1',
+          client_session_id: 'finished-session',
+          movements: [],
+        } as unknown as TrackedWorkout,
+      ],
+      '2026-11-05',
+      [{ id: 'saved-1', draft: finishedDraft }],
+    );
+    expect(totals(afterSave)).toEqual({ Pectorals: 3, Triceps: 0.5 });
+  });
+
+  it('lists just-saved workouts by saved id, then queued ones that are not refused', () => {
+    const finished = (session: string, workoutId: string | null = null): FinishedWorkout => ({
+      ...draft,
+      clientSessionId: session,
+      pendingSave: {
+        userId: 'me',
+        finishedAt: 5,
+        workoutId,
+        payload: { client_session_id: session } as FinishedWorkout['pendingSave']['payload'],
+      },
+    });
+    const saved = finished('saved-session');
+    const queued = finished('queued-session');
+    const resumed = finished('resumed-session', 'workout-7');
+    const refused = finished('refused-session');
+    expect(
+      finishedMuscleSourcesFor([{ id: 'workout-3', finished: saved }], [queued, resumed, refused], {
+        'refused-session': 'Workout name is required.',
+      }),
+    ).toEqual([
+      { id: 'workout-3', draft: saved },
+      { id: 'pending:queued-session', draft: queued },
+      // A queued change to a saved workout replaces that workout's dashboard sets.
+      { id: 'workout-7', draft: resumed },
+    ]);
   });
 });

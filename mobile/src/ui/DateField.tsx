@@ -1,0 +1,245 @@
+import { Host as ComposeHost, DatePickerDialog, TimePickerDialog } from '@expo/ui/jetpack-compose';
+import { DatePicker, Host } from '@expo/ui/swift-ui';
+import {
+  datePickerStyle,
+  disabled as swiftDisabled,
+  labelsHidden,
+  tint,
+} from '@expo/ui/swift-ui/modifiers';
+import { useState } from 'react';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { prettyDate } from '../../../frontend/src/appShared';
+import { isoLocalDate, parseLocalDate } from '../../../frontend/src/trainingSummary';
+import { Icon } from './Icon';
+import { useTheme } from './theme';
+
+// Shared copies of the Body tab's date and time fields (features/body/DateField.tsx), in the
+// web's input look. Body's own file can become a re-export of this one.
+
+/**
+ * A labelled date, picked natively: SwiftUI's compact date picker on iOS (a pill that opens a
+ * calendar), and Material's date picker dialog on Android. Dates are local yyyy-mm-dd strings.
+ */
+export function DateField({
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (date: string) => void;
+  min?: string;
+  max?: string;
+  disabled?: boolean;
+}) {
+  const { colors, type, radius, scheme } = useTheme();
+  const [open, setOpen] = useState(false);
+  // A field that becomes disabled (a save starting) closes its dialog and ignores its answer.
+  if (open && disabled) setOpen(false);
+  const caption = <Text style={[type.callout, { color: colors.secondary, flex: 1 }]}>{label}</Text>;
+  if (Platform.OS === 'ios') {
+    return (
+      <View
+        style={[
+          styles.row,
+          {
+            backgroundColor: colors.surface2,
+            borderColor: colors.lineStrong,
+            borderRadius: radius.md,
+          },
+        ]}
+      >
+        {caption}
+        <Host matchContents colorScheme={scheme}>
+          <DatePicker
+            title={label}
+            selection={value ? parseLocalDate(value) : new Date()}
+            range={{
+              ...(min ? { start: parseLocalDate(min) } : {}),
+              ...(max ? { end: parseLocalDate(max) } : {}),
+            }}
+            displayedComponents={['date']}
+            // SwiftUI's picker ignores React's disabled state, so it gets the native modifier and
+            // a guard against a change already on its way.
+            onDateChange={(date) => {
+              if (!disabled) onChange(isoLocalDate(date));
+            }}
+            modifiers={[
+              datePickerStyle('compact'),
+              labelsHidden(),
+              tint(colors.accent),
+              swiftDisabled(!!disabled),
+            ]}
+          />
+        </Host>
+      </View>
+    );
+  }
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${value ? prettyDate(value) : 'not set'}`}
+        accessibilityState={{ disabled: !!disabled }}
+        disabled={disabled}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [
+          styles.row,
+          {
+            backgroundColor: colors.surface2,
+            borderColor: colors.lineStrong,
+            borderRadius: radius.md,
+          },
+          pressed && { opacity: 0.7 },
+        ]}
+      >
+        {caption}
+        <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '600' }]}>
+          {value ? prettyDate(value) : 'Choose'}
+        </Text>
+        <Icon name="chevronDown" size={16} color={colors.muted} />
+      </Pressable>
+      {open && !disabled && (
+        <ComposeHost matchContents>
+          <DatePickerDialog
+            // Material's picker works in UTC days.
+            initialDate={value || isoLocalDate(new Date())}
+            selectableDates={{
+              ...(min ? { start: new Date(`${min}T00:00:00Z`) } : {}),
+              ...(max ? { end: new Date(`${max}T00:00:00Z`) } : {}),
+            }}
+            color={colors.accent}
+            confirmButtonLabel="OK"
+            dismissButtonLabel="Cancel"
+            onDateSelected={(date) => {
+              setOpen(false);
+              if (!disabled) onChange(date.toISOString().slice(0, 10));
+            }}
+            onDismissRequest={() => setOpen(false)}
+          />
+        </ComposeHost>
+      )}
+    </>
+  );
+}
+
+/** "HH:MM" as today's local time, for the pickers. */
+function timeOnToday(value: string): Date {
+  const [hours, minutes] = value.split(':').map(Number);
+  const date = new Date();
+  date.setHours(hours || 0, minutes || 0, 0, 0);
+  return date;
+}
+
+const hhmm = (date: Date) =>
+  `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+
+/**
+ * A labelled time of day ("HH:MM"), picked natively: SwiftUI's compact time picker on iOS, and
+ * Material's time picker dialog on Android.
+ */
+export function TimeField({
+  label,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (time: string) => void;
+  disabled?: boolean;
+}) {
+  const { colors, type, radius, scheme } = useTheme();
+  const [open, setOpen] = useState(false);
+  // A field that becomes disabled (a save starting) closes its dialog and ignores its answer.
+  if (open && disabled) setOpen(false);
+  const caption = <Text style={[type.callout, { color: colors.secondary, flex: 1 }]}>{label}</Text>;
+  if (Platform.OS === 'ios') {
+    return (
+      <View
+        style={[
+          styles.row,
+          {
+            backgroundColor: colors.surface2,
+            borderColor: colors.lineStrong,
+            borderRadius: radius.md,
+          },
+        ]}
+      >
+        {caption}
+        <Host matchContents colorScheme={scheme}>
+          <DatePicker
+            title={label}
+            selection={timeOnToday(value)}
+            displayedComponents={['hourAndMinute']}
+            onDateChange={(date) => {
+              if (!disabled) onChange(hhmm(date));
+            }}
+            modifiers={[
+              datePickerStyle('compact'),
+              labelsHidden(),
+              tint(colors.accent),
+              swiftDisabled(!!disabled),
+            ]}
+          />
+        </Host>
+      </View>
+    );
+  }
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${value || 'not set'}`}
+        accessibilityState={{ disabled: !!disabled }}
+        disabled={disabled}
+        onPress={() => setOpen(true)}
+        style={({ pressed }) => [
+          styles.row,
+          {
+            backgroundColor: colors.surface2,
+            borderColor: colors.lineStrong,
+            borderRadius: radius.md,
+          },
+          pressed && { opacity: 0.7 },
+        ]}
+      >
+        {caption}
+        <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '600' }]}>
+          {value || 'Choose'}
+        </Text>
+        <Icon name="chevronDown" size={16} color={colors.muted} />
+      </Pressable>
+      {open && !disabled && (
+        <ComposeHost matchContents>
+          <TimePickerDialog
+            initialDate={timeOnToday(value).toISOString()}
+            color={colors.accent}
+            confirmButtonLabel="OK"
+            dismissButtonLabel="Cancel"
+            onDateSelected={(date) => {
+              setOpen(false);
+              if (!disabled) onChange(hhmm(date));
+            }}
+            onDismissRequest={() => setOpen(false)}
+          />
+        </ComposeHost>
+      )}
+    </>
+  );
+}
+
+const styles = StyleSheet.create({
+  row: {
+    minHeight: 46,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderWidth: 1,
+  },
+});

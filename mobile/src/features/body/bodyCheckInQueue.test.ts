@@ -3,6 +3,7 @@ import { ApiError, apiGet, apiSend } from '../../data/api';
 import { memoryKv } from '../../testing/memoryKvStore';
 import {
   bodyCheckInStatus,
+  bodyCheckInSyncFailed,
   deleteBodyCheckIn,
   fetchBodyMeasurements,
   localBodyMeasurements,
@@ -86,6 +87,9 @@ test('a connection failure keeps the check-in waiting without marking it refused
   jest.mocked(apiSend).mockRejectedValueOnce(new Error('Network request failed'));
   await expect(syncBodyCheckIns()).rejects.toThrow('Network request failed');
   expect(bodyCheckInStatus()).toEqual({ pending: 1, error: null });
+  expect(bodyCheckInSyncFailed()).toBe(true);
+  expect(await syncBodyCheckIns()).toBe(1);
+  expect(bodyCheckInSyncFailed()).toBe(false);
 });
 
 test('a deletion is sent for the day, and another account never sees the queue', async () => {

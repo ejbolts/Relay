@@ -1,7 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import { hasCardioMetrics } from '../../../../frontend/src/cardioForm';
@@ -34,10 +33,13 @@ import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
 import { CardioAllStats } from '../cardio/CardioAllStats';
 import { deleteCardioEntry } from '../cardio/cardioData';
+import { openCardioImportMenu } from '../cardio/cardioScreenshotImport';
 import { CardioShareSheet } from '../cardio/CardioShareSheet';
+import { chartNeutral } from './contrast';
 import { trainingIcons } from './icons';
 import { Chip, Divider, MoreButton, Note, Segmented } from './parts';
 import { useCardioOverview } from './trainingQueries';
+import { haptics } from '../../ui/haptics';
 
 const shortDay = (value: string) =>
   new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
@@ -49,6 +51,14 @@ const shortDay = (value: string) =>
 export function CardioSection() {
   const overview = useCardioOverview();
   const router = useRouter();
+  const openingMenu = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   if (overview.isPending) return <Note>Loading cardio…</Note>;
   if (overview.isError)
     return (
@@ -60,9 +70,36 @@ export function CardioSection() {
         Could not load cardio.
       </Note>
     );
+  async function openImport() {
+    if (openingMenu.current) return;
+    openingMenu.current = true;
+    try {
+      await openCardioImportMenu(
+        (source) => router.push({ pathname: '/cardio/log', params: { import: source } }),
+        () => mounted.current,
+      );
+    } finally {
+      openingMenu.current = false;
+    }
+  }
   return (
     <View style={{ gap: 20 }}>
-      <Button label="Log session" icon="plus" onPress={() => router.push('/cardio/log')} />
+      {/* The web's two actions, side by side: log by hand, or read a watch screenshot. */}
+      <View style={styles.actions}>
+        <Button
+          label="Log session"
+          icon="plus"
+          style={styles.action}
+          onPress={() => router.push('/cardio/log')}
+        />
+        <Button
+          label="Import screenshot"
+          variant="secondary"
+          icon={{ sf: 'camera', md: 'photo-camera' }}
+          style={styles.action}
+          onPress={() => void openImport()}
+        />
+      </View>
       <CardioTrend overview={overview.data} />
       <CardioHistory overview={overview.data} />
       <ZoneGoals overview={overview.data} />
@@ -71,7 +108,7 @@ export function CardioSection() {
 }
 
 function CardioTrend({ overview }: { overview: CardioOverview }) {
-  const { colors, radius, type } = useTheme();
+  const { colors, type } = useTheme();
   const [metricKey, setMetricKey] = useState<CardioTrendMetricKey>('time');
   const [selectedStart, setSelectedStart] = useState<string | null>(null);
   const [distanceKey, setDistanceKey] = useState<string | null>(null);
@@ -84,6 +121,8 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
     distanceKey,
   );
   const { selected, metric, value, difference, maximum } = view;
+  // The web's grey bars, darkened where needed to keep 3:1 on the card.
+  const neutral = chartNeutral(colors);
   return (
     <Card accessibilityLabel="Weekly cardio trend">
       <Segmented
@@ -110,9 +149,11 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
         </ScrollView>
       )}
       <View accessibilityLiveRegion="polite" style={{ gap: 2 }}>
-        <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
-          {selected.start === overview.current_week.week_start ? 'This week' : 'Week'} ·{' '}
-          {shortDay(selected.start)} – {shortDay(selected.end)}
+        <Text style={[type.caption, styles.kicker, { color: colors.muted }]}>
+          {(
+            `${selected.start === overview.current_week.week_start ? 'This week' : 'Week'} · ` +
+            `${shortDay(selected.start)} – ${shortDay(selected.end)}`
+          ).toUpperCase()}
         </Text>
         <Text style={[type.largeTitle, type.number, { color: colors.text }]}>
           {value === null ? '—' : formatCardioAmount(value)}
@@ -142,24 +183,28 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
               accessibilityLabel={`Week of ${shortDay(week.start)}: ${amount === null ? 'not logged' : `${formatCardioAmount(amount)} ${metric.unit}`}`}
               accessibilityState={{ selected: active }}
               onPress={() => {
-                void Haptics.selectionAsync();
+                haptics.selection();
                 setSelectedStart(week.start);
               }}
               style={styles.barColumn}
             >
-              <View
-                style={[
-                  styles.track,
-                  { backgroundColor: colors.surface2, borderRadius: radius.sm },
-                ]}
-              >
+              {/* The web's bars: grey weeks and the chosen one in accent, on a baseline. */}
+              <View style={[styles.track, { borderBottomColor: colors.line }]}>
                 <View
-                  style={{
-                    height: `${Math.max(3, ((amount ?? 0) / maximum) * 100)}%`,
-                    borderRadius: radius.sm,
-                    backgroundColor:
-                      amount === null ? colors.deemph : active ? colors.accent : colors.accentSoft,
-                  }}
+                  style={[
+                    styles.bar,
+                    amount === null
+                      ? {
+                          height: '4%',
+                          borderWidth: 1,
+                          borderStyle: 'dashed',
+                          borderColor: colors.muted,
+                        }
+                      : {
+                          height: `${Math.max(3, (amount / maximum) * 100)}%`,
+                          backgroundColor: active ? colors.accent : neutral,
+                        },
+                  ]}
                 />
               </View>
               <Text
@@ -195,9 +240,9 @@ function CardioTrend({ overview }: { overview: CardioOverview }) {
 }
 
 function WeekStat({ label, value }: { label: string; value: string }) {
-  const { colors, type } = useTheme();
+  const { colors, radius, type } = useTheme();
   return (
-    <View style={{ flex: 1, gap: 2 }}>
+    <View style={[styles.weekStat, { backgroundColor: colors.surface2, borderRadius: radius.md }]}>
       <Text style={[type.caption, { color: colors.muted }]} numberOfLines={1}>
         {label}
       </Text>
@@ -316,7 +361,7 @@ function CardioRow({
         accessibilityState={{ expanded: open }}
         accessibilityLabel={`${session.activity_type}, ${prettyDate(session.session_date)}, ${session.duration_minutes} minutes`}
         onPress={() => {
-          void Haptics.selectionAsync();
+          haptics.selection();
           onToggle();
         }}
         style={({ pressed }) => [styles.row, pressed && { opacity: 0.6 }]}
@@ -468,15 +513,21 @@ function ZoneGoals({ overview }: { overview: CardioOverview }) {
 }
 
 const styles = StyleSheet.create({
-  bars: { flexDirection: 'row', gap: 6, height: 120, alignItems: 'flex-end' },
-  barColumn: { flex: 1, alignItems: 'center', gap: 4, height: '100%' },
+  actions: { flexDirection: 'row', gap: 10 },
+  action: { flex: 1, paddingHorizontal: 10 },
+  kicker: { fontWeight: '600', letterSpacing: 0.6 },
+  bars: { flexDirection: 'row', gap: 4, height: 136, alignItems: 'flex-end' },
+  barColumn: { flex: 1, alignItems: 'center', gap: 6, height: '100%' },
   track: {
     flex: 1,
     width: '100%',
+    alignItems: 'center',
     justifyContent: 'flex-end',
-    overflow: 'hidden',
+    borderBottomWidth: 1,
   },
-  weekStats: { flexDirection: 'row', gap: 12 },
+  bar: { width: '65%', borderTopLeftRadius: 5, borderTopRightRadius: 5 },
+  weekStats: { flexDirection: 'row', gap: 8 },
+  weekStat: { flex: 1, gap: 4, paddingHorizontal: 11, paddingVertical: 10 },
   weekHeader: {
     flexDirection: 'row',
     alignItems: 'center',

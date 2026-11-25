@@ -1,77 +1,155 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { nextSetAfterRest, restOvertimeLabel } from '../../../../frontend/src/restComplete';
+import { restTimerProgress } from '../../../../frontend/src/restProgress';
 import { formatSeconds } from '../../../../frontend/src/utils';
 import type { WeightUnit } from '../../../../frontend/src/weightUnits';
-import { Icon } from '../../ui/Icon';
+import { haptics } from '../../ui/haptics';
+import { Icon, type IconName, type IconPair } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { useNow } from '../../ui/useNow';
 import type { LoggerState } from './loggerState';
 import { restSecondsLeft, type RestState } from './restTimer';
 
+const ADJUST_SECONDS = 30;
+const SKIP_BACK: IconPair = { sf: 'gobackward.30', md: 'replay-30' };
+const SKIP_FORWARD: IconPair = { sf: 'goforward.30', md: 'forward-30' };
+
 /**
- * The rest after a logged set, docked at the bottom of the logger: a countdown with -30 s, +30 s
- * and Skip, then "Rest complete" with the next set until it is logged or dismissed.
+ * The rest after a logged set, docked at the bottom of the logger as the web's rest pill: pause
+ * or play (the workout and its rest together), the countdown, end, -30, +30 and hide. A hidden
+ * rest tucks into a small notch on the bottom edge. After the rest, "Rest complete" shows the
+ * next set until it is logged or dismissed.
  */
 export function RestBar({
   rest,
   state,
   weightUnit,
-  bottom,
+  hidden,
+  joined,
+  onTogglePause,
   onAdjust,
   onSkip,
+  onHide,
+  onShow,
   onDismissDone,
 }: {
   rest: RestState;
   state: LoggerState;
   weightUnit: WeightUnit;
-  bottom: number;
+  /** Tucked into the notch. */
+  hidden: boolean;
+  /** The weekly sets shelf sits on top, so the pill squares its top corners to join it. */
+  joined: boolean;
+  onTogglePause: () => void;
   onAdjust: (deltaSeconds: number) => void;
   onSkip: () => void;
+  onHide: () => void;
+  onShow: () => void;
   onDismissDone: () => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const now = useNow(rest.timer ? 1000 : 5000);
   if (!rest.timer && !rest.done) return null;
-  const panel = [
-    styles.panel,
-    { bottom, backgroundColor: colors.surface3, borderRadius: radius.card },
+  const pill = [
+    styles.pill,
+    {
+      backgroundColor: colors.surface,
+      borderColor: colors.lineStrong,
+      shadowColor: colors.shadow,
+    },
+    joined && styles.joined,
   ];
 
   if (rest.timer) {
     const left = restSecondsLeft(rest.timer, now);
-    const fraction = rest.timer.totalSeconds > 0 ? left / rest.timer.totalSeconds : 0;
-    const paused = rest.timer.pausedLeft !== null;
+    const paused = state.pause.pausedAt !== null || rest.timer.pausedLeft !== null;
+    const time = formatSeconds(left);
+    if (hidden)
+      return (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Show ${paused ? 'paused ' : ''}rest timer, ${time} left`}
+          onPress={() => {
+            haptics.tap();
+            onShow();
+          }}
+          style={[
+            styles.notch,
+            {
+              backgroundColor: colors.surface,
+              borderColor: colors.lineStrong,
+              shadowColor: colors.shadow,
+            },
+          ]}
+        >
+          <Icon name={paused ? 'pause' : 'timer'} size={16} color={colors.accentText} />
+          <Text style={[styles.notchTime, type.number, { color: colors.text }]}>{time}</Text>
+          <Icon name="chevronUp" size={14} color={colors.muted} />
+        </Pressable>
+      );
+    const verb = paused ? 'Resume' : 'Pause';
     return (
-      <View style={panel} accessibilityLabel={`Rest ${formatSeconds(left)} left`}>
+      <View style={pill} accessibilityRole="none">
         <View
           style={[
             styles.fill,
             {
-              width: `${Math.round(Math.min(1, fraction) * 100)}%`,
+              width: `${Math.round(restTimerProgress(left, rest.timer.totalSeconds) * 100)}%`,
               backgroundColor: colors.accentSoft,
             },
           ]}
         />
-        <Icon name="timer" size={18} color={colors.accentText} />
-        <View style={{ flex: 1 }}>
-          <Text style={[type.caption, { color: colors.muted }]}>
-            {paused ? 'Rest paused' : 'Rest'}
-          </Text>
-          <Text style={[type.title, type.number, { color: colors.text }]}>
-            {formatSeconds(left)}
-          </Text>
-        </View>
-        <RestButton
-          label="−30"
-          accessibilityLabel="Take 30 seconds off the rest"
-          onPress={() => onAdjust(-30)}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${verb} workout and rest timer`}
+          onPress={() => {
+            haptics.selection();
+            onTogglePause();
+          }}
+          style={({ pressed }) => [
+            styles.round,
+            { backgroundColor: colors.accent },
+            pressed && styles.pressed,
+          ]}
+        >
+          <Icon name={paused ? 'play' : 'pause'} size={18} color={colors.onAccent} />
+        </Pressable>
+        <Text
+          accessibilityRole="timer"
+          accessibilityLabel={`Rest timer ${time}${paused ? ', paused' : ''}`}
+          style={[styles.time, type.number, { color: colors.text }]}
+        >
+          {time}
+        </Text>
+        <PillButton
+          icon="close"
+          size={16}
+          color={colors.muted}
+          accessibilityLabel="End rest timer"
+          onPress={onSkip}
         />
-        <RestButton
-          label="+30"
-          accessibilityLabel="Add 30 seconds to the rest"
-          onPress={() => onAdjust(30)}
+        <View style={{ flex: 1 }} />
+        <PillButton
+          icon={SKIP_BACK}
+          size={24}
+          color={colors.accentText}
+          accessibilityLabel={`Take ${ADJUST_SECONDS} seconds off the rest`}
+          onPress={() => onAdjust(-ADJUST_SECONDS)}
         />
-        <RestButton label="Skip" accessibilityLabel="Skip rest" onPress={onSkip} strong />
+        <PillButton
+          icon={SKIP_FORWARD}
+          size={24}
+          color={colors.accentText}
+          accessibilityLabel={`Add ${ADJUST_SECONDS} seconds to the rest`}
+          onPress={() => onAdjust(ADJUST_SECONDS)}
+        />
+        <PillButton
+          icon="chevronDown"
+          size={18}
+          color={colors.muted}
+          accessibilityLabel="Hide rest timer"
+          onPress={onHide}
+        />
       </View>
     );
   }
@@ -79,10 +157,12 @@ export function RestBar({
   const done = rest.done!;
   const next = nextSetAfterRest(state.movements, done.movementKey, weightUnit);
   return (
-    <View style={panel} accessibilityLiveRegion="polite">
-      <Icon name="check" size={18} color={colors.good} />
+    <View style={[pill, styles.done]} accessibilityLiveRegion="polite">
+      <View style={[styles.doneMark, { backgroundColor: colors.goodSoft }]}>
+        <Icon name="check" size={16} color={colors.good} />
+      </View>
       <View style={{ flex: 1 }}>
-        <Text style={[type.callout, { color: colors.text, fontWeight: '700' }]}>
+        <Text style={[type.callout, { color: colors.text, fontWeight: '700' }]} numberOfLines={1}>
           Rest complete{' '}
           <Text style={[type.callout, type.number, { color: colors.muted, fontWeight: '500' }]}>
             {restOvertimeLabel(done.endedAt, now)}
@@ -94,83 +174,101 @@ export function RestBar({
           </Text>
         )}
       </View>
-      <Pressable
-        accessibilityRole="button"
+      <PillButton
+        icon="close"
+        size={16}
+        color={colors.muted}
         accessibilityLabel="Dismiss rest complete"
-        hitSlop={8}
         onPress={onDismissDone}
-        style={styles.close}
-      >
-        <Icon name="close" size={16} color={colors.secondary} />
-      </Pressable>
+      />
     </View>
   );
 }
 
-function RestButton({
-  label,
+function PillButton({
+  icon,
+  size,
+  color,
   accessibilityLabel,
   onPress,
-  strong,
 }: {
-  label: string;
+  icon: IconName | IconPair;
+  size: number;
+  color: string;
   accessibilityLabel: string;
   onPress: () => void;
-  strong?: boolean;
 }) {
-  const { colors, type, radius } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.button,
-        {
-          backgroundColor: strong ? colors.accent : colors.surface2,
-          borderRadius: radius.md,
-        },
-        pressed && { opacity: 0.7 },
-      ]}
+      onPress={() => {
+        haptics.tap();
+        onPress();
+      }}
+      style={({ pressed }) => [styles.round, pressed && styles.pressed]}
     >
-      <Text
-        style={[type.callout, { color: strong ? colors.onAccent : colors.text, fontWeight: '700' }]}
-      >
-        {label}
-      </Text>
+      <Icon name={icon} size={size} color={color} />
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    position: 'absolute',
-    left: 12,
-    right: 12,
+  // The web's 56 pt rest pill: one row, a line-strong outline and a drop shadow.
+  pill: {
+    height: 56,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    gap: 2,
+    paddingHorizontal: 6,
+    borderWidth: 1,
+    borderRadius: 28,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOpacity: 0.25,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 8,
+    shadowOpacity: 1,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 10,
   },
-  fill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
-  button: {
-    minWidth: 48,
-    height: 40,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  close: {
+  joined: { borderTopLeftRadius: 0, borderTopRightRadius: 0 },
+  done: { height: undefined, minHeight: 56, gap: 10, paddingLeft: 10, paddingVertical: 6 },
+  doneMark: {
     width: 32,
     height: 32,
+    borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
   },
+  fill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
+  round: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pressed: { opacity: 0.6 },
+  time: {
+    paddingLeft: 10,
+    paddingRight: 2,
+    fontSize: 22,
+    fontWeight: '800',
+    letterSpacing: -0.4,
+  },
+  notch: {
+    alignSelf: 'center',
+    minWidth: 52,
+    height: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    borderWidth: 1,
+    borderRadius: 22,
+    shadowOpacity: 1,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  notchTime: { fontSize: 14, fontWeight: '800' },
 });

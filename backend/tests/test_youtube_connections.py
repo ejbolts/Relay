@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from datetime import UTC, date, datetime, timedelta
@@ -8,13 +9,23 @@ from unittest.mock import Mock
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
+from fastapi.testclient import TestClient
 from google.auth.exceptions import RefreshError
 from google.oauth2.credentials import Credentials
+from sqlalchemy import delete
 
+from app import youtube_connections
 from app.auth import hash_token
 from app.config import get_settings
 from app.database import SessionLocal
-from app.models import SessionStatus, WorkoutSession, YouTubeConnection, YouTubeOAuthState
+from app.models import (
+    SessionStatus,
+    User,
+    UserSession,
+    WorkoutSession,
+    YouTubeConnection,
+    YouTubeOAuthState,
+)
 from app.youtube import make_uploader
 from app.youtube_connections import (
     YOUTUBE_SCOPES,
@@ -390,17 +401,19 @@ def test_transient_refresh_failure_does_not_revoke_working_connection(
 
 
 def test_callback_codes_are_removed_from_access_logs():
+    path = "/api/youtube/callback?code=secret&state=secret"
     record = logging.LogRecord(
         "uvicorn.access",
         logging.INFO,
         "",
         1,
         "%s %s %s %s %s",
-        ("browser", "GET", "/api/youtube/callback?code=secret&state=secret", "1.1", 303),
+        ("browser", "GET", path, "1.1", 303),
         None,
     )
     assert OAuthAccessLogFilter().filter(record)
     assert "secret" not in record.getMessage()
+    assert path.split("?")[0] in record.getMessage()
 
 
 def test_account_snapshot_excludes_credentials_and_deletion_revokes_them(
@@ -428,3 +441,656 @@ def test_account_snapshot_excludes_credentials_and_deletion_revokes_them(
     with SessionLocal() as db:
         assert db.get(YouTubeConnection, client.user["id"]) is None
         assert db.query(YouTubeOAuthState).count() == 0
+
+
+# The native app's flow: it starts with its bearer session and a challenge for a secret it keeps.
+# Its sign-in browser has no Relay sign-in; the callback only exchanges the code, and the app
+# finishes with its session, the completion code and the secret.
+APP_RETURN = "relay-mobile://youtube-return"
+VERIFIER = "sample-app-verifier-" + "x" * 40
+CHALLENGE = hashlib.sha256(VERIFIER.encode()).hexdigest()
+
+
+def bearer_client(client, user_id):
+    """A client holding a bearer token for an account, as the installed app does."""
+    from app.auth import create_user_session
+    from app.models import User
+
+    with SessionLocal() as db:
+        token = create_user_session(db, db.get(User, user_id), client.app.state.settings)
+    phone = TestClient(client.app)
+    phone.headers["Authorization"] = f"Bearer {token}"
+    return phone
+
+
+@pytest.fixture
+def app_session(client):
+    phone = bearer_client(client, client.user["id"])
+    yield phone
+    phone.close()
+
+
+@pytest.fixture
+def browser(client):
+    """A sign-in browser: a fresh cookie jar with no Relay sign-in."""
+    sign_in_browser = TestClient(client.app)
+    yield sign_in_browser
+    sign_in_browser.close()
+
+
+def begin_in_app(phone, return_url=APP_RETURN, challenge=CHALLENGE):
+    response = phone.post(
+        "/api/youtube/connect", json={"return_url": return_url, "app_challenge": challenge}
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["flow"] == "app"
+    assert parse_qs(urlsplit(body["url"]).query)["state"] == [body["state"]]
+    return body["state"]
+
+
+def returned(response):
+    """The app link a callback returned to, and its query."""
+    assert response.status_code == 303, response.text
+    location = response.headers["location"]
+    return location.split("?", 1)[0], parse_qs(urlsplit(location).query)
+
+
+def finish_in_app(phone, state, code, verifier=VERIFIER):
+    response = phone.post(
+        "/api/youtube/finish", json={"state": state, "code": code, "verifier": verifier}
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_app_start_returns_google_address_and_seals_the_flow(client, real_youtube, app_session):
+    state = begin_in_app(app_session)
+    with SessionLocal() as db:
+        row = db.get(YouTubeOAuthState, hash_token(state))
+        assert row.session_id is not None
+        assert CHALLENGE not in row.encrypted_verifier
+        assert APP_RETURN not in row.encrypted_verifier
+    # The web's start is unchanged: no body still answers with Google's address only.
+    response = client.post("/api/youtube/connect")
+    assert set(response.json()) == {"url"}
+
+
+def test_app_flow_saves_only_when_the_starting_app_finishes(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    state = begin_in_app(app_session)
+    exchange = fake_provider(monkeypatch)
+    link, query = returned(finish(browser, state))
+    assert link == APP_RETURN
+    assert query["youtube"] == ["finish"] and len(query["code"]) == 1
+    exchange.assert_called_once_with(code="sample-code", timeout=20)
+    # Google has answered, but nothing is saved until the app finishes.
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+    result = finish_in_app(app_session, state, query["code"][0])
+    assert result["result"] == "connected"
+    assert result["connection"]["status"] == "connected"
+    assert "sample-refresh-token" not in json.dumps(result)
+    with SessionLocal() as db:
+        row = db.get(YouTubeConnection, client.user["id"])
+        assert row.channel_id == "sample-channel"
+        assert decrypt_credentials(real_youtube, row).refresh_token == "sample-refresh-token"
+        assert db.get(YouTubeOAuthState, hash_token(state)) is None
+    # Finishing again, or replaying the callback, changes nothing.
+    assert finish_in_app(app_session, state, query["code"][0])["result"] == "expired"
+    # The finished flow is gone, so its callback is an unknown state that needs a web sign-in.
+    assert finish(browser, state).status_code == 401
+    exchange.assert_called_once()
+
+
+def test_a_shared_start_link_cannot_attach_someone_elses_channel(
+    client, other_client, real_youtube, app_session, monkeypatch
+):
+    """Someone opens your Google link in their browser, even one signed in to Relay, and
+    consents. Their channel must never reach your account."""
+    client.patch("/api/admin/settings", json={"video_uploads": "everyone"})
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch, channel="their-channel")
+    link, query = returned(finish(other_client, state))
+    code = query["code"][0]
+    # The code reached their browser, not your app. Your app has the secret but not the code.
+    assert finish_in_app(app_session, state, "guessed-code")["result"] == "expired"
+    # They have the code but neither your sign-in nor your secret.
+    with bearer_client(client, other_client.user["id"]) as their_app:
+        assert finish_in_app(their_app, state, code)["result"] == "expired"
+        assert (
+            finish_in_app(their_app, state, code, "their-own-verifier-" + "y" * 40)["result"]
+            == "expired"
+        )
+    # Even with your sign-in, a stolen code without your secret fails.
+    assert finish_in_app(app_session, state, code, "wrong-verifier-" + "z" * 40)["result"] == (
+        "expired"
+    )
+    # A cookie-signed-in web browser of the starting account can't finish it either.
+    response = client.post(
+        "/api/youtube/finish", json={"state": state, "code": code, "verifier": VERIFIER}
+    )
+    assert response.json()["result"] == "expired"
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+        assert db.get(YouTubeConnection, other_client.user["id"]) is None
+
+
+def test_app_flow_ends_with_the_sign_in_that_started_it(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    state = begin_in_app(app_session)
+    exchange = fake_provider(monkeypatch)
+    assert app_session.post("/api/auth/logout").status_code < 300
+    # Signing out removes the flow with the session.
+    assert finish(browser, state).status_code == 401
+    exchange.assert_not_called()
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+
+
+def test_revoking_the_sign_in_during_googles_exchange_saves_nothing(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    state = begin_in_app(app_session)
+    exchange = fake_provider(monkeypatch)
+    # The sign-in ends while Google is answering.
+    exchange.side_effect = lambda **_: app_session.post("/api/auth/logout")
+    # Signing out removed the flow with its session, so nothing waits to be finished.
+    assert returned(finish(browser, state)) == (APP_RETURN, {"youtube": ["expired"]})
+    exchange.assert_called_once()
+    with SessionLocal() as db:
+        assert db.get(YouTubeOAuthState, hash_token(state)) is None
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+
+
+def test_losing_video_access_before_finishing_saves_nothing(
+    client, other_client, real_youtube, monkeypatch
+):
+    client.patch("/api/admin/settings", json={"video_uploads": "everyone"})
+    with bearer_client(client, other_client.user["id"]) as phone, TestClient(client.app) as web:
+        state = begin_in_app(phone)
+        fake_provider(monkeypatch)
+        code = returned(finish(web, state))[1]["code"][0]
+        client.patch("/api/admin/settings", json={"video_uploads": "admin"})
+        response = phone.post(
+            "/api/youtube/finish", json={"state": state, "code": code, "verifier": VERIFIER}
+        )
+    assert response.status_code == 403
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, other_client.user["id"]) is None
+
+
+def settle_and_hook(monkeypatch, browser, app_session, state, change):
+    """Lets Google answer, then runs `change` against the real database just after `finish` has
+    authenticated the request, as a sign-out or a setting change on another device would land."""
+    code = returned(finish(browser, state))[1]["code"][0]
+    original = youtube_connections.find_state
+
+    def find_then_change(*args, **kwargs):
+        found = original(*args, **kwargs)
+        change()
+        return found
+
+    monkeypatch.setattr(youtube_connections, "find_state", find_then_change)
+    return finish_in_app(app_session, state, code)
+
+
+def session_of(state):
+    with SessionLocal() as db:
+        return db.get(YouTubeOAuthState, hash_token(state)).session_id
+
+
+@pytest.mark.parametrize("change", ["session expired", "account disabled", "attempt expired"])
+def test_the_save_rechecks_the_real_sign_in_at_the_write(
+    client, real_youtube, app_session, browser, monkeypatch, change
+):
+    """The request's own cached session and account can't vouch for rows changed since."""
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch)
+    session_id = session_of(state)
+
+    def apply():
+        with SessionLocal() as db:
+            if change == "session expired":
+                db.get(UserSession, session_id).expires_at = datetime.now(UTC) - timedelta(
+                    minutes=1
+                )
+            elif change == "account disabled":
+                db.get(User, client.user["id"]).disabled_at = datetime.now(UTC)
+            else:
+                db.get(YouTubeOAuthState, hash_token(state)).expires_at = datetime.now(
+                    UTC
+                ) - timedelta(minutes=1)
+            db.commit()
+
+    assert settle_and_hook(monkeypatch, browser, app_session, state, apply)["result"] == "expired"
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+
+
+def test_losing_video_access_at_the_write_saves_nothing(
+    client, other_client, real_youtube, monkeypatch
+):
+    client.patch("/api/admin/settings", json={"video_uploads": "everyone"})
+    with bearer_client(client, other_client.user["id"]) as phone, TestClient(client.app) as web:
+        state = begin_in_app(phone)
+        fake_provider(monkeypatch)
+
+        def withdraw():
+            assert (
+                client.patch("/api/admin/settings", json={"video_uploads": "admin"}).status_code
+                == 200
+            )
+
+        result = settle_and_hook(monkeypatch, web, phone, state, withdraw)
+    assert result["result"] == "expired"
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, other_client.user["id"]) is None
+
+
+def test_disconnecting_on_another_device_before_the_save_wins(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch)
+    with bearer_client(client, client.user["id"]) as other_device:
+
+        def disconnect():
+            assert other_device.delete("/api/youtube/connection").status_code == 200
+
+        result = settle_and_hook(monkeypatch, browser, app_session, state, disconnect)
+    assert result["result"] == "expired"
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+
+
+def test_disconnecting_after_the_save_removes_it(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch)
+    code = returned(finish(browser, state))[1]["code"][0]
+    assert finish_in_app(app_session, state, code)["result"] == "connected"
+    with bearer_client(client, client.user["id"]) as other_device:
+        assert other_device.delete("/api/youtube/connection").status_code == 200
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+
+
+@pytest.mark.parametrize("outcome", ["cancelled", "failed", "permission", "no_channel"])
+def test_app_flow_failures_are_only_reported_to_the_starting_app(
+    client, real_youtube, app_session, browser, monkeypatch, outcome
+):
+    save_connection(real_youtube, client.user["id"], "original-channel")
+    state = begin_in_app(app_session)
+    exchange = fake_provider(monkeypatch)
+    query = {}
+    if outcome == "cancelled":
+        query["error"] = "access_denied"
+    elif outcome == "permission":
+        fake_provider(monkeypatch, creds=credentials(refresh=None))
+    elif outcome == "no_channel":
+        monkeypatch.setattr(
+            "app.youtube_connections.authorized_channel",
+            Mock(side_effect=YouTubeConnectionError("No YouTube channel was selected.")),
+        )
+    else:
+        exchange.side_effect = RuntimeError("sample-client-secret must never reach UI")
+    response = finish(browser, state, **query)
+    link, returned_query = returned(response)
+    # The link carries no result of its own, only the code to ask with.
+    assert returned_query["youtube"] == ["finish"]
+    assert "sample-client-secret" not in response.text
+    code = returned_query["code"][0]
+    assert finish_in_app(app_session, state, code, "wrong-verifier-" + "z" * 40)["result"] == (
+        "expired"
+    )
+    assert finish_in_app(app_session, state, code)["result"] == outcome
+    assert finish_in_app(app_session, state, code)["result"] == "expired"
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]).channel_id == "original-channel"
+
+
+def test_an_expired_attempt_returns_unverified(real_youtube, app_session, browser, monkeypatch):
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch)
+    with SessionLocal() as db:
+        db.get(YouTubeOAuthState, hash_token(state)).expires_at = datetime.now(UTC) - timedelta(
+            minutes=1
+        )
+        db.commit()
+    assert returned(finish(browser, state)) == (APP_RETURN, {"youtube": ["expired"]})
+
+
+def test_expired_attempts_and_their_credentials_are_swept(
+    client, other_client, real_youtube, app_session, browser, monkeypatch
+):
+    import asyncio
+
+    client.patch("/api/admin/settings", json={"video_uploads": "everyone"})
+    with bearer_client(client, other_client.user["id"]) as their_app:
+        live = begin_in_app(their_app)
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch)
+    returned(finish(browser, state))
+    with SessionLocal() as db:
+        # The settled attempt holds sealed Google credentials; let its finish window pass.
+        db.get(YouTubeOAuthState, hash_token(state)).expires_at = datetime.now(UTC) - timedelta(
+            minutes=1
+        )
+        db.commit()
+    assert youtube_connections.remove_expired_states(SessionLocal) == 1
+    with SessionLocal() as db:
+        assert db.get(YouTubeOAuthState, hash_token(state)) is None
+        assert db.get(YouTubeOAuthState, hash_token(live)) is not None
+        db.get(YouTubeOAuthState, hash_token(live)).expires_at = datetime.now(UTC) - timedelta(
+            minutes=1
+        )
+        db.commit()
+
+    async def run_once():
+        sweeper = youtube_connections.OAuthStateSweeper(SessionLocal)
+        sweeper.start()
+        await asyncio.sleep(0.5)
+        await sweeper.stop()
+
+    asyncio.run(run_once())
+    with SessionLocal() as db:
+        assert db.query(YouTubeOAuthState).count() == 0
+
+
+def test_a_busy_channel_is_not_switched_when_finishing(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    save_connection(real_youtube, client.user["id"], "original-channel")
+    with SessionLocal() as db:
+        db.add(
+            WorkoutSession(
+                user_id=client.user["id"],
+                name="Processing",
+                workout_date=date.today(),
+                expected_clip_count=1,
+                status=SessionStatus.QUEUED,
+                youtube_channel_id="original-channel",
+            )
+        )
+        db.commit()
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch, channel="new-channel")
+    code = returned(finish(browser, state))[1]["code"][0]
+    assert finish_in_app(app_session, state, code)["result"] == "busy"
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]).channel_id == "original-channel"
+
+
+def test_a_second_start_replaces_the_first_and_flows_stay_apart(
+    client, other_client, real_youtube, app_session, browser, monkeypatch
+):
+    client.patch("/api/admin/settings", json={"video_uploads": "everyone"})
+    first = begin_in_app(app_session)
+    second = begin_in_app(app_session)
+    # Another account's flow runs in the same browser at the same time.
+    their_secret = "their-app-verifier-" + "y" * 40
+    with bearer_client(client, other_client.user["id"]) as their_app:
+        theirs = begin_in_app(
+            their_app, challenge=hashlib.sha256(their_secret.encode()).hexdigest()
+        )
+        fake_provider(monkeypatch)
+        # Starting again replaced the first flow.
+        assert finish(browser, first).status_code == 401
+        their_code = returned(finish(browser, theirs))[1]["code"][0]
+        my_code = returned(finish(browser, second))[1]["code"][0]
+        # Neither code works for the other flow, and each app finishes its own.
+        assert finish_in_app(app_session, theirs, their_code)["result"] == "expired"
+        assert finish_in_app(their_app, second, my_code, their_secret)["result"] == "expired"
+        assert finish_in_app(app_session, second, my_code)["result"] == "connected"
+        assert finish_in_app(their_app, theirs, their_code, their_secret)["result"] == "connected"
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is not None
+        assert db.get(YouTubeConnection, other_client.user["id"]) is not None
+
+
+def test_a_callback_with_an_unknown_state_still_needs_a_web_sign_in(browser, real_youtube):
+    response = browser.get(
+        "/api/youtube/callback", params={"state": "unknown", "code": "x"}, follow_redirects=False
+    )
+    assert response.status_code == 401
+
+
+def test_expo_go_return_links_need_a_listed_development_host(
+    real_youtube, app_session, browser, monkeypatch
+):
+    target = "exp://127.0.0.1:8081/--/youtube-return"
+    response = app_session.post(
+        "/api/youtube/connect", json={"return_url": target, "app_challenge": CHALLENGE}
+    )
+    assert response.status_code == 422
+    monkeypatch.setattr(real_youtube, "youtube_app_dev_return_hosts", "127.0.0.1:8081, other:1")
+    state = begin_in_app(app_session, target)
+    fake_provider(monkeypatch)
+    link, query = returned(finish(browser, state))
+    assert link == target and query["youtube"] == ["finish"]
+
+
+@pytest.mark.parametrize(
+    "target",
+    [
+        "https://evil.example/steal",
+        "javascript:alert(1)",
+        "//evil.example",
+        "relay-mobile://youtube-return#",
+        "relay-mobile://youtube-return?youtube=connected",
+        "relay-mobile://youtube-return/extra",
+        "relay-mobile://other",
+        "relay-mobile:///youtube-return",
+        "exp://evil.example:8081/--/youtube-return",
+        "exp://127.0.0.1:8081/--/youtube-return?x=1",
+    ],
+)
+def test_app_return_link_must_be_the_app_link(real_youtube, app_session, monkeypatch, target):
+    monkeypatch.setattr(real_youtube, "youtube_app_dev_return_hosts", "127.0.0.1:8081")
+    response = app_session.post(
+        "/api/youtube/connect", json={"return_url": target, "app_challenge": CHALLENGE}
+    )
+    assert response.status_code == 422
+    with SessionLocal() as db:
+        assert db.query(YouTubeOAuthState).count() == 0
+
+
+@pytest.mark.parametrize("challenge", [None, "short", "A" * 64])
+def test_app_start_needs_a_challenge(real_youtube, app_session, challenge):
+    body = {"return_url": APP_RETURN, **({"app_challenge": challenge} if challenge else {})}
+    assert app_session.post("/api/youtube/connect", json=body).status_code == 422
+
+
+def test_mock_mode_has_no_app_flow(client, app_session):
+    response = app_session.post(
+        "/api/youtube/connect", json={"return_url": APP_RETURN, "app_challenge": CHALLENGE}
+    )
+    assert response.status_code == 409
+    response = app_session.post(
+        "/api/youtube/finish", json={"state": "any", "code": "any", "verifier": VERIFIER}
+    )
+    assert response.json()["result"] == "expired"
+
+
+def test_finish_needs_a_sign_in(anonymous_client):
+    response = anonymous_client.post(
+        "/api/youtube/finish", json={"state": "any", "code": "any", "verifier": VERIFIER}
+    )
+    assert response.status_code == 401
+
+
+def overlap_finish_and_disconnect(client, app_session, state, code, monkeypatch):
+    """Runs a finish that holds its write until a disconnect from another device has started,
+    then lets both complete. Returns the finish result and the disconnect response."""
+    import threading
+    import time
+
+    writing, release = threading.Event(), threading.Event()
+    original = youtube_connections.write_connection
+
+    def slow_write(*args, **kwargs):
+        result = original(*args, **kwargs)
+        writing.set()
+        release.wait(10)
+        return result
+
+    monkeypatch.setattr(youtube_connections, "write_connection", slow_write)
+    finished, disconnected = [], []
+    with bearer_client(client, client.user["id"]) as other_device:
+        saver = threading.Thread(
+            target=lambda: finished.append(finish_in_app(app_session, state, code))
+        )
+        saver.start()
+        assert writing.wait(10)
+        remover = threading.Thread(
+            target=lambda: disconnected.append(other_device.delete("/api/youtube/connection"))
+        )
+        remover.start()
+        # The disconnect is now waiting for the finish's write lock.
+        time.sleep(0.5)
+        release.set()
+        saver.join(15)
+        remover.join(15)
+    return finished[0], disconnected[0]
+
+
+def test_a_disconnect_during_a_first_connect_removes_it(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    revoke = Mock(return_value=True)
+    monkeypatch.setattr("app.youtube_connections.revoke_credentials", revoke)
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch, creds=credentials(refresh="new-refresh-token"))
+    code = returned(finish(browser, state))[1]["code"][0]
+    result, response = overlap_finish_and_disconnect(client, app_session, state, code, monkeypatch)
+    assert result["result"] == "connected"
+    assert response.status_code == 200
+    # The disconnect waited for the save, then removed the channel it saved and revoked its grant.
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+    revoke.assert_called_once()
+    assert revoke.call_args.args[0].refresh_token == "new-refresh-token"
+
+
+def test_a_disconnect_during_a_replacement_revokes_the_new_grant(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    save_connection(
+        real_youtube, client.user["id"], "old-channel", creds=credentials(refresh="old-refresh")
+    )
+    revoke = Mock(return_value=True)
+    monkeypatch.setattr("app.youtube_connections.revoke_credentials", revoke)
+    state = begin_in_app(app_session)
+    fake_provider(monkeypatch, channel="new-channel", creds=credentials(refresh="new-refresh"))
+    code = returned(finish(browser, state))[1]["code"][0]
+    result, response = overlap_finish_and_disconnect(client, app_session, state, code, monkeypatch)
+    assert result["result"] == "connected"
+    assert response.status_code == 200
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+    revoke.assert_called_once()
+    assert revoke.call_args.args[0].refresh_token == "new-refresh"
+
+
+def test_a_sweep_spares_an_exchange_that_began_before_the_deadline(
+    client, real_youtube, app_session, browser, monkeypatch
+):
+    state = begin_in_app(app_session)
+    # Consent arrives a few seconds before the ten-minute start window closes.
+    with SessionLocal() as db:
+        db.get(YouTubeOAuthState, hash_token(state)).expires_at = datetime.now(UTC) + timedelta(
+            seconds=5
+        )
+        db.commit()
+    exchange = fake_provider(monkeypatch)
+    real_now = youtube_connections.utc_now
+
+    def answer_slowly(**_):
+        # Google answers after the old deadline, and a sweep runs meanwhile.
+        later = real_now() + timedelta(seconds=30)
+        monkeypatch.setattr(youtube_connections, "utc_now", lambda: later)
+        assert youtube_connections.remove_expired_states(SessionLocal) == 0
+        monkeypatch.setattr(youtube_connections, "utc_now", real_now)
+
+    exchange.side_effect = answer_slowly
+    link, query = returned(finish(browser, state))
+    assert query["youtube"] == ["finish"]
+    assert finish_in_app(app_session, state, query["code"][0])["result"] == "connected"
+
+
+def test_a_callback_after_the_deadline_claims_nothing(
+    real_youtube, app_session, browser, monkeypatch
+):
+    state = begin_in_app(app_session)
+    exchange = fake_provider(monkeypatch)
+    # The row is read just before its deadline, but the claim runs just after it.
+    original = youtube_connections.find_state
+
+    def read_then_expire(*args, **kwargs):
+        found = original(*args, **kwargs)
+        with SessionLocal() as db:
+            db.get(YouTubeOAuthState, hash_token(state)).expires_at = datetime.now(UTC) - timedelta(
+                seconds=1
+            )
+            db.commit()
+        return found
+
+    monkeypatch.setattr(youtube_connections, "find_state", read_then_expire)
+    assert returned(finish(browser, state)) == (APP_RETURN, {"youtube": ["expired"]})
+    exchange.assert_not_called()
+
+
+def test_the_web_reports_a_failure_when_a_disconnect_wins_the_save(
+    client, real_youtube, monkeypatch
+):
+    save_connection(real_youtube, client.user["id"], "old-channel")
+    state = begin(client)["state"][0]
+    fake_provider(monkeypatch, channel="new-channel")
+
+    def disconnected_meanwhile(db, user_id):
+        # Another device disconnects between the save's read and its update.
+        with SessionLocal() as other:
+            other.execute(delete(YouTubeConnection).where(YouTubeConnection.user_id == user_id))
+            other.commit()
+        return False
+
+    monkeypatch.setattr(youtube_connections, "has_active_job", disconnected_meanwhile)
+    assert finish(client, state).headers["location"] == "/?youtube=failed#videos"
+    with SessionLocal() as db:
+        assert db.get(YouTubeConnection, client.user["id"]) is None
+
+
+def test_stopping_the_sweeper_waits_for_a_sweep_in_progress(monkeypatch):
+    import asyncio
+    import threading
+
+    entered, release = threading.Event(), threading.Event()
+    finished = []
+
+    def held_sweep(_):
+        entered.set()
+        release.wait(10)
+        finished.append(True)
+        return 0
+
+    monkeypatch.setattr(youtube_connections, "remove_expired_states", held_sweep)
+
+    async def scenario():
+        sweeper = youtube_connections.OAuthStateSweeper(SessionLocal)
+        sweeper.start()
+        await asyncio.to_thread(entered.wait, 10)
+        stopping = asyncio.create_task(sweeper.stop())
+        await asyncio.sleep(0.2)
+        assert not stopping.done()
+        release.set()
+        await asyncio.wait_for(stopping, 10)
+        assert finished == [True]
+        # No further sweep was scheduled after stopping.
+        await asyncio.sleep(0.1)
+        assert finished == [True]
+
+    asyncio.run(scenario())
