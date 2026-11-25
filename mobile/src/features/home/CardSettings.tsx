@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { spotlightOptions } from '../../../../frontend/src/homeInsights';
@@ -19,6 +18,7 @@ import { localDate } from '../../../../frontend/src/utils';
 import { useDashboard } from '../../data/queries';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { haptics } from '../../ui/haptics';
 import { useExerciseLibrary } from '../training/trainingQueries';
 import { useSpotlightNames } from './InsightCards';
 import { SparkBars } from './Sparks';
@@ -248,7 +248,7 @@ function Choices({
             accessibilityLabel={option.label}
             accessibilityState={{ checked: option.selected }}
             onPress={() => {
-              void Haptics.selectionAsync();
+              haptics.selection();
               option.onSelect();
             }}
             style={({ pressed }) => [

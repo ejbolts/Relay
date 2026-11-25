@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, Text, View } from 'react-native';
 import { prettyDate } from '../../../../frontend/src/appShared';
 import {
   checkInEditPayload,
@@ -12,8 +12,11 @@ import type { BodyCheckInPayload } from '../../../../frontend/src/bodyCheckInUnd
 import { nudgedBodyFat, nudgedBodyweightKg } from '../../../../frontend/src/homeStats';
 import type { BodyMeasurement } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
+import { weightInputValue } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
 import { Button } from '../../ui/components';
+import { TextField } from '../../ui/controls';
+import { haptics } from '../../ui/haptics';
 import { Sheet } from '../../ui/Sheet';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
@@ -25,8 +28,12 @@ import { BodyFatStepper, WeightStepper } from './NumberStepper';
 export function useSaveCheckIn() {
   const client = useQueryClient();
   return useMutation({
+    // The save lands in the phone's queue first, so it must run offline too; the queue sends it.
+    networkMode: 'always',
     mutationFn: (payload: BodyCheckInPayload) => bodyCheckInApi.saveBodyMeasurement(payload),
-    onSettled: () => refreshBodyMeasurements(client),
+    onSettled: () => {
+      void refreshBodyMeasurements(client);
+    },
   });
 }
 
@@ -75,7 +82,7 @@ function WeighInForm({
   editing: BodyMeasurement | null;
   onDone: () => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const unit = useWeightUnit();
   const save = useSaveCheckIn();
   const entryOn = (day: string) => measurements.find((item) => item.measurement_date === day);
@@ -111,27 +118,34 @@ function WeighInForm({
       ? checkInEditPayload(editing, draft.weight, draft.bodyFat, unit)
       : weighInPayload(date, draft, unit);
     if (checked.error !== null) {
+      haptics.error();
       setError(checked.error);
       return;
     }
     save.mutate(checked.payload, {
       onSuccess: () => {
+        haptics.success();
         onDone();
         showToast(existing ? 'Check-in updated' : 'Check-in saved');
       },
-      onError: (reason) =>
-        setError(reason instanceof Error ? reason.message : 'Could not save this measurement.'),
+      onError: (reason) => {
+        haptics.error();
+        setError(reason instanceof Error ? reason.message : 'Could not save this measurement.');
+      },
     });
   }
 
   return (
-    <View style={{ gap: 16 }}>
+    <View style={{ gap: 14 }}>
       {!editing && <DateField label="Date" value={date} max={localDate()} onChange={chooseDate} />}
-      <View style={{ gap: 6 }}>
-        <Text style={[type.footnote, { color: colors.secondary }]}>Weight ({unit})</Text>
+      <View style={styles.field}>
+        <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
+          Weight ({unit})
+        </Text>
         <WeightStepper
           weightKg={draft.weight}
           unit={unit}
+          placeholder={weightInputValue(latestKg ?? 88, unit)}
           disabled={save.isPending}
           onChange={(weight) => change({ weight })}
           onStep={(delta) =>
@@ -139,28 +153,26 @@ function WeighInForm({
           }
         />
       </View>
-      <View style={{ gap: 6 }}>
-        <Text style={[type.footnote, { color: colors.secondary }]}>Body fat %</Text>
+      <View style={styles.field}>
+        <Text style={[type.footnote, { color: colors.secondary, fontWeight: '600' }]}>
+          Body fat %
+        </Text>
         <BodyFatStepper
           value={draft.bodyFat === '' ? null : Number(draft.bodyFat)}
+          placeholder="Optional"
           disabled={save.isPending}
           onChange={(value) => change({ bodyFat: value === null ? '' : String(value) })}
           onStep={(delta) => change({ bodyFat: nudgedBodyFat(draft.bodyFat, latestFat, delta) })}
         />
       </View>
       {!editing && (
-        <TextInput
+        <TextField
           value={draft.notes}
           onChangeText={(notes) => change({ notes })}
           placeholder="Conditions or anything worth remembering…"
-          placeholderTextColor={colors.muted}
           multiline
           accessibilityLabel="Notes"
-          style={[
-            type.body,
-            styles.notes,
-            { color: colors.text, backgroundColor: colors.surface2, borderRadius: radius.md },
-          ]}
+          inputStyle={styles.notes}
         />
       )}
       {error && (
@@ -168,23 +180,29 @@ function WeighInForm({
           {error}
         </Text>
       )}
-      <Button
-        label={
-          save.isPending
-            ? 'Saving…'
-            : editing
-              ? 'Save changes'
-              : existing
-                ? 'Update check-in'
-                : 'Save check-in'
-        }
-        disabled={save.isPending}
-        onPress={submit}
-      />
+      <View style={styles.actions}>
+        <Button
+          label={
+            save.isPending
+              ? 'Saving…'
+              : editing
+                ? 'Save changes'
+                : existing
+                  ? 'Update check-in'
+                  : 'Save check-in'
+          }
+          loading={save.isPending}
+          disabled={save.isPending}
+          onPress={submit}
+        />
+        <Button label="Cancel" variant="secondary" disabled={save.isPending} onPress={onDone} />
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  notes: { minHeight: 72, paddingHorizontal: 14, paddingVertical: 12, textAlignVertical: 'top' },
+  field: { gap: 6 },
+  notes: { minHeight: 76 },
+  actions: { gap: 8, marginTop: 2 },
 });

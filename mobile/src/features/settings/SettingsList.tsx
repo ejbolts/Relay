@@ -1,7 +1,6 @@
 import { Host, Picker, Text as SwiftText } from '@expo/ui/swift-ui';
 import { disabled as swiftDisabled, pickerStyle, tag, tint } from '@expo/ui/swift-ui/modifiers';
-import * as Haptics from 'expo-haptics';
-import { Children, Fragment, isValidElement, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useContext, type ReactNode, type Ref } from 'react';
 import {
   ActivityIndicator,
   Platform,
@@ -9,38 +8,61 @@ import {
   RefreshControl,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   View,
+  type ScrollViewInstance,
   type StyleProp,
   type ViewStyle,
 } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import { buttonColors, cardSurface } from '../../ui/components';
+import { Switch } from '../../ui/controls';
+import { haptics } from '../../ui/haptics';
 import { Icon, type IconName, type IconPair } from '../../ui/Icon';
 import { showMenu } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 
-// An iOS Settings-style grouped list: sections of rows on a card, each row with an optional
-// tinted icon, a label, and a value, switch, menu or chevron on the right.
+// A native grouped list styled with Pulse's card surfaces and calm accent-tinted icon badges:
+// sections of rows on a card, each row with an optional icon, a label, and a value, switch, menu
+// or chevron on the right.
 
 /** A pushed screen's scrolling page under its native header. */
 export function SettingsPage({
   children,
   refreshing,
   onRefresh,
+  scrollRef,
 }: {
   children: ReactNode;
   refreshing?: boolean;
   onRefresh?: () => void;
+  /** For screens that scroll to one of their sections, such as Settings' search. */
+  scrollRef?: Ref<ScrollViewInstance>;
 }) {
   const { colors, space } = useTheme();
+  // Optional, so pages rendered without a safe-area provider (tests, other stacks) still work.
+  const bottomInset = useContext(SafeAreaInsetsContext)?.bottom ?? 0;
   return (
     <ScrollView
+      ref={scrollRef}
       style={{ flex: 1, backgroundColor: colors.page }}
       contentInsetAdjustmentBehavior="automatic"
       keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ padding: space.lg, gap: space.xl, paddingBottom: space.xxl * 2 }}
+      contentContainerStyle={{
+        padding: space.gutter,
+        gap: space.xl,
+        paddingBottom: Math.max(space.xxl * 2, bottomInset + 36),
+      }}
       refreshControl={
-        onRefresh ? <RefreshControl refreshing={!!refreshing} onRefresh={onRefresh} /> : undefined
+        onRefresh ? (
+          <RefreshControl
+            refreshing={!!refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.muted}
+            colors={[colors.accent]}
+            progressBackgroundColor={colors.surface2}
+          />
+        ) : undefined
       }
     >
       {children}
@@ -58,7 +80,7 @@ export function Section({
   action?: ReactNode;
   children: ReactNode;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const rows = Children.toArray(children).filter(isValidElement);
   return (
     <View style={{ gap: 6 }}>
@@ -75,20 +97,10 @@ export function Section({
           {action}
         </View>
       )}
-      <View
-        style={{
-          backgroundColor: colors.surface,
-          borderRadius: radius.lg,
-          borderColor: colors.line,
-          borderWidth: StyleSheet.hairlineWidth,
-          overflow: 'hidden',
-        }}
-      >
+      <View style={[cardSurface(colors), { overflow: 'hidden' }]}>
         {rows.map((row, index) => (
           <Fragment key={row.key ?? index}>
-            {index > 0 && (
-              <View style={[styles.separator, { backgroundColor: colors.lineStrong }]} />
-            )}
+            {index > 0 && <View style={[styles.separator, { backgroundColor: colors.line }]} />}
             {row}
           </Fragment>
         ))}
@@ -97,12 +109,27 @@ export function Section({
   );
 }
 
-/** The small tinted square that leads a row, as in the iOS Settings app. */
-export function RowIcon({ icon, tint: color }: { icon: IconName | IconPair; tint?: string }) {
+/**
+ * The calm rounded-square icon badge that leads a row, matching the web's Settings hub: soft
+ * accent fill with accent ink (or soft danger tint for destructive rows), following the active
+ * Relay accent theme instead of hardcoded per-row colours.
+ */
+export function RowIcon({
+  icon,
+  destructive,
+}: {
+  icon: IconName | IconPair;
+  /** @deprecated Ignored: badges follow the accent, as on the web. */
+  tint?: string;
+  destructive?: boolean;
+}) {
   const { colors } = useTheme();
+  const danger = buttonColors(colors, 'danger-soft');
   return (
-    <View style={[styles.rowIcon, { backgroundColor: color ?? colors.accent }]}>
-      <Icon name={icon} size={15} color="#ffffff" />
+    <View
+      style={[styles.rowIcon, { backgroundColor: destructive ? danger.fill : colors.accentSoft }]}
+    >
+      <Icon name={icon} size={16} color={destructive ? danger.ink : colors.accentText} />
     </View>
   );
 }
@@ -110,12 +137,17 @@ export function RowIcon({ icon, tint: color }: { icon: IconName | IconPair; tint
 interface RowBase {
   label: string;
   icon?: IconName | IconPair;
+  /**
+   * @deprecated Ignored: row badges follow the accent, as on the web. Kept so the Data, Admin and
+   * Guides rows (other streams' files) still compile; remove once they stop passing it.
+   */
   iconTint?: string;
   disabled?: boolean;
 }
 
 export function Row({
   label,
+  subtitle,
   icon,
   iconTint,
   value,
@@ -129,6 +161,7 @@ export function Row({
   accessory,
   style,
 }: RowBase & {
+  subtitle?: string | null;
   value?: string | null;
   onPress?: () => void;
   chevron?: boolean;
@@ -144,18 +177,20 @@ export function Row({
   const { colors, type } = useTheme();
   const content = (
     <>
-      {icon && <RowIcon icon={icon} tint={iconTint} />}
-      <Text
-        style={[
-          type.body,
-          // A value gives way to its label, which stays on one line.
-          { color: destructive ? colors.danger : colors.text, flexShrink: value ? 0 : 1 },
-          !accessory && !value && { flex: 1 },
-        ]}
-        numberOfLines={2}
-      >
-        {label}
-      </Text>
+      {icon && <RowIcon icon={icon} tint={iconTint} destructive={destructive} />}
+      <View style={[!accessory && !value && { flex: 1 }, { flexShrink: value ? 0 : 1, gap: 1 }]}>
+        <Text
+          style={[type.body, { color: destructive ? colors.danger : colors.text }]}
+          numberOfLines={2}
+        >
+          {label}
+        </Text>
+        {!!subtitle && (
+          <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
+            {subtitle}
+          </Text>
+        )}
+      </View>
       {(accessory || !!value) && <View style={{ flex: 1 }} />}
       {!!value && (
         <Text
@@ -217,25 +252,13 @@ export function SwitchRow({
   onChange,
   disabled,
 }: RowBase & { value: boolean; onChange: (value: boolean) => void }) {
-  const { colors } = useTheme();
   return (
     <Row
       label={label}
       icon={icon}
       iconTint={iconTint}
       accessory={
-        <Switch
-          accessibilityLabel={label}
-          value={value}
-          disabled={disabled}
-          onValueChange={(next) => {
-            void Haptics.selectionAsync();
-            onChange(next);
-          }}
-          trackColor={{ true: colors.good, false: colors.surface3 }}
-          thumbColor={Platform.OS === 'android' ? '#ffffff' : undefined}
-          ios_backgroundColor={colors.surface3}
-        />
+        <Switch accessibilityLabel={label} value={value} disabled={disabled} onChange={onChange} />
       }
     />
   );
@@ -270,7 +293,7 @@ export function ChoiceRow<T>({
   const current = choices[index]?.label ?? '';
   const pick = (next: T) => {
     if (next === value) return;
-    void Haptics.selectionAsync();
+    haptics.selection();
     onChange(next);
   };
   if (Platform.OS === 'ios')
@@ -349,8 +372,8 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 16,
   },
-  sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.4 },
-  separator: { height: StyleSheet.hairlineWidth, marginLeft: 16 },
+  sectionTitle: { textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '600' },
+  separator: { height: 1, marginLeft: 16 },
   row: {
     minHeight: 50,
     paddingHorizontal: 16,
@@ -360,9 +383,9 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   rowIcon: {
-    width: 29,
-    height: 29,
-    borderRadius: 7,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },

@@ -1,11 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
   activityCardSettings,
+  canDropHomeSectionInGap,
   defaultHomeLayout,
+  dropHomeSection,
+  findHomeDropTarget,
   HOME_SECTIONS,
   fillHomeSectionGap,
   homeLayoutDraft,
   homeSectionGaps,
+  homeSectionGridRows,
   homeSectionLists,
   homeSectionRows,
   homeSectionSpans,
@@ -16,6 +20,7 @@ import {
   toggleHomeSectionWidth,
   homeSectionSettings,
   updateHomeSectionSettings,
+  type HomeDropRect,
   type HomeLayout,
 } from './homeLayout';
 
@@ -267,5 +272,84 @@ describe('Home layout for the app', () => {
     const draft = homeLayoutDraft(saved);
     expect(draft.settings?.workouts).toEqual({ weeks: 8 });
     expect(draft.order).not.toBe(saved.order);
+  });
+
+  it('pairs each six-column row with its trailing empty slot when space remains', () => {
+    expect(
+      homeSectionGridRows(['consistency', 'friends', 'workouts', 'cardio-sessions', 'zone2'], {
+        consistency: 'compact',
+        friends: 'full',
+        workouts: 'compact',
+        'cardio-sessions': 'compact',
+        zone2: 'compact',
+      }),
+    ).toEqual([
+      {
+        items: [{ id: 'consistency', span: 3 }],
+        gap: { after: 'consistency', span: 3 },
+      },
+      {
+        items: [{ id: 'friends', span: 6 }],
+        gap: null,
+      },
+      {
+        items: [
+          { id: 'workouts', span: 2 },
+          { id: 'cardio-sessions', span: 2 },
+        ],
+        gap: { after: 'cardio-sessions', span: 2 },
+      },
+      {
+        items: [{ id: 'zone2', span: 3 }],
+        gap: { after: 'zone2', span: 3 },
+      },
+    ]);
+  });
+
+  it('drops cards into gaps or onto other cards and hit-tests grid targets', () => {
+    const saved: HomeLayout = {
+      ...defaultHomeLayout(),
+      widths: { consistency: 'compact', friends: 'full' },
+    };
+    expect(canDropHomeSectionInGap('friends', 'consistency', 3)).toBe(true);
+    expect(canDropHomeSectionInGap('consistency', 'consistency', 3)).toBe(false);
+    expect(canDropHomeSectionInGap('friends', 'consistency', 1)).toBe(false);
+
+    const inGap = dropHomeSection(saved, 'friends', {
+      kind: 'gap',
+      after: 'consistency',
+      span: 3,
+    });
+    expect(inGap.order[inGap.order.indexOf('consistency') + 1]).toBe('friends');
+    expect(inGap.widths?.friends).toBe('compact');
+    expect(new Set(inGap.order).size).toBe(HOME_SECTIONS.length);
+
+    const onCard = dropHomeSection(saved, 'zone2', { kind: 'card', id: 'consistency' });
+    expect(onCard.order.indexOf('zone2')).toBe(saved.order.indexOf('consistency'));
+    expect(new Set(onCard.order).size).toBe(HOME_SECTIONS.length);
+
+    const rects: HomeDropRect[] = [
+      { target: { kind: 'card', id: 'consistency' }, x: 0, y: 0, width: 170, height: 90 },
+      {
+        target: { kind: 'gap', after: 'consistency', span: 3 },
+        x: 180,
+        y: 0,
+        width: 170,
+        height: 90,
+      },
+      { target: { kind: 'card', id: 'friends' }, x: 0, y: 100, width: 350, height: 60 },
+    ];
+    expect(findHomeDropTarget(rects, 'friends', 220, 40)).toEqual({
+      kind: 'gap',
+      after: 'consistency',
+      span: 3,
+    });
+    expect(findHomeDropTarget(rects, 'consistency', 220, 40)).toBeNull();
+    expect(findHomeDropTarget(rects, 'friends', 50, 40)).toEqual({
+      kind: 'card',
+      id: 'consistency',
+    });
+    expect(findHomeDropTarget(rects, 'friends', 50, 120)).toBeNull();
+    expect(findHomeDropTarget(rects, 'friends', 400, 40)).toBeNull();
   });
 });

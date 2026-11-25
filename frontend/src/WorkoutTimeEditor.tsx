@@ -1,11 +1,6 @@
 import { useId, useState, type FormEvent } from 'react';
 import { PopupDialog } from './PopupDialog';
-import { MAX_LIVE_CLOCK_SECONDS } from './workoutPause';
-
-function wholeNumber(value: string, max: number): number {
-  const parsed = Math.floor(Number(value));
-  return Number.isFinite(parsed) ? Math.min(max, Math.max(0, parsed)) : 0;
-}
+import { workoutTimeFields, workoutTimeSeconds } from './workoutTimeCorrection';
 
 /**
  * Corrects the live workout clock, for a workout whose timer was started late or left running.
@@ -21,19 +16,14 @@ export function WorkoutTimeEditor({
   onSave: (seconds: number) => void;
   onClose: () => void;
 }) {
-  const startingMinutes = Math.floor(Math.min(elapsedSeconds, MAX_LIVE_CLOCK_SECONDS) / 60);
-  const [hours, setHours] = useState(String(Math.floor(startingMinutes / 60)));
-  const [minutes, setMinutes] = useState(String(startingMinutes % 60));
+  const [starting] = useState(() => workoutTimeFields(elapsedSeconds));
+  const [hours, setHours] = useState(starting.hours);
+  const [minutes, setMinutes] = useState(starting.minutes);
   const formId = useId();
 
   function submit(event: FormEvent) {
     event.preventDefault();
-    onSave(
-      Math.min(
-        MAX_LIVE_CLOCK_SECONDS,
-        wholeNumber(hours, 23) * 3600 + wholeNumber(minutes, 59) * 60,
-      ),
-    );
+    onSave(workoutTimeSeconds(hours, minutes));
   }
 
   return (

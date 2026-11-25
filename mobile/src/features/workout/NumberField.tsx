@@ -20,6 +20,8 @@ export const NumberField = forwardRef<
     /** Shown muted: a value copied from last time, used if the set is logged as it is. */
     suggested?: boolean;
     done?: boolean;
+    /** Shown faintly while empty, such as last time's value, until the field is edited. */
+    placeholder?: string;
     onSubmitEditing?: () => void;
   }
 >(function NumberField(
@@ -32,11 +34,16 @@ export const NumberField = forwardRef<
     keyboardType = 'decimal-pad',
     suggested,
     done,
+    placeholder,
     onSubmitEditing,
   },
   ref,
 ) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type, radius, scheme } = useTheme();
+  const [focused, setFocused] = useState(false);
+  // Once someone types in or clears the field, last time's value no longer stands in for it,
+  // so an emptied field can't be read as still holding the old number.
+  const [edited, setEdited] = useState(false);
   const [text, setText] = useState(() => format(value));
   const latest = useRef(value);
   useEffect(() => {
@@ -49,6 +56,7 @@ export const NumberField = forwardRef<
       ref={ref}
       value={text}
       onChangeText={(next) => {
+        setEdited(true);
         setText(next);
         const parsed = parse(next);
         latest.current = parsed;
@@ -58,8 +66,14 @@ export const NumberField = forwardRef<
       keyboardType={keyboardType}
       returnKeyType="done"
       selectTextOnFocus
-      placeholder="–"
-      placeholderTextColor={colors.muted}
+      placeholder={(!edited && placeholder) || '–'}
+      // Fainter than a suggested value, which is logged as it is: a hint is only a hint.
+      placeholderTextColor={`${colors.muted}8C`}
+      selectionColor={colors.accent}
+      cursorColor={colors.accent}
+      keyboardAppearance={scheme}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
       accessibilityLabel={suggested ? `${label}, suggested value` : label}
       style={[
         type.body,
@@ -67,9 +81,12 @@ export const NumberField = forwardRef<
         styles.field,
         {
           borderRadius: radius.sm,
-          backgroundColor: done ? 'transparent' : colors.surface2,
+          // The web's set input: a raised field with a strong outline, accent while typing; a
+          // logged set reads as plain numbers on its green row.
+          backgroundColor: done && !focused ? 'transparent' : colors.surface2,
+          borderColor: focused ? colors.accent : done ? 'transparent' : colors.lineStrong,
           color: suggested && !done ? colors.muted : colors.text,
-          fontWeight: done ? '600' : '500',
+          fontWeight: '600',
         },
       ]}
     />
@@ -80,8 +97,10 @@ const styles = StyleSheet.create({
   field: {
     flex: 1,
     minWidth: 52,
-    height: 40,
+    height: 38,
+    borderWidth: 1,
     paddingHorizontal: 6,
+    fontSize: 15,
     textAlign: 'center',
   },
 });

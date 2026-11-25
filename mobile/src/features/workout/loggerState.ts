@@ -8,7 +8,9 @@ import {
   recentExerciseHistory,
   withSuggestedSets,
 } from '../../../../frontend/src/exerciseHistory';
+import type { ExerciseMachineChoices } from '../../../../frontend/src/exerciseMachineChoices';
 import { swapMovementExercise } from '../../../../frontend/src/exerciseSwap';
+import { movementAfterMachineMerge } from '../../../../frontend/src/machinePhotoMerge';
 import { movementWithMachines } from '../../../../frontend/src/setMachines';
 import { setKindUpdate, type SetKind } from '../../../../frontend/src/setFieldValues';
 import type { SessionTemplate } from '../../../../frontend/src/trainingSummary';
@@ -44,19 +46,20 @@ import {
   pauseWorkout,
   resumeWorkout,
   RUNNING,
+  withElapsedSeconds,
   type WorkoutPause,
 } from '../../../../frontend/src/workoutPause';
 import {
   movementAfterSetUpdate,
   setUpdateEffects,
 } from '../../../../frontend/src/workoutSetUpdate';
+import { movementWithAddedSet } from '../../../../frontend/src/workoutSetInsert';
 import {
   completeRemainingSets,
   hasRecordedPerformance,
 } from '../../../../frontend/src/workoutSets';
 import {
-  emptyDraftSet,
-  suggestedSetsFromHistory,
+  suggestedSetsForPickedExercise,
   templateDraftMovements,
 } from '../../../../frontend/src/workoutStartMovements';
 import {
@@ -460,55 +463,82 @@ export function olderHistoryFor(
   return baselines && date >= baselines.before ? baselines.byExercise : null;
 }
 
-/** Adds exercises from the picker, each with sets suggested from its last session. */
+/**
+ * Adds exercises from the picker, as the web's picker does: each on the machine chosen there (its
+ * sets suggested from that machine's last session) or else its own last session. With
+ * `supersetKey`, two or more added exercises form a superset.
+ */
 export function addExercises(
   state: LoggerState,
   selected: Exercise[],
   context: LoggerContext,
+  machineChoices: ExerciseMachineChoices = {},
+  supersetKey: string | null = null,
 ): LoggerState {
   const merged = mergeUniqueById(
     state.movements.map((item) => item.exercise),
     selected,
   );
-  const additions: WorkoutDraftMovement[] = merged
-    .slice(state.movements.length)
-    .map((exercise) => ({
+  const additions: WorkoutDraftMovement[] = merged.slice(state.movements.length).map((exercise) => {
+    const machine = machineSelection(exercise.id, machineChoices);
+    return {
       key: context.newKey(),
       exercise,
       notes: '',
-      ...machineSelection(exercise.id, {}),
+      ...machine,
       supersetKey: null,
       isComplete: false,
-      sets: suggestedSetsFromHistory(
+      sets: suggestedSetsForPickedExercise(
         context.workouts,
         exercise,
         state.workoutDate,
         state.resumingWorkoutId ?? undefined,
         olderHistoryFor(context, state.workoutDate),
         context.defaultRest,
+        machine.machinePhotoIds[0],
         context.newKey,
       ),
-    }));
-  return { ...state, movements: [...state.movements, ...additions] };
+    };
+  });
+  const movements = [...state.movements, ...additions];
+  return {
+    ...state,
+    movements:
+      supersetKey && additions.length >= 2
+        ? applySupersetSelection(
+            movements,
+            additions[0].key,
+            additions.slice(1).map((item) => item.key),
+            supersetKey,
+          )
+        : movements,
+  };
 }
 
 /**
  * Swaps an exercise for another, as the web does: logged sets stay with the original, planned
- * sets move to the replacement with loads from its own last session.
+ * sets move to the replacement with loads from its own last session. A machine chosen for the
+ * replacement in the picker is pinned, and its own last session on that machine sets the loads;
+ * without a choice the logger pins the replacement's last-used machine.
  */
 export function swapExercise(
   state: LoggerState,
   movementKey: string,
   replacement: Exercise,
   context: LoggerContext,
+  machineChoices: ExerciseMachineChoices = {},
+  /** The saved workout being edited, which isn't the replacement's previous session. */
+  excludedWorkoutId?: string,
 ): LoggerState {
-  const suggested = suggestedSetsFromHistory(
+  const machine = machineSelection(replacement.id, machineChoices);
+  const suggested = suggestedSetsForPickedExercise(
     context.workouts,
     replacement,
     state.workoutDate,
-    undefined,
+    excludedWorkoutId ?? state.resumingWorkoutId ?? undefined,
     olderHistoryFor(context, state.workoutDate),
     context.defaultRest,
+    machine.machinePhotoIds[0],
     context.newKey,
   );
   const movements = swapMovementExercise(
@@ -516,7 +546,7 @@ export function swapExercise(
     movementKey,
     replacement,
     suggested,
-    machineSelection(replacement.id, {}),
+    machine,
     context.newKey,
   );
   return movements === state.movements ? state : { ...state, movements };
@@ -561,6 +591,23 @@ export function chooseMachines(
       ),
     };
   });
+}
+
+/**
+ * After duplicate machines merge into `mergedId`, every exercise's pins and set assignments on a
+ * merged-away id (`awayIds`) move to it, as the server remaps saved sets; logged sets keep theirs.
+ */
+export function mergeMachines(
+  state: LoggerState,
+  mergedId: string,
+  awayIds: string[],
+): LoggerState {
+  const movements = state.movements.map((movement) =>
+    movementAfterMachineMerge(movement, mergedId, awayIds),
+  );
+  return movements.every((movement, index) => movement === state.movements[index])
+    ? state
+    : { ...state, movements };
 }
 
 export function setMachineSettings(
@@ -644,22 +691,21 @@ export function setSetKind(
   }).state;
 }
 
-/** Adds a set at the end, copying the one before it. Returns the new set's key too. */
+/**
+ * Adds a set at the end, copying the one before it, or at `position` (the web's "+" between
+ * sets), where its rest stays hidden until it is ticked. Returns the new set's key too.
+ */
 export function addSet(
   state: LoggerState,
   movementKey: string,
   context: Pick<LoggerContext, 'defaultRest' | 'newKey'>,
+  position?: number,
 ): { state: LoggerState; setKey: string | null } {
   let setKey: string | null = null;
   const next = mapMovement(state, movementKey, (movement) => {
-    const added = emptyDraftSet(
-      movement.exercise.kind,
-      movement.sets.at(-1),
-      context.defaultRest,
-      context.newKey(),
-    );
-    setKey = added.key;
-    return { ...movement, isComplete: false, sets: [...movement.sets, added] };
+    const key = context.newKey();
+    setKey = key;
+    return movementWithAddedSet(movement, context.defaultRest, key, position);
   });
   return { state: next, setKey };
 }
@@ -693,17 +739,32 @@ export function restoreSet(
   });
 }
 
+/** Where a set moves: one place up or down, or into another set's place. */
+export type SetMove = { by: -1 | 1 } | { to: string };
+
+/**
+ * Moves a set, found by its key in the workout as it is now, so a menu or drag opened before
+ * the sets changed (a set deleted on another device, say) moves the right set or nothing. Both
+ * places are checked before anything moves.
+ */
 export function moveSet(
   state: LoggerState,
   movementKey: string,
-  from: number,
-  to: number,
+  setKey: string,
+  move: SetMove,
 ): LoggerState {
-  return mapMovement(state, movementKey, (movement) =>
-    to < 0 || to >= movement.sets.length
-      ? movement
-      : { ...movement, sets: reorder(movement.sets, from, to) },
-  );
+  const movement = state.movements.find((item) => item.key === movementKey);
+  if (!movement) return state;
+  const from = movement.sets.findIndex((item) => item.key === setKey);
+  const to =
+    'by' in move ? from + move.by : movement.sets.findIndex((item) => item.key === move.to);
+  if (from < 0 || to < 0 || from >= movement.sets.length || to >= movement.sets.length)
+    return state;
+  if (from === to) return state;
+  return mapMovement(state, movementKey, (current) => ({
+    ...current,
+    sets: reorder(current.sets, from, to),
+  }));
 }
 
 export function moveMovement(state: LoggerState, index: number, direction: -1 | 1): LoggerState {
@@ -773,6 +834,19 @@ export function togglePause(state: LoggerState, now: number): LoggerState {
       state.pause.pausedAt === null
         ? pauseWorkout(state.pause, now)
         : resumeWorkout(state.pause, now),
+  };
+}
+
+/**
+ * Corrects the live clock to read `seconds` now, for a timer started late or left running, as
+ * the web's clock correction does: the session keeps its real start (and its draft identity),
+ * a pause stays as it is, and a fixed total kept from an earlier finish attempt gives way to it.
+ */
+export function correctWorkoutTime(state: LoggerState, seconds: number, now: number): LoggerState {
+  return {
+    ...state,
+    durationOverrideMinutes: null,
+    pause: withElapsedSeconds(state.pause, state.startedAt, seconds, now),
   };
 }
 

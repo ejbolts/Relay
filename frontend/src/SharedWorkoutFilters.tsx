@@ -1,15 +1,13 @@
 import { Icon } from './Icon';
-import { CATEGORY_LABELS } from './trainingSummary';
-import type {
-  SharedWorkoutFilters as Filters,
-  SharedWorkoutFilterOptions,
-  WorkoutCategory,
-} from './types';
-
-/** How many workout filters are set. */
-function activeFilterCount(filters: Filters) {
-  return Object.values(filters).filter(Boolean).length;
-}
+import {
+  NO_SHARED_WORKOUT_FILTERS,
+  sharedWorkoutFilterCount as activeFilterCount,
+  sharedWorkoutFilterLabel,
+  sharedWorkoutTypeChoices,
+  sharedWorkoutTypeValue,
+  withSharedWorkoutType,
+} from './sharedHistoryFilters';
+import type { SharedWorkoutFilters as Filters, SharedWorkoutFilterOptions } from './types';
 
 /** The filter button beside a profile's Workouts title, with the number of filters set. */
 export function SharedWorkoutFilterToggle({
@@ -28,7 +26,7 @@ export function SharedWorkoutFilterToggle({
     <button
       type="button"
       className={`shared-workout-filter-toggle${active > 0 ? ' is-filtered' : ''}`}
-      aria-label={active > 0 ? `Filter workouts, ${active} set` : 'Filter workouts'}
+      aria-label={sharedWorkoutFilterLabel(active)}
       aria-expanded={open}
       aria-controls={controls}
       onClick={() => onToggle(!open)}
@@ -60,31 +58,14 @@ export function SharedWorkoutFilters({
           Workout type
           <select
             aria-label="Workout type"
-            value={filters.workout_type_id ? `custom:${filters.workout_type_id}` : filters.category}
-            onChange={(event) => {
-              const value = event.target.value;
-              if (value.startsWith('custom:')) {
-                onChange({ ...filters, category: '', workout_type_id: value.slice(7) });
-              } else {
-                const next = { ...filters, category: value as WorkoutCategory | '' };
-                delete next.workout_type_id;
-                onChange(next);
-              }
-            }}
+            value={sharedWorkoutTypeValue(filters)}
+            onChange={(event) => onChange(withSharedWorkoutType(filters, event.target.value))}
           >
-            <option value="">All types</option>
-            {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-              <option value={value} key={value}>
-                {label}
+            {sharedWorkoutTypeChoices(options).map((choice) => (
+              <option value={choice.value} key={choice.value}>
+                {choice.label}
               </option>
             ))}
-            {options.workout_types
-              ?.filter((type) => type.is_custom)
-              .map((type) => (
-                <option value={`custom:${type.id}`} key={type.id}>
-                  {type.name}
-                </option>
-              ))}
           </select>
         </label>
         <label>
@@ -141,15 +122,7 @@ export function SharedWorkoutFilters({
           <button
             className="pulse-button link small"
             type="button"
-            onClick={() =>
-              onChange({
-                category: '',
-                exercise_id: '',
-                machine_photo_id: '',
-                start_date: '',
-                end_date: '',
-              })
-            }
+            onClick={() => onChange(NO_SHARED_WORKOUT_FILTERS)}
           >
             Reset filters
           </button>

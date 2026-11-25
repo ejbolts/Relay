@@ -15,14 +15,25 @@ import { apiGet, apiSend } from '../../data/api';
 import { showToast } from '../../ui/Toast';
 import { preferences, TODAY } from '../training/trainingFixtures';
 import { selectBlock, useBlockScope } from './blockQueries';
+import { coachHighlight } from '../guides/GuideCoach';
+import {
+  activeSetupGuide,
+  exitSetupGuide,
+  resetSetupGuideForTests,
+  startSetupGuide,
+} from '../guides/setupGuides';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
+import { resetTipsForTests, tipsFor } from '../guides/tips';
 import { BlockFormScreen } from './BlockFormScreen';
 import { BlocksScreen } from './BlocksScreen';
 import { BlockSummaryScreen } from './BlockSummaryScreen';
 import { HomeTrainingBlockCard } from './index';
 
 const mockRouter = { push: jest.fn(), back: jest.fn(), navigate: jest.fn() };
+const mockFocus = { current: true };
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
+  useIsFocused: () => mockFocus.current,
   Stack: {
     Screen: ({ options }: { options?: { headerRight?: () => ReactNode } }) =>
       options?.headerRight?.() ?? null,
@@ -34,6 +45,22 @@ jest.mock('../../data/api', () => ({
   apiSend: jest.fn(),
 }));
 jest.mock('../../ui/Toast', () => ({ showToast: jest.fn(), ToastHost: () => null }));
+// Pinches can't be made in a test; the timeline's pinch reaches its handlers through this stand-in.
+const mockPinches: { onUpdate?: (event: { scale: number; focalX: number }) => void }[] = [];
+jest.mock('react-native-gesture-handler', () => ({
+  GestureHandlerRootView: ({ children }: { children: unknown }) => children,
+  GestureDetector: ({ children }: { children: unknown }) => children,
+  ScrollView: jest.requireActual<typeof import('react-native')>('react-native').ScrollView,
+  usePinchGesture: (config: (typeof mockPinches)[number]) => {
+    mockPinches.push(config);
+    return config;
+  },
+}));
+jest.mock('expo-screen-orientation', () => ({
+  lockAsync: jest.fn(async () => undefined),
+  unlockAsync: jest.fn(async () => undefined),
+  OrientationLock: { LANDSCAPE: 'landscape' },
+}));
 // A plain text box for the native date picker, so a test can type a date.
 jest.mock('../body/DateField', () => {
   const { createElement } = jest.requireActual<typeof import('react')>('react');
@@ -217,6 +244,25 @@ describe('the blocks overview', () => {
   });
 });
 
+describe('the training timeline', () => {
+  test('pinching zooms the timeline in to months, and it opens in landscape', async () => {
+    await open(<BlocksScreen />);
+    await screen.findByLabelText('2026 training blocks');
+    const hidden = { includeHiddenElements: true };
+    expect(screen.queryByText('Mar', hidden)).toBeNull();
+    await act(async () => mockPinches.at(-1)!.onUpdate!({ scale: 2.5, focalX: 160 }));
+    expect(screen.getAllByText('Mar', hidden).length).toBeGreaterThan(0);
+
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'View Training timeline full screen in landscape' }),
+    );
+    expect(
+      await screen.findByRole('button', { name: 'Exit full-screen Training timeline' }),
+    ).toBeVisible();
+    expect(jest.requireMock('expo-screen-orientation').lockAsync).toHaveBeenCalledWith('landscape');
+  });
+});
+
 describe('the block form', () => {
   test('starts a block today, shows it as the current one, and confirms', async () => {
     const started = block('Winter', today);
@@ -236,6 +282,61 @@ describe('the block form', () => {
       color: '#b59cf0',
     });
     expect(showToast).toHaveBeenCalledWith('Training block started');
+  });
+
+  test('the training blocks guide coaches a new block’s form and finishes once it starts', async () => {
+    resetSetupGuideForTests();
+    resetTipsForTests();
+    jest.mocked(apiSend).mockResolvedValueOnce({ blocks: [base, peak, block('Winter', today)] });
+    startSetupGuide('blocks', 'u1', []);
+    await open(<BlockFormScreen />);
+    expect(await screen.findByText('Setup guide · 1 of 4')).toBeVisible();
+    expect(screen.getByText('Name this phase')).toBeVisible();
+    expect(coachHighlight()).toBe('blocks.name');
+    // Next waits for a name, as the web's.
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+    await fireEvent.changeText(screen.getByLabelText('Block name'), 'Winter');
+    await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Pick a start')).toBeVisible();
+    expect(coachHighlight()).toBe('blocks.start');
+    await fireEvent.press(screen.getByRole('button', { name: 'Back' }));
+    expect(screen.getByText('Name this phase')).toBeVisible();
+    for (let step = 0; step < 3; step++)
+      await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+    expect(screen.getByText('Start the block')).toBeVisible();
+    expect(screen.getByText('Setup guide · 4 of 4')).toBeVisible();
+    expect(coachHighlight()).toBe('blocks.submit');
+    // The last step finishes with the real Start.
+    expect(screen.queryByRole('button', { name: 'Next' })).toBeNull();
+    await fireEvent.press(screen.getByRole('button', { name: 'Start block' }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(activeSetupGuide()).toBeNull();
+    expect(tipsFor('u1').get().seen.blocks).toBe('learned');
+    expect(screen.queryByText(/Setup guide/)).toBeNull();
+  });
+
+  test('a block form opened outside a guide shows no coaching; Skip guide or leaving marks nothing', async () => {
+    resetSetupGuideForTests();
+    resetTipsForTests();
+    let view = await open(<BlockFormScreen />);
+    expect(await screen.findByLabelText('Block name')).toBeVisible();
+    expect(screen.queryByText(/Setup guide/)).toBeNull();
+    await view.unmount();
+
+    startSetupGuide('blocks', 'u1', []);
+    view = await open(<BlockFormScreen />);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Skip guide' }));
+    expect(activeSetupGuide()).toBeNull();
+    expect(screen.queryByText(/Setup guide/)).toBeNull();
+    expect(coachHighlight()).toBeNull();
+    await view.unmount();
+
+    startSetupGuide('blocks', 'u1', []);
+    view = await open(<BlockFormScreen />);
+    expect(await screen.findByText('Setup guide · 1 of 4')).toBeVisible();
+    await view.unmount();
+    await waitFor(() => expect(activeSetupGuide()).toBeNull());
+    expect(tipsFor('u1').get().seen.blocks).toBeUndefined();
   });
 
   test('a custom start asks for the date', async () => {
@@ -269,6 +370,52 @@ describe('the block form', () => {
     const buttons = jest.mocked(Alert.alert).mock.calls.at(-1)![2] as AlertButton[];
     await act(async () => buttons.find((button) => button.text === 'Remove block')!.onPress!());
     expect(apiSend).toHaveBeenLastCalledWith('/api/training-blocks/Peak', 'DELETE');
+  });
+});
+
+describe('the training blocks guide and late saves', () => {
+  const pending = <T,>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => (resolve = done));
+    return { promise, resolve };
+  };
+  beforeEach(() => {
+    resetSetupGuideForTests();
+    resetTipsForTests();
+    mockFocus.current = true;
+  });
+
+  async function startSlowSave() {
+    const save = pending<TrainingBlocks>();
+    jest.mocked(apiSend).mockReturnValueOnce(save.promise as never);
+    startSetupGuide('blocks', 'u1', []);
+    await open(<BlockFormScreen />);
+    await fireEvent.changeText(await screen.findByLabelText('Block name'), 'Winter');
+    await fireEvent.press(screen.getByRole('button', { name: 'Start block' }));
+    return save;
+  }
+
+  test('a save that answers after a new guide started leaves the new guide running', async () => {
+    const save = await startSlowSave();
+    exitSetupGuide('blocks');
+    startSetupGuide('blocks', 'u1', []);
+    const replacement = activeSetupGuide();
+    await act(async () => save.resolve({ blocks: [base, peak, block('Winter', today)] }));
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(activeSetupGuide()).toBe(replacement);
+    expect(tipsFor('u1').get().seen.blocks).toBeUndefined();
+  });
+
+  test('a save that answers after another account started a guide leaves that guide alone', async () => {
+    const save = await startSlowSave();
+    nextSessionEpoch();
+    startSetupGuide('blocks', 'u2', []);
+    const replacement = activeSetupGuide();
+    await act(async () => save.resolve({ blocks: [base, peak, block('Winter', today)] }));
+    await waitFor(() => expect(apiSend).toHaveBeenCalled());
+    expect(activeSetupGuide()).toBe(replacement);
+    expect(tipsFor('u1').get().seen.blocks).toBeUndefined();
+    expect(tipsFor('u2').get().seen.blocks).toBeUndefined();
   });
 });
 

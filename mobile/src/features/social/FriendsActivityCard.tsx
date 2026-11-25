@@ -137,7 +137,10 @@ export function FriendsActivityCard({ title = 'Recent Friends Activity' }: { tit
                           }
                           style={({ pressed }) => [{ gap: 2 }, pressed && { opacity: 0.6 }]}
                         >
-                          <Text style={[type.headline, { color: colors.text }]} numberOfLines={1}>
+                          <Text
+                            style={[type.headline, { color: colors.accentText, fontWeight: '700' }]}
+                            numberOfLines={2}
+                          >
                             {session.name}
                           </Text>
                           <View style={styles.meta}>

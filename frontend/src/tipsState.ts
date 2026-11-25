@@ -4,6 +4,10 @@ export { TIP_DEFINITIONS, type TipId, type TipTarget } from './tipDefinitions';
 
 export type TipState = {
   enabled: boolean;
+  /** When Show tips was last switched, so the latest choice wins across devices (tipSync). */
+  enabledAt?: number;
+  /** The server's tip generation this copy last synced (tipSync); a restore starts a new one. */
+  syncGeneration?: string;
   lastShown: number;
   seen: Partial<Record<TipId, 'seen' | 'dismissed' | 'learned'>>;
   counts: Record<string, number>;
@@ -36,9 +40,10 @@ export const freshTips = (): TipState => ({
   shows: {},
 });
 export const tipStorageKey = (account: string) => `relay:tips:v1:${account}`;
-export function loadTips(account: string): TipState {
+/** A device's stored tips, as saved by either app; anything unreadable starts fresh. */
+export function parseTips(raw: string | null): TipState {
   try {
-    const value = JSON.parse(localStorage.getItem(tipStorageKey(account)) ?? 'null');
+    const value = JSON.parse(raw ?? 'null');
     if (!value || typeof value !== 'object') return freshTips();
     const tipIds = (list: unknown) =>
       Array.isArray(list)
@@ -74,6 +79,14 @@ export function loadTips(account: string): TipState {
         ),
       ),
       enabled: value.enabled !== false,
+      ...(typeof value.enabledAt === 'number' &&
+      Number.isFinite(value.enabledAt) &&
+      value.enabledAt > 0
+        ? { enabledAt: value.enabledAt }
+        : {}),
+      ...(typeof value.syncGeneration === 'string' && value.syncGeneration.length <= 64
+        ? { syncGeneration: value.syncGeneration }
+        : {}),
       lastShown:
         typeof value.lastShown === 'number' && Number.isFinite(value.lastShown)
           ? value.lastShown
@@ -93,13 +106,6 @@ export function loadTips(account: string): TipState {
     } as TipState;
   } catch {
     return freshTips();
-  }
-}
-export function saveTips(account: string, state: TipState) {
-  try {
-    localStorage.setItem(tipStorageKey(account), JSON.stringify(state));
-  } catch {
-    /* In-memory state still works when storage is unavailable. */
   }
 }
 /** Priority tips explain something easy to get wrong, so they skip the onboarding gates. */
@@ -132,6 +138,10 @@ export function tipShown(state: TipState, id: TipId, now: number): TipState {
     shows: { ...state.shows, [id]: shows },
     seen: shows >= TIP_MAX_SHOWS ? { ...state.seen, [id]: 'seen' } : state.seen,
   };
+}
+/** Show tips switched on or off now; the account's other devices follow the latest choice. */
+export function withTipsEnabled(state: TipState, enabled: boolean, now: number): TipState {
+  return { ...state, enabled, enabledAt: now };
 }
 export function countTipEvent(state: TipState, event: string): TipState {
   return {

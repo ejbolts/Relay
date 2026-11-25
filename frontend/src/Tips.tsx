@@ -14,24 +14,41 @@ import { PopupDialog } from './PopupDialog';
 import { useToast } from './Toast';
 import { openTipTarget } from './tipActions';
 import {
-  canShowTip,
-  countTipEvent,
+  hintMayShow,
+  interruptedNudge,
+  priorityTipWaiting,
+  shownTipEnds,
+  tipEventRequest,
+  TIP_QUIET_MS,
+  waitingNudge,
+  type ShownNudge,
+  type TipEnvironment,
+} from './tipScheduling';
+import {
   freshTips,
   isPriorityTip,
   isQuietTip,
-  loadTips,
-  saveTips,
   tipAction,
   tipShown,
   tipStorageKey,
   TIP_DEFINITIONS,
   withTipReminders,
+  withTipsEnabled,
   type TipId,
   type TipState,
 } from './tipsState';
+import {
+  holdTipSync,
+  loadSavedTips,
+  loadTips,
+  loadTipSyncHold,
+  saveTips,
+  sendTips,
+} from './tipsStorage';
+import { createTipSync, tipSyncHoldUntil, type TipSync } from './tipSync';
 import './tips.css';
 
-type Environment = { page: string; ready: boolean; resting: boolean; workoutCount: number };
+type Environment = TipEnvironment;
 type Candidate = { id: TipId; element: HTMLElement; until: number };
 const noop = () => {};
 interface TipsApi {
@@ -123,9 +140,12 @@ export function TipsProvider({
   const [libraryOpen, setLibraryOpen] = useState(false);
   const activePage = useRef('');
   const activeSince = useRef(0);
+  const activeNudge = useRef<ShownNudge | null>(null);
   const quietSince = useRef(0);
   const toastShowing = useRef(false);
   toastShowing.current = useToast().active;
+  // Keeps this account's tips in step with its other devices and the app (tipSync).
+  const syncRef = useRef<TipSync | null>(null);
   const [api] = useState(() => {
     function write(change: TipState) {
       // A guided tip put away before its feature is used is scheduled to come back.
@@ -133,9 +153,11 @@ export function TipsProvider({
       stateRef.current = next;
       setState(next);
       if (account) saveTips(account, next);
+      syncRef.current?.changed();
     }
     function close() {
       activeRef.current = null;
+      activeNudge.current = null;
       setSlot(null);
       setActive(null);
     }
@@ -156,10 +178,16 @@ export function TipsProvider({
           completedSetAt.current = Date.now();
           return;
         }
-        const next = countTipEvent(stateRef.current, name);
+        const { state: next, request } = tipEventRequest(
+          stateRef.current,
+          name,
+          tip,
+          threshold,
+          env.current.page,
+          Date.now(),
+        );
         write(next);
-        if (tip && next.counts[name] >= threshold && !next.seen[tip])
-          pending.current.set(tip, { until: Date.now() + 120000, page: env.current.page });
+        if (tip && request) pending.current.set(tip, request);
       },
       learn(id: TipId) {
         if (stateRef.current.seen[id] === 'learned') return;
@@ -202,7 +230,7 @@ export function TipsProvider({
         openTipTarget({ target: action.target, ...(exerciseId && { exerciseId }) });
       },
       enable(enabled: boolean) {
-        write({ ...stateRef.current, enabled });
+        write(withTipsEnabled(stateRef.current, enabled, Date.now()));
         if (!enabled) close();
       },
       library() {
@@ -215,64 +243,127 @@ export function TipsProvider({
     // Keep reminders that came back or were scheduled while loading.
     if (account && JSON.stringify(loadTips(account)) !== JSON.stringify(stateRef.current))
       saveTips(account, stateRef.current);
+    const tipSync: TipSync | null = account
+      ? createTipSync({
+          // Another tab may have saved since this one last heard: replies merge into that.
+          read: () => loadSavedTips(account) ?? stateRef.current,
+          write: (next) => {
+            const previous = stateRef.current;
+            stateRef.current = next;
+            setState(next);
+            saveTips(account, next);
+            // A reply (such as an adopted restore that dismisses the showing tip) is reconciled
+            // with the showing tip like another tab's change.
+            reconcileActive(previous, next);
+          },
+          // The server refuses the tips if this browser is now signed in to another account.
+          send: (tips, generation) => sendTips(account, tips, generation),
+          current: () => syncRef.current === tipSync,
+          sharedHold: () => loadTipSyncHold(account),
+        })
+      : null;
+    syncRef.current = tipSync;
+    tipSync?.syncNow();
     const sync = (event: StorageEvent) => {
       if (!account || (event.key !== tipStorageKey(account) && event.key !== null)) return;
+      const previous = stateRef.current;
       const next = withTipReminders(loadTips(account), Date.now());
       stateRef.current = next;
       setState(next);
+      reconcileActive(previous, next);
+    };
+    /**
+     * Another tab or a sync reply changed the tips while one shows. It stays up when the change
+     * leaves it as it is: a nudge whose showing is still ours (keeping its rollback), or another
+     * tip whose status is unchanged while tips stay on. Otherwise a nudge goes through the guarded
+     * rollback, which leaves newer state alone, and any other tip closes.
+     */
+    const reconcileActive = (previous: TipState, next: TipState) => {
+      const id = activeRef.current;
+      if (!id) return;
+      const currentNudge = activeNudge.current;
+      const unaffected = currentNudge
+        ? showingStillOurs(next, currentNudge)
+        : next.enabled && next.seen[id] === previous.seen[id];
+      if (unaffected) return;
+      if (currentNudge) interrupt(Date.now());
+      else api.close();
+    };
+    /** The stored tips still hold this nudge's showing and nothing newer has replaced it. */
+    const showingStillOurs = (stored: TipState, currentNudge: ShownNudge) =>
+      stored.enabled &&
+      stored.lastShown === currentNudge.at &&
+      (stored.shows?.[currentNudge.id] ?? 0) === currentNudge.shownCount &&
+      stored.seen[currentNudge.id] === currentNudge.seenAfter;
+    const interrupt = (now: number) => {
+      const currentNudge = activeNudge.current;
+      if (currentNudge && account) {
+        // Read the latest stored state before rolling back: another tab may have saved a newer
+        // showing or change before its storage event arrived. Leave newer stored state untouched.
+        const stored = loadTips(account);
+        if (showingStillOurs(stored, currentNudge)) {
+          const reverted = interruptedNudge(stored, currentNudge, now);
+          if (reverted) {
+            const next = withTipReminders(reverted.state, now);
+            stateRef.current = next;
+            setState(next);
+            saveTips(account, next);
+            tipSync?.changed();
+            pending.current.set(currentNudge.id, reverted.request);
+          }
+        }
+      }
       api.close();
     };
     const tick = () => {
       const now = Date.now(),
         current = env.current;
-      const available =
-        !!account && current.ready && stateRef.current.enabled && quiet(toastShowing.current);
-      // Before a first saved workout, only priority tips may appear.
-      const established = current.workoutCount > 0;
-      if (!available) {
+      if (!account || !stateRef.current.enabled) {
         quietSince.current = 0;
         if (activeRef.current) api.close();
+        return;
+      }
+      if (!current.ready || !quiet(toastShowing.current)) {
+        quietSince.current = 0;
+        if (activeRef.current) interrupt(now);
         return;
       }
       if (!quietSince.current) quietSince.current = now;
       if (activeRef.current) {
         const id = activeRef.current;
         if (
-          activePage.current !== current.page ||
-          (TIP_DEFINITIONS[id].surface === 'nudge' &&
-            (now - activeSince.current >= 12000 ||
-              (current.page === 'log' &&
-                !current.resting &&
-                now - completedSetAt.current >= 20000)))
+          shownTipEnds(
+            id,
+            { page: activePage.current, at: activeSince.current },
+            current,
+            completedSetAt.current,
+            now,
+          )
         ) {
           api.close();
           return;
         }
         // A waiting priority nudge replaces an ordinary tip that is already showing.
-        const priorityWaiting = [...pending.current].some(
-          ([pendingId, request]) =>
-            isPriorityTip(pendingId) &&
-            request.until > now &&
-            request.page === current.page &&
-            canShowTip(stateRef.current, pendingId, now),
-        );
-        if (isPriorityTip(id) || !priorityWaiting) return;
+        if (
+          isPriorityTip(id) ||
+          !priorityTipWaiting(pending.current, stateRef.current, current.page, now)
+        )
+          return;
         api.close();
       }
-      if (now - quietSince.current < 1500) return;
-      const nudge = [...pending.current].find(
-        ([id, request]) =>
-          request.until > now &&
-          (established || isPriorityTip(id)) &&
-          (id === 'back' || request.page === current.page) &&
-          canShowTip(stateRef.current, id, now) &&
-          (current.page !== 'log' || current.resting || now - completedSetAt.current < 20000),
+      if (now - quietSince.current < TIP_QUIET_MS) return;
+      const nudge = waitingNudge(
+        pending.current,
+        stateRef.current,
+        current,
+        completedSetAt.current,
+        now,
       );
       const candidate = [...candidates.current.entries()].find(
         ([, { id, element }]) =>
-          established && canShowTip(stateRef.current, id, now) && visible(element),
+          hintMayShow(stateRef.current, id, current, now) && visible(element),
       );
-      const id = nudge?.[0] ?? candidate?.[1].id;
+      const id = nudge ?? candidate?.[1].id;
       if (!id) return;
       // Read again before claiming: another tab may have spent today's shared allowance.
       const stored = loadTips(account!);
@@ -281,21 +372,41 @@ export function TipsProvider({
         setState(stored);
         return;
       }
+      const previousLastShown = stateRef.current.lastShown;
+      const request = nudge ? pending.current.get(nudge) : undefined;
       const next = withTipReminders(tipShown(stateRef.current, id, now), now);
+      // An interrupted nudge may be put back, so its showing waits before reaching the server,
+      // from this tab or any other: the hold is saved before the showing.
+      if (nudge) {
+        holdTipSync(account!, tipSyncHoldUntil(now));
+        tipSync?.hold(tipSyncHoldUntil(now));
+      }
       stateRef.current = next;
       setState(next);
       saveTips(account!, next);
+      tipSync?.changed();
       setSlot(nudge ? null : (candidate?.[0] ?? null));
       activeRef.current = id;
       activeSince.current = now;
       activePage.current = current.page;
+      activeNudge.current =
+        nudge && request
+          ? {
+              id: nudge,
+              at: now,
+              previousLastShown,
+              request,
+              shownCount: next.shows?.[nudge] ?? 0,
+              seenAfter: next.seen[nudge],
+            }
+          : null;
       setActive(id);
       pending.current.delete(id);
     };
     const visibility = () => {
       if (document.visibilityState === 'hidden') {
         quietSince.current = 0;
-        api.close();
+        if (activeRef.current) interrupt(Date.now());
         return;
       }
       // An app left open for days still brings reminders back when it is next looked at.
@@ -304,15 +415,22 @@ export function TipsProvider({
         stateRef.current = reminded;
         setState(reminded);
         if (account) saveTips(account, reminded);
+        tipSync?.changed();
       }
+      tipSync?.refresh();
     };
+    const focus = () => tipSync?.refresh();
     const timer = window.setInterval(tick, 500);
     document.addEventListener('visibilitychange', visibility);
     window.addEventListener('storage', sync);
+    window.addEventListener('focus', focus);
     return () => {
       clearInterval(timer);
       document.removeEventListener('visibilitychange', visibility);
       window.removeEventListener('storage', sync);
+      window.removeEventListener('focus', focus);
+      tipSync?.stop();
+      if (syncRef.current === tipSync) syncRef.current = null;
     };
   }, [account, api]);
   useEffect(() => {
@@ -537,13 +655,13 @@ export function TipsSettings() {
         </button>
       </header>
       <div className="notification-setting-row">
-        <strong>Show tips on this device</strong>
+        <strong>Show tips</strong>
         <button
           type="button"
           className={tips.state.enabled ? 'is-on' : ''}
           role="switch"
           aria-checked={tips.state.enabled}
-          aria-label="Show tips on this device"
+          aria-label="Show tips"
           onClick={() => tips.enable(!tips.state.enabled)}
         >
           <span />

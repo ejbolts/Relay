@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -9,8 +8,10 @@ import { useDashboard, useUpNext, useWeightUnit, useWorkoutHistory } from '../..
 import { Button, Card, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { haptics } from '../../ui/haptics';
 import { showToast } from '../../ui/Toast';
 import { useWorkout } from '../workout/WorkoutProvider';
+import { mixColor } from './color';
 import { useMoveSplit, useTypeColors } from './homeData';
 import { homeIcons } from './homeIcons';
 
@@ -18,7 +19,7 @@ const SHOWN_EXERCISES = 6;
 
 /** Home's first card, as on the web: the suggested session and the buttons that start it. */
 export function UpNextCard() {
-  const { colors, type, space } = useTheme();
+  const { colors, type } = useTheme();
   const router = useRouter();
   const today = localDate();
   const workout = useWorkout();
@@ -83,7 +84,7 @@ export function UpNextCard() {
       showToast(errorMessage(error) || 'Could not skip this day.');
       return;
     }
-    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    haptics.success();
     showToast(splitSkipMessage(skip, types), {
       label: 'Undo',
       run: () => {
@@ -166,25 +167,23 @@ export function UpNextCard() {
         {source && <Text style={[type.footnote, { color: colors.muted }]}>{source}</Text>}
       </View>
       {shown.length > 0 && (
+        // The web's two-column grid: rows in pairs, so an odd last exercise keeps its column.
         <View style={styles.exercises}>
-          {shown.map((item) => {
-            const set = upNextSetLabel(item, latestSets.get(item.exercise.id), weightUnit);
-            return (
-              <View
-                key={item.exercise.id}
-                accessible
-                accessibilityLabel={`${item.exercise.name}, ${set.title}`}
-                style={[styles.exercise, { borderBottomColor: colors.line }]}
-              >
-                <Text style={[type.footnote, { color: colors.text, flex: 1 }]} numberOfLines={1}>
-                  {item.exercise.name}
-                </Text>
-                <Text style={[type.footnote, type.number, { color: colors.secondary }]}>
-                  {set.text}
-                </Text>
-              </View>
-            );
-          })}
+          {pairs(shown).map((pair) => (
+            <View key={pair[0].exercise.id} style={styles.pair}>
+              {pair.map((item, index) =>
+                item ? (
+                  <ExerciseRow
+                    key={item.exercise.id}
+                    name={item.exercise.name}
+                    set={upNextSetLabel(item, latestSets.get(item.exercise.id), weightUnit)}
+                  />
+                ) : (
+                  <View key={`empty-${index}`} style={styles.exercise} />
+                ),
+              )}
+            </View>
+          ))}
         </View>
       )}
       {more > 0 && (
@@ -199,25 +198,44 @@ export function UpNextCard() {
           {message}
         </Text>
       )}
-      <View style={{ flexDirection: 'row', gap: space.sm }}>
-        <Button
-          label="Start workout"
-          icon={template ? 'play' : homeIcons.addCircle}
+      {/* The web's split button: Start and Empty share one accent pill. */}
+      <View style={styles.actions}>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel={template ? `Start ${label?.toLowerCase()} workout` : 'Start workout'}
-          style={{ flex: 1 }}
-          onPress={() =>
-            workout.start(template && !startsEmpty ? { kind: 'up-next' } : { kind: 'empty' })
-          }
-        />
+          onPress={() => {
+            haptics.tap();
+            workout.start(template && !startsEmpty ? { kind: 'up-next' } : { kind: 'empty' });
+          }}
+          style={({ pressed }) => [
+            styles.action,
+            styles.start,
+            { backgroundColor: colors.accent },
+            pressed && styles.pressed,
+          ]}
+        >
+          <Icon name={template ? 'play' : homeIcons.addCircle} size={16} color={colors.onAccent} />
+          <Text style={[type.button, { color: colors.onAccent }]}>Start workout</Text>
+        </Pressable>
         {/* On a rest day, or while the split needs updating, Start workout already starts empty,
             so a second Empty button would do the same thing. */}
         {!startsEmpty && (
-          <Button
-            label="Empty"
-            variant="secondary"
+          <Pressable
+            accessibilityRole="button"
             accessibilityLabel="Start empty workout"
-            onPress={() => workout.start({ kind: 'empty' })}
-          />
+            onPress={() => {
+              haptics.tap();
+              workout.start({ kind: 'empty' });
+            }}
+            style={({ pressed }) => [
+              styles.action,
+              styles.empty,
+              { backgroundColor: mixColor(colors.accent, '#000000', 0.8) },
+              pressed && styles.pressed,
+            ]}
+          >
+            <Text style={[type.button, styles.emptyLabel, { color: colors.onAccent }]}>Empty</Text>
+          </Pressable>
         )}
       </View>
     </Card>
@@ -231,14 +249,62 @@ const styles = StyleSheet.create({
   link: { flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 28 },
   linkText: { fontWeight: '600' },
   dim: { opacity: 0.55 },
-  exercises: { flexDirection: 'row', flexWrap: 'wrap', columnGap: 16 },
+  exercises: { gap: 0 },
+  pair: { flexDirection: 'row', columnGap: 12 },
   exercise: {
-    width: '47%',
-    flexGrow: 1,
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 6,
+    paddingVertical: 6,
+  },
+  name: { flex: 1, fontSize: 13, lineHeight: 17, fontWeight: '600' },
+  set: { fontSize: 12, fontWeight: '500' },
+  actions: { flexDirection: 'row', borderRadius: 14, overflow: 'hidden' },
+  action: {
+    minHeight: 46,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingVertical: 7,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    justifyContent: 'center',
+    gap: 8,
   },
+  start: { flex: 1, paddingHorizontal: 16 },
+  empty: {
+    paddingHorizontal: 18,
+    borderLeftWidth: 1,
+    borderLeftColor: 'rgba(255,255,255,0.22)',
+  },
+  emptyLabel: { fontWeight: '500' },
+  pressed: { opacity: 0.8 },
+  rule: { borderBottomWidth: 1 },
 });
+
+type ShownExercise = { exercise: { id: number | string; name: string } };
+
+/** Splits the shown exercises into rows of two, padding an odd last row. */
+function pairs<T extends ShownExercise>(items: T[]): [T, T | null][] {
+  const rows: [T, T | null][] = [];
+  for (let index = 0; index < items.length; index += 2) {
+    rows.push([items[index], items[index + 1] ?? null]);
+  }
+  return rows;
+}
+
+/** One exercise in the grid: its name over up to two lines and last time's top set. */
+function ExerciseRow({ name, set }: { name: string; set: { text: string; title: string } }) {
+  const { colors, type } = useTheme();
+  return (
+    <View
+      accessible
+      accessibilityLabel={`${name}, ${set.title}`}
+      style={[styles.exercise, styles.rule, { borderBottomColor: colors.line }]}
+    >
+      <Text style={[styles.name, { color: colors.text }]} numberOfLines={2}>
+        {name}
+      </Text>
+      <Text style={[type.number, styles.set, { color: colors.muted }]}>{set.text}</Text>
+    </View>
+  );
+}

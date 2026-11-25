@@ -49,6 +49,14 @@ export function workoutTimeInputValue(value: string | null): string {
   return value?.slice(0, 5) ?? '';
 }
 
+/**
+ * Whether start and end times can record a duration. Equal times mean no time at all, so a
+ * 24-hour workout keeps its duration without them.
+ */
+export function timesCanRecordDuration(durationMinutes: number): boolean {
+  return durationMinutes < 24 * 60;
+}
+
 export function workoutDurationMinutes(startTime: string, endTime: string): number | null {
   const parse = (value: string) => {
     const match = /^(\d{2}):(\d{2})/.exec(value);

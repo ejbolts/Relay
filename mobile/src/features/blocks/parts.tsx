@@ -1,8 +1,8 @@
-import * as Haptics from 'expo-haptics';
 import type { ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import { haptics } from '../../ui/haptics';
 
 /** A text action in a screen's header, such as Save, that turns into a spinner while it works. */
 export function HeaderTextButton({
@@ -78,7 +78,7 @@ export function ChoiceTiles<T extends string>({
               accessibilityState={{ checked: on, disabled: !!disabled }}
               disabled={disabled}
               onPress={() => {
-                void Haptics.selectionAsync();
+                haptics.selection();
                 onChange(option.value);
               }}
               style={({ pressed }) => [

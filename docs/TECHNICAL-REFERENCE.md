@@ -258,6 +258,39 @@ when that device reconnects, so the server can only act on activity it has recei
 `0057_active_workout_sync` creates the private draft, revision tombstone and reminder state;
 account deletion removes them and account backups exclude them. Legacy two-hour reminders remain
 supported for older clients, and are suppressed for a session using shared activity tracking.
+
+The native app registers an Expo push token instead of a Web Push subscription (migration
+`0066_expo_push_tokens`). `POST /api/notifications/expo/tokens` (`token`, optional `platform` and
+`local_alerts`) saves or refreshes it for the signed-in account and binds it to that sign-in; the
+same limit of 10 devices applies, and a token signed in to another account moves to it.
+`DELETE /api/notifications/expo/tokens` removes it, and `POST /api/notifications/expo/tokens/test`
+sends a test alert to that phone alone, answering 410 if Expo reports it unregistered and 502 if
+Expo refuses it (the account-wide `/api/notifications/push/test` keeps its 204). Alerts go only to
+tokens whose sign-in is still current, so signing out of the app (`/api/auth/logout-session`, which
+the app retries until the server confirms it), signing out everywhere, a password change,
+disabling or deleting the account all stop them. Account-wide alerts (Still working out?,
+auto-save, video ready, admin requests and the test alert) reach the app through
+`https://exp.host/--/api/v2/push/send`; rest timers and the legacy two-hour reminder stay with the
+browser that scheduled them. The app's alerts are sent on background workers with bounded timeouts
+and one retry, so they never delay Web Push or change when a browser's alert is retried, and an
+alert retried for browsers reaches the app once. Text the phone shows names no workout or person.
+Android messages use the app's `relay-alerts` channel. Tokens Expo reports as `DeviceNotRegistered`,
+in a ticket or in the receipt checked about 15 minutes later, are removed only while they still
+belong to the same account and sign-in; credential errors are logged. `GYM_EXPO_ACCESS_TOKEN` (or
+`EXPO_ACCESS_TOKEN`) is optional, for an Expo project with enhanced push security. The app
+schedules Still working out? on the phone too, so it lists `inactive-workout` in `local_alerts` and
+reports the workout and due time of the reminder it has scheduled with
+`PUT /api/notifications/expo/tokens/local-reminder`. The server skips that phone when its own
+reminder is for the same workout and due within two minutes of the server's, either way, and sends
+its own reminder to a phone at most once per idle spell (`native_reminder_due_ms`), up to 30
+minutes after it was due. The app's alerts are sent by workers that start and stop with the app,
+from a bounded queue. This avoids duplicate alerts in normal use but can't rule them out: a phone
+clock that is far off, a phone whose report hasn't reached the server (offline, or a first
+registration not yet reported), more than one server process (the service runs one), or an Expo
+request whose outcome is lost before it is recorded can each still give a phone two alerts.
+Stopping the server or a full queue can also drop a phone's reminder after its browsers have had
+theirs; queued native alerts are not kept across restarts. Tokens are device registrations and are
+left out of account backups.
 A workout left running can be saved with **Actual duration (minutes)**; the correction stays in
 its draft until saved. Inactivity reminders do not finish or discard the workout.
 
@@ -311,7 +344,7 @@ python -m app.manage import-legacy-backup --username yourname --source <backup f
 
 `POST /api/account-archive/preview` checks an uploaded archive and returns its workout, cardio, check-in, custom exercise and photo totals beside the account's current ones, changing nothing. `POST /api/account-archive/restore` replaces the signed-in account's training data with the archive's. The upload is treated as untrusted: only the expected file names are unpacked, within size and file-count limits, and every file must match the manifest. The database is opened read-only with SQLite's defensive settings and may contain only plain tables and indexes with names this app knows. An archive from an older release is migrated on a private copy in a separate `alembic` process; one from a newer release is refused. Rows are copied as values under the signed-in account; the account itself, sign-ins, video rows and server tables are left alone, and personal records are rebuilt. Every restored row must fall under its table's ownership rule and every reference must point at the account's own rows, so an archive cannot reach another account; one that collides with another account's rows on this server is refused. Photos are re-encoded under new names. Friends' reactions and comments on workouts the archive still contains survive; those on workouts it removes go. The account's limits apply to the archive (admins are exempt).
 
-A restore runs in one transaction after taking a server-side snapshot labelled **Before restore**; the two newest are kept and appear in `list-backups`. Each account runs one archive operation at a time. The app reloads once after a restore so splits, blocks, layout and preferences are read again. Test with `backend/tests/test_account_archive.py` and `frontend/src/AccountArchivePanel.test.tsx`.
+A restore runs in one transaction after taking a server-side snapshot labelled **Before restore**; the two newest are kept and appear in `list-backups`. Each account runs one archive operation at a time. The app reloads once after a restore so splits, blocks, layout and preferences are read again. A restore also starts a new tip generation, committed with the restored rows: every device adopts the restored tips, so tip changes a device made offline and had not yet synced are lost. Test with `backend/tests/test_account_archive.py` and `frontend/src/AccountArchivePanel.test.tsx`.
 
 ## Hidden account limits
 

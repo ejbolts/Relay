@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { cancelRestTimerPushSchedule, restSecondsLeft, restTimerProgress } from './restTimer';
+import { restTimerProgress } from './restProgress';
+import { cancelRestTimerPushSchedule, restSecondsLeft } from './restTimer';
 
 describe('rest timer push cancellation', () => {
   it('cancels immediately and again after an in-flight schedule completes', async () => {

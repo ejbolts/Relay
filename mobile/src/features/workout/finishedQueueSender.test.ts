@@ -188,3 +188,23 @@ test("another account never sends this one's finished workouts", async () => {
   expect(server.requests).toBe(0);
   expect(readFinishedWorkouts(storage)).toHaveLength(0);
 });
+
+test('a save the phone could not drop from storage is reported as sent, not waiting', async () => {
+  const storage = new MemoryStorage();
+  finishWorkout(storage, sessionA, startedAt);
+  // Storage is full from here on: the queue can't be rewritten without the saved workout.
+  storage.setItem = () => {
+    throw new Error('Storage is full.');
+  };
+  storage.removeItem = () => {
+    throw new Error('Storage is full.');
+  };
+  const { instance, saved } = sender(storage, new FakeServer());
+
+  instance.wake();
+  await flush();
+  expect(saved).toEqual(['workout-1']);
+  expect(readFinishedWorkouts(storage)).toHaveLength(1);
+  // Screens counting the queue leave it out, as the sender does.
+  expect(instance.status()).toMatchObject({ waiting: 0, sent: [sessionA] });
+});

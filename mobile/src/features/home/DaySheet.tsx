@@ -41,7 +41,12 @@ export function DaySheet({
         <DayContent
           day={day}
           onOpen={(id) =>
-            closeThen(() => router.push({ pathname: '/training/session/[id]', params: { id } }))
+            closeThen(() =>
+              router.push(
+                { pathname: '/training/session/[id]', params: { id } },
+                { withAnchor: true },
+              ),
+            )
           }
           onEdit={(id) =>
             closeThen(() => router.push({ pathname: '/edit-workout/[id]', params: { id } }))
