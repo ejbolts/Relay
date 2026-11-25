@@ -131,7 +131,8 @@ type ExerciseIconExercise = Pick<
   'name' | 'kind' | 'category' | 'muscle_group' | 'equipment'
 >;
 
-const iconUrls: Record<ExerciseIconKey, string> = {
+// A URL in the web; the app bundles each image as an image source.
+const iconUrls: Record<ExerciseIconKey, typeof abCrunchMachineIcon> = {
   'ab-crunch-machine': abCrunchMachineIcon,
   'back-extension': backExtensionIcon,
   'back-squat': backSquatIcon,

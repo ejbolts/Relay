@@ -1,4 +1,4 @@
-import type { CardioMetricsInput, CardioSessionInput, Exercise } from './types';
+import type { CardioMetricsInput, CardioSession, CardioSessionInput, Exercise } from './types';
 
 export type CardioMetricKey = keyof CardioMetricsInput;
 
@@ -107,4 +107,39 @@ export function emptyCardioSession(exercises: Exercise[], today: string): Cardio
     qualifies_zone2: false,
     notes: null,
   };
+}
+
+/** The cardio exercise a saved session was logged as, matched by name, or null when none is. */
+export function cardioExerciseFor(activityType: string, exercises: Exercise[]): string | null {
+  return exercises.find((exercise) => exercise.name === activityType)?.id ?? null;
+}
+
+/** A saved session's own fields, as the edit form starts from them. */
+export function cardioSessionEditInput(
+  session: CardioSession,
+  exercises: Exercise[],
+): CardioSessionInput {
+  return {
+    session_date: session.session_date,
+    exercise_id: cardioExerciseFor(session.activity_type, exercises),
+    activity_type: session.activity_type,
+    duration_minutes: session.duration_minutes,
+    calories_kcal: session.calories_kcal ?? null,
+    average_heart_rate_bpm: session.average_heart_rate_bpm ?? null,
+    distance_km: session.distance_km ?? null,
+    average_speed_kph: session.average_speed_kph ?? null,
+    incline_percent: session.incline_percent ?? null,
+    average_power_watts: session.average_power_watts ?? null,
+    average_mets: session.average_mets ?? null,
+    elevation_gain_m: session.elevation_gain_m ?? null,
+    intensity: session.intensity,
+    zone: session.zone,
+    qualifies_zone2: session.qualifies_zone2,
+    notes: session.notes,
+  };
+}
+
+/** What Add and Save send: intensity and zone come from heart-rate zones on the server. */
+export function cardioSessionPayload<T extends CardioSessionInput>(draft: T): T {
+  return { ...draft, intensity: null, zone: null, qualifies_zone2: false };
 }

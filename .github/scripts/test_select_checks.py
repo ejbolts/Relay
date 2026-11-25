@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from select_checks import (
+    MOBILE_SOURCES,
     ROOT,
     git,
     main,
@@ -101,6 +102,8 @@ class PathSelectionTests(unittest.TestCase):
     def test_shared_files_import_no_packages(self):
         # Metro would resolve a package here from the web's node_modules, not the app's.
         for path in mobile_shared_files():
+            if Path(path).suffix not in MOBILE_SOURCES:
+                continue  # Images and JSON import nothing.
             with self.subTest(path=path):
                 text = (ROOT / path).read_text(encoding="utf-8")
                 packages = [name for name in module_specifiers(text) if not name.startswith(".")]
@@ -132,15 +135,21 @@ const greeting = 'hello from the app';
                 "mobile/src/home.tsx": "import { a } from '../../frontend/src/rules';",
                 "mobile/src/local.ts": "export * from './home';",
                 "mobile/node_modules/pkg/index.js": "require('../../../frontend/src/never');",
-                "frontend/src/rules.ts": "import type { T } from './types'; export const a = 1;",
+                "frontend/src/rules.ts": (
+                    "import type { T } from './types'; import icon from './icon.webp';"
+                    " export const a = 1;"
+                ),
                 "frontend/src/types.ts": "export type T = number;",
                 "frontend/src/unrelated.ts": "export const b = 2;",
             }
             for path, text in files.items():
                 (root / path).parent.mkdir(parents=True, exist_ok=True)
                 (root / path).write_text(text, encoding="utf-8")
+            # An imported image is shared but never read as source.
+            (root / "frontend/src/icon.webp").write_bytes(b"RIFF\x00\x00\x00\x00WEBP\xf0\x9f")
             self.assertEqual(
-                mobile_shared_files(root), {"frontend/src/rules.ts", "frontend/src/types.ts"}
+                mobile_shared_files(root),
+                {"frontend/src/rules.ts", "frontend/src/types.ts", "frontend/src/icon.webp"},
             )
             self.assertTrue(select_paths(["frontend/src/types.ts"], root).mobile)
             self.assertFalse(select_paths(["frontend/src/unrelated.ts"], root).mobile)
@@ -175,6 +184,11 @@ const greeting = 'hello from the app';
                 self.assertEqual(
                     (selected.frontend, selected.backend, selected.mobile), ("full", True, True)
                 )
+
+    def test_shared_fixtures_the_backend_reads_run_the_backend_suite(self):
+        selected = select_paths(["frontend/src/tipSyncCases.json"])
+        self.assertTrue(selected.backend)
+        self.assertNotEqual(selected.frontend, "none")
 
     def test_docs_and_empty_diff_need_neither_suite(self):
         for paths in (

@@ -4,6 +4,7 @@ import { GuideCoach, type CoachStep } from './GuideCoach';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { exitGuide, finishGuide, useActiveGuide } from './setupGuides';
+import { blocksCoachSteps, type CoachTarget } from './setupGuideCoach';
 import {
   blockFormDraft,
   blockFormInput,
@@ -27,6 +28,14 @@ import './trainingBlocks.css';
 type View = 'blocks' | 'form' | 'remove';
 /** Where the dialog opens: the blocks overview, or straight into a new block. */
 export type TrainingBlockDialogStart = 'blocks' | 'new';
+
+/** The form's controls each step of the training blocks guide is about. */
+const BLOCK_COACH_TARGETS: Partial<Record<CoachTarget, string>> = {
+  'blocks.name': '.training-block-form fieldset > label:first-of-type input',
+  'blocks.start': '.training-block-starts:not(.plan)',
+  'blocks.end': '.training-block-starts.plan',
+  'blocks.submit': '.training-block-dialog .popup-dialog-footer button[type="submit"]',
+};
 
 /** Lists, creates, edits and removes training blocks. */
 export function TrainingBlockDialog({
@@ -143,34 +152,13 @@ export function TrainingBlockDialog({
         ? 'Remove training block?'
         : 'Training blocks';
 
-  const lift = guide?.facts.lift;
-  const coachSteps: CoachStep[] = [
-    {
-      title: 'Name this phase',
-      body: 'Something like Strength or Summer cut. Your first session of each lift in a block sets a fresh baseline, so you can earn Block PRs below your all-time best.',
-      target: '.training-block-form fieldset > label:first-of-type input',
-      next: { disabled: !name.trim(), onClick: () => setGuideStep(1) },
-    },
-    {
-      title: 'Pick a start',
-      body: 'Today, 1 January, or Custom for a past date so recent workouts count towards this block.',
-      target: '.training-block-starts:not(.plan)',
-      next: { onClick: () => setGuideStep(2) },
-    },
-    {
-      title: 'Plan an end, if you like',
-      body: 'Home counts down the days left. A block never closes by itself.',
-      target: '.training-block-starts.plan',
-      next: { onClick: () => setGuideStep(3) },
-    },
-    {
-      title: 'Start the block',
-      body: lift
-        ? `Home then shows the week you’re on, and ${lift.name} records start fresh from your next session.`
-        : 'Home then shows the week you’re on, and records start fresh from your next session.',
-      target: '.training-block-dialog .popup-dialog-footer button[type="submit"]',
-    },
-  ];
+  const coachSteps: CoachStep[] = blocksCoachSteps(guide?.facts.lift, name).map(
+    ({ target, next, ...copy }, index) => ({
+      ...copy,
+      target: BLOCK_COACH_TARGETS[target],
+      next: next && { disabled: next.disabled, onClick: () => setGuideStep(index + 1) },
+    }),
+  );
 
   return (
     <PopupDialog

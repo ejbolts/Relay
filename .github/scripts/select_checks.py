@@ -18,10 +18,12 @@ DOC_FILES = {"README.md", "CONTRIBUTING.md", "AGENTS.md", "CLAUDE.md", "LICENSE"
 # affect both clients. A repository test below guards new APIRouter modules.
 CONTRACT_MODULES = {
     "account_archive.py",
+    "app_links.py",
     "app_notices.py",
     "accounts.py",
     "admin.py",
     "client_versions.py",
+    "expo_push.py",
     "feedback.py",
     "frontend.py",
     "home_layout.py",
@@ -33,6 +35,7 @@ CONTRACT_MODULES = {
     "routines.py",
     "session_events.py",
     "sharing.py",
+    "tip_state.py",
     "tracker.py",
     "training_blocks.py",
     "username_reminder_requests.py",
@@ -40,6 +43,8 @@ CONTRACT_MODULES = {
     "workout_type_exercises.py",
     "youtube_connections.py",
 }
+# Frontend files the backend tests also read: the tip merge cases check the Python port too.
+BACKEND_FIXTURES = {"frontend/src/tipSyncCases.json"}
 # Comments can quote module paths ("Alex" from "Alex Morgan", or from './old'), so they are
 # removed before a file's imports are read.
 COMMENTS = re.compile(r"/\*.*?\*/|//[^\n]*", re.S)
@@ -87,7 +92,9 @@ def mobile_shared_files(root: Path = ROOT) -> frozenset[str]:
             if target is None or not target.is_relative_to(root):
                 raise ValueError(f"Cannot resolve {specifier} imported by {source}")
             shared.add(target.relative_to(root).as_posix())
-            pending.append(target)
+            # Images and JSON a shared module imports are shared too, but import nothing.
+            if target.suffix in MOBILE_SOURCES:
+                pending.append(target)
     return frozenset(shared)
 
 
@@ -112,6 +119,8 @@ def select_paths(paths: list[str], root: Path = ROOT) -> Selection:
             raise ValueError("Invalid changed-file path")
         if path in DOC_FILES or path.startswith("docs/"):
             continue
+        if path in BACKEND_FIXTURES:
+            backend = True
         if path.startswith("frontend/"):
             if shared is None:
                 shared = mobile_shared_files(root)

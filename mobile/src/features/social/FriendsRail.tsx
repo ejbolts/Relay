@@ -24,7 +24,7 @@ export function FriendsRail({
   today: string;
   onOpenFriend: (friend: FriendActivity) => void;
 }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, space, type, radius } = useTheme();
   const now = useNow(30_000);
   const ordered = byLiveActivity(friends, (friend) => friend.presence);
   const week = lastWeek(today);
@@ -34,8 +34,8 @@ export function FriendsRail({
       horizontal
       showsHorizontalScrollIndicator={false}
       accessibilityLabel="Friends"
-      contentContainerStyle={styles.rail}
-      style={styles.bleed}
+      contentContainerStyle={[styles.rail, { paddingHorizontal: space.gutter }]}
+      style={{ marginHorizontal: -space.gutter }}
     >
       {ordered.map((friend) => {
         const status = presenceStatus(friend.presence);
@@ -56,21 +56,25 @@ export function FriendsRail({
             style={({ pressed }) => [styles.person, pressed && { opacity: 0.6 }]}
           >
             <View>
-              <Avatar person={friend} size={56} status={status} />
+              <View style={[styles.ring, { borderColor: live ? colors.accent : colors.line }]}>
+                <Avatar person={friend} size={52} status={live ? null : status} />
+              </View>
               {live && (
                 <View
                   style={[
                     styles.live,
-                    { backgroundColor: colors.accent, borderRadius: radius.pill },
+                    {
+                      backgroundColor: colors.accent,
+                      borderColor: colors.page,
+                      borderRadius: radius.pill,
+                    },
                   ]}
                 >
-                  <Text style={[type.caption, { color: colors.onAccent, fontWeight: '700' }]}>
-                    Live
-                  </Text>
+                  <Text style={[styles.liveText, { color: colors.onAccent }]}>LIVE</Text>
                 </View>
               )}
             </View>
-            <Text style={[type.footnote, { color: colors.text }]} numberOfLines={1}>
+            <Text style={[type.caption, styles.name, { color: colors.text }]} numberOfLines={1}>
               {firstName(friend.display_name)}
             </Text>
             <View style={styles.week}>
@@ -98,16 +102,23 @@ export function FriendsRail({
 }
 
 const styles = StyleSheet.create({
-  bleed: { marginHorizontal: -16 },
-  rail: { paddingHorizontal: 16, gap: 14 },
-  person: { width: 64, alignItems: 'center', gap: 4 },
+  rail: { gap: 4, paddingVertical: 2 },
+  person: { width: 68, alignItems: 'center', gap: 5 },
+  ring: {
+    padding: 3,
+    borderRadius: 999,
+    borderWidth: 2,
+  },
   live: {
     position: 'absolute',
     bottom: -4,
     alignSelf: 'center',
+    borderWidth: 2,
     paddingHorizontal: 6,
     paddingVertical: 1,
   },
-  week: { flexDirection: 'row', gap: 2 },
+  liveText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.4 },
+  name: { fontWeight: '600' },
+  week: { flexDirection: 'row', gap: 3 },
   day: { width: 5, height: 5, borderRadius: 2.5 },
 });

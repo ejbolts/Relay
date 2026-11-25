@@ -1,5 +1,4 @@
 import { useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { useMemo, useRef, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import {
@@ -27,9 +26,11 @@ import { Button, Card, CardHeader, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
+import { haptics } from '../../ui/haptics';
 import { bodyCheckInApi, refreshBodyMeasurements, useBodyMeasurements } from '../body/bodyQueries';
 import { BodyFatStepper, WeightStepper } from '../body/NumberStepper';
 import { bodyIcons } from '../body/bodyIcons';
+import { HomeHoldExempt } from './homeHold';
 import { useWeekStartDay } from './StatCards';
 
 /**
@@ -116,7 +117,7 @@ function CheckInForm({
         : view.singleButton
           ? await saveBodyweightCheckInWith(bodyCheckInApi, todayEntry, today, weightKg, fat!)
           : await saveBodyweightCheckInWith(bodyCheckInApi, todayEntry, today, weightKg);
-      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      haptics.success();
       await refreshBodyMeasurements(client);
       showToast(
         checkInSavedMessage(view.fatOnly ? 'fat' : view.singleButton ? 'combined' : 'weight'),
@@ -147,10 +148,9 @@ function CheckInForm({
             accessibilityLabel={
               saving ? `Saving ${view.saveKind}` : `${hasToday ? 'Update' : 'Log'} ${view.saveKind}`
             }
-            icon="check"
-            disabled={saving}
+            size="small"
+            loading={saving}
             onPress={() => void save()}
-            style={styles.save}
           />
         }
       />
@@ -168,19 +168,21 @@ function CheckInForm({
               unit={unit}
             />
           </View>
-          <WeightStepper
-            weightKg={weight}
-            unit={unit}
-            disabled={saving}
-            onChange={(kg) => {
-              setWeight(kg);
-              setError(null);
-            }}
-            onStep={(delta) => {
-              setWeight(nudgedBodyweightKg(weight, latestKg, delta, unit));
-              setError(null);
-            }}
-          />
+          <HomeHoldExempt>
+            <WeightStepper
+              weightKg={weight}
+              unit={unit}
+              disabled={saving}
+              onChange={(kg) => {
+                setWeight(kg);
+                setError(null);
+              }}
+              onStep={(delta) => {
+                setWeight(nudgedBodyweightKg(weight, latestKg, delta, unit));
+                setError(null);
+              }}
+            />
+          </HomeHoldExempt>
         </View>
       )}
       {view.showFat && (
@@ -191,20 +193,24 @@ function CheckInForm({
             </Text>
             <Status prior={stats.priorBodyFat} today={todayEntry?.body_fat_pct ?? null} unit="%" />
           </View>
-          <BodyFatStepper
-            value={fat}
-            disabled={saving}
-            onChange={(value) => {
-              setFat(value);
-              setError(null);
-            }}
-            onStep={(delta) => {
-              setFat(
-                Number(nudgedBodyFat(fat === null ? '' : String(fat), stats.latestBodyFat, delta)),
-              );
-              setError(null);
-            }}
-          />
+          <HomeHoldExempt>
+            <BodyFatStepper
+              value={fat}
+              disabled={saving}
+              onChange={(value) => {
+                setFat(value);
+                setError(null);
+              }}
+              onStep={(delta) => {
+                setFat(
+                  Number(
+                    nudgedBodyFat(fat === null ? '' : String(fat), stats.latestBodyFat, delta),
+                  ),
+                );
+                setError(null);
+              }}
+            />
+          </HomeHoldExempt>
         </View>
       )}
       {error && (
@@ -267,7 +273,6 @@ function Status({
 }
 
 const styles = StyleSheet.create({
-  save: { minHeight: 34, paddingHorizontal: 12 },
   heading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   status: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 });

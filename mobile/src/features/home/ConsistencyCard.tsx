@@ -1,4 +1,3 @@
-import * as Haptics from 'expo-haptics';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { calendarDayLook } from '../../../../frontend/src/calendarDayLook';
@@ -24,6 +23,7 @@ import { useDashboard, useTrainingPreferences, useWorkoutHistory } from '../../d
 import { Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme, type Palette } from '../../ui/theme';
+import { haptics } from '../../ui/haptics';
 import { DayRing } from './DayRing';
 import { useTypeColors } from './homeData';
 import { prettyDate } from '../../../../frontend/src/appShared';
@@ -237,7 +237,7 @@ function TrainingCalendar({
                 accessibilityState={{ checked: shown }}
                 hitSlop={6}
                 onPress={() => {
-                  void Haptics.selectionAsync();
+                  haptics.selection();
                   setHidden((current) => {
                     const next = new Set(current);
                     if (!next.delete(item.id)) next.add(item.id);

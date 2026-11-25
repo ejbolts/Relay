@@ -295,6 +295,9 @@ def test_youtube_processing_completion_sends_a_phone_notification(monkeypatch):
             "title": "Workout video ready",
             "body": "Push day is ready on YouTube.",
             "user_id": owner_id,
+            # The app opens Videos and shows no workout name.
+            "data": {"screen": "videos"},
+            "native_body": "Your workout video is ready on YouTube.",
         }
     ]
 

@@ -2,17 +2,21 @@
 import { act, useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { api } from './api';
+import { api, ApiError } from './api';
 import { TipsProvider, TipSlot, TipsSettings, useTips } from './Tips';
 import { HomeTips } from './HomeTips';
 import { SetupGuideHost } from './SetupGuide';
 import { activeGuide, exitGuide } from './setupGuides';
 import { onTipTarget, type TipAction } from './tipActions';
 import { Toast, ToastProvider } from './Toast';
-import { loadTips, saveTips, freshTips, TIP_COOLDOWN } from './tipsState';
+import { freshTips, TIP_COOLDOWN, tipShown, tipStorageKey, withTipsEnabled } from './tipsState';
+import { holdTipSync, loadTips, saveTips } from './tipsStorage';
+import { mergeTipStates, TIP_SYNC_REFRESH_MS, tipSyncHoldUntil } from './tipSync';
 
 let root: Root, container: HTMLDivElement;
 let controller: ReturnType<typeof useTips>;
+/** The account's tips on the server, which merges every save as /api/tips does. */
+let server: Record<string, unknown> = {};
 let resting = true,
   ready = true,
   workoutCount = 5,
@@ -61,6 +65,11 @@ beforeEach(() => {
   resting = ready = true;
   workoutCount = 5;
   page = 'log';
+  server = {};
+  vi.spyOn(api, 'saveTipState').mockImplementation(async (state) => {
+    server = mergeTipStates(server, state);
+    return server;
+  });
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
     top: 100,
     bottom: 150,
@@ -201,14 +210,14 @@ describe('shared tip presentation', () => {
   it('turns every surface off immediately, remembers the switch and keeps the library available', async () => {
     await render();
     await advance();
-    await act(async () => button('Show tips on this device').click());
+    await act(async () => button('Show tips').click());
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
     expect(loadTips('alice').enabled).toBe(false);
     await act(async () => button('Browse tips').click());
     expect(document.querySelector('dialog')?.textContent).toContain('Machine taken?');
     await render('bob');
     await advance();
-    expect(button('Show tips on this device').getAttribute('aria-checked')).toBe('true');
+    expect(button('Show tips').getAttribute('aria-checked')).toBe('true');
     await render('alice');
     await advance();
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
@@ -245,6 +254,63 @@ describe('shared tip presentation', () => {
     await advance();
     expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
     expect(loadTips('alice').shows?.reorder).toBe(2);
+  });
+  it('returns an interrupted nudge to pending at most once, and keeps a second interruption counted', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // First interruption right after appearing rolls back and re-queues once.
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    document.body.append(dialog);
+    await advance(500);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice').shows?.reorder).toBeUndefined();
+    expect(loadTips('alice').lastShown).toBe(0);
+    // Once the dialog closes and things are quiet again, the nudge appears once more.
+    dialog.remove();
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    expect(loadTips('alice').shows?.reorder).toBe(1);
+    expect(loadTips('alice').lastShown).toBeGreaterThan(0);
+    // A second quick interruption of the same request counts normally and does not replay again.
+    document.body.append(dialog);
+    await advance(500);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice').shows?.reorder).toBe(1);
+    expect(loadTips('alice').lastShown).toBeGreaterThan(0);
+    dialog.remove();
+    await advance(5000);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+  });
+  it('does not overwrite a newer stored tip state from another tab when rolling back', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // Another tab records a newer priority showing before this tab receives the storage event.
+    const newerTimestamp = Date.now() + 250;
+    const otherTabState = {
+      ...loadTips('alice'),
+      lastShown: newerTimestamp,
+      shows: { ...loadTips('alice').shows, setType: 1 },
+    };
+    saveTips('alice', otherTabState);
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    document.body.append(dialog);
+    await advance(500);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    // Newer state in storage is preserved and this tab does not re-queue its nudge.
+    expect(loadTips('alice').lastShown).toBe(newerTimestamp);
+    expect(loadTips('alice').shows?.setType).toBe(1);
+    expect(loadTips('alice').shows?.reorder).toBe(1);
+    dialog.remove();
+    await advance(5000);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
   });
   it('brings a dot back on later visits until it has been shown three times', async () => {
     await render();
@@ -326,7 +392,7 @@ describe('shared tip presentation', () => {
       window.dispatchEvent(new StorageEvent('storage', { key: 'relay:tips:v1:alice' })),
     );
     expect(document.querySelector('.relay-tip-dot')).toBeNull();
-    expect(button('Show tips on this device').getAttribute('aria-checked')).toBe('false');
+    expect(button('Show tips').getAttribute('aria-checked')).toBe('false');
   });
   async function homeBulb(child = <HomeTips workouts={[]} hasSplit />) {
     page = 'dashboard';
@@ -363,6 +429,21 @@ describe('shared tip presentation', () => {
     expect(loadTips('alice').lastShown).toBe(Date.now() - 2500);
     await advance();
     expect(popover()).not.toBeNull();
+  });
+  it('offers Edit Home once the account turns a week old, with Home left open', async () => {
+    const child = <HomeTips workouts={[]} hasSplit createdAt="2026-11-04T09:00:00Z" />;
+    await homeBulb(child);
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 2 new');
+    vi.setSystemTime(new Date('2026-11-11T12:00:00Z'));
+    // The same Home renders again on the next day, with nothing else changed.
+    await render(
+      'alice',
+      <>
+        <Harness />
+        {child}
+      </>,
+    );
+    expect(bulb()?.getAttribute('aria-label')).toBe('Tips, 3 new');
   });
   it('turns grey once every tip is read and opens on the next unread tip', async () => {
     await homeBulb();
@@ -419,7 +500,7 @@ describe('shared tip presentation', () => {
     workoutCount = 0;
     await homeBulb();
     expect(bulb()).not.toBeNull();
-    await act(async () => button('Show tips on this device').click());
+    await act(async () => button('Show tips').click());
     expect(bulb()).toBeNull();
   });
   const machineWorkout = (id: string, date: string, machine: string) => ({
@@ -538,5 +619,219 @@ describe('shared tip presentation', () => {
     expect(loadTips('alice').seen.normalise).toBe('seen');
     exitGuide();
     stop();
+  });
+});
+
+describe('tips that follow the account', () => {
+  it('brings the account’s tips from its other devices on sign-in', async () => {
+    server = {
+      seen: { plates: 'learned', reorder: 'dismissed', futureTip: 'dismissed' },
+      enabled: false,
+      enabledAt: 5,
+    };
+    saveTips('alice', { ...freshTips(), seen: { swap: 'dismissed' } });
+    await render();
+    await advance(0);
+    expect(loadTips('alice')).toMatchObject({
+      enabled: false,
+      enabledAt: 5,
+      seen: { plates: 'learned', reorder: 'dismissed', swap: 'dismissed' },
+    });
+    expect(button('Show tips').getAttribute('aria-checked')).toBe('false');
+    // This browser's progress reached the account too, and the unknown tip stayed there.
+    expect(server.seen).toEqual({
+      plates: 'learned',
+      reorder: 'dismissed',
+      futureTip: 'dismissed',
+      swap: 'dismissed',
+    });
+  });
+
+  it('saves Show tips with its time after a pause, so the latest choice wins elsewhere', async () => {
+    await render();
+    await advance(0);
+    vi.mocked(api.saveTipState).mockClear();
+    await act(async () => button('Show tips').click());
+    await advance(4000);
+    expect(api.saveTipState).not.toHaveBeenCalled();
+    await advance(1000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(1);
+    expect(server).toMatchObject({ enabled: false, enabledAt: Date.now() - 5000 });
+  });
+
+  it('keeps an interrupted nudge’s showing off the account, so its rollback stands', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // Coming back to the tab while the nudge shows would sync, but the showing is held back.
+    window.dispatchEvent(new Event('focus'));
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    document.body.append(dialog);
+    await advance(500);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    await advance(6000);
+    expect((server.shows as Record<string, number>).reorder).toBeUndefined();
+    expect(server.lastShown).toBe(0);
+    expect(loadTips('alice').shows?.reorder).toBeUndefined();
+    // Once it has really been seen, the showing is saved to the account.
+    dialog.remove();
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    await advance(6000);
+    expect((server.shows as Record<string, number>).reorder).toBe(1);
+  });
+
+  it('never lets one account’s late reply reach the next account', async () => {
+    let reply: (value: Record<string, unknown>) => void = () => {};
+    vi.mocked(api.saveTipState).mockImplementationOnce(
+      () => new Promise((resolve) => (reply = resolve)),
+    );
+    await render('alice');
+    await advance(0);
+    await render('bob');
+    await act(async () => reply({ seen: { plates: 'learned' }, enabled: false, enabledAt: 9 }));
+    await advance(0);
+    expect(loadTips('bob').seen).toEqual({});
+    expect(loadTips('bob').enabled).toBe(true);
+    expect(loadTips('alice').seen).toEqual({});
+  });
+
+  it('keeps working on this browser alone with a server that has no tip store', async () => {
+    vi.mocked(api.saveTipState).mockRejectedValue(new ApiError('Not found', 'not_found', 404));
+    await render();
+    await advance(0);
+    await act(async () => button('Show tips').click());
+    await advance(10_000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(1);
+    expect(loadTips('alice').enabled).toBe(false);
+  });
+
+  it('names its account, and a stale tab keeps tips here until its account is back', async () => {
+    await render('alice');
+    await advance(0);
+    expect(vi.mocked(api.saveTipState).mock.calls[0][1]).toBe('alice');
+    // Another tab signed in to bob: the server refuses alice's tips under bob's cookie.
+    vi.mocked(api.saveTipState).mockRejectedValue(
+      new ApiError('Not this account', 'tip_account_mismatch', 409),
+    );
+    await act(async () => controller.dismissTip('swap'));
+    await advance(10_000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(2);
+    await act(async () => controller.dismissTip('plates'));
+    await advance(10_000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(2);
+    expect(loadTips('alice').seen).toMatchObject({ swap: 'dismissed', plates: 'dismissed' });
+    // Alice signs in again in another tab; returning to this one is accepted, and syncing resumes.
+    vi.mocked(api.saveTipState).mockImplementation(async (state) => {
+      server = mergeTipStates(server, state);
+      return server;
+    });
+    window.dispatchEvent(new Event('focus'));
+    await advance(0);
+    expect(api.saveTipState).toHaveBeenCalledTimes(3);
+    expect(server.seen).toMatchObject({ swap: 'dismissed', plates: 'dismissed' });
+    await act(async () => controller.dismissTip('back'));
+    await advance(10_000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(4);
+  });
+
+  it('keeps a nudge and its rollback when another tab saves only sync bookkeeping', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // Another tab's sync reply records the account's generation.
+    saveTips('alice', { ...loadTips('alice'), syncGeneration: 'g1' });
+    await act(async () =>
+      window.dispatchEvent(new StorageEvent('storage', { key: tipStorageKey('alice') })),
+    );
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // An early interruption still puts the showing back.
+    const dialog = document.createElement('dialog');
+    dialog.setAttribute('open', '');
+    document.body.append(dialog);
+    await advance(500);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice').shows?.reorder).toBeUndefined();
+    expect(loadTips('alice').syncGeneration).toBe('g1');
+    dialog.remove();
+  });
+
+  it('closes a nudge without a rollback when another tab saved a newer showing', async () => {
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' } });
+    await render();
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    const newer = { ...loadTips('alice'), lastShown: Date.now() + 100 };
+    saveTips('alice', newer);
+    await act(async () =>
+      window.dispatchEvent(new StorageEvent('storage', { key: tipStorageKey('alice') })),
+    );
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice').lastShown).toBe(newer.lastShown);
+    expect(loadTips('alice').shows?.reorder).toBe(1);
+  });
+
+  it('merges a reply into what another tab saved before its storage event arrived', async () => {
+    let reply: (value: Record<string, unknown>) => void = () => {};
+    vi.mocked(api.saveTipState).mockImplementationOnce(
+      () => new Promise((resolve) => (reply = resolve)),
+    );
+    await render();
+    await advance(0);
+    // Another tab turns tips off; this tab hasn't heard yet.
+    saveTips('alice', withTipsEnabled(loadTips('alice'), false, Date.now()));
+    await act(async () => reply({ enabled: true, enabledAt: 1, seen: { back: 'seen' } }));
+    await advance(0);
+    expect(loadTips('alice')).toMatchObject({ enabled: false, seen: { back: 'seen' } });
+    expect(button('Show tips').getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('leaves another tab’s nudge showing off the account until that tab settles it', async () => {
+    await render('alice', <TipsSettings />);
+    await advance(0);
+    await advance(TIP_SYNC_REFRESH_MS);
+    vi.mocked(api.saveTipState).mockClear();
+    // Another tab shows a nudge: it places the shared hold, then saves the showing.
+    const now = Date.now();
+    holdTipSync('alice', tipSyncHoldUntil(now));
+    saveTips('alice', tipShown(loadTips('alice'), 'reorder', now));
+    // Coming back to this tab asks for a sync, which waits for the hold.
+    window.dispatchEvent(new Event('focus'));
+    await advance(3000);
+    expect(api.saveTipState).not.toHaveBeenCalled();
+    // The other tab puts the nudge back after an early interruption.
+    saveTips('alice', { ...loadTips('alice'), lastShown: 0, shows: {} });
+    await advance(2000);
+    expect(api.saveTipState).toHaveBeenCalledTimes(1);
+    expect((server.shows as Record<string, number>).reorder).toBeUndefined();
+    expect(server.lastShown).toBe(0);
+  });
+
+  it('closes a nudge when this tab’s own sync adopts a restore that dismissed it', async () => {
+    let reply: (value: Record<string, unknown>) => void = () => {};
+    vi.mocked(api.saveTipState).mockImplementationOnce(
+      () => new Promise((resolve) => (reply = resolve)),
+    );
+    saveTips('alice', { ...freshTips(), seen: { plates: 'learned' }, syncGeneration: 'g1' });
+    await render();
+    // The nudge opens while the sign-in sync is still out.
+    await act(async () => controller.event('re-add-set', 'reorder'));
+    await advance();
+    expect(document.querySelector('.relay-tip-nudge')?.textContent).toContain('dotted handle');
+    // Its reply is from a restore in which the tip was dismissed.
+    await act(async () =>
+      reply({ seen: { plates: 'learned', reorder: 'dismissed' }, generation: 'g2' }),
+    );
+    await advance(0);
+    expect(document.querySelector('.relay-tip-nudge')).toBeNull();
+    expect(loadTips('alice')).toMatchObject({
+      seen: { reorder: 'dismissed' },
+      syncGeneration: 'g2',
+    });
   });
 });

@@ -656,7 +656,7 @@ describe('shared history filtering', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(panel.hidden).toBe(false);
     await chooseType('lower');
-    expect(toggle.getAttribute('aria-label')).toBe('Filter workouts, 1 set');
+    expect(toggle.getAttribute('aria-label')).toBe('Filter workouts, 1 filter on');
     expect(toggle.textContent).toBe('1');
     await act(async () => toggle.click());
     expect(panel.hidden).toBe(true);

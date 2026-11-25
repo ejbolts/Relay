@@ -80,4 +80,24 @@ describe('useRangePinchZoom', () => {
     await act(async () => root.unmount());
     vi.unstubAllGlobals();
   });
+
+  it('keeps the span the pinch started on when the dates change mid-gesture', async () => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    let latest: ReturnType<typeof useRangePinchZoom> | undefined;
+    function Harness({ dates }: { dates: string[] }) {
+      const [range, setRange] = useState<TimeRange>('all');
+      latest = useRangePinchZoom(dates, range, setRange);
+      return null;
+    }
+    const root = createRoot(document.createElement('div'));
+    await act(async () => root.render(<Harness dates={['2023-01-01', '2026-11-16']} />));
+    await act(async () => latest!.pinchZoom.onChange(1.2));
+    const start = latest!.pinchStart;
+    // A refresh brings in older history while the fingers are still down.
+    await act(async () => root.render(<Harness dates={['2020-01-01', '2026-11-16']} />));
+    await act(async () => latest!.pinchZoom.onChange(1.2));
+    expect(latest!.pinchStart).toBe(start);
+    await act(async () => root.unmount());
+    vi.unstubAllGlobals();
+  });
 });

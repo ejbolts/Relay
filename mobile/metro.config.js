@@ -11,4 +11,11 @@ config.resolver.blockList = [
   /[/\\]frontend[/\\](?:node_modules|dist)(?:[/\\]|$)/,
 ];
 
+// Images a shared module imports (the exercise icons) need React Native's asset registry, which
+// only the app's own node_modules has.
+config.resolver.nodeModulesPaths = [
+  ...(config.resolver.nodeModulesPaths ?? []),
+  path.resolve(__dirname, 'node_modules'),
+];
+
 module.exports = config;

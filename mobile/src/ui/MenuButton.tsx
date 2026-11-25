@@ -2,6 +2,7 @@ import { Button, Host, Image, Menu, Section, Text as SwiftText } from '@expo/ui/
 import {
   accessibilityLabel as labelled,
   background,
+  contentShape,
   font,
   foregroundStyle,
   frame,
@@ -9,7 +10,16 @@ import {
 } from '@expo/ui/swift-ui/modifiers';
 import type { SFSymbol } from 'expo-symbols';
 import type { ReactNode } from 'react';
-import { Platform, Pressable, type ColorValue, type StyleProp, type ViewStyle } from 'react-native';
+import {
+  Platform,
+  Pressable,
+  StyleSheet,
+  View,
+  type ColorValue,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
+import { splitStyle } from './components';
 import { showMenu, type MenuOption } from './prompts';
 import { useTheme } from './theme';
 
@@ -35,6 +45,7 @@ export function MenuButton({
   height,
   fill,
   cornerRadius,
+  touch,
   style,
   children,
 }: {
@@ -48,10 +59,72 @@ export function MenuButton({
   fill: ColorValue;
   /** Leave out for a circle. */
   cornerRadius?: number;
+  /**
+   * A touch area larger than the drawn trigger (`width` × `height`), such as 44 pt around a
+   * compact pill. `style`'s placement goes on the touch area and its looks on the face.
+   */
+  touch?: { width?: number; height?: number };
   style?: StyleProp<ViewStyle>;
   children: ReactNode;
 }) {
   const { scheme } = useTheme();
+  if (touch) {
+    const { box: place, face } = splitStyle(style);
+    const outerWidth = Math.max(touch.width ?? width, width);
+    const outerHeight = Math.max(touch.height ?? height, height);
+    const outer = [
+      place,
+      { width: outerWidth, height: outerHeight },
+      touchStyles.centre,
+    ] as StyleProp<ViewStyle>;
+    if (Platform.OS !== 'ios')
+      return (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={accessibilityLabel}
+          onPress={() => showMenu(title, sheetOptions(items))}
+          style={outer}
+        >
+          <View style={face}>{children}</View>
+        </Pressable>
+      );
+    // The face is drawn in RN; the native trigger on top draws the label and takes touches over
+    // the whole area, so the menu still anchors to it.
+    const area = [
+      frame({ width: outerWidth, height: outerHeight }),
+      contentShape(shapes.rectangle()),
+      labelled(accessibilityLabel),
+    ];
+    const native =
+      'sf' in trigger ? (
+        <Image
+          systemName={trigger.sf}
+          size={trigger.size ?? 17}
+          color={trigger.color as string}
+          modifiers={area}
+        />
+      ) : (
+        <SwiftText
+          modifiers={[
+            font({ size: 15, weight: 'semibold' }),
+            foregroundStyle(trigger.color as string),
+            ...area,
+          ]}
+        >
+          {trigger.text}
+        </SwiftText>
+      );
+    return (
+      <View style={outer}>
+        <View pointerEvents="none" style={[face, { width, height }]} />
+        <Host matchContents colorScheme={scheme} style={StyleSheet.absoluteFill}>
+          <Menu label={native}>
+            {title ? <Section title={title}>{menuItems(items)}</Section> : menuItems(items)}
+          </Menu>
+        </Host>
+      </View>
+    );
+  }
   if (Platform.OS !== 'ios')
     return (
       <Pressable
@@ -100,7 +173,7 @@ export function MenuButton({
   );
 }
 
-function menuItems(items: MenuItem[]): ReactNode {
+export function menuItems(items: MenuItem[]): ReactNode {
   return items.map((item, index) =>
     'items' in item ? (
       <Menu key={`${index}-${item.label}`} label={item.label}>
@@ -119,7 +192,7 @@ function menuItems(items: MenuItem[]): ReactNode {
 }
 
 /** The same items for the menu sheet: a submenu opens a second sheet. */
-function sheetOptions(items: MenuItem[]): MenuOption[] {
+export function sheetOptions(items: MenuItem[]): MenuOption[] {
   return items.map((item) =>
     'items' in item
       ? { label: item.label, onPress: () => showMenu(item.label, sheetOptions(item.items)) }
@@ -130,3 +203,7 @@ function sheetOptions(items: MenuItem[]): MenuOption[] {
         },
   );
 }
+
+const touchStyles = StyleSheet.create({
+  centre: { alignItems: 'center', justifyContent: 'center' },
+});

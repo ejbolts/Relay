@@ -16,13 +16,14 @@ import { bodyHistoryPeriodLabel } from '../../../../frontend/src/bodyTrend';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
 import { formatWeight, weightFromKg, type WeightUnit } from '../../../../frontend/src/weightUnits';
 import { useWeightUnit } from '../../data/queries';
-import { Button, Card, CardHeader } from '../../ui/components';
+import { Button, Card, EmptyState } from '../../ui/components';
+import { Segmented } from '../../ui/controls';
+import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { MenuButton } from '../../ui/MenuButton';
 import { showMenu } from '../../ui/prompts';
 import { useTheme } from '../../ui/theme';
 import { bodyTrendPreference } from '../settings/devicePreferences';
-import { Segmented } from '../training/parts';
 import { bodyIcons } from './bodyIcons';
 
 type HistoryView = 'daily' | BodyHistoryPeriod;
@@ -80,12 +81,13 @@ export function BodyHistory({
       <GoalDivider
         goal={goal}
         unit={unit}
-        onPress={() =>
+        onPress={() => {
+          haptics.tap();
           showMenu(bodyGoalName(goal, unit), [
             { label: 'Edit goal', onPress: () => onEditGoal(goal) },
             { label: 'Remove goal', destructive: true, onPress: () => onRemoveGoal(goal) },
-          ])
-        }
+          ]);
+        }}
       />
     );
 
@@ -101,16 +103,40 @@ export function BodyHistory({
         }}
       />
       <Card accessibilityLabel="Check-ins">
-        <CardHeader title="Check-ins" />
-        {count === 0 && (
-          <Text style={[type.callout, { color: colors.muted }]}>
-            Your first check-in will appear here.
+        <View style={styles.heading}>
+          <Text style={[type.eyebrow, { color: colors.muted }]}>HISTORY</Text>
+          <Text accessibilityRole="header" style={[type.cardTitle, { color: colors.text }]}>
+            Check-ins
           </Text>
+        </View>
+        {count === 0 ? (
+          <EmptyState icon={bodyIcons.scale} title="Your first check-in will appear here." />
+        ) : (
+          <View accessible={false} style={[styles.tableHead, { borderBottomColor: colors.line }]}>
+            <Text style={[type.caption, styles.date, { color: colors.muted, fontWeight: '600' }]}>
+              {view === 'daily' ? 'Date' : view === 'week' ? 'Week' : 'Month'}
+            </Text>
+            <Text style={[type.caption, { color: colors.muted, fontWeight: '600', flex: 1 }]}>
+              Bodyweight
+            </Text>
+            <Text
+              style={[
+                type.caption,
+                styles.fat,
+                styles.fatText,
+                { color: colors.muted, fontWeight: '600' },
+              ]}
+            >
+              Body fat
+            </Text>
+            {view === 'daily' && <View style={styles.moreSpacer} />}
+          </View>
         )}
         {view === 'daily' &&
-          daily.slice(0, rows).map((measurement) => (
+          daily.slice(0, rows).map((measurement, index) => (
             <Fragment key={measurement.id}>
               <Row
+                first={index === 0}
                 date={dayMonth(measurement.measurement_date)}
                 year={measurement.measurement_date.slice(0, 4)}
                 weight={formatWeight(measurement.weight_kg, unit)}
@@ -121,6 +147,7 @@ export function BodyHistory({
                 detail={measurement.is_sample ? 'Sample' : null}
                 notes={measurement.notes}
                 fat={measurement.body_fat_pct !== null ? `${measurement.body_fat_pct}%` : '–'}
+                fatNote={measurement.body_fat_pct !== null ? 'estimate' : undefined}
                 menu={
                   <MenuButton
                     accessibilityLabel={`Actions for ${prettyDate(measurement.measurement_date)}`}
@@ -147,7 +174,7 @@ export function BodyHistory({
             </Fragment>
           ))}
         {view !== 'daily' &&
-          summaries.slice(0, rows).map((summary) => {
+          summaries.slice(0, rows).map((summary, index) => {
             const years =
               summary.start_date.slice(0, 4) +
               (summary.start_date.slice(0, 4) !== summary.end_date.slice(0, 4)
@@ -156,6 +183,7 @@ export function BodyHistory({
             return (
               <Fragment key={summary.start_date}>
                 <Row
+                  first={index === 0}
                   date={
                     view === 'week'
                       ? `${dayMonth(summary.start_date)} – ${dayMonth(summary.end_date)}`
@@ -179,6 +207,7 @@ export function BodyHistory({
           <Button
             label="Show more"
             variant="link"
+            align="center"
             onPress={() => setRows((shown) => shown + HISTORY_PAGE_SIZE)}
           />
         )}
@@ -188,6 +217,7 @@ export function BodyHistory({
 }
 
 function Row({
+  first,
   date,
   year,
   weight,
@@ -198,8 +228,10 @@ function Row({
   detail,
   notes,
   fat,
+  fatNote,
   menu,
 }: {
+  first: boolean;
   date: string;
   year: string;
   weight: string;
@@ -210,12 +242,23 @@ function Row({
   detail: string | null;
   notes: string | null;
   fat: string;
+  /** Small print under the body fat, as the web's "estimate". */
+  fatNote?: string;
   menu?: ReactNode;
 }) {
   const { colors, type } = useTheme();
   const unit = useWeightUnit();
   return (
-    <View style={[styles.row, { borderTopColor: colors.line }]}>
+    <View
+      style={[
+        styles.row,
+        !first && {
+          borderTopWidth: StyleSheet.hairlineWidth,
+          borderTopColor: colors.line,
+          paddingTop: 10,
+        },
+      ]}
+    >
       <View style={styles.date}>
         <Text style={[type.callout, { color: colors.text, fontWeight: '600' }]}>{date}</Text>
         <Text style={[type.caption, { color: colors.muted }]}>{year}</Text>
@@ -240,12 +283,18 @@ function Row({
           </Text>
         )}
       </View>
-      <Text
-        accessibilityLabel={`Body fat ${fat === '–' ? 'not logged' : fat}`}
-        style={[type.callout, type.number, styles.fat, { color: colors.secondary }]}
+      <View
+        accessible
+        accessibilityLabel={`Body fat ${fat === '–' ? 'not logged' : `${fat}${fatNote ? `, ${fatNote}` : ''}`}`}
+        style={styles.fat}
       >
-        {fat}
-      </Text>
+        <Text style={[type.callout, type.number, styles.fatText, { color: colors.secondary }]}>
+          {fat}
+        </Text>
+        {!!fatNote && (
+          <Text style={[type.caption, styles.fatText, { color: colors.muted }]}>{fatNote}</Text>
+        )}
+      </View>
       {menu}
     </View>
   );
@@ -328,18 +377,26 @@ function GoalDivider({
 }
 
 const styles = StyleSheet.create({
+  heading: { gap: 2 },
+  tableHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingBottom: 6,
+    borderBottomWidth: 1,
+  },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
   date: { width: 72 },
   weight: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
   change: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  fat: { width: 52, textAlign: 'right' },
+  fat: { width: 56 },
+  fatText: { textAlign: 'right' },
   more: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  moreSpacer: { width: 32 },
   divider: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 4 },
   dots: { flex: 1, borderTopWidth: 1.5, borderStyle: 'dotted', height: 0 },
 });

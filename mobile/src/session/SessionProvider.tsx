@@ -14,10 +14,12 @@ import type { User } from '../../../frontend/src/types';
 import {
   ApiError,
   currentUser,
+  retryPendingSignOut,
   signIn as requestSignIn,
   signOut as requestSignOut,
 } from '../data/api';
 import { forgetSessionToken } from '../data/session';
+import { nextSessionEpoch, runBeforeSignOut } from './sessionEpoch';
 import { forgetCachedUser, offlineUser, publicUser, rememberUser } from './cachedUser';
 
 type Status =
@@ -73,6 +75,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const endSession = useCallback(() => {
     generation.current += 1;
+    nextSessionEpoch();
     signedIn.current = false;
     forgetCachedUser();
     setStatus({ kind: 'signed-out' });
@@ -136,11 +139,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // The app feeds onlineManager from NetInfo (src/data/queryClient.ts).
+    // Sign-outs the server hasn't confirmed are retried even while signed out, so an earlier
+    // account's alerts stop reaching this phone without waiting for the next launch.
     const net = onlineManager.subscribe((online) => {
-      if (online) void recheck();
+      if (!online) return;
+      void retryPendingSignOut();
+      void recheck();
     });
     const app = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void recheck();
+      if (state !== 'active') return;
+      void retryPendingSignOut();
+      void recheck();
     });
     return () => {
       net();
@@ -163,6 +172,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     async (username: string, password: string) => {
       const user = publicUser(await requestSignIn(username, password));
       generation.current += 1;
+      nextSessionEpoch();
       client.clear();
       rememberUser(user);
       setStatus({ kind: 'signed-in', user });
@@ -170,6 +180,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     [client],
   );
   const signOut = useCallback(async () => {
+    await runBeforeSignOut();
     await requestSignOut();
     endSession();
   }, [endSession]);

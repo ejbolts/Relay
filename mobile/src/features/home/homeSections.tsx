@@ -11,6 +11,7 @@ import type { HeatmapDay } from '../../../../frontend/src/types';
 import { HomeTrainingBlockCard } from '../blocks';
 import { FriendsActivityCard } from '../social';
 import { CheckInCard } from './CheckInCard';
+import { HoldableCard } from './homeHold';
 import { ConsistencyCard } from './ConsistencyCard';
 import { BodyweightTrendCard, CardioGoalCard } from './HalfCards';
 import {
@@ -83,17 +84,29 @@ export const appDrawsSection = (id: HomeSectionId) => HOME_CARDS[id] !== null;
 /**
  * The visible sections in the saved order, packed into the web's six-column rows: three stat
  * cards or two half cards share a row, and a compact card leaves the rest of its row empty.
+ * A stationary 500 ms hold on a card (not the empty part of a row) opens Edit Home.
  */
 export function HomeSections({
   visible,
+  onHoldToEdit,
   ...context
-}: Omit<HomeCardContext, 'span'> & { visible: HomeSectionId[] }) {
+}: Omit<HomeCardContext, 'span'> & {
+  visible: HomeSectionId[];
+  /** Called after a stationary 500 ms hold on a Home card when editing is allowed. */
+  onHoldToEdit?: () => void;
+}) {
+  const card = (id: HomeSectionId, span: number) => {
+    const content = HOME_CARDS[id]?.({ ...context, span });
+    return content ? (
+      <HoldableCard onHold={onHoldToEdit} testID={`home-card-${id}`}>
+        {content}
+      </HoldableCard>
+    ) : null;
+  };
   return homeSectionRows(visible, context.layout.widths).map((row) => {
     const used = row.reduce((total, item) => total + item.span, 0);
     if (row.length === 1 && used === 6)
-      return (
-        <Fragment key={row[0].id}>{HOME_CARDS[row[0].id]?.({ ...context, span: 6 })}</Fragment>
-      );
+      return <Fragment key={row[0].id}>{card(row[0].id, 6)}</Fragment>;
     return (
       <View
         key={row.map((item) => item.id).join()}
@@ -101,7 +114,7 @@ export function HomeSections({
       >
         {row.map((item) => (
           <View key={item.id} style={{ flex: item.span, minWidth: 0 }}>
-            {HOME_CARDS[item.id]?.({ ...context, span: item.span })}
+            {card(item.id, item.span)}
           </View>
         ))}
         {used < 6 && <View style={{ flex: 6 - used }} />}

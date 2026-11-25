@@ -1,27 +1,14 @@
 import { useState } from 'react';
 import { api } from './api';
 import { PopupDialog } from './PopupDialog';
-import { IMPORT_APPS } from './WorkoutImportSource';
 import type { ImportBatch } from './types';
-
-function counts(batch: ImportBatch) {
-  return [
-    batch.workouts && `${batch.workouts} ${batch.workouts === 1 ? 'session' : 'sessions'}`,
-    batch.body_measurements &&
-      `${batch.body_measurements} ${batch.body_measurements === 1 ? 'check-in' : 'check-ins'}`,
-  ]
-    .filter(Boolean)
-    .join(' · ');
-}
-
-function details(batch: ImportBatch) {
-  const source = IMPORT_APPS.find((app) => app.id === batch.source)?.name ?? batch.source;
-  const time = new Date(batch.created_at).toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  });
-  return `${source} · ${time}`;
-}
+import {
+  importBatchCounts as counts,
+  importBatchDetails as details,
+  importUndoWarning,
+  NO_TRACKED_IMPORTS,
+  NOTHING_LEFT_TO_REMOVE,
+} from './workoutImport';
 
 export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise<void> }) {
   const [batches, setBatches] = useState<ImportBatch[] | null>(null);
@@ -103,26 +90,20 @@ export function ImportBatchHistory({ onUndo }: { onUndo: (id: string) => Promise
               <div className="import-undo-confirm" role="group" aria-label="Confirm undo import">
                 <div className="import-batch-info">
                   <strong>{selected.file_name}</strong>
-                  <span>{counts(selected) || 'Nothing left to remove'}</span>
+                  <span>{counts(selected) || NOTHING_LEFT_TO_REMOVE}</span>
                   <span>{details(selected)}</span>
                 </div>
-                <p>
-                  {selected.workouts > 0 &&
-                    'Sessions are permanently deleted, including later edits. '}
-                  {selected.body_measurements > 0 && 'Edited check-ins are kept.'}
-                </p>
+                <p>{importUndoWarning(selected)}</p>
               </div>
             ) : batches?.length === 0 ? (
-              <p className="import-history-muted">
-                No tracked imports yet. Earlier imports cannot be undone as a batch.
-              </p>
+              <p className="import-history-muted">{NO_TRACKED_IMPORTS}</p>
             ) : (
               <ul className="import-batches" aria-label="Import batches">
                 {batches?.map((batch) => (
                   <li key={batch.id}>
                     <div className="import-batch-info">
                       <strong>{batch.file_name}</strong>
-                      <span>{counts(batch) || 'Nothing left to remove'}</span>
+                      <span>{counts(batch) || NOTHING_LEFT_TO_REMOVE}</span>
                       <span>{details(batch)}</span>
                     </div>
                     <button

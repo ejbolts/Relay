@@ -2,16 +2,19 @@ import * as Clipboard from 'expo-clipboard';
 import Constants from 'expo-constants';
 import * as Notifications from 'expo-notifications';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { HeaderHeightContext } from 'expo-router/react-navigation';
+import { useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Alert,
   AppState,
+  Keyboard,
   Linking,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
+  type ScrollViewInstance,
 } from 'react-native';
 import { formatReleaseVersion, announcedVersion } from '../../../../frontend/src/releaseMetadata';
 import {
@@ -28,16 +31,23 @@ import { VISIBILITY_LABELS } from '../../../../frontend/src/sharedProfileDisplay
 import type { TrainingPreferences } from '../../../../frontend/src/types';
 import { formatSeconds } from '../../../../frontend/src/utils';
 import { apiOrigin, ApiError } from '../../data/api';
+import { waitingForNetwork } from '../../data/offline';
 import { useTrainingPreferences, useWorkoutTypes } from '../../data/queries';
 import { useSession, useUser } from '../../session/SessionProvider';
-import { errorMessage, ErrorState, Loading } from '../../ui/components';
+import { cardSurface, errorMessage, ErrorState, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { ProfilePhoto } from '../../ui/ProfilePhoto';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
+import { HelpSettings } from '../guides/HelpSettings';
+import { PhoneAlertsRow, TestAlertRow, usePhoneAlerts } from '../push/PhoneAlertsRows';
+// B5 (data): imports, exports and backups.
+import { DataSection } from '../data';
+import { YouTubeSettingsRow } from '../videos/YouTubeSettings';
+import { AdminSettingsSection } from '../admin';
 import { socialRoutes, useSharingChoices } from '../social';
 import { useWorkout } from '../workout/WorkoutProvider';
-import { restTimerPreference } from './devicePreferences';
+import { restTimerPreference, restTimesPreference, useReduceMotion } from './devicePreferences';
 import { settingsIcons } from './icons';
 import {
   useAutoSave,
@@ -56,6 +66,14 @@ import {
   SwitchRow,
   type Choice,
 } from './SettingsList';
+import {
+  sectionScrollOffset,
+  settingsSearchResults,
+  SettingsSearchBar,
+  SettingsSearchResults,
+  type SearchTarget,
+  type SettingsAnchor,
+} from './SettingsSearch';
 
 const NO_REST = -1;
 
@@ -75,13 +93,21 @@ export function SettingsScreen() {
 
 function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
   const router = useRouter();
+  const user = useUser();
+  const { space } = useTheme();
+  const reducedMotion = useReduceMotion();
+  // Optional, so Settings renders outside a navigator in tests.
+  const headerHeight = useContext(HeaderHeightContext) ?? 0;
   const types = useWorkoutTypes();
   const split = useTrainingSplit();
   const save = useSavePreferences();
   const [trainingError, setTrainingError] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
   // While a change is on its way, show it rather than the saved value.
   const shown = (save.isPending && save.variables) || preferences;
   const restTimer = restTimerPreference.use();
+  // Stream B1 (logger): rest times between sets.
+  const restTimes = restTimesPreference.use();
 
   function change(next: TrainingPreferences, confirmation = 'Training preferences saved.') {
     setTrainingError(null);
@@ -101,130 +127,196 @@ function SettingsList({ preferences }: { preferences: TrainingPreferences }) {
     })),
   ];
 
+  const searching = query.trim().length > 0;
+  const results = searching ? settingsSearchResults(query, user.id, user.is_admin) : [];
+  const scroll = useRef<ScrollViewInstance>(null);
+  const [jump, setJump] = useState<SettingsAnchor | null>(null);
+
+  function choose(target: SearchTarget) {
+    // The keyboard would otherwise cover the section the result scrolls to.
+    Keyboard.dismiss();
+    setQuery('');
+    if ('route' in target) router.push(target.route);
+    else setJump(target.section);
+  }
+  function placed(anchor: SettingsAnchor, y: number) {
+    if (jump !== anchor) return;
+    setJump(null);
+    scroll.current?.scrollTo({
+      y: sectionScrollOffset(y, space.sm, headerHeight),
+      animated: !reducedMotion,
+    });
+  }
   return (
-    <SettingsPage>
+    <SettingsPage scrollRef={scroll}>
       <ProfileHeader />
-      <Section title="Training">
-        <Row
-          label="Your split"
-          icon={settingsIcons.split}
-          iconTint="#8b5cf6"
-          value={split.isPending ? null : splitName}
-          onPress={() => router.push('/split')}
-        />
-        <ChoiceRow
-          label="Weight unit"
-          icon={settingsIcons.unit}
-          iconTint="#14b8a6"
-          value={shown.preferred_weight_unit}
-          choices={WEIGHT_UNIT_CHOICES}
-          onChange={(unit) => change({ ...preferences, preferred_weight_unit: unit })}
-        />
-        <ChoiceRow
-          label="Week starts"
-          icon={settingsIcons.week}
-          iconTint="#ef476f"
-          value={shown.week_start}
-          choices={WEEK_START_CHOICES}
-          onChange={(weekStart) => change({ ...preferences, week_start: weekStart })}
-        />
-        <WeeklyGoalRow
-          goal={shown.weekly_muscle_set_goal}
-          onSave={(goal) => change({ ...preferences, weekly_muscle_set_goal: goal })}
-          onInvalid={() => setTrainingError(WEEKLY_GOAL_ERROR)}
-        />
-        <Row
-          label="Muscle goals"
-          icon={settingsIcons.goal}
-          iconTint="#16a34a"
-          onPress={() => router.push('/muscle-goals')}
-        />
-        <Row
-          label="Workout types"
-          icon={settingsIcons.types}
-          iconTint="#3b82f6"
-          value={types.data ? String(activeTypes) : null}
-          onPress={() => router.push('/settings/workout-types')}
-        />
-        <Row
-          label="Fresh starts"
-          icon={settingsIcons.freshStart}
-          iconTint="#159487"
-          onPress={() => router.push('/settings/fresh-starts')}
-        />
-        <Row
-          label="Bodyweight chart"
-          icon={settingsIcons.unit}
-          iconTint="#0e8996"
-          onPress={() => router.push('/settings/bodyweight')}
-        />
-        <Row
-          label="Heart-rate zones"
-          icon={settingsIcons.heartRate}
-          iconTint="#e11d48"
-          onPress={() => router.push('/cardio/zones')}
-        />
-      </Section>
-      <Section title="Between sets">
-        <SwitchRow
-          label="Rest timer"
-          icon={settingsIcons.rest}
-          iconTint="#f59e0b"
-          value={restTimer}
-          onChange={restTimerPreference.set}
-        />
-        {/* Show rest times returns once the logger draws rest times between sets (PARITY.md). */}
-        <ChoiceRow
-          label="Default rest"
-          disabled={save.isPending}
-          value={shown.default_rest_seconds ?? NO_REST}
-          choices={restChoices}
-          onChange={(seconds) =>
-            change(
-              { ...preferences, default_rest_seconds: seconds === NO_REST ? null : seconds },
-              'Default rest saved.',
-            )
-          }
-        />
-      </Section>
-      <SectionError message={trainingError} />
-      <Section title="Appearance">
-        <Row
-          label="Theme and motion"
-          icon={settingsIcons.appearance}
-          iconTint="#8057ba"
-          onPress={() => router.push('/settings/appearance')}
-        />
-      </Section>
-      <AutoSaveSection />
-      <NotificationsSection />
-      <AccountSection />
-      <AboutSection />
+      <SettingsSearchBar
+        value={query}
+        onChange={setQuery}
+        onSubmit={() => results[0] && choose(results[0].target)}
+      />
+      {searching ? (
+        <SettingsSearchResults results={results} onChoose={(target) => choose(target)} />
+      ) : (
+        <>
+          <SettingsSection anchor="training" onPlaced={placed}>
+            <Section title="Training">
+              <Row
+                label="Your split"
+                icon={settingsIcons.split}
+                value={waitingForNetwork(split) ? 'Offline' : split.isPending ? null : splitName}
+                onPress={() => router.push('/split')}
+              />
+              <ChoiceRow
+                label="Weight unit"
+                icon={settingsIcons.unit}
+                value={shown.preferred_weight_unit}
+                choices={WEIGHT_UNIT_CHOICES}
+                onChange={(unit) => change({ ...preferences, preferred_weight_unit: unit })}
+              />
+              <ChoiceRow
+                label="Week starts"
+                icon={settingsIcons.week}
+                value={shown.week_start}
+                choices={WEEK_START_CHOICES}
+                onChange={(weekStart) => change({ ...preferences, week_start: weekStart })}
+              />
+              <WeeklyGoalRow
+                goal={shown.weekly_muscle_set_goal}
+                onSave={(goal) => change({ ...preferences, weekly_muscle_set_goal: goal })}
+                onInvalid={() => setTrainingError(WEEKLY_GOAL_ERROR)}
+              />
+              <Row
+                label="Muscle goals"
+                icon={settingsIcons.goal}
+                onPress={() => router.push('/muscle-goals')}
+              />
+              <Row
+                label="Workout types"
+                icon={settingsIcons.types}
+                value={types.data ? String(activeTypes) : null}
+                onPress={() => router.push('/settings/workout-types')}
+              />
+              <Row
+                label="Fresh starts"
+                icon={settingsIcons.freshStart}
+                onPress={() => router.push('/settings/fresh-starts')}
+              />
+              <Row
+                label="Bodyweight chart"
+                icon={settingsIcons.unit}
+                onPress={() => router.push('/settings/bodyweight')}
+              />
+              <Row
+                label="Heart-rate zones"
+                icon={settingsIcons.heartRate}
+                onPress={() => router.push('/cardio/zones')}
+              />
+            </Section>
+          </SettingsSection>
+          <SettingsSection anchor="between-sets" onPlaced={placed}>
+            <Section title="Between sets">
+              <SwitchRow
+                label="Rest timer"
+                icon={settingsIcons.rest}
+                value={restTimer}
+                onChange={restTimerPreference.set}
+              />
+              <SwitchRow
+                label="Show rest times"
+                icon={settingsIcons.show}
+                value={restTimes}
+                onChange={restTimesPreference.set}
+              />
+              <ChoiceRow
+                label="Default rest"
+                disabled={save.isPending}
+                value={shown.default_rest_seconds ?? NO_REST}
+                choices={restChoices}
+                onChange={(seconds) =>
+                  change(
+                    { ...preferences, default_rest_seconds: seconds === NO_REST ? null : seconds },
+                    'Default rest saved.',
+                  )
+                }
+              />
+            </Section>
+            <SectionError message={trainingError} />
+          </SettingsSection>
+          <Section title="Appearance">
+            <Row
+              label="Theme and motion"
+              icon={settingsIcons.appearance}
+              onPress={() => router.push('/settings/appearance')}
+            />
+          </Section>
+          <SettingsSection anchor="help" onPlaced={placed}>
+            {/* B4 (guides): Help and Workout sharing. */}
+            <HelpSettings />
+          </SettingsSection>
+          <SettingsSection anchor="auto-save" onPlaced={placed}>
+            <AutoSaveSection />
+          </SettingsSection>
+          <SettingsSection anchor="notifications" onPlaced={placed}>
+            <NotificationsSection />
+          </SettingsSection>
+          <SettingsSection anchor="data" onPlaced={placed}>
+            <DataSection />
+            {/* The web shows its YouTube panel with the data settings. */}
+            <YouTubeSettingsRow />
+          </SettingsSection>
+          <SettingsSection anchor="account" onPlaced={placed}>
+            <AccountSection />
+          </SettingsSection>
+          {/* Mobile batch 4, B6: the admin console, for administrators only. */}
+          <AdminSettingsSection />
+          <AboutSection />
+        </>
+      )}
     </SettingsPage>
+  );
+}
+
+/** A part of Settings that a search result can scroll to. */
+function SettingsSection({
+  anchor,
+  onPlaced,
+  children,
+}: {
+  anchor: SettingsAnchor;
+  onPlaced: (anchor: SettingsAnchor, y: number) => void;
+  children: ReactNode;
+}) {
+  const { space } = useTheme();
+  return (
+    <View
+      testID={`settings-section-${anchor}`}
+      style={{ gap: space.xl }}
+      onLayout={(event) => onPlaced(anchor, event.nativeEvent.layout.y)}
+    >
+      {children}
+    </View>
   );
 }
 
 function ProfileHeader() {
   const user = useUser();
   const router = useRouter();
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   return (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`Edit profile, ${user.display_name}`}
       onPress={() => router.push('/settings/profile')}
       style={({ pressed }) => [
+        cardSurface(colors),
         styles.profile,
-        {
-          backgroundColor: pressed ? colors.surface2 : colors.surface,
-          borderRadius: radius.lg,
-          borderColor: colors.line,
-        },
+        pressed && { backgroundColor: colors.surface2 },
       ]}
     >
-      <ProfilePhoto user={user} size={60} />
+      <ProfilePhoto user={user} size={56} />
       <View style={{ flex: 1, gap: 2 }}>
-        <Text style={[type.title, { color: colors.text }]} numberOfLines={1}>
+        <Text style={[type.headline, { color: colors.text }]} numberOfLines={1}>
           {user.display_name || user.username}
         </Text>
         <Text style={[type.footnote, { color: colors.muted }]} numberOfLines={1}>
@@ -248,7 +340,9 @@ function WeeklyGoalRow({
 }) {
   const { colors, type, radius } = useTheme();
   const [draft, setDraft] = useState<string | null>(null);
+  const [focused, setFocused] = useState(false);
   function commit() {
+    setFocused(false);
     if (draft === null) return;
     const next = Number(draft.trim());
     setDraft(null);
@@ -263,12 +357,12 @@ function WeeklyGoalRow({
     <Row
       label="Weekly sets per muscle"
       icon={settingsIcons.goal}
-      iconTint="#22c55e"
       accessory={
         <TextInput
           accessibilityLabel="Default weekly sets per muscle"
           value={draft ?? String(goal)}
           onChangeText={setDraft}
+          onFocus={() => setFocused(true)}
           onEndEditing={commit}
           onSubmitEditing={commit}
           keyboardType="number-pad"
@@ -279,7 +373,12 @@ function WeeklyGoalRow({
             type.body,
             type.number,
             styles.number,
-            { color: colors.text, backgroundColor: colors.surface2, borderRadius: radius.sm },
+            {
+              color: colors.text,
+              backgroundColor: colors.surface2,
+              borderColor: focused ? colors.accent : colors.lineStrong,
+              borderRadius: radius.sm,
+            },
           ]}
         />
       }
@@ -306,7 +405,6 @@ function AutoSaveSection() {
         <SwitchRow
           label="Auto-save"
           icon={settingsIcons.autoSave}
-          iconTint="#0ea5e9"
           value={enabled}
           disabled={!autoSave.data || save.isPending}
           onChange={(on) => change(on ? DEFAULT_WORKOUT_AUTO_SAVE_MINUTES : null)}
@@ -354,6 +452,7 @@ function useNotificationPermission() {
 
 function NotificationsSection() {
   const { permission, setPermission } = useNotificationPermission();
+  const alerts = usePhoneAlerts();
   async function press() {
     if (permission !== 'undetermined') {
       void Linking.openSettings();
@@ -365,25 +464,29 @@ function NotificationsSection() {
     if (status.granted) showToast('Notifications on');
   }
   return (
-    <Section title="Notifications">
-      <Row
-        label="Notifications"
-        icon={settingsIcons.bell}
-        iconTint="#ef4444"
-        value={
-          permission === 'checking'
-            ? null
-            : permission === 'granted'
-              ? 'On'
-              : permission === 'denied'
-                ? 'Off'
-                : 'Allow'
-        }
-        external={permission === 'granted' || permission === 'denied'}
-        disabled={permission === 'checking'}
-        onPress={() => void press()}
-      />
-    </Section>
+    <>
+      <Section title="Notifications">
+        <Row
+          label="Notifications"
+          icon={settingsIcons.bell}
+          value={
+            permission === 'checking'
+              ? null
+              : permission === 'granted'
+                ? 'On'
+                : permission === 'denied'
+                  ? 'Off'
+                  : 'Allow'
+          }
+          external={permission === 'granted' || permission === 'denied'}
+          disabled={permission === 'checking'}
+          onPress={() => void press()}
+        />
+        <PhoneAlertsRow alerts={alerts} />
+        {alerts.enabled && <TestAlertRow alerts={alerts} />}
+      </Section>
+      <SectionError message={alerts.error} />
+    </>
   );
 }
 
@@ -451,20 +554,17 @@ function AccountSection() {
         <Row
           label="Profile sharing"
           icon={settingsIcons.people}
-          iconTint="#6366f1"
           value={sharing ? VISIBILITY_LABELS[sharing.visibility] : undefined}
           onPress={() => router.push(socialRoutes.sharing)}
         />
         <Row
           label="Change password"
           icon={settingsIcons.password}
-          iconTint="#64748b"
           onPress={() => router.push('/settings/password')}
         />
         <Row
           label="Account UUID"
           icon={settingsIcons.copy}
-          iconTint="#64748b"
           value={user.id}
           chevron={false}
           accessibilityLabel="Copy account UUID"
@@ -478,7 +578,6 @@ function AccountSection() {
         <Row
           label={busy === 'device' ? 'Signing out…' : 'Sign out'}
           icon={settingsIcons.signOut}
-          iconTint="#64748b"
           chevron={false}
           busy={busy === 'device'}
           disabled={busy !== null}
@@ -487,7 +586,6 @@ function AccountSection() {
         <Row
           label={busy === 'everywhere' ? 'Signing out everywhere…' : 'Sign out everywhere'}
           icon={settingsIcons.everywhere}
-          iconTint="#c53b3b"
           destructive
           chevron={false}
           busy={busy === 'everywhere'}
@@ -497,7 +595,6 @@ function AccountSection() {
         <Row
           label="Delete account"
           icon="trash"
-          iconTint="#c53b3b"
           destructive
           disabled={busy !== null}
           onPress={() => router.push('/settings/delete-account')}
@@ -517,33 +614,24 @@ function AboutSection() {
       <Row
         label="What's new"
         icon={settingsIcons.whatsNew}
-        iconTint="#a855f7"
         value={version}
         onPress={() => router.push('/settings/whats-new')}
       />
       <Row
         label="App version"
         icon={settingsIcons.version}
-        iconTint="#64748b"
         value={Constants.expoConfig?.version ?? null}
       />
-      <Row
-        label="Tips"
-        icon={settingsIcons.tips}
-        iconTint="#986414"
-        onPress={() => router.push('/settings/tips')}
-      />
+      <Row label="Tips" icon={settingsIcons.tips} onPress={() => router.push('/settings/tips')} />
       <Row
         label="Send feedback"
         icon={settingsIcons.feedback}
-        iconTint="#316ba8"
         onPress={() => router.push('/settings/feedback')}
       />
       {!!apiOrigin && (
         <Row
           label="Relay on the web"
           icon={settingsIcons.web}
-          iconTint="#2c74d0"
           external
           onPress={() => void Linking.openURL(`${apiOrigin!.replace(/\/$/, '')}/#settings`)}
         />
@@ -558,7 +646,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 14,
     padding: 14,
-    borderWidth: StyleSheet.hairlineWidth,
   },
-  number: { minWidth: 56, textAlign: 'center', paddingHorizontal: 10, paddingVertical: 6 },
+  number: {
+    minWidth: 56,
+    textAlign: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderWidth: 1,
+  },
 });

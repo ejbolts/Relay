@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { bodyFigureCallouts, bodyFigureLabelName } from './bodyFigureLayout';
 import {
+  bodyFigureKindForSex,
   bodyFigureValues,
   bodySizeChangeText,
   bodySizeChanges,
@@ -12,6 +13,7 @@ import {
   bodySizesPayload,
   emptyBodySizeLog,
   figureEntry,
+  sharedBodyFigureValues,
   withBodySizeLog,
 } from './bodySizeEntries';
 import type { BodySizeLog } from './bodySizes';
@@ -86,6 +88,19 @@ describe('body measurement entries', () => {
         '2026-11-10',
       ]);
     }
+  });
+
+  it('formats shared profile body figure values without carrying earlier entries', () => {
+    expect(bodyFigureKindForSex('female')).toBe('female');
+    expect(bodyFigureKindForSex('male')).toBe('male');
+    expect(bodyFigureKindForSex(null)).toBe('male');
+    expect(bodyFigureKindForSex(undefined)).toBe('male');
+    expect(
+      sharedBodyFigureValues(log('2026-10-27', { waist_cm: 76.2, hips_cm: 96.52 }), inches),
+    ).toEqual({
+      waist_cm: '30',
+      hips_cm: '38',
+    });
   });
 
   it('words history rows', () => {

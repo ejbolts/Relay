@@ -1,12 +1,11 @@
 import type { Release } from './releaseMetadata';
 import { parseRelease } from './releaseMetadata';
+import { releaseNoticeReadKey, releaseSeenKey } from './appNoticeRules';
 
 const seenThisSession = new Set<string>();
 const readNoticesThisSession = new Set<string>();
 
-function noticeReadKey(userId: string, version: string): string {
-  return `gym-logger-release-notice-read:${encodeURIComponent(userId)}:${version}`;
-}
+const noticeReadKey = releaseNoticeReadKey;
 
 export function hasReadReleaseNotice(userId: string, version: string): boolean {
   const key = noticeReadKey(userId, version);
@@ -28,9 +27,7 @@ export function rememberReleaseNoticeRead(userId: string, version: string): void
   }
 }
 
-function seenKey(userId: string, version: string): string {
-  return `gym-logger-release-seen:${encodeURIComponent(userId)}:${version}`;
-}
+const seenKey = releaseSeenKey;
 
 export function hasSeenRelease(userId: string, version: string): boolean {
   const key = seenKey(userId, version);
