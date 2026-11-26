@@ -1870,24 +1870,35 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 /* The ripple is a band that grows from the ring's outer edge and fades, matching the flat ripple's
-   timing and reach while keeping every workout colour in its arc. */
+   timing and reach while keeping every workout colour in its arc.
+   Safari runs the opacity on the compositor but the band's size on the main thread, so a loop that
+   jumped from the faded full-size band straight back to the start flashed a solid full-size band
+   for a frame. The band instead shrinks back while it is invisible and only regains its opacity at
+   zero width, so neither property ever jumps and the loop has nothing to flash. */
 .calendar-today-ring::after {
   border-width: 0;
   animation: calendar-today-ring-ripple 2.4s ease-out infinite;
 }
 
 @keyframes calendar-today-ring-ripple {
-  0% {
+  0%,
+  100% {
     inset: 0;
     border-width: 0;
     border-radius: 13px;
     opacity: 0.9;
   }
   70%,
-  100% {
+  80% {
     inset: -7px;
     border-width: 7px;
     border-radius: 20px;
+    opacity: 0;
+  }
+  90% {
+    inset: 0;
+    border-width: 0;
+    border-radius: 13px;
     opacity: 0;
   }
 }
