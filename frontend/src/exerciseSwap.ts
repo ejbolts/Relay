@@ -107,10 +107,11 @@ function carrySet(
   set: WorkoutDraftSet,
   suggestion: WorkoutDraftSet | undefined,
   replacement: Exercise,
+  key: string,
 ): WorkoutDraftSet {
   const carried: WorkoutDraftSet = {
     ...set,
-    key: crypto.randomUUID(),
+    key,
     completed: false,
     machine_photo_id: null,
     failed: false,
@@ -130,6 +131,7 @@ function carrySet(
  * yet the movement is replaced in place. `suggestedSets` are the replacement's sets from its
  * last session and supply loads (or the whole plan when there is nothing left to carry).
  * `machine` is the replacement's machine choice; without one the logger restores its last machine.
+ * `newKey` makes new row keys (crypto.randomUUID on the web).
  */
 export function swapMovementExercise(
   movements: WorkoutDraftMovement[],
@@ -140,6 +142,7 @@ export function swapMovementExercise(
     WorkoutDraftMovement,
     'machinePhotoIds' | 'machinePhotosInitialized' | 'machineSettings'
   > = { machinePhotoIds: [], machinePhotosInitialized: false, machineSettings: undefined },
+  newKey: () => string = () => crypto.randomUUID(),
 ): WorkoutDraftMovement[] {
   const index = movements.findIndex((movement) => movement.key === movementKey);
   if (index < 0) return movements;
@@ -159,13 +162,13 @@ export function swapMovementExercise(
           const group = isWarmup(set) ? 'warmup' : 'working';
           const pool = pools[group];
           const suggestion = pool[used[group]++] ?? pool.at(-1);
-          return carrySet(set, suggestion, replacement);
+          return carrySet(set, suggestion, replacement, newKey());
         })
       : suggestedSets;
   const originName = original.swappedFrom ?? original.exercise.name;
   const replacementMovement: WorkoutDraftMovement = {
     ...original,
-    key: logged.length ? crypto.randomUUID() : original.key,
+    key: logged.length ? newKey() : original.key,
     exercise: replacement,
     notes: logged.length ? '' : original.notes,
     ...machine,
@@ -179,4 +182,45 @@ export function swapMovementExercise(
   const next = [...movements];
   next.splice(index, 1, { ...original, sets: logged, isComplete: true }, replacementMovement);
   return next;
+}
+
+/** The swap sheet's sections: same muscles first, then close matches; cardio in one list. */
+export function swapAlternativeGroups(
+  alternatives: SwapAlternative[],
+  cardio: boolean,
+): { label: string; items: SwapAlternative[] }[] {
+  return cardio
+    ? [{ label: 'Other cardio', items: alternatives }]
+    : [
+        {
+          label: 'Same muscles',
+          items: alternatives.filter((item) => (item.match ?? 0) >= SAME_MUSCLES_MATCH),
+        },
+        {
+          label: 'Close match',
+          items: alternatives.filter((item) => (item.match ?? 0) < SAME_MUSCLES_MATCH),
+        },
+      ];
+}
+
+const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
+
+/** What a swap does with the sets: "2 planned sets move across · 1 logged set stays". */
+export function swapCarrySummary(plannedSetCount: number, loggedSetCount: number): string {
+  return [
+    plannedSetCount ? `${plural(plannedSetCount, 'planned set')} move across` : null,
+    loggedSetCount
+      ? `${plural(loggedSetCount, 'logged set')} ${loggedSetCount === 1 ? 'stays' : 'stay'}`
+      : null,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+}
+
+/** The original's muscles an alternative does not train, shown crossed out beside its own. */
+export function missingSwapMuscles(original: Exercise, alternative: Exercise): string[] {
+  const trained = swapMuscleCredits(alternative);
+  return swapMuscleCreditList(original)
+    .filter(({ muscle }) => !trained.has(muscle.toLowerCase()))
+    .map(({ muscle }) => muscle);
 }

@@ -14,22 +14,14 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { Icon } from './Icon';
+import { POPUP_MS, toastDuration, type PopupDuration, type ToastVariant } from './popupTiming';
 import './toast.css';
 
-export type ToastVariant = 'status' | 'action' | 'warning' | 'error' | 'celebrate';
+export type { ToastVariant };
 
-/** The only toast durations in the app. Undo hooks use `TOAST_MS.action` for their commit delay. */
-// eslint-disable-next-line react-refresh/only-export-components
-export const TOAST_MS = {
-  status: 4000,
-  action: 6000,
-  warning: 6000,
-  celebrate: 6000,
-  error: 8000,
-} as const;
+/** Toast times: the app's pop-up times. An Undo hook waits as long as its toast. */
+export const TOAST_MS = POPUP_MS;
 
-/** A message longer than this gets the error tier's time, so there is time to read it. */
-const LONG_MESSAGE_LENGTH = 90;
 const MAX_LINES = 3;
 
 export interface ToastAction {
@@ -45,6 +37,8 @@ export interface ToastProps {
   lines?: { title: string; detail?: string }[];
   /** Defaults to 'action' when there is an action, otherwise 'status'. */
   variant?: ToastVariant;
+  /** Replaces the variant's time: `quick` for frequent small undos, `important` for big ones. */
+  duration?: PopupDuration;
   action?: ToastAction;
   /** A second action before the main one. Only the finished-workout toast needs it. */
   secondaryAction?: ToastAction;
@@ -77,12 +71,6 @@ type ToastEdge = 'top' | 'bottom';
 
 function toastVariant({ variant, action }: Pick<ToastProps, 'variant' | 'action'>): ToastVariant {
   return variant ?? (action ? 'action' : 'status');
-}
-
-function toastDuration(variant: ToastVariant, message: string): number {
-  return message.length > LONG_MESSAGE_LENGTH
-    ? Math.max(TOAST_MS[variant], TOAST_MS.error)
-    : TOAST_MS[variant];
 }
 
 /** What ends a toast without the close button: the owner's timeout, or dismissal by default. */
@@ -347,7 +335,7 @@ function ToastCard({
 function useToastCard(props: ToastProps, current: boolean): ReactElement {
   const { id, message, action, busy = false } = props;
   const variant = toastVariant(props);
-  const durationMs = toastDuration(variant, message);
+  const durationMs = toastDuration(variant, message, props.duration);
   const latest = useRef(props);
   latest.current = props;
   const [held, setHeld] = useState(false);

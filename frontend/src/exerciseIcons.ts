@@ -131,7 +131,8 @@ type ExerciseIconExercise = Pick<
   'name' | 'kind' | 'category' | 'muscle_group' | 'equipment'
 >;
 
-const iconUrls: Record<ExerciseIconKey, string> = {
+// A URL in the web; the app bundles each image as an image source.
+const iconUrls: Record<ExerciseIconKey, typeof abCrunchMachineIcon> = {
   'ab-crunch-machine': abCrunchMachineIcon,
   'back-extension': backExtensionIcon,
   'back-squat': backSquatIcon,
@@ -229,6 +230,7 @@ const exactIcons: Record<string, ExerciseIconKey> = {
   'leg press': 'leg-press',
   'lying leg curl': 'hamstring-curl',
   'machine bicep preacher curl': 'preacher-curl',
+  'ez bar preacher curl': 'preacher-curl',
   'machine chest press': 'machine-chest-press',
   'machine shoulder press': 'machine-shoulder-press',
   'machine lateral raise': 'machine-lateral-raise',

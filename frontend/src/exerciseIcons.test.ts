@@ -55,6 +55,7 @@ describe('exerciseIconKey', () => {
   it.each([
     ['Cable Biceps Curl', 'Cable', 'biceps-curl'],
     ['Single-Arm Preacher Curl', 'Dumbbell', 'preacher-curl'],
+    ['EZ Bar Preacher Curl', 'EZ bar', 'preacher-curl'],
     ['Single-Arm Cable Hammer Curl', 'Cable', 'biceps-curl'],
     ['Single-Arm Cable Leg Curl', 'Cable', 'hamstring-curl'],
     ['Chest-Supported Dumbbell Row', 'Dumbbell', 'seated-row'],

@@ -2,8 +2,8 @@ import { useState } from 'react';
 import './workoutAutoSaveSetting.css';
 import {
   DEFAULT_WORKOUT_AUTO_SAVE_MINUTES,
-  WORKOUT_AUTO_SAVE_CHOICES,
   autoSaveChoiceLabel,
+  autoSaveChoices,
   saveWorkoutAutoSave,
   useWorkoutAutoSaveMinutes,
 } from './workoutAutoSaveChoice';
@@ -13,11 +13,7 @@ export function WorkoutAutoSaveSetting({ userId }: { userId: string }) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const enabled = minutes !== null;
-  const choices: number[] = [...WORKOUT_AUTO_SAVE_CHOICES];
-  if (minutes !== null && !choices.includes(minutes)) {
-    choices.push(minutes);
-    choices.sort((a, b) => a - b);
-  }
+  const choices = autoSaveChoices(minutes);
 
   const change = (value: number | null) => {
     setSaving(true);

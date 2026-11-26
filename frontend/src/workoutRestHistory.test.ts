@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { previousSetRests, restToAdd } from './workoutRestHistory';
-import { createWorkoutSet, DEFAULT_REST_SECONDS } from './workoutSets';
+import { previousSetRests, restRowShown, restToAdd } from './workoutRestHistory';
+import { createWorkoutSet } from './workoutSets';
 import type { ExerciseHistoryEntry } from './exerciseHistory';
 
 const working = { ...createWorkoutSet('strength'), set_type: 'normal' as const, warmup: false };
@@ -65,9 +65,32 @@ describe('rest to add between sets', () => {
   it('uses what the same set rested last time', () => {
     expect(restToAdd([noRest, noRest], 1, [entry])).toBe(210);
   });
-  it('falls back to the nearest rest in the exercise, then the default', () => {
+  it('falls back to the nearest rest in the exercise, then the default rest if one is set', () => {
     const sets = [{ ...noRest, rest_seconds: 45 }, noRest, { ...noRest, rest_seconds: 120 }];
-    expect(restToAdd(sets, 1, [])).toBe(45);
-    expect(restToAdd([noRest, noRest], 0, [])).toBe(DEFAULT_REST_SECONDS);
+    expect(restToAdd(sets, 1, [], 150)).toBe(45);
+    expect(restToAdd([noRest, noRest], 0, [], 150)).toBe(150);
+    expect(restToAdd([noRest, noRest], 0, [])).toBeUndefined();
+  });
+});
+
+describe('when a rest shows between sets', () => {
+  const set = { completed: false, rest_seconds: 90 };
+
+  it("shows a logged set's rest, and a typed set's straight away", () => {
+    expect(restRowShown({ ...set, completed: true, fromPrevious: true }, false, true)).toBe(true);
+    expect(restRowShown({ ...set, restRevealed: true }, false, true)).toBe(true);
+    expect(restRowShown(set, false, true)).toBe(true);
+  });
+
+  it("hides a suggestion's rest and a set slotted in with + until they are logged", () => {
+    expect(restRowShown({ ...set, fromPrevious: true }, false, true)).toBe(false);
+    expect(restRowShown({ ...set, restRevealed: false }, false, true)).toBe(false);
+  });
+
+  it('never shows for cardio, without a rest, or with Show rest times off', () => {
+    const logged = { ...set, completed: true };
+    expect(restRowShown(logged, true, true)).toBe(false);
+    expect(restRowShown({ ...logged, rest_seconds: null }, false, true)).toBe(false);
+    expect(restRowShown(logged, false, false)).toBe(false);
   });
 });

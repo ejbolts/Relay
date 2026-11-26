@@ -2,14 +2,40 @@ import { useTips } from './Tips';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { useWeightUnit } from './trainingPreferencesContext';
-import type { CardioOverview, CardioSession, CardioSessionInput, Exercise } from './types';
+import type {
+  CardioOverview,
+  CardioSession,
+  CardioSessionInput,
+  Exercise,
+  PersonalRecord,
+} from './types';
+import {
+  cardioExerciseFor,
+  cardioMetricFields,
+  cardioSessionPayload,
+  emptyCardioSession,
+  hasCardioMetrics,
+} from './cardioForm';
+import { cardioSessionUpdateFromScan } from './cardioScreenshot';
+import { savedCardioRecordsToast } from './cardioRecords';
 import { InlineConfirmButton } from './InlineConfirmButton';
 import { CardioTrendCard } from './CardioTrendCard';
-import { groupCardioHistory, sessionElevation, sessionMets } from './cardioTrend';
+import { groupCardioHistory } from './cardioTrend';
+import {
+  CARDIO_HISTORY_FILTERS,
+  CARDIO_HISTORY_WEEKS_PER_PAGE,
+  cardioSessionContextLabel,
+  cardioSessionEnergy,
+  cardioDeletion,
+  cardioSessionPerformance,
+  cardioSessionsPerWorkout,
+  filterCardioHistory,
+  type CardioDeletion,
+  type CardioHistoryFilter,
+} from './cardioHistory';
 import { CardioMetricsEditor } from './CardioMetricsEditor';
 import { CardioZoneSettings } from './CardioZoneSettings';
 import { DEFAULT_CARDIO_PREFERENCES } from './cardioZones';
-import { fatEnergyEquivalent } from './cardioEnergy';
 import { PaginationControls } from './PaginationControls';
 import { Icon } from './Icon';
 import { WorkoutShareCard } from './WorkoutShareCard';
@@ -20,17 +46,6 @@ import { weekStartDayFrom } from './trainingSummary';
 import { localDate } from './utils';
 import { numberOrNull, prettyDate } from './appShared';
 import { LoadingState } from './LoadingState';
-
-/** History pages hold whole weeks, so a week's sessions are never split across pages. */
-const CARDIO_HISTORY_WEEKS_PER_PAGE = 3;
-
-/** A history value, marked with ≈ when it was calculated rather than logged. */
-function estimatedMetric(value: number | null, estimated: boolean, unit: string) {
-  if (value === null) return null;
-  // Non-breaking spaces keep the sign, number and unit on one line.
-  const amount = value.toLocaleString(undefined, { maximumFractionDigits: 1 });
-  return `${estimated ? '≈\u00A0' : ''}${amount}\u00A0${unit}`;
-}
 
 function ScanningLabel() {
   return (
@@ -57,31 +72,8 @@ export function CardioScreen({
 }) {
   const tips = useTips();
   const cardioExercises = exercises.filter((exercise) => exercise.kind === 'cardio');
-  const defaultExercise =
-    cardioExercises.find(
-      (exercise) => exercise.name.toLocaleLowerCase() === 'incline treadmill walking',
-    ) ??
-    cardioExercises[0] ??
-    null;
   const weightUnit = useWeightUnit();
-  const empty: CardioSessionInput = {
-    session_date: localDate(),
-    exercise_id: defaultExercise?.id ?? null,
-    activity_type: defaultExercise?.name ?? '',
-    duration_minutes: 30,
-    calories_kcal: null,
-    average_heart_rate_bpm: null,
-    distance_km: null,
-    average_speed_kph: null,
-    incline_percent: null,
-    average_power_watts: null,
-    average_mets: null,
-    elevation_gain_m: null,
-    intensity: null,
-    zone: null,
-    qualifies_zone2: false,
-    notes: null,
-  };
+  const empty = emptyCardioSession(cardioExercises, localDate());
   const [overview, setOverview] = useState<CardioOverview | null>(null);
   const [zoneSettingsOpen, setZoneSettingsOpen] = useState(false);
   const [draft, setDraft] = useState<CardioSessionInput>(empty);
@@ -93,9 +85,7 @@ export function CardioScreen({
   const [scanning, setScanning] = useState(false);
   const [scanStatus, setScanStatus] = useState<{ message: string; warning: boolean } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [historyFilter, setHistoryFilter] = useState<'all' | 'pure_cardio' | 'workout_plus_cardio'>(
-    'all',
-  );
+  const [historyFilter, setHistoryFilter] = useState<CardioHistoryFilter>('all');
   const [historyPage, setHistoryPage] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [formOpen, setFormOpen] = useState(false);
@@ -121,14 +111,7 @@ export function CardioScreen({
     window.addEventListener('training-preferences-updated', reloadPreferences);
     return () => window.removeEventListener('training-preferences-updated', reloadPreferences);
   }, [dataRevision]);
-  const filteredSessions =
-    overview?.sessions.filter(
-      (session) =>
-        historyFilter === 'all' ||
-        (session.workout_context === 'workout_plus_cardio'
-          ? 'workout_plus_cardio'
-          : 'pure_cardio') === historyFilter,
-    ) ?? [];
+  const filteredSessions = filterCardioHistory(overview?.sessions ?? [], historyFilter);
   const allHistoryGroups = groupCardioHistory(
     filteredSessions,
     weekStartDayFrom(overview?.current_week.week_start),
@@ -143,14 +126,7 @@ export function CardioScreen({
     currentHistoryPage * CARDIO_HISTORY_WEEKS_PER_PAGE,
   );
   // Sessions per workout: deleting a session deletes its workout only when that is all it holds.
-  const sessionsPerWorkout = new Map<string, number>();
-  for (const session of overview?.sessions ?? []) {
-    if (session.source_workout_id)
-      sessionsPerWorkout.set(
-        session.source_workout_id,
-        (sessionsPerWorkout.get(session.source_workout_id) ?? 0) + 1,
-      );
-  }
+  const sessionsPerWorkout = cardioSessionsPerWorkout(overview?.sessions ?? []);
 
   useEffect(() => {
     setHistoryPage((page) => Math.min(page, historyPageCount));
@@ -163,35 +139,12 @@ export function CardioScreen({
     try {
       const scan = await api.scanCardioScreenshot(file);
       tips.learn('cardio');
-      const scannedExercise = scan.activity_type
-        ? cardioExercises.find(
-            (exercise) =>
-              exercise.name.toLocaleLowerCase() === scan.activity_type?.toLocaleLowerCase(),
-          )
-        : null;
-      setDraft((current) => ({
-        ...current,
-        session_date: scan.session_date ?? current.session_date,
-        exercise_id: scannedExercise?.id ?? current.exercise_id,
-        activity_type: scannedExercise?.name ?? current.activity_type,
-        duration_minutes: scan.duration_minutes ?? current.duration_minutes,
-        calories_kcal: scan.calories_kcal,
-        average_heart_rate_bpm: scan.average_heart_rate_bpm,
-        distance_km: scan.distance_km,
-        average_speed_kph: scan.average_speed_kph,
-        incline_percent: null,
-        average_power_watts: null,
-        average_mets: null,
-        elevation_gain_m: scan.elevation_gain_m ?? null,
-      }));
+      const { update, warning } = cardioSessionUpdateFromScan(scan, cardioExercises);
+      setDraft((current) => ({ ...current, ...update }));
       const scanned = scan.fields_found.join(', ');
-      const activityWarning =
-        scan.activity_type && !scannedExercise
-          ? ` ${scan.activity_type} is not in the activity list, so the current activity was kept.`
-          : '';
       setScanStatus({
-        message: `Scanned ${scanned}.${activityWarning}${scan.warning ? ` ${scan.warning}` : ''} Review the fields below, then add the session.`,
-        warning: Boolean(scan.warning || activityWarning),
+        message: `Scanned ${scanned}.${warning ? ` ${warning}` : ''} Review the fields below, then add the session.`,
+        warning: Boolean(warning),
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Could not scan that screenshot.');
@@ -207,12 +160,7 @@ export function CardioScreen({
         setError('Choose a cardio exercise.');
         return;
       }
-      const payload = {
-        ...draft,
-        intensity: null,
-        zone: null,
-        qualifies_zone2: false,
-      };
+      const payload = cardioSessionPayload(draft);
       setSaving(true);
       if (editingId) {
         await api.updateCardio(editingId, payload);
@@ -220,19 +168,31 @@ export function CardioScreen({
       } else {
         const saved = await api.createCardio(payload);
         if (!scanStatus) tips.event('manual-cardio', 'cardio', 2);
+        const share = {
+          label: 'Share card',
+          run: () => {
+            toast.dismiss();
+            setCardioSharing(saved);
+          },
+        };
+        // A session logged with an exercise is saved as a workout, which can set cardio PRs.
+        const records = saved.source_workout_id
+          ? await api
+              .listPersonalRecords({ workoutId: saved.source_workout_id })
+              .catch(() => [] as PersonalRecord[])
+          : [];
+        const celebration = savedCardioRecordsToast(records);
         toast.show(
-          shareReminder
+          celebration
             ? {
-                message: 'Workout saved',
-                action: {
-                  label: 'Share card',
-                  run: () => {
-                    toast.dismiss();
-                    setCardioSharing(saved);
-                  },
-                },
+                ...celebration,
+                variant: 'celebrate',
+                dismissLabel: 'Dismiss personal record popup',
+                action: shareReminder ? share : undefined,
               }
-            : 'Cardio saved',
+            : shareReminder
+              ? { message: 'Workout saved', action: share }
+              : 'Cardio saved',
         );
       }
       setDraft(empty);
@@ -247,11 +207,11 @@ export function CardioScreen({
       setSaving(false);
     }
   }
-  async function remove(session: CardioSession) {
+  async function remove(deletion: CardioDeletion) {
     try {
       // A session logged on its own is saved as a cardio-only workout; deleting it deletes that.
-      if (session.source_workout_id) await api.deleteWorkout(session.source_workout_id);
-      else await api.deleteCardio(session.id);
+      if (deletion.kind === 'workout') await api.deleteWorkout(deletion.id);
+      else await api.deleteCardio(deletion.id);
       await onDataChange();
       await load();
     } catch (reason) {
@@ -402,129 +362,31 @@ export function CardioScreen({
                 }
               />
             </label>
-            <label>
-              Calories burned (kcal)
-              <input
-                type="number"
-                min="0"
-                max="100000"
-                step="1"
-                inputMode="numeric"
-                value={draft.calories_kcal ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, calories_kcal: numberOrNull(event.target.value) })
-                }
-                placeholder="e.g. 350"
-              />
-            </label>
-            <label>
-              Average HR (bpm)
-              <input
-                type="number"
-                min="20"
-                max="250"
-                step="1"
-                inputMode="numeric"
-                value={draft.average_heart_rate_bpm ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_heart_rate_bpm: numberOrNull(event.target.value) })
-                }
-                placeholder="e.g. 142"
-              />
-            </label>
-            <label>
-              Distance (km)
-              <input
-                type="number"
-                min="0"
-                max="10000"
-                step="0.01"
-                inputMode="decimal"
-                value={draft.distance_km ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, distance_km: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            <label>
-              Average speed (km/h)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.average_speed_kph ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_speed_kph: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            <label>
-              Incline (%)
-              <input
-                type="number"
-                min="0"
-                max="100"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.incline_percent ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, incline_percent: numberOrNull(event.target.value) })
-                }
-                placeholder="Optional"
-              />
-            </label>
-            {(draft.activity_type.toLocaleLowerCase().includes('cycl') ||
-              draft.activity_type.toLocaleLowerCase().includes('bike')) && (
-              <label>
-                Average power (watts)
-                <input
-                  type="number"
-                  min="1"
-                  max="3000"
-                  step="1"
-                  inputMode="numeric"
-                  value={draft.average_power_watts ?? ''}
-                  onChange={(event) =>
-                    setDraft({ ...draft, average_power_watts: numberOrNull(event.target.value) })
-                  }
-                  placeholder="Optional"
-                />
-              </label>
+            {cardioMetricFields(draft.activity_type).map(
+              ({ key, label, min, max, step, placeholder }) => (
+                <label key={key}>
+                  {key === 'calories_kcal' ? 'Calories burned (kcal)' : label}
+                  <input
+                    type="number"
+                    min={min}
+                    max={max}
+                    step={step}
+                    inputMode={step === 1 ? 'numeric' : 'decimal'}
+                    value={draft[key] ?? ''}
+                    onChange={(event) =>
+                      setDraft({ ...draft, [key]: numberOrNull(event.target.value) })
+                    }
+                    placeholder={
+                      key === 'calories_kcal'
+                        ? 'e.g. 350'
+                        : key === 'average_heart_rate_bpm'
+                          ? 'e.g. 142'
+                          : (placeholder ?? 'Optional')
+                    }
+                  />
+                </label>
+              ),
             )}
-            <label>
-              Elevation gain (m)
-              <input
-                type="number"
-                min="0"
-                max="30000"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.elevation_gain_m ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, elevation_gain_m: numberOrNull(event.target.value) })
-                }
-                placeholder="Auto from incline"
-              />
-            </label>
-            <label>
-              Average MET
-              <input
-                type="number"
-                min="0.1"
-                max="50"
-                step="0.1"
-                inputMode="decimal"
-                value={draft.average_mets ?? ''}
-                onChange={(event) =>
-                  setDraft({ ...draft, average_mets: numberOrNull(event.target.value) })
-                }
-                placeholder="Auto"
-              />
-            </label>
           </div>
           <p className="cardio-calorie-hint">
             Performance metrics are optional. For calories, prefer your watch or machine’s active
@@ -563,17 +425,13 @@ export function CardioScreen({
             role="group"
             aria-label="Filter cardio history"
           >
-            {[
-              ['all', 'All'],
-              ['pure_cardio', 'Cardio only'],
-              ['workout_plus_cardio', 'With workout'],
-            ].map(([value, label]) => (
+            {CARDIO_HISTORY_FILTERS.map(([value, label]) => (
               <button
                 key={value}
                 type="button"
                 aria-pressed={historyFilter === value}
                 onClick={() => {
-                  setHistoryFilter(value as 'all' | 'pure_cardio' | 'workout_plus_cardio');
+                  setHistoryFilter(value);
                   setHistoryPage(1);
                 }}
               >
@@ -594,16 +452,9 @@ export function CardioScreen({
               </span>
             </h3>
             {group.sessions.map((session, index) => {
-              const workoutContext =
-                session.workout_context === 'workout_plus_cardio'
-                  ? 'workout_plus_cardio'
-                  : 'pure_cardio';
-              const workoutName = session.source_workout_name?.replace(/\s+workout$/i, '');
               const linked = session.source_workout_id;
               // A session inside a strength workout, or sharing one, is removed in that workout.
-              const deletable =
-                !linked ||
-                (workoutContext === 'pure_cardio' && sessionsPerWorkout.get(linked) === 1);
+              const deletion = cardioDeletion(session, sessionsPerWorkout);
               return (
                 <details
                   className={`cardio-history-row${index > 0 && group.sessions[index - 1].session_date !== session.session_date ? ' cardio-history-new-day' : ''}`}
@@ -616,10 +467,7 @@ export function CardioScreen({
                     <span className="cardio-history-row-title">
                       <strong>{session.activity_type}</strong>
                       <small>
-                        {prettyDate(session.session_date)} ·{' '}
-                        {workoutContext === 'workout_plus_cardio'
-                          ? `With ${workoutName ?? 'workout'}`
-                          : (session.zone ?? 'Cardio only')}
+                        {prettyDate(session.session_date)} · {cardioSessionContextLabel(session)}
                       </small>
                     </span>
                     <span className="cardio-history-row-minutes">
@@ -629,38 +477,10 @@ export function CardioScreen({
                   </summary>
                   <div className="cardio-history-row-content">
                     <small className="cardio-session-energy">
-                      {session.calories_kcal == null
-                        ? 'Calories not logged'
-                        : `${session.calories_kcal.toLocaleString()} kcal · ≈ ${fatEnergyEquivalent(session.calories_kcal, weightUnit)} fat burnt`}
+                      {cardioSessionEnergy(session, weightUnit)}
                     </small>
                     <small className="cardio-session-performance">
-                      {[
-                        session.average_heart_rate_bpm == null
-                          ? null
-                          : `${session.average_heart_rate_bpm} bpm avg`,
-                        session.distance_km == null ? null : `${session.distance_km} km`,
-                        session.average_speed_kph == null
-                          ? null
-                          : `${session.average_speed_kph} km/h avg`,
-                        session.incline_percent == null
-                          ? null
-                          : `${session.incline_percent}% incline`,
-                        session.average_power_watts == null
-                          ? null
-                          : `${session.average_power_watts} W avg`,
-                        estimatedMetric(
-                          sessionElevation(session),
-                          session.elevation_gain_m == null,
-                          'm elevation',
-                        ),
-                        estimatedMetric(
-                          sessionMets(session),
-                          session.average_mets == null,
-                          'MET avg',
-                        ),
-                      ]
-                        .filter((value): value is string => value !== null)
-                        .join(' · ') || 'Performance metrics not logged'}
+                      {cardioSessionPerformance(session)}
                     </small>
                   </div>
                   <div className="cardio-session-actions">
@@ -677,18 +497,7 @@ export function CardioScreen({
                       onClick={() => setMetricSession(session)}
                       aria-label={`Edit performance metrics for ${session.activity_type} on ${session.session_date}`}
                     >
-                      {[
-                        session.calories_kcal,
-                        session.average_heart_rate_bpm,
-                        session.distance_km,
-                        session.average_speed_kph,
-                        session.incline_percent,
-                        session.average_power_watts,
-                        session.average_mets,
-                        session.elevation_gain_m,
-                      ].some((value) => value != null)
-                        ? 'Edit metrics'
-                        : 'Log metrics'}
+                      {hasCardioMetrics(session) ? 'Edit metrics' : 'Log metrics'}
                     </button>
                     <button
                       type="button"
@@ -706,20 +515,18 @@ export function CardioScreen({
                         setEditingId(session.id);
                         setDraft({
                           ...session,
-                          exercise_id:
-                            cardioExercises.find((item) => item.name === session.activity_type)
-                              ?.id ?? null,
+                          exercise_id: cardioExerciseFor(session.activity_type, cardioExercises),
                         });
                       }}
                     >
                       Edit
                     </button>
-                    {deletable && (
+                    {deletion && (
                       <InlineConfirmButton
                         className="pulse-button danger-soft small"
                         label="Delete"
                         confirmLabel="Delete session"
-                        onConfirm={() => remove(session)}
+                        onConfirm={() => remove(deletion)}
                       />
                     )}
                   </div>

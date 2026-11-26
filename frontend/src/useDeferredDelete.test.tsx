@@ -63,7 +63,7 @@ describe('a deletion that can be undone', () => {
   it('goes through when its toast runs out, not before', async () => {
     await act(async () => deletion.request('workout-1'));
     expect(container.querySelector('output')?.textContent).toBe('workout-1');
-    await advance(TOAST_MS.action - 1);
+    await advance(TOAST_MS.standard - 1);
     expect(commit).not.toHaveBeenCalled();
     await advance(1);
     expect(commit).toHaveBeenCalledExactlyOnceWith('workout-1');
@@ -73,7 +73,7 @@ describe('a deletion that can be undone', () => {
 
   it('waits while its toast is held, then carries on from where it was', async () => {
     await act(async () => deletion.request('workout-1'));
-    await advance(TOAST_MS.action - 1000);
+    await advance(TOAST_MS.standard - 1000);
     await act(async () => press(toastElement()!, 'pointerdown'));
     await advance(10_000);
     expect(commit).not.toHaveBeenCalled();

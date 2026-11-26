@@ -9,33 +9,25 @@ import { ProfileAvatar } from './ProfileAvatar';
 import { PopupDialog } from './PopupDialog';
 import { ShowMoreButton } from './ShowMoreButton';
 import type { WorkoutComment, WorkoutReactions } from './types';
-import { localDate, localDateOf } from './utils';
-
-/** A comment's time, with its day when it was not posted today. */
-function commentTime(createdAt: string): string {
-  const posted = new Date(createdAt);
-  const time = posted.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  if (localDateOf(createdAt) === localDate()) return time;
-  const day = posted.toLocaleDateString([], {
-    day: 'numeric',
-    month: 'short',
-    ...(posted.getFullYear() === new Date().getFullYear() ? {} : { year: 'numeric' }),
-  });
-  return `${day}, ${time}`;
-}
+import {
+  canSendComment,
+  clampComment,
+  commentLength,
+  commentThreads,
+  commentTime,
+  COMMENT_MAX_LENGTH,
+  deleteCommentMessage,
+} from './commentDisplay';
 
 export function WorkoutComments({
   workoutId,
   onOpenMember,
   onCountChange,
   active = true,
-  replyTo,
   focusComment,
   onLayoutChange,
 }: {
   workoutId: string;
-  /** A comment to reply to once it loads, such as one opened from a notification. */
-  replyTo?: string;
   /** A comment to find, scroll to and highlight, such as one opened from a notification. */
   focusComment?: string;
   onOpenMember?: (person: WorkoutComment['author']) => void;
@@ -57,7 +49,6 @@ export function WorkoutComments({
   const [deleting, setDeleting] = useState<WorkoutComment | null>(null);
   const input = useRef<HTMLTextAreaElement>(null);
   const focused = useRef<HTMLElement>(null);
-  const wanted = replyTo ?? focusComment;
   const section = useRef<HTMLElement>(null);
   const layoutKey = JSON.stringify([
     active,
@@ -80,8 +71,12 @@ export function WorkoutComments({
     (async () => {
       let page = await api.sharing.comments(workoutId);
       const rows = [...page.items];
-      // Load further pages only until the comment being replied to or opened appears.
-      while (wanted && page.next_offset !== null && !rows.some((row) => row.id === wanted)) {
+      // Load further pages only until the comment being opened appears.
+      while (
+        focusComment &&
+        page.next_offset !== null &&
+        !rows.some((row) => row.id === focusComment)
+      ) {
         page = await api.sharing.comments(workoutId, page.next_offset);
         rows.push(...page.items);
       }
@@ -92,8 +87,6 @@ export function WorkoutComments({
         setItems(rows);
         setNext(page.next_offset);
         countRef.current(page.total, page.reactions);
-        const target = replyTo ? rows.find((row) => row.id === replyTo) : undefined;
-        if (target) setReply(target);
       })
       .catch((reason) => {
         if (!cancelled) setError(authErrorMessage(reason));
@@ -104,11 +97,7 @@ export function WorkoutComments({
     return () => {
       cancelled = true;
     };
-  }, [workoutId, active, replyTo, wanted]);
-
-  useEffect(() => {
-    if (!loading && reply && reply.id === replyTo) input.current?.focus();
-  }, [loading, reply, replyTo]);
+  }, [workoutId, active, focusComment]);
 
   useEffect(() => {
     if (loading || !focusComment) return;
@@ -322,11 +311,7 @@ export function WorkoutComments({
             </>
           }
         >
-          <p>
-            {items.some((item) => item.parent_id === deleting.id)
-              ? 'This comment and its replies will be permanently deleted.'
-              : 'This comment will be permanently deleted.'}
-          </p>
+          <p>{deleteCommentMessage(items, deleting)}</p>
           {error && (
             <p className="inline-error" role="alert">
               {error}
@@ -337,16 +322,12 @@ export function WorkoutComments({
       {loading ? (
         <p role="status">Loading comments…</p>
       ) : (
-        items
-          .filter((item) => !item.parent_id)
-          .map((root) => (
-            <div key={root.id}>
-              {renderComment(root)}
-              <div className="comment-replies">
-                {items.filter((item) => item.parent_id === root.id).map(renderComment)}
-              </div>
-            </div>
-          ))
+        commentThreads(items).map(({ root, replies }) => (
+          <div key={root.id}>
+            {renderComment(root)}
+            <div className="comment-replies">{replies.map(renderComment)}</div>
+          </div>
+        ))
       )}
       {next !== null && (
         <ShowMoreButton
@@ -383,7 +364,7 @@ export function WorkoutComments({
         className="comment-composer"
         onSubmit={(event) => {
           event.preventDefault();
-          if (!body.trim() || Array.from(body).length > 280) return;
+          if (!canSendComment(body)) return;
           void run(async () => {
             if (editing) await api.sharing.editComment(editing.id, body);
             else await api.sharing.addComment(workoutId, body, reply?.id ?? null, null);
@@ -400,7 +381,7 @@ export function WorkoutComments({
           placeholder={reply ? 'Write a reply…' : 'Write a comment…'}
           value={body}
           rows={2}
-          onChange={(event) => setBody(Array.from(event.target.value).slice(0, 280).join(''))}
+          onChange={(event) => setBody(clampComment(event.target.value))}
           disabled={loading || busy}
         />
         <button
@@ -411,7 +392,7 @@ export function WorkoutComments({
           {busy ? 'Saving…' : editing ? 'Save' : 'Send'}
         </button>
         <span className="comment-length" aria-live="polite">
-          {Array.from(body).length}/280
+          {commentLength(body)}/{COMMENT_MAX_LENGTH}
         </span>
       </form>
       {error && (

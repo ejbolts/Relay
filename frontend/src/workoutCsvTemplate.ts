@@ -16,21 +16,10 @@ export function workoutCsvTemplateRows(unit: WeightUnit): string[][] {
   ];
 }
 
+export const WORKOUT_CSV_TEMPLATE_NAME = 'relay-workout-template.csv';
+
 export function workoutCsvTemplate(unit: WeightUnit): string {
   return workoutCsvTemplateRows(unit)
     .map((row) => `${row.join(',')}\r\n`)
     .join('');
-}
-
-export function downloadWorkoutCsvTemplate(unit: WeightUnit) {
-  // The byte order mark lets spreadsheet apps open the file as UTF-8.
-  const blob = new Blob(['﻿', workoutCsvTemplate(unit)], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = 'relay-workout-template.csv';
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }

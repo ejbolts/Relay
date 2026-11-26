@@ -10,7 +10,14 @@ import { HomeLayoutSections } from './HomeLayoutSections';
 import { HOME_SECTIONS, type HomeSectionId } from './homeLayout';
 import { homeSectionSettings, updateHomeSectionSettings } from './homeLayout';
 
-vi.mock('./api', () => ({ api: { getHomeLayout: vi.fn(), saveHomeLayout: vi.fn() } }));
+vi.mock('./api', () => ({
+  api: {
+    getHomeLayout: vi.fn(),
+    saveHomeLayout: vi.fn(),
+    // This device has no saved copy of the layout in these tests.
+    saved: { homeLayout: vi.fn().mockResolvedValue(null) },
+  },
+}));
 vi.mock('./userContext', () => {
   const session = { user: { id: 'sample-user' } };
   return { useUserSession: () => session };

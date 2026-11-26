@@ -2,13 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { Icon } from './Icon';
 import { machineUsedShort } from './machineHistory';
+import {
+  captionAfterCoverChange,
+  machinePhotoCount,
+  mergedPhotoCount as countMergedPhotos,
+} from './machinePhotoMerge';
 import type { MachinePhotoUsage } from './types';
 import { localDate } from './utils';
 import './machinePhotoMerge.css';
 
-function photoCount(photo: MachinePhotoUsage) {
-  return Math.max(photo.images?.length ?? 1, 1);
-}
+const photoCount = machinePhotoCount;
 
 export function MachinePhotoMergePicker({
   exerciseId,
@@ -34,7 +37,7 @@ export function MachinePhotoMergePicker({
     .map((id) => photos.find((photo) => photo.id === id))
     .filter((photo): photo is MachinePhotoUsage => !!photo);
   const allSelected = selected.length === photos.length;
-  const mergedPhotoCount = selectedPhotos.reduce((total, photo) => total + photoCount(photo), 0);
+  const mergedPhotoCount = countMergedPhotos(selectedPhotos);
   const today = localDate();
 
   useEffect(() => {
@@ -59,8 +62,7 @@ export function MachinePhotoMergePicker({
 
   function chooseCover(photo: MachinePhotoUsage) {
     const previous = selectedPhotos.find((item) => item.id === keepId);
-    // Follow the cover's name until the user types their own.
-    if (!previous || caption.trim() === previous.caption.trim()) setCaption(photo.caption);
+    setCaption(captionAfterCoverChange(caption, previous, photo));
     setKeepId(photo.id);
   }
 

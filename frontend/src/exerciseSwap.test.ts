@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import {
+  missingSwapMuscles,
   muscleMatchPercent,
   rankSwapAlternatives,
+  swapAlternativeGroups,
+  swapCarrySummary,
   swapMovementExercise,
   swapMuscleCreditList,
 } from './exerciseSwap';
@@ -211,5 +214,44 @@ describe('swapping a movement', () => {
   it('leaves the workout unchanged for an unknown movement', () => {
     const movements = [movement([set({})])];
     expect(swapMovementExercise(movements, 'missing', pecDeck, [])).toBe(movements);
+  });
+});
+
+describe('the swap sheet', () => {
+  it('groups same-muscle alternatives first, and offers cardio as one list', () => {
+    const alternatives = rankSwapAlternatives(chestPress, [dumbbellBench, pecDeck, lateralRaise]);
+    expect(
+      swapAlternativeGroups(alternatives, false).map((group) => [
+        group.label,
+        group.items.map((item) => item.exercise.id),
+      ]),
+    ).toEqual([
+      ['Same muscles', ['Dumbbell bench press']],
+      ['Close match', ['Pec deck']],
+    ]);
+    expect(swapAlternativeGroups(rankSwapAlternatives(treadmill, [bike]), true)).toEqual([
+      { label: 'Other cardio', items: [expect.objectContaining({ exercise: bike })] },
+    ]);
+  });
+
+  it('says what happens to the sets, and which muscles an alternative misses', () => {
+    expect(swapCarrySummary(2, 1)).toBe('2 planned sets move across · 1 logged set stays');
+    expect(swapCarrySummary(1, 0)).toBe('1 planned set move across');
+    expect(swapCarrySummary(0, 3)).toBe('3 logged sets stay');
+    expect(missingSwapMuscles(chestPress, pecDeck)).toEqual(['Front delts', 'Triceps']);
+  });
+
+  it('makes new keys with the given maker', () => {
+    let next = 0;
+    const swapped = swapMovementExercise(
+      [movement([set({ completed: true, reps: 8 }), set({ reps: 8 })])],
+      'press',
+      pecDeck,
+      [set({ weight_kg: 50 })],
+      undefined,
+      () => `key-${++next}`,
+    );
+    expect(swapped[1].key).toBe('key-2');
+    expect(swapped[1].sets.map((item) => item.key)).toEqual(['key-1']);
   });
 });

@@ -1,0 +1,10 @@
+node_modules/
+.expo/
+dist/
+coverage/
+/android/
+/ios/
+.env*.local
+# Firebase app configs: supplied to builds through RELAY_GOOGLE_SERVICES_FILE.
+google-services.json
+GoogleService-Info.plist

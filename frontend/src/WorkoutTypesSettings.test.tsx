@@ -191,6 +191,10 @@ describe('Workout type settings', () => {
     );
     expect(changed.mock.calls.at(-1)![0]).toEqual([{ ...upper, archived: true }, arms]);
     expect(toastText()).toBe('Upper body removed');
+    // Removing a type is hard to redo, so its Undo stays longer than an everyday toast.
+    expect(
+      document.querySelector<HTMLElement>('.toast')?.style.getPropertyValue('--toast-ms'),
+    ).toBe('5000ms');
     await click('Restore Upper body workout type');
     expect(api.updateWorkoutType).toHaveBeenCalledWith('upper', { archived: false });
     expect(container.querySelector('[aria-label="Active workout types"]')!.textContent).toContain(

@@ -4,7 +4,7 @@ import { GuideCard } from './GuideCard';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { HomeScreenGuideContent } from './HomeScreenGuide';
-import { appGuideSteps, CONTRIBUTING_URL, PROJECT_URL } from './appGuideSteps';
+import { APP_GUIDE_THANKS, appGuideSteps, CONTRIBUTING_URL, PROJECT_URL } from './appGuideSteps';
 import type { AppTab } from './appNavigation';
 
 type TargetBox = { top: number; left: number; width: number; height: number };
@@ -103,7 +103,7 @@ export function AppGuide({
   return (
     <PopupDialog
       title={installing ? 'Add to Home Screen' : 'App guide'}
-      kicker={finished ? 'YOU ARE READY' : installing ? 'SET UP YOUR PHONE' : undefined}
+      kicker={finished ? APP_GUIDE_THANKS.kicker : installing ? 'SET UP YOUR PHONE' : undefined}
       className={`app-guide ${installing ? 'home-guide app-guide-install' : finished ? 'app-guide-finish' : `app-guide-${position} app-guide-tour`}`}
       style={
         availableHeight
@@ -165,21 +165,14 @@ export function AppGuide({
               <Icon name="heart" />
             </span>
             <h3 ref={titleRef} tabIndex={-1}>
-              Thanks for trying Relay!
+              {APP_GUIDE_THANKS.title}
             </h3>
-            <p>
-              We hope it makes your next workout a little easier. What worked well, and what could
-              be better?
-            </p>
+            <p>{APP_GUIDE_THANKS.body}</p>
           </div>
           <FeedbackForm optional onSendingChange={setSendingFeedback} />
           <details className="guide-contribute">
-            <summary>Want to help build Relay?</summary>
-            <p>
-              Check existing issues, discuss bigger changes first, then work on a focused branch or
-              fork. Use sample data, run the project checks and include screenshots for UI changes
-              in your pull request.
-            </p>
+            <summary>{APP_GUIDE_THANKS.contributeTitle}</summary>
+            <p>{APP_GUIDE_THANKS.contributeBody}</p>
             <a href={PROJECT_URL} target="_blank" rel="noopener noreferrer">
               GitHub repository <Icon name="external" />
             </a>

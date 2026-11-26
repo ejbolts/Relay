@@ -11,6 +11,8 @@
 #
 # Restore (stop the app first: sudo systemctl stop gym-logger):
 #   sudo tar -xzf <archive> -C /tmp/restore
+#   # A write-ahead log left by an unclean stop belongs to the database being replaced.
+#   sudo rm -f /opt/gym-logger/data/gym-video-logger.db-wal /opt/gym-logger/data/gym-video-logger.db-shm
 #   sudo install -o gymlogger -g gymlogger -m 640 /tmp/restore/gym-video-logger.db /opt/gym-logger/data/gym-video-logger.db
 #   sudo rsync -a /tmp/restore/data/ /opt/gym-logger/data/      # machine photos and the VAPID key
 #   sudo rsync -a /tmp/restore/secrets/ /opt/gym-logger/secrets/   # only if the archive has secrets/

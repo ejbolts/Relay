@@ -15,6 +15,41 @@ export const BODY_TREND_DURATION_OPTIONS = [
 export type BodyTrendDuration = (typeof BODY_TREND_DURATION_OPTIONS)[number]['value'];
 export type BodyTrendStatistic = 'average' | 'median';
 
+/** Body history's week and month tabs, named after the chosen statistic: "Avg Week", "Median Monthly". */
+export function bodyHistoryPeriodLabel(period: 'week' | 'month', statistic: BodyTrendStatistic) {
+  const prefix = statistic === 'average' ? 'Avg' : 'Median';
+  return period === 'week' ? `${prefix} Week` : `${prefix} Monthly`;
+}
+
+export const BODY_TREND_PREFERENCE_KEY = 'gym-logger-body-trend';
+
+export interface BodyTrendPreference {
+  duration: BodyTrendDuration;
+  statistic: BodyTrendStatistic;
+}
+
+export const DEFAULT_BODY_TREND_PREFERENCE: BodyTrendPreference = {
+  duration: '30d',
+  statistic: 'average',
+};
+
+export function parseBodyTrendPreference(value: string | null): BodyTrendPreference {
+  try {
+    const saved = JSON.parse(value ?? 'null') as {
+      duration?: unknown;
+      statistic?: unknown;
+    } | null;
+    return {
+      duration:
+        BODY_TREND_DURATION_OPTIONS.find((option) => option.value === saved?.duration)?.value ??
+        DEFAULT_BODY_TREND_PREFERENCE.duration,
+      statistic: saved?.statistic === 'median' ? 'median' : 'average',
+    };
+  } catch {
+    return DEFAULT_BODY_TREND_PREFERENCE;
+  }
+}
+
 export interface WeightedMeasurement extends DatedMeasurement {
   weight_kg: number;
 }
@@ -138,4 +173,16 @@ export function nearestChartPointIndex(
   if (pointCount <= 1) return 0;
   const ratio = Math.min(1, Math.max(0, (chartX - chartStart) / (chartEnd - chartStart)));
   return Math.round(ratio * (pointCount - 1));
+}
+
+const WEEK_MS = 7 * 86_400_000;
+
+/** The average weight of the check-ins in the seven days up to and including `date`. */
+export function trailingWeekAverageKg(measurements: WeightedMeasurement[], date: string): number {
+  const end = new Date(`${date}T12:00:00`).getTime();
+  const window = measurements.filter((candidate) => {
+    const time = new Date(`${candidate.measurement_date}T12:00:00`).getTime();
+    return time <= end && time > end - WEEK_MS;
+  });
+  return window.reduce((total, candidate) => total + candidate.weight_kg, 0) / window.length;
 }

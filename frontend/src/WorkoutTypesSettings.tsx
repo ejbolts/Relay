@@ -4,6 +4,7 @@ import { CollapsibleSection } from './CollapsibleSection';
 import { useToast } from './Toast';
 import type { WorkoutType } from './types';
 import { WorkoutTypeExercisesEditor } from './WorkoutTypeExercisesEditor';
+import { NEW_WORKOUT_TYPE_COLOR, workoutTypeNameError } from './workoutTypes';
 import { useWorkoutTypes } from './workoutTypesContext';
 import './WorkoutTypesSettings.css';
 
@@ -26,7 +27,7 @@ export function WorkoutTypesSettings({
 }: WorkoutTypesSettingsProps) {
   const fieldId = useId();
   const [name, setName] = useState('');
-  const [color, setColor] = useState('#a855f7');
+  const [color, setColor] = useState(NEW_WORKOUT_TYPE_COLOR);
   const [colorDrafts, setColorDrafts] = useState<Record<string, string>>({});
   const [pending, setPending] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -59,17 +60,9 @@ export function WorkoutTypesSettings({
   async function addType() {
     if (busy.current || loading || error) return;
     const trimmed = name.trim();
-    if (!trimmed || trimmed.length > 40) {
-      setSaveError('Enter a workout type name of 1–40 characters.');
-      return;
-    }
-    const duplicate = types.find((type) => type.name.toLowerCase() === trimmed.toLowerCase());
-    if (duplicate) {
-      setSaveError(
-        duplicate.archived
-          ? 'That workout type already exists in Removed types. Restore it below.'
-          : 'That workout type already exists. Choose a different name.',
-      );
+    const nameError = workoutTypeNameError(trimmed, types);
+    if (nameError) {
+      setSaveError(nameError);
       return;
     }
     await save('add', async () => {
@@ -105,6 +98,7 @@ export function WorkoutTypesSettings({
       replaceType({ ...type, archived: true });
       toast.show({
         message: `${type.name} removed`,
+        duration: 'important',
         action: { label: 'Undo', run: () => restoreType(type) },
       });
     });

@@ -270,6 +270,30 @@ async function switchOn() {
   await click(document.querySelector('[role="switch"][aria-label="Normalise weights"]')!);
 }
 
+it('keeps the conversion when your weight is emptied and typed again', async () => {
+  await switchOn();
+  const weight = 'Weight on Life Fitness';
+  const match = () => field('Matching weight on Hammer for Life Fitness').value;
+  expect([field(weight).value, match()]).toEqual(['69', '85.6']);
+
+  // Select all and delete, then type the weight again a digit at a time.
+  for (const value of ['', '6', '69']) await type(weight, value);
+  expect(match()).toBe('85.6');
+
+  // Leaving the emptied box and coming back to it returns to the same conversion.
+  await type(weight, '');
+  await act(async () => {
+    field(weight).dispatchEvent(new FocusEvent('focusout', { bubbles: true }));
+  });
+  for (const value of ['1', '10', '100']) await type(weight, value);
+  expect(match()).toBe('124.1');
+
+  // A new matching weight is a new conversion, kept from then on.
+  await type('Matching weight on Hammer for Life Fitness', '150');
+  for (const value of ['', '5', '50']) await type(weight, value);
+  expect(match()).toBe('75');
+});
+
 it('pre-fills a match from any history, and the slider reshapes the preview as it moves', async () => {
   vi.mocked(api.exerciseProgress).mockResolvedValue(spreadProgress(spread));
   vi.mocked(api.getWeightMapping).mockResolvedValue(threeMachines);

@@ -1,7 +1,7 @@
 import { useTips } from './Tips';
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
-import { DEFAULT_HOME_SECTION_SETTINGS, defaultHomeLayout, isHomeSectionId } from './homeLayout';
+import { defaultHomeLayout, homeLayoutDraft, isHomeSectionId } from './homeLayout';
 import { useUserSession } from './userContext';
 
 export function useHomeLayout(active = true) {
@@ -42,14 +42,27 @@ export function useHomeLayout(active = true) {
     }
   }, [active, editing, paused, saving]);
 
+  // The account, not the object describing it: that is replaced when the server confirms a
+  // session the app had already opened, which is no reason to read the layout again.
+  const userId = user?.id ?? null;
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     let cancelled = false;
+    let answered = false;
     setLoaded(false);
     setLoadError(false);
+    // This device's copy shows first, so the cards do not rearrange once Home is up. Editing
+    // still waits for the server's answer, so an older layout is never saved over a newer one.
+    void api.saved
+      .homeLayout()
+      .then((copy) => {
+        if (!cancelled && !answered && copy) setLayout(copy);
+      })
+      .catch(() => undefined);
     void api
       .getHomeLayout()
       .then((saved) => {
+        answered = true;
         if (!cancelled) {
           const defaults = defaultHomeLayout();
           const order = saved.order.filter(isHomeSectionId);
@@ -70,15 +83,10 @@ export function useHomeLayout(active = true) {
     return () => {
       cancelled = true;
     };
-  }, [user, attempt, learn]);
+  }, [userId, attempt, learn]);
 
   function edit() {
-    setDraft({
-      order: [...layout.order],
-      hidden: [...layout.hidden],
-      widths: { ...layout.widths },
-      settings: { ...DEFAULT_HOME_SECTION_SETTINGS, ...layout.settings },
-    });
+    setDraft(homeLayoutDraft(layout));
     setError(null);
     setMessage('');
     setEditing(true);

@@ -22,7 +22,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .auth import as_utc
-from .errors import api_error
+from .errors import api_error, format_validation_errors
 from .models import ActiveWorkoutSync, TrainingWorkout, UserSetting, utc_now
 from .presence import hub
 from .tracker_schemas import RepRange, TrainingWorkoutCreate, WorkoutSetCreate
@@ -132,7 +132,13 @@ class DraftChange(BaseModel):
             if value is not None:
                 if len(json.dumps(value)) > 512_000:
                     raise ValueError("Workout draft is too large.")
-                Draft.model_validate(value)
+                try:
+                    Draft.model_validate(value)
+                except ValidationError as error:
+                    raise ValueError(
+                        format_validation_errors(error.errors())
+                        or "Workout draft contains an invalid value."
+                    ) from error
         if self.autoSave is not None:
             # A malformed copy must never stop the draft itself from syncing.
             try:
@@ -277,7 +283,10 @@ def change_draft(
             Draft.model_validate(merged)
         except ValidationError as error:
             raise api_error(
-                422, "draft_limit", "The combined workout exceeds the live draft limits."
+                422,
+                "draft_limit",
+                format_validation_errors(error.errors())
+                or "The combined workout exceeds the live draft limits.",
             ) from error
         session_id = merged["clientSessionId"]
         if (

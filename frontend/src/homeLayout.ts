@@ -1,4 +1,5 @@
-import type { IconName } from './Icon';
+// Plain data and rules only: the native app imports this module too. Icon names are checked
+// where the web draws them (HomeLayoutSections).
 
 // In default order. The next workout leads, so starting it needs no scrolling.
 export const HOME_SECTIONS = [
@@ -139,7 +140,7 @@ export const HOME_SECTIONS = [
   id: string;
   title: string;
   description: string;
-  icon: IconName;
+  icon: string;
   size: string;
 }>;
 
@@ -170,6 +171,12 @@ export interface CardioGoalCardSettings {
   style: CardioGoalCardStyle;
 }
 export type TrainingBlockCardStyle = 'progress' | 'timeline' | 'both';
+/** The training block card's designs, in the order Customise offers them. */
+export const TRAINING_BLOCK_CARD_STYLES: { id: TrainingBlockCardStyle; label: string }[] = [
+  { id: 'progress', label: 'Progress' },
+  { id: 'timeline', label: 'Timeline' },
+  { id: 'both', label: 'Both' },
+];
 export interface TrainingBlockCardSettings {
   style: TrainingBlockCardStyle;
 }
@@ -245,6 +252,149 @@ export function updateHomeSectionSettings<Id extends keyof HomeSectionSettings>(
       [id]: { ...homeSectionSettings(layout, id), ...change },
     },
   };
+}
+
+/** A section's title, description, icon and size. */
+export function homeSection(id: HomeSectionId) {
+  return HOME_SECTIONS.find((section) => section.id === id)!;
+}
+
+/** A copy to edit, with every section's settings filled in so saving keeps them all. */
+export function homeLayoutDraft(layout: HomeLayout): HomeLayout {
+  return {
+    order: [...layout.order],
+    hidden: [...layout.hidden],
+    widths: { ...layout.widths },
+    settings: { ...DEFAULT_HOME_SECTION_SETTINGS, ...layout.settings },
+  };
+}
+
+/**
+ * The sections Home shows, in order, and the hidden ones it could add. `shown` says whether a
+ * section has anything to show on this screen (the training block needs a block, for example).
+ */
+export function homeSectionLists(
+  layout: HomeLayout,
+  shown: (id: HomeSectionId) => boolean = () => true,
+): { visible: HomeSectionId[]; hidden: HomeSectionId[] } {
+  const ids = layout.order.filter(isHomeSectionId).filter(shown);
+  return {
+    visible: ids.filter((id) => !layout.hidden.includes(id)),
+    hidden: ids.filter((id) => layout.hidden.includes(id)),
+  };
+}
+
+/** Home's visible sections grouped into rows of the six-column grid, with each one's span. */
+export function homeSectionRows(
+  ids: HomeSectionId[],
+  widths: HomeSectionWidths = {},
+): { id: HomeSectionId; span: number }[][] {
+  const spans = homeSectionSpans(ids, widths);
+  const rows: { id: HomeSectionId; span: number }[][] = [];
+  let used = 6;
+  ids.forEach((id, index) => {
+    if (used + spans[index] > 6) {
+      rows.push([]);
+      used = 0;
+    }
+    rows.at(-1)!.push({ id, span: spans[index] });
+    used += spans[index];
+  });
+  return rows;
+}
+
+export interface HomeSectionGap {
+  after: HomeSectionId;
+  span: number;
+}
+
+export interface HomeSectionRow {
+  items: { id: HomeSectionId; span: number }[];
+  gap: HomeSectionGap | null;
+}
+
+/**
+ * Visible sections grouped into six-column rows together with any usable empty space at the end
+ * of a row. Both web and mobile layout editors use the same row and empty-slot rules.
+ */
+export function homeSectionGridRows(
+  ids: HomeSectionId[],
+  widths: HomeSectionWidths = {},
+): HomeSectionRow[] {
+  const spans = homeSectionSpans(ids, widths);
+  const gaps = homeSectionGaps(ids, spans);
+  return homeSectionRows(ids, widths).map((items) => {
+    const last = items.at(-1);
+    const gapSpan = last ? gaps.get(last.id) : undefined;
+    return {
+      items,
+      gap: last && gapSpan !== undefined ? { after: last.id, span: gapSpan } : null,
+    };
+  });
+}
+
+export type HomeDropTarget =
+  { kind: 'card'; id: HomeSectionId } | { kind: 'gap'; after: HomeSectionId; span: number };
+
+export interface HomeDropRect {
+  target: HomeDropTarget;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** Whether `source` can be dropped into the empty space of `gapSpan` columns after `after`. */
+export function canDropHomeSectionInGap(
+  source: HomeSectionId,
+  after: HomeSectionId,
+  gapSpan: number,
+): boolean {
+  if (source === after || !Number.isFinite(gapSpan)) return false;
+  const compactSpan = homeSectionSpans([source], { [source]: 'third' })[0];
+  return compactSpan <= gapSpan;
+}
+
+/** Apply a card-to-card or card-to-empty-space drop without losing or duplicating sections. */
+export function dropHomeSection(
+  layout: HomeLayout,
+  source: HomeSectionId,
+  target: HomeDropTarget,
+): HomeLayout {
+  if (target.kind === 'gap') {
+    if (!canDropHomeSectionInGap(source, target.after, target.span)) return layout;
+    return fillHomeSectionGap(layout, source, target.after, target.span);
+  }
+  return moveHomeSection(layout, source, target.id);
+}
+
+/** Find the valid drop target containing a point in the grid's coordinates, or null. */
+export function findHomeDropTarget(
+  rects: readonly HomeDropRect[],
+  source: HomeSectionId,
+  x: number,
+  y: number,
+): HomeDropTarget | null {
+  for (const rect of rects) {
+    if (x < rect.x || x > rect.x + rect.width || y < rect.y || y > rect.y + rect.height) continue;
+    const { target } = rect;
+    if (target.kind === 'gap') {
+      return canDropHomeSectionInGap(source, target.after, target.span) ? target : null;
+    }
+    return target.id !== source ? target : null;
+  }
+  return null;
+}
+
+/** Moves a visible section one place earlier (-1) or later (1) among the visible sections. */
+export function stepHomeSection(
+  layout: HomeLayout,
+  visible: HomeSectionId[],
+  id: HomeSectionId,
+  direction: -1 | 1,
+): HomeLayout {
+  const target = visible[visible.indexOf(id) + direction];
+  return target ? moveHomeSection(layout, id, target) : layout;
 }
 
 export function defaultHomeLayout(): HomeLayout {

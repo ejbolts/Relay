@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Relay",
+    "slug": "relay-mobile",
+    "version": "0.1.0",
+    "scheme": "relay-mobile",
+    "platforms": ["ios", "android"],
+    "userInterfaceStyle": "automatic",
+    "icon": "./assets/icon.png",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": false
+        }
+      ],
+      "expo-sqlite",
+      "expo-font",
+      "expo-asset",
+      "expo-sharing",
+      "expo-web-browser",
+      "expo-notifications",
+      "expo-video",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Relay uses the camera to scan friends' QR codes.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Relay uses your photos for your profile picture and workout photos.",
+          "cameraPermission": "Relay uses the camera to take your profile picture and workout photos.",
+          "microphonePermission": false
+        }
+      ],
+      "./modules/relay-live-activity/app.plugin.js"
+    ]
+  }
+}

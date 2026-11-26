@@ -7,7 +7,7 @@ import re
 import shutil
 import threading
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Request, Response, UploadFile
 from fastapi.responses import FileResponse
@@ -36,14 +36,22 @@ from .auth import (
     hash_password,
     hash_token,
     password_needs_rehash,
+    session_token,
     set_session_cookie,
     too_many_attempts,
     utc_now,
     verify_password,
 )
+from .client_versions import (
+    CLIENT_VERSION_HEADER,
+    NATIVE_CLIENT_HEADER,
+    normalized_native_client,
+    normalized_version,
+)
 from .config import Settings
 from .database import get_db
 from .errors import api_error
+from .expo_push import remove_account_tokens, remove_session_tokens
 from .models import (
     AccountBackup,
     ActiveWorkoutReminder,
@@ -55,6 +63,7 @@ from .models import (
     Clip,
     Exercise,
     ExerciseMuscleContribution,
+    ExpoPushToken,
     Friendship,
     ImportBatch,
     LiveWorkout,
@@ -91,6 +100,7 @@ from .session_events import session_events
 from .storage import remove_session_files
 from .tracker import (
     bump_workout_cache_revision,
+    report_workout_revision,
     seed_default_exercises,
     sync_all_workout_cardio_sessions,
 )
@@ -185,6 +195,9 @@ class RegisterRequest(BaseModel):
 class LoginRequest(BaseModel):
     username: str = Field(max_length=320)
     password: str = Field(min_length=1, max_length=MAX_PASSWORD_LENGTH)
+    # The native app asks for "token": the session comes back in the response body for it to
+    # send as a bearer header, and no cookie is set. Browsers omit it and keep the cookie.
+    session: Literal["cookie", "token"] = "cookie"
 
 
 class ProfileUpdate(BaseModel):
@@ -236,6 +249,11 @@ class UserRead(BaseModel):
     # Versioned by the stored file's name, so a new photo never shows a cached old one.
     profile_photo_url: str | None = None
     sex: Sex | None = None
+
+
+class LoginRead(UserRead):
+    # Only when the sign-in asked for a token (the native app); browsers get a cookie instead.
+    session_token: str | None = None
 
 
 def user_to_read(db: Session, user: User, settings: Settings) -> UserRead:
@@ -379,6 +397,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         delete(LiveWorkout).where(LiveWorkout.user_id == user_id),
         delete(ActiveWorkoutSync).where(ActiveWorkoutSync.user_id == user_id),
         delete(PushSubscription).where(PushSubscription.user_id == user_id),
+        delete(ExpoPushToken).where(ExpoPushToken.user_id == user_id),
         delete(UserSetting).where(UserSetting.user_id == user_id),
         delete(ProfileSharing).where(ProfileSharing.user_id == user_id),
         delete(Friendship).where(
@@ -505,7 +524,7 @@ def register(
     return user_to_read(db, user, settings)
 
 
-@auth_router.post("/login", response_model=UserRead)
+@auth_router.post("/login", response_model=LoginRead)
 def login(
     payload: LoginRequest,
     request: Request,
@@ -513,7 +532,7 @@ def login(
     db: DbDependency,
     settings: AppSettings,
     throttle: Throttle,
-) -> UserRead:
+) -> LoginRead:
     username = payload.username.strip().lower()
     ip_key, username_key = f"ip:{client_ip(request)}", f"username:{username}"
     if throttle.is_blocked(ip_key) or throttle.is_blocked(
@@ -542,14 +561,29 @@ def login(
     user.password_reset_requested_at = None
     # Likewise, they found their username.
     user.username_reminder_requested_at = None
-    token = create_user_session(db, user, settings, request.headers.get("user-agent"))
+    token = create_user_session(
+        db,
+        user,
+        settings,
+        request.headers.get("user-agent"),
+        client_version=normalized_version(request.headers.get(CLIENT_VERSION_HEADER)),
+        native_client=(
+            normalized_native_client(request.headers.get(NATIVE_CLIENT_HEADER))
+            if payload.session == "token"
+            else None
+        ),
+    )
+    report_workout_revision(response, db, user.id)
+    read = user_to_read(db, user, settings).model_dump()
+    if payload.session == "token":
+        return LoginRead(**read, session_token=token)
     set_session_cookie(response, token, settings)
-    return user_to_read(db, user, settings)
+    return LoginRead(**read)
 
 
 @auth_router.post("/logout", status_code=204)
 def logout(request: Request, response: Response, db: DbDependency, settings: AppSettings) -> None:
-    token = request.cookies.get(settings.session_cookie)
+    token = session_token(request, settings)
     user_id = (
         db.scalar(
             select(UserSession.user_id)
@@ -570,6 +604,7 @@ def logout(request: Request, response: Response, db: DbDependency, settings: App
         )
         db.execute(delete(UserSession).where(UserSession.user_id == user_id))
         db.execute(delete(PushSubscription).where(PushSubscription.user_id == user_id))
+        remove_account_tokens(db, user_id)
         db.execute(delete(ActiveWorkoutReminder).where(ActiveWorkoutReminder.user_id == user_id))
         db.commit()
         session_events.changed(user_id)
@@ -583,11 +618,11 @@ def logout(request: Request, response: Response, db: DbDependency, settings: App
 def logout_session(
     request: Request, response: Response, db: DbDependency, settings: AppSettings
 ) -> None:
-    """Sign out this browser only; the account's other devices stay signed in.
+    """Sign out this browser or native app only; the account's other devices stay signed in.
 
     The app removes this browser's own push subscription first, while the session is valid.
     """
-    token = request.cookies.get(settings.session_cookie)
+    token = session_token(request, settings)
     session = (
         db.scalar(select(UserSession).where(UserSession.token_hash == hash_token(token)))
         if token
@@ -595,6 +630,8 @@ def logout_session(
     )
     if session is not None:
         user_id = session.user_id
+        # The app's push token goes with its sign-in, even if the app could not remove it first.
+        remove_session_tokens(db, session.id)
         db.delete(session)
         db.commit()
         session_events.changed(user_id)
@@ -602,8 +639,12 @@ def logout_session(
 
 
 @auth_router.get("/me", response_model=UserRead)
-def me(context: AuthContextDependency, db: DbDependency, settings: AppSettings) -> UserRead:
+def me(
+    context: AuthContextDependency, response: Response, db: DbDependency, settings: AppSettings
+) -> UserRead:
     # Uses the auth context directly so it still answers while a new password is required.
+    # The app loads its data as soon as it knows who is signed in, so the revision comes with it.
+    report_workout_revision(response, db, context.user.id)
     return user_to_read(db, context.user, settings)
 
 

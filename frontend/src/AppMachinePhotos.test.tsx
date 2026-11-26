@@ -367,7 +367,9 @@ describe('saving and pinning a machine photo while logging', () => {
     expect(movement.machinePhotoIds).toEqual([homeGym.id]);
     // The latest session overall was on the travel gym's machine at 140 kg.
     expect(movement.sets.map((item) => item.weight_kg)).toEqual([180]);
-    expect(container.querySelector('.movement-last-session')?.textContent).toContain('12 Oct');
+    expect(container.querySelector('.movement-last-session time')?.getAttribute('dateTime')).toBe(
+      '2025-10-12',
+    );
   });
 
   it('edits settings for an existing machine and saves to that machine', async () => {
@@ -433,10 +435,10 @@ describe('saving and pinning a machine photo while logging', () => {
     );
     expect(document.activeElement).toBe(input);
 
-    await act(async () => vi.advanceTimersByTime(TOAST_MS.status - 1000));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
     await type(input, 'Hammer leg press 2');
     await click(button('Save name'));
-    await act(async () => vi.advanceTimersByTime(TOAST_MS.status - 1));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1));
     expect(notice()).not.toBeNull();
     await act(async () => vi.advanceTimersByTime(1));
     expect(notice()).toBeNull();
@@ -549,19 +551,20 @@ describe('saving and pinning a machine photo while logging', () => {
     ]);
     await act(async () => root.render(<App />));
     const rail = () => container.querySelectorAll<HTMLElement>('.machine-photo-rail article');
-    const lastSession = () => container.querySelector('.movement-last-session')?.textContent;
+    const lastSession = () =>
+      container.querySelector('.movement-last-session time')?.getAttribute('dateTime');
     const suggestion = () => {
       const [{ key, weight_kg, reps }] = readActiveWorkoutDraft()!.movements[0].sets;
       return { key, weight_kg, reps };
     };
-    expect(lastSession()).toContain('14 Oct');
+    expect(lastSession()).toBe('2026-10-14');
 
     await click(button('Pin to sets', rail()[1]));
-    expect(lastSession()).toContain('12 Oct');
+    expect(lastSession()).toBe('2025-10-12');
     expect(suggestion()).toEqual({ key: 'suggested', weight_kg: 180, reps: 10 });
 
     await click(button('Pin to sets', rail()[0]));
-    expect(lastSession()).toContain('14 Oct');
+    expect(lastSession()).toBe('2026-10-14');
     expect(suggestion()).toEqual({ key: 'suggested', weight_kg: 140, reps: 10 });
   });
 

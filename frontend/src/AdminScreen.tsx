@@ -1,5 +1,27 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
+import {
+  accountActivityLabel,
+  accountFilterOptions,
+  accountLiveWorkout,
+  accountOnline,
+  accountsTitle,
+  accountVersionsLabel,
+  afterPasswordReset,
+  diskUsedPercent,
+  dismissRequestsLabel,
+  feedbackResolvedNotice,
+  filterAccounts,
+  nativeClientLabel,
+  registrationSummary,
+  replaceAccount,
+  settingsSavedNotice,
+  userDisabledNotice,
+  userSexNotice,
+  usernameChangedNotice,
+  waitingRequestsLabel,
+  type AccountFilter,
+} from './adminAccounts';
 import { useAdminUsers } from './adminActivity';
 import { adminUserRowId, clearAdminAccountFocus, useAdminAccountFocus } from './adminAccountFocus';
 import { useNow, workoutElapsed } from './presence';
@@ -131,13 +153,7 @@ function SwitchesPanel({
       <div className="notification-setting-row admin-setting-row">
         <div>
           <strong>New sign-ups</strong>
-          <small>
-            {settings.allow_registration
-              ? settings.invite_code_required
-                ? 'Anyone with the invite code can create an account'
-                : 'Anyone can create an account'
-              : 'Nobody new can create an account'}
-          </small>
+          <small>{registrationSummary(settings)}</small>
         </div>
         <button
           type="button"
@@ -275,7 +291,7 @@ function ClientVersionsPanel({ status, now }: { status: ServerStatus; now: numbe
           <h2 id="admin-versions-title">App versions in use</h2>
         </div>
       </header>
-      <dl className="admin-stats">
+      <dl className="admin-stats admin-version-stats">
         {versions.map((usage) => (
           <div key={usage.version ?? 'unreported'}>
             <dt>{usage.version ? `Version ${usage.version}` : 'Not reported'}</dt>
@@ -283,6 +299,11 @@ function ClientVersionsPanel({ status, now }: { status: ServerStatus; now: numbe
               {plural(usage.users, 'account')} · {plural(usage.sessions, 'device')} ·{' '}
               {formatLastActive(usage.last_seen_at, new Date(now))}
             </dd>
+            {usage.native_clients?.map(({ client, sessions }) => (
+              <dd key={client}>
+                {nativeClientLabel(client)} · {plural(sessions, 'device')}
+              </dd>
+            ))}
           </div>
         ))}
         {versions.length === 0 && (
@@ -301,8 +322,8 @@ function ClientVersionsPanel({ status, now }: { status: ServerStatus; now: numbe
 }
 
 function StatusPanel({ status }: { status: ServerStatus }) {
-  const { total_bytes, used_bytes, free_bytes } = status.disk;
-  const usedPercent = total_bytes ? Math.round((used_bytes / total_bytes) * 100) : 0;
+  const { total_bytes, free_bytes } = status.disk;
+  const usedPercent = diskUsedPercent(status.disk);
   return (
     <section className="settings-panel panel" aria-labelledby="admin-status-title">
       <header>
@@ -415,9 +436,8 @@ function UserRow({
   onTemporaryPasswordDismiss: () => void;
 }) {
   const disabled = user.disabled_at !== null;
-  const online = !disabled && user.presence?.online;
-  const live = disabled ? null : user.presence?.workout;
-  const versions = user.client_versions ?? [];
+  const online = accountOnline(user);
+  const live = accountLiveWorkout(user);
   const resetRequestedAt = user.password_reset_requested_at ?? null;
   const usernameRequestedAt = user.username_reminder_requested_at ?? null;
   const requested = Boolean(resetRequestedAt || usernameRequestedAt);
@@ -455,11 +475,7 @@ function UserRow({
           <span>{user.username}</span>
         </span>
         <span className={`admin-user-activity${online ? ' admin-user-online' : ''}`}>
-          {online
-            ? live
-              ? `Live · ${live.name}`
-              : 'Active now'
-            : formatLastActive(user.last_active_at, new Date(now))}
+          {accountActivityLabel(user, now)}
         </span>
         <Icon name="chevron-down" />
       </button>
@@ -501,18 +517,7 @@ function UserRow({
           </div>
           <div>
             <dt>App versions</dt>
-            <dd>
-              {versions.length
-                ? versions
-                    .map(
-                      (usage) =>
-                        `${usage.version ? `v${usage.version}` : 'Not reported'} (${plural(usage.devices, 'device')})`,
-                    )
-                    .join(', ')
-                : user.signed_in_devices === 0
-                  ? 'No signed-in devices'
-                  : 'Not reported'}
-            </dd>
+            <dd>{accountVersionsLabel(user)}</dd>
           </div>
           <div>
             <dt>Workouts</dt>
@@ -595,7 +600,7 @@ function UserRow({
                 disabled={busy}
                 onClick={() => onRequestDismiss(user)}
               >
-                {resetRequestedAt && usernameRequestedAt ? 'Dismiss requests' : 'Dismiss request'}
+                {dismissRequestsLabel(user)}
               </button>
             )}
             {isSelf ? null : disabled ? (
@@ -636,26 +641,6 @@ function UserRow({
   );
 }
 
-const ACCOUNT_FILTERS = [
-  {
-    id: 'reset',
-    label: 'Reset requested',
-    matches: (user: AdminUser) => !!user.password_reset_requested_at,
-  },
-  {
-    id: 'username',
-    label: 'Username requested',
-    matches: (user: AdminUser) => !!user.username_reminder_requested_at,
-  },
-  { id: 'disabled', label: 'Disabled', matches: (user: AdminUser) => user.disabled_at !== null },
-  {
-    id: 'temporary',
-    label: 'Temporary password',
-    matches: (user: AdminUser) => user.must_change_password,
-  },
-] as const;
-type AccountFilter = (typeof ACCOUNT_FILTERS)[number]['id'];
-
 function AccountsPanel({
   users,
   now,
@@ -690,40 +675,16 @@ function AccountsPanel({
 > & { users: AdminUser[] | null; now: number }) {
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<AccountFilter | null>(null);
-  const disabledCount = users?.filter((user) => user.disabled_at !== null).length ?? 0;
-  const resetRequests = users?.filter((user) => user.password_reset_requested_at).length ?? 0;
-  const usernameRequests = users?.filter((user) => user.username_reminder_requested_at).length ?? 0;
-  const waitingRequests =
-    resetRequests && usernameRequests
-      ? plural(resetRequests + usernameRequests, 'request')
-      : resetRequests
-        ? plural(resetRequests, 'reset request')
-        : usernameRequests
-          ? plural(usernameRequests, 'username request')
-          : null;
-  const words = query.trim().toLocaleLowerCase();
+  const waitingRequests = waitingRequestsLabel(users);
   // Only offer filters that would find someone, and keep a chosen one until it is cleared.
-  const filters = ACCOUNT_FILTERS.filter(
-    (option) => option.id === filter || users?.some(option.matches),
-  );
-  const chosen = ACCOUNT_FILTERS.find((option) => option.id === filter);
-  const shown =
-    users?.filter(
-      (user) =>
-        (!words ||
-          user.display_name.toLocaleLowerCase().includes(words) ||
-          user.username.toLocaleLowerCase().includes(words)) &&
-        (!chosen || chosen.matches(user)),
-    ) ?? null;
+  const filters = accountFilterOptions(users, filter);
+  const shown = filterAccounts(users, query, filter);
   return (
     <section className="settings-panel panel admin-accounts" aria-labelledby="admin-users-title">
       <header>
         <div>
           <p className="section-kicker">ACCOUNTS</p>
-          <h2 id="admin-users-title">
-            {users ? plural(users.length, 'account') : 'Accounts'}
-            {disabledCount > 0 && ` · ${disabledCount} disabled`}
-          </h2>
+          <h2 id="admin-users-title">{accountsTitle(users)}</h2>
         </div>
         {waitingRequests && <span className="sharing-state is-on">{waitingRequests}</span>}
         <button
@@ -865,9 +826,7 @@ export function AdminScreenView({
   const now = useNow(users !== null, 60_000);
   const openFeedback = feedback?.filter((item) => item.resolved_at === null).length ?? 0;
   const scoped = (scope: string) => (errorScope === scope ? error : null);
-  const usedPercent = status?.disk.total_bytes
-    ? Math.round((status.disk.used_bytes / status.disk.total_bytes) * 100)
-    : null;
+  const usedPercent = status?.disk.total_bytes ? diskUsedPercent(status.disk) : null;
   return (
     <section className="settings-screen admin-screen content-page">
       {error && errorScope === null && (
@@ -1043,11 +1002,8 @@ export function AdminScreen({ active }: { active: boolean }) {
           .me()
           .then(updateUser)
           .catch(() => undefined);
-        const label = VIDEO_UPLOAD_OPTIONS.find((option) => option.value === saved.video_uploads);
-        setNotice(`Video uploads: ${label?.label ?? saved.video_uploads}.`);
-      } else {
-        setNotice(saved.allow_registration ? 'Sign-ups are open.' : 'Sign-ups are closed.');
       }
+      setNotice(settingsSavedNotice(update, saved));
     } catch (reason) {
       setError({ message: authErrorMessage(reason), scope: 'switches' });
     } finally {
@@ -1076,14 +1032,8 @@ export function AdminScreen({ active }: { active: boolean }) {
     setNotice(null);
     try {
       const updated = await api.admin.setUserDisabled(target.id, disabled);
-      setUsers((current) =>
-        current ? current.map((row) => (row.id === updated.id ? updated : row)) : current,
-      );
-      setNotice(
-        disabled
-          ? `${updated.display_name} is disabled and signed out.`
-          : `${updated.display_name} can sign in again.`,
-      );
+      setUsers((current) => replaceAccount(current, updated) ?? current);
+      setNotice(userDisabledNotice(updated, disabled));
     } catch (reason) {
       setError({ message: authErrorMessage(reason), scope: `user:${target.id}` });
     } finally {
@@ -1097,14 +1047,8 @@ export function AdminScreen({ active }: { active: boolean }) {
     setNotice(null);
     try {
       const updated = await api.admin.setUserSex(target.id, sex);
-      setUsers((current) =>
-        current ? current.map((row) => (row.id === updated.id ? updated : row)) : current,
-      );
-      setNotice(
-        sex
-          ? `${updated.display_name}’s sex is now ${SEX_LABELS[sex]}.`
-          : `${updated.display_name} can choose their sex again.`,
-      );
+      setUsers((current) => replaceAccount(current, updated) ?? current);
+      setNotice(userSexNotice(updated, sex));
     } catch (reason) {
       setError({ message: authErrorMessage(reason), scope: `user:${target.id}` });
     } finally {
@@ -1121,16 +1065,7 @@ export function AdminScreen({ active }: { active: boolean }) {
       const { temporary_password } = await api.admin.resetUserPassword(target.id);
       setUsers((current) =>
         current
-          ? current.map((row) =>
-              row.id === target.id
-                ? {
-                    ...row,
-                    must_change_password: true,
-                    password_reset_requested_at: null,
-                    signed_in_devices: 0,
-                  }
-                : row,
-            )
+          ? current.map((row) => (row.id === target.id ? afterPasswordReset(row) : row))
           : current,
       );
       setTemporaryPassword({
@@ -1151,10 +1086,8 @@ export function AdminScreen({ active }: { active: boolean }) {
     setNotice(null);
     try {
       const updated = await api.admin.setUserUsername(target.id, username);
-      setUsers((current) =>
-        current ? current.map((row) => (row.id === updated.id ? updated : row)) : current,
-      );
-      setNotice(`${updated.display_name}’s username is now @${updated.username}.`);
+      setUsers((current) => replaceAccount(current, updated) ?? current);
+      setNotice(usernameChangedNotice(updated));
     } finally {
       setBusyUserId(null);
     }
@@ -1198,11 +1131,7 @@ export function AdminScreen({ active }: { active: boolean }) {
       setFeedback((current) =>
         current ? current.map((row) => (row.id === updated.id ? updated : row)) : current,
       );
-      setNotice(
-        resolved
-          ? `Resolved feedback from @${updated.username}.`
-          : `Reopened feedback from @${updated.username}.`,
-      );
+      setNotice(feedbackResolvedNotice(updated, resolved));
     } catch (reason) {
       setError({ message: authErrorMessage(reason), scope: `feedback:${target.id}` });
     } finally {

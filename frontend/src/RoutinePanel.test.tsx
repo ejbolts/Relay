@@ -206,13 +206,13 @@ it('shows save feedback in a dismissible popup that clears automatically after r
 
     await click('Edit split');
     await save();
-    await act(async () => vi.advanceTimersByTime(TOAST_MS.status - 1000));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard - 1000));
     expect(document.querySelector('.toast')).not.toBeNull();
     await click('Edit split');
     await save();
     await act(async () => vi.advanceTimersByTime(1000));
     expect(document.querySelector('.toast')).not.toBeNull();
-    await act(async () => vi.advanceTimersByTime(TOAST_MS.status));
+    await act(async () => vi.advanceTimersByTime(TOAST_MS.standard));
     expect(document.querySelector('.toast')).toBeNull();
   } finally {
     vi.useRealTimers();
@@ -229,9 +229,17 @@ it('requires an explicit date confirmation before replacing the active split', a
       .querySelector('.routine-use')!
       .dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
   );
-  expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02', 'workouts');
+  expect(api.routines.use).toHaveBeenCalledWith('source', '2026-11-02');
   expect(document.querySelector('.toast')).toBeNull();
   expect(host.textContent).not.toContain('is your active split');
+});
+
+it('asks only for a start date, without a schedule choice or note', async () => {
+  await mount(true);
+  await click('Use split');
+  const dialog = document.querySelector('.routine-use')!;
+  expect(dialog.querySelector('[role="radio"], [role="switch"]')).toBeNull();
+  expect(dialog.textContent).not.toContain('Saved splits');
 });
 
 it('creates private splits without a publishing switch and shares from split options', async () => {
@@ -523,4 +531,30 @@ it('shows each planned set as a block, with muscles on request', async () => {
   expect(host.querySelector('.routine-exercise-label small')).toBeNull();
   await click('Muscles');
   expect(host.querySelector('.routine-exercise-label small')?.textContent).toBe('Chest');
+});
+
+it('mixes workout types on a day and saves them with it', async () => {
+  await mount(true);
+  await click('Edit split');
+  await click('Add a workout type to day 1');
+  const extra = () =>
+    document.querySelector<HTMLSelectElement>('[aria-label="Day 1 workout type 2"]');
+  // The new type is the first one the day doesn't have; the main type isn't offered again.
+  expect(extra()?.value).toBe('lower');
+  expect([...extra()!.options].map((option) => option.value)).not.toContain('upper');
+  await input('[aria-label="Day 1 workout type 2"]', 'cardio');
+  expect(document.querySelector('.routine-day-toggle strong')?.textContent).toBe(
+    'Day 1 · Upper body + Cardio',
+  );
+  await save();
+  expect(vi.mocked(api.routines.save).mock.calls[0][0].days[0].extra_workout_type_ids).toEqual([
+    'cardio',
+  ]);
+  // Saving closes the editor; the saved split reopens with its mixed day.
+  await click('Edit split');
+  expect(extra()?.value).toBe('cardio');
+  await click('Remove Cardio from day 1');
+  expect(extra()).toBeNull();
+  await save();
+  expect(vi.mocked(api.routines.save).mock.calls[1][0].days[0].extra_workout_type_ids).toEqual([]);
 });

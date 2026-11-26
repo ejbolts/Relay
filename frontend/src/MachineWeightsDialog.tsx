@@ -5,112 +5,50 @@ import { HelpPopup } from './HelpPopup';
 import {
   FACTOR_RANGE,
   clampFactor,
-  latestWeightKg,
   recentSessionCounts,
   recommendedReferenceId,
   pairFactor,
   progressViewPoints,
   suggestFactors,
   withReference,
-  type FactorSuggestion,
 } from './machineWeights';
+import {
+  BLANK_PAIR as BLANK,
+  baseWeight,
+  inLikelyRange,
+  liveMapping,
+  machineWeightsLayout,
+  pairForFactor,
+  pairSettled,
+  pairTexts,
+  pairWithMachineWeight,
+  pairWithReferenceWeight,
+  parsedMapping,
+  sessionCount,
+  sliderPosition,
+  suggestionLabel,
+  toggledNormalise,
+  withSuggestions,
+  type PairText,
+} from './machineWeightsForm';
 import { PopupDialog } from './PopupDialog';
 import { PreviewDrawer } from './PreviewDrawer';
+import {
+  normaliseCoachSteps,
+  normaliseFirstStep,
+  normaliseStepAfterToggle,
+  type CoachTarget,
+} from './setupGuideCoach';
 import { exitGuide, finishGuide, useActiveGuide } from './setupGuides';
 import { TrendChart, type TrendPoint } from './PulseCharts';
 import type { ExerciseProgress, MachineWeight, WeightMapping } from './types';
-import { weightFromKg, weightInputKg, weightInputValue, type WeightUnit } from './weightUnits';
-import { decimalNumberOrNull, localDate } from './utils';
+import { weightFromKg, type WeightUnit } from './weightUnits';
+import { localDate } from './utils';
 import './machineWeights.css';
-
-type PairText = { machine: string; reference: string };
-type PairTexts = Record<string, PairText>;
-
-const BLANK: PairText = { machine: '', reference: '' };
-
-function pairTexts(mapping: WeightMapping, unit: WeightUnit): PairTexts {
-  return Object.fromEntries(
-    mapping.machines.map((machine) => [
-      machine.id,
-      {
-        machine: weightInputValue(machine.machine_kg, unit),
-        reference: weightInputValue(machine.reference_kg, unit),
-      },
-    ]),
-  );
-}
-
-const trimmed = (value: number) => String(Math.round(value * 10) / 10);
-
-/** Your latest weight on a machine in the display unit, or a round default. */
-function baseWeight(progress: ExerciseProgress, machineId: string, unit: WeightUnit): number {
-  const kg = latestWeightKg(progress, machineId);
-  if (kg === null) return unit === 'lb' ? 100 : 50;
-  return Math.round(weightFromKg(kg, unit) * 2) / 2;
-}
-
-/** A pair of typed weights for a conversion, keeping a weight already entered for the machine. */
-function pairForFactor(text: PairText, factor: number, base: number): PairText {
-  const typed = decimalNumberOrNull(text.machine);
-  const machine = typed && typed > 0 ? typed : base;
-  return { machine: trimmed(machine), reference: trimmed(machine * factor) };
-}
-
-/** Where a conversion sits along the slider, from 0 at its minimum to 1 at its maximum. */
-function sliderPosition(factor: number): number {
-  return (clampFactor(factor) - FACTOR_RANGE.min) / (FACTOR_RANGE.max - FACTOR_RANGE.min);
-}
-
-/** Whether a conversion falls within the middle half of your sessions' conversions. */
-function inLikelyRange(factor: number, suggestion: FactorSuggestion): boolean {
-  const rounded = Math.round(factor * 100) / 100;
-  return rounded >= suggestion.low && rounded <= suggestion.high;
-}
-
-/** The conversion a typed pair describes, or null while either weight is missing. */
-function typedFactor(text: PairText): number | null {
-  const machine = decimalNumberOrNull(text.machine);
-  const reference = decimalNumberOrNull(text.reference);
-  return machine && reference && machine > 0 && reference > 0 ? reference / machine : null;
-}
-
-/**
- * Fill machines without a pair from their suggestions: your latest weight on the machine, and
- * what it works out as on the reference. A pair you saved or started typing is kept.
- */
-function withSuggestions(
-  texts: PairTexts,
-  mapping: WeightMapping,
-  progress: ExerciseProgress,
-  unit: WeightUnit,
-): PairTexts {
-  const suggestions = suggestFactors(progress, mapping.reference_machine_id);
-  const next = { ...texts };
-  for (const machine of mapping.machines) {
-    const text = next[machine.id] ?? BLANK;
-    const suggestion = suggestions.get(machine.id);
-    const blank = !text.machine.trim() && !text.reference.trim();
-    if (suggestion && machine.id !== mapping.reference_machine_id && blank) {
-      next[machine.id] = pairForFactor(
-        text,
-        suggestion.factor,
-        baseWeight(progress, machine.id, unit),
-      );
-    }
-  }
-  return next;
-}
 
 function MachineThumb({ machine }: { machine: MachineWeight }) {
   return <img className="machine-weights-thumb" src={machine.thumbnail_url} alt="" />;
 }
-
-/** How a suggestion is labelled: a rough one has too few sessions near the reference's. */
-function suggestionLabel(suggestion: FactorSuggestion): string {
-  return suggestion.basis === 'rough' ? 'Estimated' : 'Suggested';
-}
-
-const sessionCount = (count: number) => `${count} ${count === 1 ? 'session' : 'sessions'}`;
 
 interface MachineWeightsDialogProps {
   exerciseId: string;
@@ -121,6 +59,14 @@ interface MachineWeightsDialogProps {
   onClose: () => void;
   onSaved: (mapping: WeightMapping) => void;
 }
+
+/** The dialog's controls each step of the machine weights guide is about. */
+const NORMALISE_COACH_TARGETS: Partial<Record<CoachTarget, string>> = {
+  'normalise.switch': '.machine-weights-toggle [role="switch"]',
+  'normalise.reference': '.machine-weights-list li.is-reference',
+  'normalise.match': '.machine-weights-list li.is-spoke',
+  'normalise.save': '.machine-weights-save',
+};
 
 /**
  * Choose a reference machine and how each other machine's weights compare with it. Suggestions
@@ -168,34 +114,18 @@ function MachineWeightsEditor({
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const guide = useActiveGuide('normalise');
-  const [guideStep, setGuideStep] = useState(() => (mapping.enabled ? 1 : 0));
-  const reference = draft.machines.find((machine) => machine.id === draft.reference_machine_id);
+  const [guideStep, setGuideStep] = useState(() => normaliseFirstStep(mapping.enabled));
+  const { reference, tree, ordered } = machineWeightsLayout(draft);
   const recent = useMemo(() => recentSessionCounts(progress, localDate()), [progress]);
   const recommendedId = recommendedReferenceId(draft, recent);
   const suggestions = useMemo(
     () => suggestFactors(progress, draft.reference_machine_id),
     [progress, draft.reference_machine_id],
   );
-  const tree = draft.enabled && reference !== undefined;
-  // The reference leads, with an arrow to each machine measured against it.
-  const ordered =
-    reference && tree
-      ? [reference, ...draft.machines.filter((machine) => machine.id !== reference.id)]
-      : draft.machines;
 
   /** Typed pairs as entered so far; an unfinished pair leaves that machine unconverted. */
   const live = useMemo<WeightMapping>(
-    () => ({
-      ...draft,
-      machines: draft.machines.map((machine) => {
-        const text = texts[machine.id] ?? BLANK;
-        const machineKg = weightInputKg(text.machine, weightUnit, machine.machine_kg);
-        const referenceKg = weightInputKg(text.reference, weightUnit, machine.reference_kg);
-        return machineKg && referenceKg && machineKg > 0 && referenceKg > 0
-          ? { ...machine, machine_kg: machineKg, reference_kg: referenceKg }
-          : { ...machine, machine_kg: null, reference_kg: null };
-      }),
-    }),
+    () => liveMapping(draft, texts, weightUnit),
     [draft, texts, weightUnit],
   );
   const showPreview = tree && progress.points.length > 1;
@@ -223,22 +153,9 @@ function MachineWeightsEditor({
 
   /** The draft with each machine's typed pair, or null after marking invalid pairs. */
   function parsedDraft(): WeightMapping | null {
-    const nextErrors: Record<string, string> = {};
-    const machines = draft.machines.map((machine) => {
-      if (machine.id === draft.reference_machine_id) return machine;
-      const text = texts[machine.id] ?? BLANK;
-      const machineKg = weightInputKg(text.machine, weightUnit, machine.machine_kg);
-      const referenceKg = weightInputKg(text.reference, weightUnit, machine.reference_kg);
-      const blank = !text.machine.trim() && !text.reference.trim();
-      if (!blank && (!machineKg || !referenceKg || machineKg <= 0 || referenceKg <= 0)) {
-        nextErrors[machine.id] = 'Enter both weights, or leave both blank.';
-      }
-      return blank
-        ? { ...machine, machine_kg: null, reference_kg: null }
-        : { ...machine, machine_kg: machineKg, reference_kg: referenceKg };
-    });
+    const { mapping: parsed, errors: nextErrors } = parsedMapping(draft, texts, weightUnit);
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length ? null : { ...draft, machines };
+    return parsed;
   }
 
   function setPair(machineId: string, text: PairText) {
@@ -252,14 +169,16 @@ function MachineWeightsEditor({
 
   /** Your weight on the machine changes; the conversion, and so the trend, stays. */
   function setMachineWeight(machineId: string, text: PairText, value: string) {
-    const factor = typedFactor(text);
-    const typed = decimalNumberOrNull(value);
-    setPair(
-      machineId,
-      factor && typed && typed > 0
-        ? { machine: value, reference: trimmed(typed * factor) }
-        : { ...text, machine: value },
-    );
+    setPair(machineId, pairWithMachineWeight(text, value));
+  }
+
+  /** Leaving the weight box ends that edit; see `pairSettled`. */
+  function settleMachineWeight(machineId: string) {
+    setTexts((current) => {
+      const text = current[machineId];
+      const settled = text && pairSettled(text);
+      return !settled || settled === text ? current : { ...current, [machineId]: settled };
+    });
   }
 
   function chooseReference(machineId: string) {
@@ -271,14 +190,10 @@ function MachineWeightsEditor({
   }
 
   function toggle() {
-    const next = {
-      ...draft,
-      enabled: !draft.enabled,
-      reference_machine_id: draft.reference_machine_id ?? recommendedId,
-    };
+    const next = toggledNormalise(draft, recommendedId);
     setDraft(next);
     // Turning the switch on is the guide's first step; switching it off again returns there.
-    if (guide) setGuideStep((step) => (!next.enabled ? 0 : step === 0 ? 1 : step));
+    if (guide) setGuideStep((step) => normaliseStepAfterToggle(step, next.enabled));
     if (next.enabled) {
       setTexts((current) => withSuggestions(current, next, progress, weightUnit));
     }
@@ -304,39 +219,17 @@ function MachineWeightsEditor({
     exitGuide('normalise');
     onClose();
   };
-  const spokes = live.machines.filter((machine) => machine.id !== draft.reference_machine_id);
-  // Machines with no sessions yet have nothing to work a match out from.
-  const unmatched = spokes.some((machine) => !suggestions.has(machine.id));
-  const coachSteps: CoachStep[] = [
-    {
-      title: 'Switch on Normalise weights',
-      body: `Your ${exerciseName} machines weigh differently, so the same number is a different effort on each. This shows every session in one machine’s weights.`,
-      target: '.machine-weights-toggle [role="switch"]',
-      next: { disabled: !draft.enabled, onClick: () => setGuideStep(1) },
-    },
-    {
-      title: 'Check the reference machine',
-      body: 'Relay picked the machine you use most and matched your other machines to it from your history. Tap Make reference on another machine to change it.',
-      target: '.machine-weights-list li.is-reference',
-      next: { onClick: () => setGuideStep(2) },
-    },
-    {
-      title: 'Match the weights',
-      body: unmatched
-        ? 'Relay matched the machines you’ve used from your history; enter both weights for any without sessions. Drag a slider to adjust a match and watch the preview.'
-        : 'Relay worked out each match from your history. Drag the slider to adjust it and watch your sessions line up in the preview.',
-      target: '.machine-weights-list li.is-spoke',
-      next: {
-        disabled: spokes.some((machine) => !machine.machine_kg || !machine.reference_kg),
-        onClick: () => setGuideStep(3),
-      },
-    },
-    {
-      title: 'Save it',
-      body: 'Your logged sets keep the weights you entered. Only the All machines chart is converted.',
-      target: '.machine-weights-save',
-    },
-  ];
+  const coachSteps: CoachStep[] = normaliseCoachSteps({
+    exerciseName,
+    enabled: draft.enabled,
+    referenceId: draft.reference_machine_id,
+    machines: live.machines,
+    suggested: (machineId) => suggestions.has(machineId),
+  }).map(({ target, next, ...copy }, index) => ({
+    ...copy,
+    target: NORMALISE_COACH_TARGETS[target],
+    next: next && { disabled: next.disabled, onClick: () => setGuideStep(index + 1) },
+  }));
 
   return (
     <PopupDialog
@@ -472,6 +365,7 @@ function MachineWeightsEditor({
                             onChange={(event) =>
                               setMachineWeight(machine.id, text, event.target.value)
                             }
+                            onBlur={() => settleMachineWeight(machine.id)}
                           />
                           <span>{weightUnit}</span>
                         </label>
@@ -493,7 +387,7 @@ function MachineWeightsEditor({
                             aria-invalid={Boolean(errors[machine.id])}
                             aria-describedby={errors[machine.id] ? errorId : undefined}
                             onChange={(event) =>
-                              setPair(machine.id, { ...text, reference: event.target.value })
+                              setPair(machine.id, pairWithReferenceWeight(text, event.target.value))
                             }
                           />
                           <span>{weightUnit}</span>

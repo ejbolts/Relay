@@ -177,8 +177,8 @@ it('renders two future schedule months as planned dates, without workout creatio
         preview={{
           from: '2026-12-01',
           days: [
-            { date: '2026-12-30', label: 'Full body A', color: '#14b8a6' },
-            { date: '2026-12-31', label: 'Rest', color: '#828b92' },
+            { date: '2026-12-30', label: 'Full body A', colors: ['#14b8a6'] },
+            { date: '2026-12-31', label: 'Rest', colors: ['#828b92'] },
             { date: '2027-01-01', label: 'Not started' },
           ],
         }}
@@ -329,11 +329,12 @@ it('reports the months on screen as the calendar scrolls, for the legend', async
 
 it('outlines split days with nothing logged in the planned workout colour', async () => {
   const splitDays = new Map([
-    ['2026-10-23', 'lower'], // Missed.
-    ['2026-10-24', 'upper'], // Logged as planned.
-    ['2026-10-26', 'upper'], // Today, still to do.
-    ['2026-10-27', 'lower'],
-    ['2026-10-29', 'custom-gone'], // A type since removed.
+    ['2026-10-23', ['lower']], // Missed.
+    ['2026-10-24', ['upper']], // Logged as planned.
+    ['2026-10-26', ['upper']], // Today, still to do.
+    ['2026-10-27', ['lower']],
+    ['2026-10-28', ['upper', 'lower']], // A mixed day.
+    ['2026-10-29', ['custom-gone']], // A type since removed.
   ]);
   const render = (hidden: string[]) =>
     act(async () =>
@@ -357,7 +358,9 @@ it('outlines split days with nothing logged in the planned workout colour', asyn
     ['2026-10-23', '#f59e0b'],
     ['2026-10-26', '#8b5cf6'],
     ['2026-10-27', '#f59e0b'],
+    ['2026-10-28', dayRing(['#8b5cf6', '#f59e0b'])],
   ]);
+  expect(cell('2026-10-28').title).toMatch(/2026: Upper body \+ Lower body planned$/);
   // Dates are written in the reader's locale, so only the plan's wording is checked.
   expect(cell('2026-10-23').getAttribute('aria-label')).toMatch(
     /^Create workout for .*2026, Lower body missed$/,
@@ -370,7 +373,10 @@ it('outlines split days with nothing logged in the planned workout colour', asyn
 
   // Switching a type off in the legend hides its planned outlines too.
   await render(['lower']);
-  expect(scheduled()).toEqual([['2026-10-26', '#8b5cf6']]);
+  expect(scheduled()).toEqual([
+    ['2026-10-26', '#8b5cf6'],
+    ['2026-10-28', '#8b5cf6'],
+  ]);
 });
 
 it('leaves the in-progress day to its live marker rather than a workout outline', async () => {
@@ -386,6 +392,72 @@ it('leaves the in-progress day to its live marker rather than a workout outline'
   );
   expect(ring('2026-10-26')).toBe('');
   expect(cell('2026-10-26').querySelector('.calendar-live-dot')).not.toBeNull();
+});
+
+it('rings today in its workout colours, split like its outline on a mixed day', async () => {
+  const todayRing = (date = '2026-10-26') => cell(date).querySelector('.calendar-today-ring');
+  const render = (categories: HeatmapDay['categories'], hidden: string[] = [], live = false) =>
+    act(async () =>
+      root.render(
+        <WorkoutCalendar
+          entries={[day('2026-10-25', ['upper']), day('2026-10-26', categories)]}
+          categoryColors={colors}
+          hiddenCategories={new Set(hidden)}
+          activeWorkoutDate={live ? '2026-10-26' : undefined}
+          onDayClick={vi.fn()}
+        />,
+      ),
+    );
+  await render(['lower']);
+  expect(todayRing()).not.toBeNull();
+  expect(ring('2026-10-26')).toBe('#f59e0b');
+  // Only today gets the extra ring; other trained days keep just their outline.
+  expect(todayRing('2026-10-25')).toBeNull();
+
+  // The ring reads the day's split outline, so every type on a mixed day keeps its arc.
+  await render(['upper', 'cardio']);
+  expect(todayRing()).not.toBeNull();
+  expect(ring('2026-10-26')).toBe(dayRing(['#8b5cf6', '#22c55e']));
+
+  // With every type switched off, or a workout live, today keeps its default outline.
+  await render(['upper', 'cardio'], ['upper', 'cardio']);
+  expect(todayRing()).toBeNull();
+  await render(['upper'], [], true);
+  expect(todayRing()).toBeNull();
+});
+
+it('rings today in its planned workout colours before anything is started', async () => {
+  const todayRing = () => cell('2026-10-26').querySelector<HTMLElement>('.calendar-today-ring');
+  const render = (plan: string[], hidden: string[] = [], live = false) =>
+    act(async () =>
+      root.render(
+        <WorkoutCalendar
+          entries={[]}
+          categoryColors={colors}
+          hiddenCategories={new Set(hidden)}
+          activeWorkoutDate={live ? '2026-10-26' : undefined}
+          activeWorkoutColor={live ? '#8b5cf6' : undefined}
+          splitDays={new Map([['2026-10-26', plan]])}
+          onDayClick={vi.fn()}
+        />,
+      ),
+    );
+  await render(['lower']);
+  expect(cell('2026-10-26').classList.contains('today-ringed')).toBe(true);
+  expect(todayRing()!.style.getPropertyValue('--day-ring')).toBe('#f59e0b');
+  // A mixed day keeps an arc for each planned type.
+  await render(['upper', 'cardio']);
+  expect(todayRing()!.style.getPropertyValue('--day-ring')).toBe(dayRing(['#8b5cf6', '#22c55e']));
+  // Once the workout starts, the outline takes the colour being logged.
+  await render(['lower'], [], true);
+  expect(todayRing()).toBeNull();
+  expect(cell('2026-10-26').style.getPropertyValue('--live-color')).toBe('#8b5cf6');
+  // Nothing planned, or the planned type switched off: the plain outline.
+  await render([]);
+  expect(todayRing()).toBeNull();
+  await render(['lower'], ['lower']);
+  expect(todayRing()).toBeNull();
+  expect(cell('2026-10-26').classList.contains('today-ringed')).toBe(false);
 });
 
 it('colours the live day in the workout type being logged', async () => {

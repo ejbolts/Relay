@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime, time
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     Column,
@@ -83,6 +84,8 @@ class PersonalRecordType(enum.StrEnum):
     ESTIMATED_1RM = "estimated_1rm"
     DURATION = "duration"
     DISTANCE = "distance"
+    # The fastest time over a set distance, held in the record's normalized_weight (km).
+    PACE = "pace"
 
 
 def new_uuid() -> str:
@@ -364,6 +367,8 @@ class UserSession(Base):
     user_agent: Mapped[str | None] = mapped_column(String(300), nullable=True)
     # The app release this sign-in last used, from the X-Relay-Version header.
     client_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Native platform and build version, for diagnostics only.
+    native_client: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class YouTubeConnection(Base):
@@ -540,6 +545,37 @@ class PushSubscription(Base):
     endpoint: Mapped[str] = mapped_column(Text, unique=True)
     p256dh: Mapped[str] = mapped_column(String(200))
     auth: Mapped[str] = mapped_column(String(200))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class ExpoPushToken(Base):
+    """A native app's Expo push token, bound to the sign-in that registered it.
+
+    Alerts go only to tokens whose sign-in is still current, so signing out (on this phone, on
+    every device, or by a password change) stops them even before the app removes the token.
+    """
+
+    __tablename__ = "expo_push_tokens"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True, nullable=False
+    )
+    session_id: Mapped[str | None] = mapped_column(String(36), nullable=True, index=True)
+    token: Mapped[str] = mapped_column(String(200), unique=True)
+    platform: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # Alert kinds the app schedules on the phone itself, which the server then leaves out.
+    local_alerts: Mapped[list[str]] = mapped_column(JSON, default=list)
+    # The workout ("startedAt", as the shared draft stores it) whose "Still working out?" the
+    # phone has scheduled, and when (epoch milliseconds) it is due.
+    local_reminder_workout: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    local_reminder_due_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    # The idle spell (its due time) whose "Still working out?" this phone has already been sent,
+    # or refused for good, so a reminder retried for browsers or after a restart isn't resent.
+    native_reminder_due_ms: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

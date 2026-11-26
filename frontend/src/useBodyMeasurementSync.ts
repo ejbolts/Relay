@@ -49,8 +49,8 @@ export function useBodyMeasurementSync(
       window.removeEventListener('storage', storageChanged);
     };
   }, [owner, onChange]);
-  useTrainingDataSync(async () => {
-    await api.syncBodyMeasurements();
+  useTrainingDataSync(async (resumed) => {
+    await api.syncBodyMeasurements(false, resumed);
   }, owner !== null);
   return { ...status, retry: () => void api.syncBodyMeasurements(true).catch(() => undefined) };
 }

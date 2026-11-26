@@ -107,6 +107,38 @@ describe('PopupDialog focus', () => {
     expect(document.activeElement).toBe(opener());
   });
 
+  it('hands focus back without a ring after a tap, until a key is pressed', async () => {
+    const dialog = await open(false, 'pointer');
+    const cancel = Array.from(dialog.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Cancel',
+    )!;
+    await act(async () => cancel.click());
+    expect(document.activeElement).toBe(opener());
+    expect(opener().hasAttribute('data-quiet-focus')).toBe(true);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+    expect(opener().hasAttribute('data-quiet-focus')).toBe(false);
+  });
+
+  it('drops the quiet mark when the control loses focus', async () => {
+    const dialog = await open(false, 'pointer');
+    const cancel = Array.from(dialog.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Cancel',
+    )!;
+    await act(async () => cancel.click());
+    opener().blur();
+    expect(opener().hasAttribute('data-quiet-focus')).toBe(false);
+  });
+
+  it('keeps the ring when the dialog was used from the keyboard', async () => {
+    const dialog = await open(false, 'keyboard');
+    const cancel = Array.from(dialog.querySelectorAll('button')).find(
+      (button) => button.textContent === 'Cancel',
+    )!;
+    await act(async () => cancel.click());
+    expect(document.activeElement).toBe(opener());
+    expect(opener().hasAttribute('data-quiet-focus')).toBe(false);
+  });
+
   it('leaves focus alone when something else took it while closing', async () => {
     const elsewhere = document.createElement('button');
     document.body.append(elsewhere);

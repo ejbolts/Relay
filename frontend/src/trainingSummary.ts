@@ -58,6 +58,11 @@ export function weekStartDayFrom(weekStart: string | null | undefined): number {
     : 1;
 }
 
+/** The weekday (0 Sunday to 6 Saturday) a week-start preference names; Monday until it loads. */
+export function weekStartDayOf(weekStart: string | null | undefined): number {
+  return weekStart === 'sunday' ? 0 : weekStart === 'saturday' ? 6 : 1;
+}
+
 export function workingSets(workout: TrackedWorkout): TrackedSet[] {
   return workout.movements.flatMap((movement) => movement.sets.filter(isCompletedWorkingSet));
 }
@@ -529,46 +534,60 @@ export function weekGroupLabel(weekStart: string, today: string, weekStartDay: n
     : `${dayMonth(weekStart)} – ${dayMonth(end)}`;
 }
 
-const STRENGTH_RECORD_TYPES: PersonalRecord['record_type'][] = [
+const COUNTED_RECORD_TYPES: PersonalRecord['record_type'][] = [
   'weight',
   'reps_at_weight',
   'relative_strength',
+  'distance',
+  'duration',
+  'pace',
 ];
-/** Which of a set's records names it in a list: a weight PR before a volume or ratio PR. */
+/**
+ * Which of a set's records names it in a list: a weight PR before a volume or ratio PR, and a
+ * cardio set's fastest time (longest distance first) before its distance or duration.
+ */
 const RECORD_TYPE_RANK: Partial<Record<PersonalRecord['record_type'], number>> = {
   weight: 0,
   reps_at_weight: 1,
   relative_strength: 2,
+  pace: 3,
+  distance: 4,
+  duration: 5,
 };
 
-const isStrengthRecord = (record: PersonalRecord) =>
-  STRENGTH_RECORD_TYPES.includes(record.record_type) && record.value > 0;
+/** A record counted as a PR: a strength or cardio record, not a legacy estimate. */
+export const isCountedRecord = (record: PersonalRecord) =>
+  COUNTED_RECORD_TYPES.includes(record.record_type) && record.value > 0;
 
 /**
  * PRs as counted everywhere a total is shown: one per set. A set can earn a weight PR and a
- * relative-strength PR at once; it is still one PR.
+ * relative-strength PR at once, or a run a distance and a pace PR; it is still one PR.
  */
 export function prSetCount(records: PersonalRecord[]): number {
-  return new Set(records.filter(isStrengthRecord).map((record) => record.set_id)).size;
+  return new Set(records.filter(isCountedRecord).map((record) => record.set_id)).size;
 }
 
-/** Strength records worth surfacing on Today, newest first: one per set, exercise and type. */
-export function recentStrengthRecords(records: PersonalRecord[], limit = 3): PersonalRecord[] {
+/** Records worth surfacing on Today, newest first: one per set, exercise and type. */
+export function recentRecords(records: PersonalRecord[], limit = 3): PersonalRecord[] {
   const seenTypes = new Set<string>();
   const seenSets = new Set<string>();
   return records
-    .filter(isStrengthRecord)
+    .filter(isCountedRecord)
     .sort(
       (left, right) =>
         right.achieved_date.localeCompare(left.achieved_date) ||
-        (RECORD_TYPE_RANK[left.record_type] ?? 3) - (RECORD_TYPE_RANK[right.record_type] ?? 3) ||
-        right.value - left.value,
+        (RECORD_TYPE_RANK[left.record_type] ?? 6) - (RECORD_TYPE_RANK[right.record_type] ?? 6) ||
+        (left.record_type === 'pace' && right.record_type === 'pace'
+          ? (right.normalized_weight ?? 0) - (left.normalized_weight ?? 0)
+          : right.value - left.value),
     )
     .filter((record) => {
       // A set's relative-strength record repeats its weight PR, so the set is listed once.
       if (seenSets.has(record.set_id)) return false;
       // One row per exercise and record type: the best of a day's repeated records.
-      const key = `${record.exercise_id}:${record.record_type}`;
+      const key = `${record.exercise_id}:${record.record_type}:${
+        record.record_type === 'pace' ? record.normalized_weight : ''
+      }`;
       if (seenTypes.has(key)) return false;
       seenSets.add(record.set_id);
       seenTypes.add(key);
@@ -581,7 +600,7 @@ export function recentStrengthRecords(records: PersonalRecord[], limit = 3): Per
 export function recordCountsByWorkout(records: PersonalRecord[]): Map<string, number> {
   const sets = new Map<string, Set<string>>();
   for (const record of records) {
-    if (!isStrengthRecord(record)) continue;
+    if (!isCountedRecord(record)) continue;
     const ids = sets.get(record.workout_id) ?? new Set<string>();
     ids.add(record.set_id);
     sets.set(record.workout_id, ids);

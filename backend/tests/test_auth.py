@@ -25,6 +25,7 @@ from app.auth import (
     SESSION_COOKIE,
     LoginThrottle,
     hash_password,
+    hash_token,
     origin_matches_host,
     password_needs_rehash,
     verify_password,
@@ -326,6 +327,84 @@ def test_logout_session_signs_out_only_this_browser(client):
     with SessionLocal() as db:
         assert db.scalar(select(func.count(UserSession.id))) == 1
         assert db.scalar(select(func.count(PushSubscription.id))) == 1
+
+
+def native_sign_in(app, username: str = "owner") -> tuple[TestClient, str, dict]:
+    """Sign in as the native app does: a token in the body, sent back as a bearer header."""
+    phone = TestClient(app)
+    response = phone.post(
+        "/api/auth/login",
+        json={"username": username, "password": TEST_PASSWORD, "session": "token"},
+    )
+    assert response.status_code == 200
+    token = response.json()["session_token"]
+    return phone, token, {"Authorization": f"Bearer {token}"}
+
+
+def test_native_sign_in_returns_a_bearer_token_instead_of_a_cookie(client):
+    phone = TestClient(client.app)
+    response = phone.post(
+        "/api/auth/login",
+        json={"username": "owner", "password": TEST_PASSWORD, "session": "token"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == client.user["id"]
+    assert "set-cookie" not in response.headers
+    assert SESSION_COOKIE not in phone.cookies
+    bearer = {"Authorization": f"Bearer {response.json()['session_token']}"}
+    assert phone.get("/api/auth/me", headers=bearer).json()["id"] == client.user["id"]
+    assert phone.get("/api/auth/me").status_code == 401
+    # Browsers keep the cookie and never see a token.
+    browser = TestClient(client.app)
+    cookie_login = login(browser, "owner")
+    assert cookie_login.json()["session_token"] is None
+    assert SESSION_COOKIE in browser.cookies
+    assert (
+        phone.post(
+            "/api/auth/login",
+            json={"username": "owner", "password": TEST_PASSWORD, "session": "url"},
+        ).status_code
+        == 422
+    )
+
+
+def test_logout_session_with_a_bearer_token_signs_out_only_that_app(client):
+    phone, token, bearer = native_sign_in(client.app)
+
+    assert phone.post("/api/auth/logout-session", headers=bearer).status_code == 204
+
+    assert phone.get("/api/auth/me", headers=bearer).status_code == 401
+    with SessionLocal() as db:
+        assert (
+            db.scalar(select(UserSession).where(UserSession.token_hash == hash_token(token)))
+            is None
+        )
+    assert client.get("/api/auth/me").status_code == 200
+
+
+def test_a_bad_bearer_token_never_falls_back_to_the_cookie(client):
+    assert client.get("/api/auth/me", headers={"Authorization": "Bearer stale"}).status_code == 401
+    assert client.get("/api/auth/me", headers={"Authorization": "Bearer "}).status_code == 401
+    # Basic credentials belong to a proxy in front of the app, so the cookie still counts.
+    proxied = client.get("/api/auth/me", headers={"Authorization": "Basic dXNlcjpwYXNz"})
+    assert proxied.status_code == 200
+
+
+def test_a_bearer_session_slides_forward_without_setting_a_cookie(client):
+    phone, token, bearer = native_sign_in(client.app)
+    with SessionLocal() as db:
+        row = db.scalar(select(UserSession).where(UserSession.token_hash == hash_token(token)))
+        row.expires_at = datetime.now(UTC) + timedelta(days=88, hours=23)
+        db.commit()
+
+    response = phone.get("/api/auth/me", headers=bearer)
+
+    assert response.status_code == 200
+    assert "set-cookie" not in response.headers
+    with SessionLocal() as db:
+        row = db.scalar(select(UserSession).where(UserSession.token_hash == hash_token(token)))
+        assert row.expires_at.replace(tzinfo=UTC) > datetime.now(UTC) + timedelta(days=89, hours=23)
 
 
 def test_logout_session_while_signed_out_is_harmless(client):
@@ -970,6 +1049,7 @@ ACCOUNT_TABLES = {
     "live_workouts",
     "active_workout_sync",
     "workout_photos",
+    "expo_push_tokens",
 }
 
 

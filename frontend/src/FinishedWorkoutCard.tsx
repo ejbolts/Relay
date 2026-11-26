@@ -60,7 +60,7 @@ export function FinishedWorkoutCard({
   // A workout finished moments ago gets a brief "Workout saved" with Undo (and Share, when the
   // sharing reminder is on); returning to Home later shows the card alone.
   const [savedToast, setSavedToast] = useState(
-    () => Date.now() - summary.finishedAt < TOAST_MS.action,
+    () => Date.now() - summary.finishedAt < TOAST_MS.important,
   );
   const share: ToastAction | undefined =
     shareReminder && onShare
@@ -241,6 +241,7 @@ export function FinishedWorkoutCard({
       {savedToast && (
         <Toast
           message="Workout saved"
+          duration="important"
           secondaryAction={undo && share}
           action={undo ?? share}
           dismissLabel="Dismiss workout saved notification"

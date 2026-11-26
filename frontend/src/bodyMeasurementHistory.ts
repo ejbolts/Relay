@@ -97,6 +97,13 @@ export function maintenanceRange(goal: {
     : null;
 }
 
+/** Whether any goal, past or present, has used a maintenance range. */
+export function usedMaintenanceRange(
+  goals: { maintenance_min_kg?: number | null; maintenance_max_kg?: number | null }[],
+): boolean {
+  return goals.some((goal) => maintenanceRange(goal) !== null);
+}
+
 export function bodyGoalTarget(goal: BodyHistoryGoal, unit: WeightUnit, decimals = 2): string {
   const range = maintenanceRange(goal);
   return range
@@ -263,4 +270,32 @@ export function bodyGoalName(goal: BodyHistoryGoal, unit: WeightUnit): string {
   return kind === 'maintain'
     ? `Maintain ${target}`
     : `${kind === 'loss' ? 'Lose' : 'Gain'} to ${target}`;
+}
+
+function goalComparison(change: BodyHistoryWeightChange): string {
+  if (!change.goalDirection || change.status === 'neutral') return '';
+  if (change.goalDirection === 'maintain') {
+    return `; ${change.status === 'favorable' ? 'closer to' : 'further from'} maintenance weight`;
+  }
+  return `; ${change.status === 'favorable' ? 'in line with' : 'opposite to'} weight-${change.goalDirection} goal`;
+}
+
+/** What a history row's change arrow says, such as "Weight decreased by 0.4 kg since …". */
+export function weightChangeLabel(
+  change: BodyHistoryWeightChange,
+  amount: string,
+  unit: WeightUnit,
+  comparison: string,
+): string {
+  return `Weight ${change.direction === 'up' ? 'increased' : 'decreased'} by ${amount} ${unit} since ${comparison}${goalComparison(change)}`;
+}
+
+/** When a goal in body history started: "3 Nov", with the year when it isn't this year's. */
+export function goalStartLabel(startDate: string, now = new Date()): string {
+  const start = new Date(`${startDate}T12:00:00`);
+  return new Intl.DateTimeFormat(undefined, {
+    day: 'numeric',
+    month: 'short',
+    ...(start.getFullYear() === now.getFullYear() ? {} : { year: 'numeric' }),
+  }).format(start);
 }

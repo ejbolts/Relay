@@ -31,8 +31,10 @@ export function dateRangeForDates(dates: string[], range: TimeRange): DateRange 
 }
 
 export function dateRangeQuery(range: DateRange): string {
-  const params = new URLSearchParams();
-  if (range.start_date) params.set('start_date', range.start_date);
-  if (range.end_date) params.set('end_date', range.end_date);
-  return params.size ? `?${params}` : '';
+  // Built by hand: React Native's URLSearchParams has no size, and the app shares this.
+  const params = [
+    range.start_date && `start_date=${encodeURIComponent(range.start_date)}`,
+    range.end_date && `end_date=${encodeURIComponent(range.end_date)}`,
+  ].filter(Boolean);
+  return params.length ? `?${params.join('&')}` : '';
 }

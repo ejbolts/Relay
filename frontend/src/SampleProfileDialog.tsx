@@ -1,9 +1,7 @@
+import { sampleProfileIdentity } from './authRules';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
-
-export const SAMPLE_DISPLAY_NAME = 'Sam Sample';
-export const SAMPLE_USERNAME = 'sam.sample';
 
 /** Example numbers so the preview looks like a real profile. */
 const SAMPLE_STATS = [
@@ -25,8 +23,7 @@ export function SampleProfileDialog({
   username: string;
   onClose: () => void;
 }) {
-  const name = displayName.trim().replace(/\s+/g, ' ') || SAMPLE_DISPLAY_NAME;
-  const handle = username.trim().toLowerCase() || SAMPLE_USERNAME;
+  const user = sampleProfileIdentity(displayName, username);
   return (
     <PopupDialog
       title="Sample profile"
@@ -41,13 +38,10 @@ export function SampleProfileDialog({
       <div className="sample-profile-body">
         <p className="sample-profile-intro">How friends will see you. Workouts are examples.</p>
         <section className="pulse-card today-profile" aria-label="Sample profile card">
-          <ProfileAvatar
-            className="profile-avatar today-profile-avatar"
-            user={{ display_name: name, username: handle, profile_photo_url: null }}
-          />
+          <ProfileAvatar className="profile-avatar today-profile-avatar" user={user} />
           <div className="today-profile-body">
-            <h2 className="sample-profile-name">{name}</h2>
-            <p className="sample-profile-username">@{handle}</p>
+            <h2 className="sample-profile-name">{user.display_name}</h2>
+            <p className="sample-profile-username">@{user.username}</p>
             <dl className="today-profile-stats">
               {SAMPLE_STATS.map((stat) => (
                 <div key={stat.label}>

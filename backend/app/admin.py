@@ -37,6 +37,7 @@ from .auth import (
 from .config import Settings
 from .database import get_db
 from .errors import api_error
+from .expo_push import remove_account_tokens
 from .models import (
     MachinePhoto,
     PushSubscription,
@@ -153,12 +154,18 @@ class DiskUsageRead(BaseModel):
     free_bytes: int
 
 
+class NativeClientUsageRead(BaseModel):
+    client: str
+    sessions: int
+
+
 class ClientVersionUsageRead(BaseModel):
     # None: sessions that have not been used since releases started sending their version.
     version: str | None
     users: int
     sessions: int
     last_seen_at: datetime
+    native_clients: list[NativeClientUsageRead] = Field(default_factory=list)
 
 
 class ServerStatusRead(BaseModel):
@@ -292,6 +299,20 @@ def generate_temporary_password() -> str:
 
 def _client_version_usage(db: Session) -> list[ClientVersionUsageRead]:
     now = utc_now()
+    recent = (
+        UserSession.expires_at > now,
+        UserSession.last_seen_at >= now - CLIENT_VERSION_WINDOW,
+    )
+    native_clients: dict[str | None, list[NativeClientUsageRead]] = {}
+    for version, client, sessions in db.execute(
+        select(UserSession.client_version, UserSession.native_client, func.count())
+        .where(*recent, UserSession.native_client.is_not(None))
+        .group_by(UserSession.client_version, UserSession.native_client)
+        .order_by(UserSession.native_client)
+    ):
+        native_clients.setdefault(version, []).append(
+            NativeClientUsageRead(client=client, sessions=sessions)
+        )
     rows = db.execute(
         select(
             UserSession.client_version,
@@ -299,15 +320,16 @@ def _client_version_usage(db: Session) -> list[ClientVersionUsageRead]:
             func.count(UserSession.id),
             func.max(UserSession.last_seen_at),
         )
-        .where(
-            UserSession.expires_at > now,
-            UserSession.last_seen_at >= now - CLIENT_VERSION_WINDOW,
-        )
+        .where(*recent)
         .group_by(UserSession.client_version)
     ).all()
     usage = [
         ClientVersionUsageRead(
-            version=version, users=users, sessions=sessions, last_seen_at=as_utc(last_seen)
+            version=version,
+            users=users,
+            sessions=sessions,
+            last_seen_at=as_utc(last_seen),
+            native_clients=native_clients.get(version, []),
         )
         for version, users, sessions, last_seen in rows
     ]
@@ -353,6 +375,7 @@ def update_user(
         user.disabled_at = utc_now()
         # Sign the account out everywhere and stop any alerts it has scheduled.
         db.execute(delete(UserSession).where(UserSession.user_id == user.id))
+        remove_account_tokens(db, user.id)
         endpoints = list(
             db.scalars(select(PushSubscription.endpoint).where(PushSubscription.user_id == user.id))
         )

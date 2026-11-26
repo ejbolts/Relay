@@ -4,6 +4,13 @@ import { PopupDialog } from './PopupDialog';
 import { dateRangeForDates, TIME_RANGE_OPTIONS, type TimeRange } from './dateRanges';
 import { downloadFile as downloadCsv } from './downloadFile';
 import { localDate } from './utils';
+import {
+  EXPORT_CHOICES,
+  EXPORT_EXCLUDED,
+  exportFileNames,
+  exportFilesNote,
+  exportRangeLabel,
+} from './dataExport';
 
 export function DataExportDialog({
   workoutDates,
@@ -35,9 +42,9 @@ export function DataExportDialog({
         workouts ? api.exportWorkouts(range) : null,
         bodyweight ? api.exportBodyMeasurements(range) : null,
       ]);
-      const suffix = range.start_date ? `${range.start_date}-to-${range.end_date}` : localDate();
-      if (workoutCsv) downloadCsv(workoutCsv, `gym-workouts-${suffix}.csv`);
-      if (bodyCsv) downloadCsv(bodyCsv, `body-weight-${suffix}.csv`);
+      const names = exportFileNames(range, localDate());
+      if (workoutCsv) downloadCsv(workoutCsv, names.workouts);
+      if (bodyCsv) downloadCsv(bodyCsv, names.bodyweight);
       setBusy(false);
       onExported(workoutCsv && bodyCsv ? 'Both CSV files downloaded.' : 'CSV downloaded.');
     } catch (caught) {
@@ -83,10 +90,8 @@ export function DataExportDialog({
               onChange={(event) => changeSelection(() => setWorkouts(event.target.checked))}
             />
             <span>
-              <strong>Workout history</strong>
-              <small>
-                Completed sets, exercise names, weights, reps, warmups and session names.
-              </small>
+              <strong>{EXPORT_CHOICES.workouts.label}</strong>
+              <small>{EXPORT_CHOICES.workouts.detail}</small>
             </span>
           </label>
           <label>
@@ -96,8 +101,8 @@ export function DataExportDialog({
               onChange={(event) => changeSelection(() => setBodyweight(event.target.checked))}
             />
             <span>
-              <strong>Bodyweight check-ins</strong>
-              <small>Date, weight, body-fat percentage and notes.</small>
+              <strong>{EXPORT_CHOICES.bodyweight.label}</strong>
+              <small>{EXPORT_CHOICES.bodyweight.detail}</small>
             </span>
           </label>
         </fieldset>
@@ -119,23 +124,10 @@ export function DataExportDialog({
               ))}
             </select>
           </label>
-          <small>
-            {range.start_date && range.end_date
-              ? `${range.start_date} – ${range.end_date} · ends at your latest selected entry`
-              : dates.length
-                ? 'All saved entries'
-                : 'No saved entries — exports an empty CSV template'}
-          </small>
+          <small>{exportRangeLabel(range, dates)}</small>
         </div>
         <p className="data-export-note">
-          {workouts && bodyweight
-            ? 'Downloads two CSV files: workout history and bodyweight check-ins.'
-            : bodyweight
-              ? 'Downloads one bodyweight CSV file.'
-              : workouts
-                ? 'Downloads one workout CSV file.'
-                : 'Select at least one type of data.'}{' '}
-          Photos, videos, supersets, goals, RPE and workout notes are excluded.
+          {exportFilesNote(workouts, bodyweight)} {EXPORT_EXCLUDED}
         </p>
         {error && (
           <p role="alert" className="inline-error">

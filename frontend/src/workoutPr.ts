@@ -8,6 +8,15 @@ import type {
 } from './types';
 import type { WorkoutDraftMovement as DraftMovement } from './workoutMovements';
 import { blockOn, freshStartOn } from './trainingBlocks';
+import {
+  addCardioSet,
+  cardioBestsFrom,
+  cardioHitLabel,
+  isCardioRecordEligible,
+  cardioSetSummary,
+  paceDistances,
+  type CardioBestsState,
+} from './cardioRecords';
 import { bodyweightContext, bodyweightOn, relativeStrength } from './relativeStrength';
 import { formatWeight, type WeightUnit } from './weightUnits';
 
@@ -39,14 +48,25 @@ export function calculateDraftPrs(
   olderHistory?: Map<string, ExerciseHistoryBaseline> | null,
   measurements: BodyMeasurement[] = [],
 ): Map<string, Map<string, string[]>> {
-  type State = { weight: number; reps: Map<number, number>; relative: number };
+  type State = {
+    weight: number;
+    reps: Map<number, number>;
+    relative: number;
+    cardio: CardioBestsState;
+  };
+  const emptyState = (): State => ({
+    weight: -1,
+    reps: new Map(),
+    relative: -1,
+    cardio: cardioBestsFrom(null),
+  });
   const states = new Map<string, State>();
   for (const [exerciseId, baseline] of olderHistory ?? []) {
-    if (baseline.best_weight_kg === null) continue;
     states.set(exerciseId, {
-      weight: prWeight(baseline.best_weight_kg),
+      weight: baseline.best_weight_kg === null ? -1 : prWeight(baseline.best_weight_kg),
       relative: baseline.best_relative_strength ?? -1,
       reps: new Map(baseline.reps_by_weight.map((item) => [prWeight(item.weight_kg), item.reps])),
+      cardio: cardioBestsFrom(baseline),
     });
   }
   const excluded = historicalWorkouts.find((workout) => workout.id === excludedWorkoutId);
@@ -61,12 +81,18 @@ export function calculateDraftPrs(
   // History is the baseline: PR rows alone omit first attempts at each weight.
   for (const workout of priorWorkouts) {
     for (const movement of workout.movements) {
+      if (movement.exercise.kind === 'cardio') {
+        const state = states.get(movement.exercise.id) ?? emptyState();
+        const distances = paceDistances(movement.exercise.name);
+        for (const item of movement.sets) {
+          if (isCardioRecordEligible(item))
+            addCardioSet(state.cardio, item.duration_seconds, item.distance_km, distances);
+        }
+        states.set(movement.exercise.id, state);
+        continue;
+      }
       if (movement.exercise.kind !== 'strength') continue;
-      const state = states.get(movement.exercise.id) ?? {
-        weight: -1,
-        reps: new Map(),
-        relative: -1,
-      };
+      const state = states.get(movement.exercise.id) ?? emptyState();
       for (const item of movement.sets) {
         if (!isStrengthPrEligible(item)) continue;
         const weight = prWeight(item.weight_kg!);
@@ -84,8 +110,19 @@ export function calculateDraftPrs(
 
   const result = new Map<string, Map<string, string[]>>();
   for (const movement of movements) {
-    const state = states.get(movement.exercise.id) ?? { weight: -1, reps: new Map(), relative: -1 };
+    const state = states.get(movement.exercise.id) ?? emptyState();
     const badges = new Map<string, string[]>();
+    if (movement.exercise.kind === 'cardio') {
+      const distances = paceDistances(movement.exercise.name);
+      for (const item of movement.sets) {
+        if (!isCardioRecordEligible(item)) continue;
+        const hits = addCardioSet(state.cardio, item.duration_seconds, item.distance_km, distances);
+        if (hits.length) badges.set(item.key, hits.map(cardioHitLabel));
+      }
+      states.set(movement.exercise.id, state);
+      result.set(movement.key, badges);
+      continue;
+    }
     for (const item of movement.sets) {
       if (movement.exercise.kind !== 'strength' || !isStrengthPrEligible(item)) continue;
       const weight = prWeight(item.weight_kg!);
@@ -192,22 +229,113 @@ export function calculateScopedDraftPrs(
 }
 
 /** A record set just logged in the live workout, for its celebrate toast. */
-export interface PrToastEntry {
-  exercise: string;
-  labels: string[];
-  reps: number;
-  weightKg: number;
-  bodyweightKg?: number | null;
-}
+export type PrToastEntry = { exercise: string; labels: string[] } & (
+  | { reps: number; weightKg: number; bodyweightKg?: number | null }
+  /** A cardio set, described by what it covered, such as “7.2 km in 36:00”. */
+  | { summary: string }
+);
 
 /** The celebrate toast's lines: which records the set beat, then the set itself. */
 export function prToastLines(entries: PrToastEntry[], weightUnit: WeightUnit) {
   return entries.map((entry) => ({
     title: entry.labels.join(' + '),
     detail:
-      `${entry.exercise} · ${entry.reps} reps at ${formatWeight(entry.weightKg, weightUnit)}` +
-      (entry.bodyweightKg != null
-        ? ` · ${bodyweightContext(entry.weightKg, entry.bodyweightKg, weightUnit)}`
-        : ''),
+      'summary' in entry
+        ? [entry.exercise, entry.summary].filter(Boolean).join(' · ')
+        : `${entry.exercise} · ${entry.reps} reps at ${formatWeight(entry.weightKg, weightUnit)}` +
+          (entry.bodyweightKg != null
+            ? ` · ${bodyweightContext(entry.weightKg, entry.bodyweightKg, weightUnit)}`
+            : ''),
   }));
+}
+
+/** A live workout's record badges: labels by set key, by movement key. */
+export type DraftPrBadges = Map<string, Map<string, string[]>>;
+
+/** Identifies a celebrated set's records, so the same ones never celebrate twice. */
+export function prSignature(
+  exerciseId: string,
+  item: WorkoutSetInput & { key: string },
+  labels: string[],
+) {
+  return `${exerciseId}:${item.key}:${labels.join(',')}:${item.weight_kg}:${item.reps}:${item.duration_seconds}:${item.distance_km}`;
+}
+
+/** Which sets have been seen ticked, and which records have already been celebrated. */
+export interface PrCelebrations {
+  completedSetKeys: Set<string>;
+  celebrated: Set<string>;
+}
+
+/** The records a workout opens with are never celebrated again: only new ones are. */
+export function initialPrCelebrations(
+  movements: DraftMovement[],
+  badges: DraftPrBadges,
+): PrCelebrations {
+  return {
+    completedSetKeys: new Set(
+      movements.flatMap((movement) =>
+        movement.sets.filter((item) => item.completed).map((item) => item.key),
+      ),
+    ),
+    celebrated: new Set(
+      movements.flatMap((movement) =>
+        movement.sets.flatMap((item) => {
+          const labels = badges.get(movement.key)?.get(item.key);
+          return item.completed && labels ? [prSignature(movement.exercise.id, item, labels)] : [];
+        }),
+      ),
+    ),
+  };
+}
+
+/**
+ * The record sets just ticked that have not been celebrated yet, for the celebrate toast, and
+ * the state to compare the next change with. `bodyweightFor` gives a set's bodyweight on the
+ * workout's day.
+ */
+export function newPrCelebrations(
+  movements: DraftMovement[],
+  badges: DraftPrBadges,
+  previous: PrCelebrations,
+  bodyweightFor: (recorded: number | null | undefined) => number | null,
+): { entries: PrToastEntry[]; next: PrCelebrations } {
+  const completedSetKeys = new Set<string>();
+  const celebrated = new Set(previous.celebrated);
+  const entries: PrToastEntry[] = [];
+  for (const movement of movements) {
+    for (const item of movement.sets) {
+      if (!item.completed) continue;
+      completedSetKeys.add(item.key);
+      const labels = badges.get(movement.key)?.get(item.key);
+      if (previous.completedSetKeys.has(item.key) || !labels) continue;
+      const signature = prSignature(movement.exercise.id, item, labels);
+      if (celebrated.has(signature)) continue;
+      celebrated.add(signature);
+      entries.push(
+        movement.exercise.kind === 'cardio'
+          ? {
+              exercise: movement.exercise.name,
+              labels,
+              summary: cardioSetSummary(item.duration_seconds, item.distance_km),
+            }
+          : {
+              exercise: movement.exercise.name,
+              labels,
+              reps: item.reps!,
+              weightKg: item.weight_kg!,
+              bodyweightKg: bodyweightFor(item.bodyweight_kg),
+            },
+      );
+    }
+  }
+  return { entries, next: { completedSetKeys, celebrated } };
+}
+
+/** The short badge a record set shows: its broadest scope. */
+export function prBadgeLabel(labels: string[]): string {
+  if (labels.some((label) => label.startsWith('All-time'))) return 'All-time PR';
+  if (labels.some((label) => label.startsWith('Fresh start'))) return 'Fresh start PR';
+  if (labels.some((label) => label.startsWith('Block'))) return 'Block PR';
+  return 'PR';
 }

@@ -19,7 +19,8 @@ import { onTipTarget, type TipAction } from './tipActions';
 import { TipsProvider, useTips } from './Tips';
 import { TrainingBlockDialog } from './TrainingBlockDialog';
 import { TrainingBlocksContext } from './trainingBlocksContext';
-import { freshTips, loadTips, saveTips } from './tipsState';
+import { freshTips } from './tipsState';
+import { loadTips, saveTips } from './tipsStorage';
 import type {
   Exercise,
   ExerciseProgress,
@@ -526,13 +527,13 @@ describe('splits guide', () => {
     await click('Dismiss notification');
     expect(coachTitle()).toBe('Make it your split');
     await click('Use split');
-    expect(coachTitle()).toBe('Choose how it runs');
+    expect(coachTitle()).toBe('Pick a start date');
     await act(async () => back()!.click());
     expect(document.querySelector('.routine-use')).toBeNull();
     expect(coachTitle()).toBe('Make it your split');
     await click('Use split');
     await submit('.routine-use');
-    expect(api.routines.use).toHaveBeenCalledWith('new', expect.any(String), 'workouts');
+    expect(api.routines.use).toHaveBeenCalledWith('new', expect.any(String));
     expect(finished).toEqual(['split']);
   });
 });

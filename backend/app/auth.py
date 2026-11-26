@@ -19,10 +19,16 @@ from fastapi import Depends, Request, Response
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 from starlette.datastructures import Headers
+from starlette.requests import HTTPConnection
 from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
-from .client_versions import CLIENT_VERSION_HEADER, normalized_version
+from .client_versions import (
+    CLIENT_VERSION_HEADER,
+    NATIVE_CLIENT_HEADER,
+    normalized_native_client,
+    normalized_version,
+)
 from .config import DEFAULT_SESSION_COOKIE, Settings
 from .database import get_db
 from .errors import api_error
@@ -150,9 +156,15 @@ def prune_expired_sessions(db: Session) -> None:
 
 
 def create_user_session(
-    db: Session, user: User, settings: Settings, user_agent: str | None = None
+    db: Session,
+    user: User,
+    settings: Settings,
+    user_agent: str | None = None,
+    *,
+    client_version: str | None = None,
+    native_client: str | None = None,
 ) -> str:
-    """Store a new revocable session and return the raw token for the cookie."""
+    """Store a new revocable session and return the raw token."""
     prune_expired_sessions(db)
     token = new_session_token()
     now = utc_now()
@@ -165,6 +177,8 @@ def create_user_session(
             expires_at=now + session_lifetime(settings),
             last_seen_at=now,
             user_agent=(user_agent or "")[:300] or None,
+            client_version=client_version,
+            native_client=native_client,
         )
     )
     db.commit()
@@ -192,13 +206,31 @@ def not_authenticated():
     return api_error(401, "not_authenticated", "Sign in to continue.")
 
 
+def bearer_token(connection: HTTPConnection) -> str | None:
+    """The session token a native app sends as `Authorization: Bearer <token>`, if any.
+
+    Other schemes, such as Basic from a proxy in front of the app, are not ours and are ignored.
+    """
+    scheme, _, value = connection.headers.get("authorization", "").partition(" ")
+    return value.strip() if scheme.lower() == "bearer" else None
+
+
+def session_token(connection: HTTPConnection, settings: Settings) -> str | None:
+    """The session behind a request or socket: a native app's bearer token, else the cookie.
+
+    A bearer header is used on its own, so an invalid token never falls back to a cookie.
+    """
+    token = bearer_token(connection)
+    return token if token is not None else connection.cookies.get(settings.session_cookie)
+
+
 def get_auth_context(
     request: Request,
     response: Response,
     settings: AppSettings,
     db: Annotated[Session, Depends(get_db)],
 ) -> AuthContext:
-    token = request.cookies.get(settings.session_cookie)
+    token = session_token(request, settings)
     if not token:
         raise not_authenticated()
     row = db.execute(
@@ -217,18 +249,31 @@ def get_auth_context(
         db.commit()
         raise not_authenticated()
     version = normalized_version(request.headers.get(CLIENT_VERSION_HEADER))
+    native_client = (
+        normalized_native_client(request.headers.get(NATIVE_CLIENT_HEADER))
+        if bearer_token(request)
+        else None
+    )
     version_changed = version is not None and version != session.client_version
+    native_changed = native_client is not None and native_client != session.native_client
     if version_changed:
         session.client_version = version
+    if native_changed:
+        session.native_client = native_client
     lifetime = session_lifetime(settings)
     if expires_at - now < lifetime - min(SESSION_REFRESH_INTERVAL, lifetime / 2):
         # Sliding expiry: a sign-in only ends after a full lifetime without use. Refresh the
-        # browser cookie to match.
+        # browser cookie to match; a native app keeps its token and needs no cookie.
         session.expires_at = now + lifetime
         session.last_seen_at = user.last_active_at = now
         db.commit()
-        set_session_cookie(response, token, settings)
-    elif version_changed or now - as_utc(session.last_seen_at) > LAST_SEEN_WRITE_INTERVAL:
+        if bearer_token(request) is None:
+            set_session_cookie(response, token, settings)
+    elif (
+        version_changed
+        or native_changed
+        or now - as_utc(session.last_seen_at) > LAST_SEEN_WRITE_INTERVAL
+    ):
         session.last_seen_at = user.last_active_at = now
         db.commit()
     return AuthContext(user=user, session=session)

@@ -11,10 +11,14 @@ export function WorkoutTypesProvider({ children }: { children: ReactNode }) {
   const [savedExercises, setSavedExercises] = useState<Record<string, RoutineMovement[]>>({});
   const requestVersion = useRef(0);
   const exercisesVersion = useRef(0);
+  /** Set once the server has answered, after which this device's copy is not used. */
+  const typesKnown = useRef(false);
+  const exercisesKnown = useRef(false);
   const reloadExercises = useCallback(async () => {
     const version = ++exercisesVersion.current;
     try {
       const saved = await api.getWorkoutTypeExercises();
+      exercisesKnown.current = true;
       if (version === exercisesVersion.current)
         setSavedExercises(
           Object.fromEntries(saved.map((item) => [item.workout_type_id, item.movements])),
@@ -38,6 +42,7 @@ export function WorkoutTypesProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       const saved = await api.getWorkoutTypes();
+      typesKnown.current = true;
       if (version === requestVersion.current) setTypes(saved);
     } catch (reason) {
       if (version === requestVersion.current)
@@ -51,6 +56,29 @@ export function WorkoutTypesProvider({ children }: { children: ReactNode }) {
     setTypes(saved);
     setLoading(false);
     setError(null);
+  }, []);
+  useEffect(() => {
+    let active = true;
+    // This device's copies show first, so type names and colours do not change once a screen is
+    // up. The types still count as loading until the server answers, which a save waits for.
+    void api.saved
+      .workoutTypes()
+      .then((copy) => {
+        if (active && copy && requestVersion.current === 1 && !typesKnown.current) setTypes(copy);
+      })
+      .catch(() => undefined);
+    void api.saved
+      .workoutTypeExercises()
+      .then((copy) => {
+        if (active && copy && exercisesVersion.current === 1 && !exercisesKnown.current)
+          setSavedExercises(
+            Object.fromEntries(copy.map((item) => [item.workout_type_id, item.movements])),
+          );
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
   }, []);
   useEffect(() => {
     void reload();

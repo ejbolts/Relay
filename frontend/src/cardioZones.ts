@@ -1,4 +1,3 @@
-import type { CardioGoalCardSettings } from './homeLayout';
 import type { CardioGoalWeek, CardioPreferences, CardioSession } from './types';
 
 export const DEFAULT_CARDIO_PREFERENCES: CardioPreferences = {
@@ -27,16 +26,79 @@ export function cardioZoneNotice(
   return `Zone ${zone} · ${heartRate} bpm average (${range.min_bpm}–${range.max_bpm} bpm). ${credit()}`;
 }
 
-/** The goals a card tracks; a removed goal falls back to every goal. */
-export function trackedCardioGoals(goals: CardioGoalWeek[], settings: CardioGoalCardSettings) {
+/**
+ * The goals a card tracks; a removed goal falls back to every goal. `zone` is the card's setting
+ * (see `CardioGoalCardSettings` in homeLayout.ts): null tracks every goal.
+ */
+export function trackedCardioGoals<Settings extends { zone: number | null }>(
+  goals: CardioGoalWeek[],
+  settings: Settings,
+) {
   const chosen = goals.filter((goal) => goal.zone === settings.zone);
   return chosen.length ? chosen : goals;
+}
+
+/** The line under Home's cardio goal card. */
+export function cardioGoalStatus(goals: CardioGoalWeek[], daysLeft: number | null): string {
+  if (!goals.length) return 'Set a weekly goal in Cardio';
+  if (goals.every((goal) => goal.complete))
+    return goals.length === 1 ? 'Weekly goal reached' : 'All goals reached';
+  if (goals.length > 1)
+    return `${goals.filter((goal) => goal.complete).length} of ${goals.length} goals reached`;
+  const days = daysLeft === null ? '' : ` · ${daysLeft} ${daysLeft === 1 ? 'day' : 'days'} left`;
+  return `${goals[0].remaining_minutes} min to go${days}`;
 }
 
 export interface ZoneDraft {
   zone: number;
   min: string;
   max: string;
+}
+
+export const CARDIO_ZONE_NUMBERS = [1, 2, 3, 4, 5];
+export const CARDIO_ZONE_BPM = { min: 20, max: 250 };
+export const CARDIO_MAX_HEART_RATE = { min: 100, max: 250 };
+export const CARDIO_GOAL_MINUTES = { min: 1, max: 10_080 };
+
+export function cardioZoneDrafts(preferences: CardioPreferences): ZoneDraft[] {
+  return CARDIO_ZONE_NUMBERS.map((zone) => {
+    const saved = preferences.heart_rate_zones.find((item) => item.zone === zone);
+    return { zone, min: saved?.min_bpm.toString() ?? '', max: saved?.max_bpm.toString() ?? '' };
+  });
+}
+
+export function validCardioInteger(value: number, { min, max }: { min: number; max: number }) {
+  return Number.isInteger(value) && value >= min && value <= max;
+}
+
+export function parseCardioZoneRanges(zones: ZoneDraft[]) {
+  if (zones.every(({ min, max }) => min === '' && max === '')) return [];
+  if (zones.some(({ min, max }) => !min.trim() || !max.trim())) {
+    throw new Error('Enter a minimum and maximum for all five zones.');
+  }
+  const ranges = zones.map(({ zone, min, max }) => ({
+    zone,
+    min_bpm: Number(min),
+    max_bpm: Number(max),
+  }));
+  if (
+    ranges.some(
+      ({ min_bpm, max_bpm }) =>
+        !validCardioInteger(min_bpm, CARDIO_ZONE_BPM) ||
+        !validCardioInteger(max_bpm, CARDIO_ZONE_BPM),
+    )
+  ) {
+    throw new Error('Enter whole heart rates from 20 to 250 bpm.');
+  }
+  if (
+    ranges.some(
+      ({ min_bpm, max_bpm }, index) =>
+        min_bpm > max_bpm || (index > 0 && ranges[index - 1].max_bpm >= min_bpm),
+    )
+  ) {
+    throw new Error('Zone ranges must increase without overlapping.');
+  }
+  return ranges;
 }
 
 /** Share of maximum heart rate where each of the five zones starts, then where zone 5 ends. */
@@ -79,8 +141,8 @@ export function invalidZoneFields(zones: ZoneDraft[]): Set<string> {
   const invalid = new Set<string>();
   if (!zones.some((zone) => zone.min !== '' || zone.max !== '')) return invalid;
   zones.forEach((zone, index) => {
-    if (zone.min === '') invalid.add(`${zone.zone}:min`);
-    if (zone.max === '') invalid.add(`${zone.zone}:max`);
+    if (!validCardioInteger(Number(zone.min), CARDIO_ZONE_BPM)) invalid.add(`${zone.zone}:min`);
+    if (!validCardioInteger(Number(zone.max), CARDIO_ZONE_BPM)) invalid.add(`${zone.zone}:max`);
     if (zone.min !== '' && zone.max !== '' && Number(zone.min) > Number(zone.max)) {
       invalid.add(`${zone.zone}:min`);
       invalid.add(`${zone.zone}:max`);

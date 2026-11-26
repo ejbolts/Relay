@@ -104,3 +104,40 @@ def test_scan_upload_is_closed_even_when_reading_fails(monkeypatch, outcome):
                 "invalid_screenshot" if outcome == "empty" else "screenshot_too_large"
             )
         assert temporary.closed
+
+
+def _ocr_line(text: str, top: float) -> cardio_ocr.OcrLine:
+    return cardio_ocr.OcrLine(
+        text=text, confidence=0.99, left=40, top=top, right=400, bottom=top + 30
+    )
+
+
+def test_parse_cardio_ocr_reads_bpm_token_without_merging_leading_icon_digit():
+    parsed = cardio_ocr.parse_cardio_ocr(
+        [
+            _ocr_line("Workout Time", 0),
+            _ocr_line("0:30:00", 40),
+            _ocr_line("Avg. Heart Rate", 100),
+            _ocr_line("1 132 bpm", 140),
+        ]
+    )
+    assert parsed["average_heart_rate_bpm"] == 132
+    assert "average heart rate" in parsed["fields_found"]
+
+
+def test_parse_cardio_ocr_drops_out_of_range_metrics():
+    parsed = cardio_ocr.parse_cardio_ocr(
+        [
+            _ocr_line("Workout Time", 0),
+            _ocr_line("0:30:00", 40),
+            _ocr_line("Avg. Heart Rate", 100),
+            _ocr_line("1132 bpm", 140),
+            _ocr_line("Avg. Pace", 200),
+            _ocr_line("0'20 /km", 240),
+        ]
+    )
+    assert parsed["duration_minutes"] == 30
+    assert parsed["average_heart_rate_bpm"] is None
+    assert parsed["average_speed_kph"] is None
+    assert "average heart rate" not in parsed["fields_found"]
+    assert "average speed" not in parsed["fields_found"]

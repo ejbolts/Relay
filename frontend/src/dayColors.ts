@@ -6,7 +6,7 @@ export function workoutTypeColor(type: WorkoutType, categoryColors?: WorkoutType
 }
 
 /** Clear space between the arcs of a mixed day, so neighbouring colours never touch. */
-const RING_GAP_DEG = 10;
+export const RING_GAP_DEG = 10;
 
 /** A day's border: one flat colour, or equal arcs around it when the day mixes workout types. */
 export function dayRing(colors: string[]): string {
@@ -20,4 +20,15 @@ export function dayRing(colors: string[]): string {
       `transparent ${(index + 1) * step - half}deg ${(index + 1) * step}deg`,
   );
   return `conic-gradient(from -45deg, ${arcs.join(', ')})`;
+}
+
+/**
+ * A mixed day's colours as equal hard-edged stripes along `direction`, for bars and swatches; a
+ * single colour stays flat.
+ */
+export function dayStripes(colors: string[], direction = 'to bottom'): string {
+  if (colors.length <= 1) return colors[0] ?? '';
+  const step = 100 / colors.length;
+  const stops = colors.map((color, index) => `${color} ${index * step}% ${(index + 1) * step}%`);
+  return `linear-gradient(${direction}, ${stops.join(', ')})`;
 }

@@ -15,8 +15,13 @@ export function useExerciseLibrary(
   exercises: Exercise[],
   dataRevision: string | null,
   enabled = true,
+  /** False until the exercise list itself has loaded; trends can start loading before it. */
+  catalogueLoaded = true,
 ): ExerciseLibraryState {
-  const { block } = useTrainingBlocks();
+  const { block, loading: blocksLoading } = useTrainingBlocks();
+  // Trends are read for the current block, so the first read waits until the blocks have loaded.
+  const [blocksKnown, setBlocksKnown] = useState(!blocksLoading);
+  if (!blocksLoading && !blocksKnown) setBlocksKnown(true);
   const blockId = block?.id;
   const scope = `${blockId ?? 'all'}:${block?.start_date ?? ''}:${block?.end_date ?? ''}`;
   const loadedScope = useRef(scope);
@@ -28,9 +33,14 @@ export function useExerciseLibrary(
     .filter((exercise) => exercise.kind === 'strength')
     .map((exercise) => exercise.id)
     .join(',');
+  // A changed catalogue reads the trends again. The catalogue first arriving is not a change, so
+  // trends that started loading beside it are kept.
+  const firstIds = useRef<string | null>(null);
+  if (firstIds.current === null && catalogueLoaded) firstIds.current = ids;
+  const catalogue = firstIds.current === null || ids === firstIds.current ? '' : ids;
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || !blocksKnown) return;
     let cancelled = false;
     setLoading(true);
     if (loadedScope.current !== scope) {
@@ -52,7 +62,7 @@ export function useExerciseLibrary(
     return () => {
       cancelled = true;
     };
-  }, [enabled, dataRevision, ids, attempt, blockId, scope]);
+  }, [enabled, blocksKnown, dataRevision, catalogue, attempt, blockId, scope]);
 
   return { summaries, loading, error, retry: () => setAttempt((value) => value + 1) };
 }

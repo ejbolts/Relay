@@ -106,6 +106,41 @@ def test_sessions_record_their_release_for_the_admin_screen(client, other_client
     assert usage == [("1.2.1", 1, 1), (None, 1, 1)]
 
 
+def test_native_session_reports_compatibility_and_platform_versions_independently(client):
+    web = as_version("1.3.2")
+    client.get("/api/auth/me", headers=web)
+    native = {"X-Relay-Client": "android/0.1.0", **web}
+    login = client.post(
+        "/api/auth/login",
+        headers=native,
+        json={"username": client.user["username"], "password": TEST_PASSWORD, "session": "token"},
+    )
+    assert login.status_code == 200
+    bearer = {"Authorization": f"Bearer {login.json()['session_token']}"}
+
+    def usage():
+        (row,) = client.get("/api/admin/status", headers=web).json()["client_versions"]
+        assert (row["version"], row["users"], row["sessions"]) == ("1.3.2", 1, 2)
+        return row["native_clients"]
+
+    assert usage() == [{"client": "android/0.1.0", "sessions": 1}]
+    for value in ("android/<script>", "web/0.1.0"):
+        assert (
+            client.get("/api/auth/me", headers={**bearer, "X-Relay-Client": value}).status_code
+            == 200
+        )
+    # A cookie session ignores a native label, and missing/invalid headers don't erase it.
+    assert client.get("/api/auth/me", headers=native).status_code == 200
+    assert usage() == [{"client": "android/0.1.0", "sessions": 1}]
+    assert (
+        client.get(
+            "/api/auth/me", headers={**bearer, "X-Relay-Client": "android/0.2.0"}
+        ).status_code
+        == 200
+    )
+    assert usage() == [{"client": "android/0.2.0", "sessions": 1}]
+
+
 def test_admin_user_versions_group_devices_and_follow_updates_and_sign_out(client, other_client):
     now = utc_now()
     with SessionLocal() as db:
@@ -253,16 +288,15 @@ def load_migration(name, operations):
     return migration
 
 
-def test_session_version_migration_keeps_sign_ins_and_downgrades():
+@pytest.mark.parametrize("revision", ["0051_session_client_version", "0065_native_client"])
+def test_session_version_migration_keeps_sign_ins_and_downgrades(revision):
     engine = create_engine("sqlite://")
     with engine.begin() as connection:
         connection.execute(
             text("CREATE TABLE user_sessions (id VARCHAR(36) PRIMARY KEY, user_id VARCHAR(36))")
         )
         connection.execute(text("INSERT INTO user_sessions VALUES ('s', 'u')"))
-        migration = load_migration(
-            "0051_session_client_version", Operations(MigrationContext.configure(connection))
-        )
+        migration = load_migration(revision, Operations(MigrationContext.configure(connection)))
         migration.upgrade()
         assert connection.execute(text("SELECT * FROM user_sessions")).all() == [("s", "u", None)]
         migration.downgrade()

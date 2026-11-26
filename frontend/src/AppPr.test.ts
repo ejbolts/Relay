@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { calculateDraftPrs, calculateScopedDraftPrs, prToastLines } from './workoutPr';
+import {
+  calculateDraftPrs,
+  calculateScopedDraftPrs,
+  initialPrCelebrations,
+  newPrCelebrations,
+  prBadgeLabel,
+  prToastLines,
+} from './workoutPr';
 import { createWorkoutSet } from './workoutSets';
 import type { WorkoutDraftMovement } from './workoutMovements';
 import type { Exercise, ExerciseHistoryBaseline, TrackedWorkout, WorkoutSetInput } from './types';
@@ -336,7 +343,7 @@ describe('exercise weight and volume PRs', () => {
     expect(result.get('movement')?.size).toBe(1);
     expect(result.get('second')?.size).toBe(0);
   });
-  it('ignores cardio duration and distance, including legacy weight fields', () => {
+  it('gives a first cardio set no PR, nor a weight PR from legacy weight fields', () => {
     const cardio = { ...bench, kind: 'cardio' as const };
     const result = calculateDraftPrs(
       [draft([set(150, 20, { duration_seconds: 3600, distance_km: 20 })], cardio)],
@@ -448,7 +455,113 @@ describe('training-block PR scopes', () => {
   });
 });
 
+describe('cardio PRs', () => {
+  const running: Exercise = { ...bench, id: 'running', name: 'Running', kind: 'cardio' };
+  const rowing: Exercise = { ...running, id: 'rowing', name: 'Rowing' };
+  const run = (distance_km: number | null, duration_seconds: number | null, extra = {}) =>
+    set(null, null, { distance_km, duration_seconds, ...extra });
+  const cardioLabels = (
+    sets: WorkoutSetInput[],
+    workouts: TrackedWorkout[],
+    exercise = running,
+    older: Map<string, ExerciseHistoryBaseline> | null = null,
+  ) => [
+    ...calculateDraftPrs([draft(sets, exercise)], workouts, null, '2026-01-15', older)
+      .get('movement')!
+      .values(),
+  ];
+
+  it('rewards distance, duration and the fastest time over each covered set distance', () => {
+    const prior = [history([run(5, 1800)], 'prior', '2026-01-01', running)];
+    // 7.2 km in 36:00 covers 1 km in 5:00 and 5 km in 25:00, but not 10 km.
+    expect(cardioLabels([run(7.2, 2160)], prior)).toEqual([
+      ['Distance PR', 'Duration PR', 'Fastest 1 km', 'Fastest 5 km'],
+    ]);
+    expect(cardioLabels([run(3, 840)], prior)).toEqual([['Fastest 1 km']]);
+    expect(cardioLabels([run(5, 1800)], prior)).toEqual([]);
+    // Within one workout, the first set is the next set's baseline.
+    expect(cardioLabels([run(2, 600), run(3, 840)], [])).toEqual([
+      ['Distance PR', 'Duration PR', 'Fastest 1 km'],
+    ]);
+  });
+
+  it('keeps each exercise and its sport’s set distances separate', () => {
+    const prior = [
+      history([run(12, 3600)], 'run', '2026-01-01', running),
+      history([run(2.4, 576)], 'row', '2026-01-02', rowing),
+    ];
+    expect(cardioLabels([run(2, 470)], prior, rowing)).toEqual([['Fastest 500 m', 'Fastest 2 km']]);
+  });
+
+  it('ignores unfinished and warm-up sets', () => {
+    const prior = [
+      history(
+        [run(15, 3600, { completed: false }), run(15, 3600, { set_type: 'warmup' }), run(5, 1500)],
+        'prior',
+        '2026-01-01',
+        running,
+      ),
+    ];
+    expect(cardioLabels([run(6, 1800)], prior)).toEqual([['Distance PR', 'Duration PR']]);
+    expect(cardioLabels([run(20, 7200, { set_type: 'warmup' })], prior)).toEqual([]);
+  });
+
+  it('compares with cardio bests condensed by the server', () => {
+    const older = new Map<string, ExerciseHistoryBaseline>([
+      [
+        running.id,
+        {
+          exercise_id: running.id,
+          best_weight_kg: null,
+          reps_by_weight: [],
+          best_distance_km: 10,
+          best_duration_seconds: 3600,
+          best_times: [
+            { distance_km: 1, seconds: 280 },
+            { distance_km: 5, seconds: 1450 },
+          ],
+          latest: null,
+        },
+      ],
+    ]);
+    expect(cardioLabels([run(7.2, 2160)], [], running, older)).toEqual([]);
+    expect(cardioLabels([run(5, 1390)], [], running, older)).toEqual([
+      ['Fastest 1 km', 'Fastest 5 km'],
+    ]);
+  });
+
+  it('names a fresh start’s cardio records by their scope', () => {
+    const workouts = [
+      history([run(8, 2400)], 'before', '2026-01-01', running),
+      history([run(5, 1800)], 'since', '2026-06-01', running),
+    ];
+    expect([
+      ...calculateScopedDraftPrs(
+        [draft([run(5, 1750)], running)],
+        workouts,
+        null,
+        '2026-06-10',
+        null,
+        [],
+        [],
+        ['2026-06-01'],
+      )
+        .get('movement')!
+        .values(),
+    ]).toEqual([['Fresh start fastest 1 km', 'Fresh start fastest 5 km']]);
+  });
+});
+
 describe('personal record toast lines', () => {
+  it('describes a cardio set by what it covered', () => {
+    expect(
+      prToastLines(
+        [{ exercise: 'Running', labels: ['Distance PR'], summary: '7.2 km in 36:00' }],
+        'kg',
+      ),
+    ).toEqual([{ title: 'Distance PR', detail: 'Running · 7.2 km in 36:00' }]);
+  });
+
   it('names the records beaten, then the exercise and set', () => {
     expect(
       prToastLines(
@@ -472,5 +585,45 @@ describe('personal record toast lines', () => {
     const [lb] = prToastLines([entry], 'lb');
     expect(lb.detail).toContain('8 reps at 220.46 lb');
     expect(lb.detail).not.toContain(' kg');
+  });
+});
+
+describe('celebrating live records', () => {
+  const badges = (movement: WorkoutDraftMovement) =>
+    calculateDraftPrs([movement], [baseline], null, '2026-01-15');
+
+  it('celebrates a record set once, when it is first ticked, and never one it opened with', () => {
+    const opened = draft([set(105, 1)]);
+    const start = initialPrCelebrations([opened], badges(opened));
+    expect(newPrCelebrations([opened], badges(opened), start, () => null).entries).toEqual([]);
+
+    const live = draft([set(105, 1), set(100, 9, { completed: false })]);
+    const before = initialPrCelebrations([live], badges(live));
+    const ticked = {
+      ...live,
+      sets: live.sets.map((item) => ({ ...item, completed: true })),
+    };
+    const first = newPrCelebrations([ticked], badges(ticked), before, () => 80);
+    expect(first.entries).toEqual([
+      {
+        exercise: 'Barbell Bench Press',
+        labels: ['Volume PR for this weight'],
+        reps: 9,
+        weightKg: 100,
+        bodyweightKg: 80,
+      },
+    ]);
+    const unticked = { ...ticked, sets: [ticked.sets[0], { ...ticked.sets[1], completed: false }] };
+    const second = newPrCelebrations([unticked], badges(unticked), first.next, () => 80);
+    expect(newPrCelebrations([ticked], badges(ticked), second.next, () => 80).entries).toEqual([]);
+  });
+
+  it('names a badge by its broadest scope', () => {
+    expect(prBadgeLabel(['Block weight PR', 'All-time volume PR for this weight'])).toBe(
+      'All-time PR',
+    );
+    expect(prBadgeLabel(['Block weight PR', 'Fresh start weight PR'])).toBe('Fresh start PR');
+    expect(prBadgeLabel(['Block weight PR'])).toBe('Block PR');
+    expect(prBadgeLabel(['Weight PR'])).toBe('PR');
   });
 });

@@ -9,6 +9,7 @@ import {
 import { blockOn, blockProgress } from './trainingBlocks';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import type { BodyWeightGoal, PersonalRecord, TrackedWorkout } from './types';
+import { blockProgressText } from './weeklyReviewDisplay';
 
 const NO_GOALS: BodyWeightGoal[] = [];
 
@@ -69,13 +70,7 @@ export function WeeklyReviewBlock({
     <div className="weekly-review-block">
       <h3>
         Training block
-        {progress && (
-          <span className="num">
-            {progress.weeks === null || progress.week > progress.weeks
-              ? `Week ${progress.week}`
-              : `Week ${progress.week} of ${progress.weeks}`}
-          </span>
-        )}
+        {progress && <span className="num">{blockProgressText(progress)}</span>}
       </h3>
       {block && <p className="weekly-review-block-name">{block.name}</p>}
       {suggestion && (

@@ -3,38 +3,22 @@ import { api } from './api';
 import { workoutTypeColor } from './dayColors';
 import { Icon } from './Icon';
 import {
-  categoryForType,
-  nextTrainingDay,
+  plannedDayButtons,
+  plannedDayKicker,
   plannedDayOn,
-  routineDayFor,
-  type PlannedDay,
+  plannedDayStart,
+  plannedDayTitle,
+  plannedStartPlan,
+  type PlannedStart,
 } from './plannedDay';
 import { PopupDialog } from './PopupDialog';
 import { useWeightUnit } from './trainingPreferencesContext';
-import {
-  latestTopSets,
-  parseLocalDate,
-  upNextSetLabel,
-  type SessionTemplate,
-} from './trainingSummary';
-import type {
-  Routine,
-  TrackedWorkout,
-  TrainingSplit,
-  WorkoutCategory,
-  WorkoutType,
-  WorkoutTypeColors,
-} from './types';
-import { splitDayTemplate } from './upNext';
+import { latestTopSets, upNextSetLabel } from './trainingSummary';
+import type { Routine, TrackedWorkout, TrainingSplit, WorkoutTypeColors } from './types';
 import { useWorkoutTypes } from './workoutTypesContext';
 import './calendarDay.css';
 
-/** A split day to start, pre-filled the way Up next starts one. */
-export interface PlannedStart {
-  template: SessionTemplate | null;
-  category: WorkoutCategory;
-  type: WorkoutType;
-}
+export type { PlannedStart } from './plannedDay';
 
 // One request per split as saved; a refreshed dashboard hands over a new split object.
 const routineRequests = new WeakMap<TrainingSplit, Promise<Routine | null>>();
@@ -49,19 +33,6 @@ function loadSplitRoutine(split: TrainingSplit): Promise<Routine | null> {
     request.catch(() => routineRequests.delete(split));
   }
   return request;
-}
-
-function titleFor(plan: PlannedDay): string {
-  switch (plan.kind) {
-    case 'training':
-      return `${plan.type.name} day`;
-    case 'rest':
-      return 'Rest day';
-    case 'update':
-      return 'Update your split';
-    default:
-      return 'Nothing planned';
-  }
 }
 
 /**
@@ -94,12 +65,11 @@ export function PlannedDaySheet({
 }) {
   const { types, savedExercises } = useWorkoutTypes();
   const weightUnit = useWeightUnit();
-  const isToday = date === today;
   const plan = useMemo(() => plannedDayOn(split, date, today, types), [split, date, today, types]);
   // From today, a rest day can start the next training day early.
   const startPlan = useMemo(
-    () => (plan.kind === 'training' ? plan : isToday ? nextTrainingDay(split, today, types) : null),
-    [isToday, plan, split, today, types],
+    () => plannedStartPlan(plan, split, today, types),
+    [plan, split, today, types],
   );
   const needsRoutine = Boolean(startPlan && split?.routine_id);
   const [routine, setRoutine] = useState<Routine | null | 'loading'>(
@@ -119,42 +89,24 @@ export function PlannedDaySheet({
     };
   }, [needsRoutine, split]);
 
-  const start = useMemo<PlannedStart | null>(() => {
-    if (!startPlan || routine === 'loading') return null;
-    const { type, step } = startPlan;
-    const category = categoryForType(type);
-    return {
-      category,
-      type,
-      template: splitDayTemplate({
-        routineDay: routineDayFor(routine, step, type),
-        type,
-        category,
-        name: `${type.name} workout`,
-        workouts,
-        savedExercises,
-        today,
-        weightUnit,
-      }),
-    };
-  }, [routine, savedExercises, startPlan, today, weightUnit, workouts]);
+  const start = useMemo<PlannedStart | null>(
+    () =>
+      !startPlan || routine === 'loading'
+        ? null
+        : plannedDayStart({ startPlan, routine, workouts, savedExercises, today, weightUnit }),
+    [routine, savedExercises, startPlan, today, weightUnit, workouts],
+  );
   const latestSets = useMemo(() => latestTopSets(workouts, today), [workouts, today]);
   const loading = needsRoutine && routine === 'loading';
   const shownTemplate = plan.kind === 'training' ? start?.template : null;
 
-  const kicker = isToday
-    ? 'Today'
-    : parseLocalDate(date).toLocaleDateString('en-GB', {
-        weekday: 'long',
-        day: 'numeric',
-        month: 'long',
-      });
-  const canStartEmpty = isToday && !activeWorkout;
+  const kicker = plannedDayKicker(date, today);
+  const buttons = plannedDayButtons({ plan, startPlan, today, activeWorkout });
 
   return (
     <PopupDialog
       variant="sheet"
-      title={titleFor(plan)}
+      title={plannedDayTitle(plan)}
       kicker={kicker}
       className={`calendar-day-detail planned-day-sheet${plan.kind === 'training' ? ' has-type-dot' : ''}`}
       // The kicker's dot shows the training day's type colour.
@@ -191,42 +143,40 @@ export function PlannedDaySheet({
               </ul>
             )
           ))}
-        {activeWorkout ? (
+        {buttons.resume ? (
           <div className="next-session-actions planned-day-actions">
             <button className="pulse-button primary" type="button" onClick={onResume}>
               <Icon name="play" filled />
               Resume workout
             </button>
           </div>
-        ) : (startPlan && (isToday || plan.kind === 'training')) || canStartEmpty ? (
+        ) : buttons.start || buttons.empty ? (
           <div className="next-session-actions planned-day-actions">
-            {startPlan && (isToday || plan.kind === 'training') && (
+            {buttons.start && (
               <button
                 className="pulse-button primary"
                 type="button"
                 disabled={!start}
-                aria-label={
-                  isToday ? `Start ${startPlan.type.name}` : `Start ${startPlan.type.name} now`
-                }
+                aria-label={buttons.start.accessibilityLabel}
                 onClick={() => start && onStart(start)}
               >
                 <Icon name="play" filled />
-                {isToday ? `Start ${startPlan.type.name}` : 'Start now'}
+                {buttons.start.label}
               </button>
             )}
-            {canStartEmpty && (
+            {buttons.empty && (
               <button
-                className={`pulse-button primary${startPlan ? ' next-session-empty' : ''}`}
+                className={`pulse-button primary${buttons.empty.compact ? ' next-session-empty' : ''}`}
                 type="button"
                 aria-label="Start empty workout"
                 onClick={() => onStart(null)}
               >
-                {startPlan ? (
-                  'Empty'
+                {buttons.empty.compact ? (
+                  buttons.empty.label
                 ) : (
                   <>
                     <Icon name="plus" />
-                    Start empty workout
+                    {buttons.empty.label}
                   </>
                 )}
               </button>

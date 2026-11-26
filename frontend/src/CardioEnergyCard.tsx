@@ -1,17 +1,8 @@
 import { useState } from 'react';
 import { HelpPopup } from './HelpPopup';
 import type { CardioEnergyPeriod } from './types';
-import { fatEnergyEquivalent } from './cardioEnergy';
+import { CARDIO_ENERGY_PERIODS, cardioEnergyStats } from './cardioEnergy';
 import { useWeightUnit } from './trainingPreferencesContext';
-
-const periods: { value: CardioEnergyPeriod['period']; label: string }[] = [
-  { value: 'week', label: 'Week' },
-  { value: 'month', label: 'Month' },
-  { value: '3m', label: '3M' },
-  { value: '6m', label: '6M' },
-  { value: 'year', label: 'Year' },
-  { value: 'all', label: 'All' },
-];
 
 function prettyDate(value: string): string {
   return new Date(`${value}T12:00:00`).toLocaleDateString(undefined, {
@@ -32,15 +23,7 @@ export function CardioEnergyCard({
   const [period, setPeriod] = useState<CardioEnergyPeriod['period']>('week');
   const summary = summaries?.find((item) => item.period === period);
   if (!summary) return null;
-  const caloriesRecorded = summary.logged_sessions > 0;
-  const heartRate = summary.average_heart_rate_bpm ?? null;
-  const distance = summary.distance_km ?? 0;
-  const speed = summary.average_speed_kph ?? null;
-  const incline = summary.average_incline_percent ?? null;
-  const averageMets = summary.average_mets ?? null;
   const metsSessions = summary.mets_sessions ?? 0;
-  const elevation = summary.elevation_gain_m ?? 0;
-  const elevationSessions = summary.elevation_sessions ?? 0;
 
   return (
     <section className="panel cardio-energy-card cardio-progress-card" aria-label="Cardio progress">
@@ -76,7 +59,7 @@ export function CardioEnergyCard({
           role="group"
           aria-label="Cardio progress period"
         >
-          {periods.map((item) => (
+          {CARDIO_ENERGY_PERIODS.map((item) => (
             <button
               key={item.value}
               type="button"
@@ -94,110 +77,21 @@ export function CardioEnergyCard({
           </strong>
         </div>
         <div className="cardio-progress-grid" aria-live="polite" aria-atomic="true">
-          <article>
-            <span>Average MET</span>
-            <strong>{averageMets === null ? '—' : averageMets.toFixed(1)}</strong>
-            <small>
-              {metsSessions} {metsSessions === 1 ? 'session' : 'sessions'}
-            </small>
-          </article>
-          <article>
-            <span>Elevation gain</span>
-            <strong>
-              {elevationSessions === 0 ? (
-                '—'
-              ) : (
-                <>
-                  {Math.round(elevation).toLocaleString()}{' '}
-                  <small className="cardio-stat-unit">m</small>
-                </>
-              )}
-            </strong>
-            <small>
-              {elevationSessions} {elevationSessions === 1 ? 'session' : 'sessions'}
-            </small>
-          </article>
-          <article>
-            <span>Calories</span>
-            <strong>
-              {caloriesRecorded ? (
-                <>
-                  {summary.calories_kcal.toLocaleString()}{' '}
-                  <small className="cardio-stat-unit">kcal</small>
-                </>
-              ) : (
-                '—'
-              )}
-            </strong>
-            <small>
-              {summary.logged_sessions} of {summary.total_sessions}{' '}
-              {summary.total_sessions === 1 ? 'session' : 'sessions'}
-            </small>
-          </article>
-          <article>
-            <span>Fat energy equivalent</span>
-            <strong>
-              {caloriesRecorded
-                ? `≈ ${fatEnergyEquivalent(summary.calories_kcal, weightUnit)}`
-                : '—'}
-            </strong>
-          </article>
-          <article>
-            <span>Average HR</span>
-            <strong>
-              {heartRate === null ? (
-                '—'
-              ) : (
-                <>
-                  {heartRate.toFixed(0)} <small className="cardio-stat-unit">bpm</small>
-                </>
-              )}
-            </strong>
-            <small>
-              {summary.heart_rate_sessions ?? 0}{' '}
-              {(summary.heart_rate_sessions ?? 0) === 1 ? 'session' : 'sessions'}
-            </small>
-          </article>
-          <article>
-            <span>Distance</span>
-            <strong>
-              {(summary.distance_sessions ?? 0) === 0 ? (
-                '—'
-              ) : (
-                <>
-                  {distance.toFixed(2)} <small className="cardio-stat-unit">km</small>
-                </>
-              )}
-            </strong>
-            <small>
-              {summary.distance_sessions ?? 0}{' '}
-              {(summary.distance_sessions ?? 0) === 1 ? 'session' : 'sessions'}
-            </small>
-          </article>
-          <article>
-            <span>Average speed</span>
-            <strong>
-              {speed === null ? (
-                '—'
-              ) : (
-                <>
-                  {speed.toFixed(1)} <small className="cardio-stat-unit">km/h</small>
-                </>
-              )}
-            </strong>
-            <small>
-              {summary.speed_sessions ?? 0}{' '}
-              {(summary.speed_sessions ?? 0) === 1 ? 'session' : 'sessions'}
-            </small>
-          </article>
-          <article>
-            <span>Average incline</span>
-            <strong>{incline === null ? '—' : `${incline.toFixed(1)}%`}</strong>
-            <small>
-              {summary.incline_sessions ?? 0}{' '}
-              {(summary.incline_sessions ?? 0) === 1 ? 'session' : 'sessions'}
-            </small>
-          </article>
+          {cardioEnergyStats(summary, weightUnit).map(({ label, value, unit, count }) => (
+            <article key={label}>
+              <span>{label}</span>
+              <strong>
+                {value}
+                {unit && (
+                  <>
+                    {' '}
+                    <small className="cardio-stat-unit">{unit}</small>
+                  </>
+                )}
+              </strong>
+              {count && <small>{count}</small>}
+            </article>
+          ))}
         </div>
       </div>
     </section>

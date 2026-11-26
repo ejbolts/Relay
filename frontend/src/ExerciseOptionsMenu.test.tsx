@@ -64,15 +64,15 @@ it('dismisses on outside pointer or keyboard focus without stealing focus', asyn
   expect(merge).not.toHaveBeenCalled();
 });
 
-it('offers rename and hide, moves between items with the arrow keys and shows hidden state', async () => {
-  const rename = vi.fn();
+it('offers edit and hide, moves between items with the arrow keys and shows hidden state', async () => {
+  const edit = vi.fn();
   const toggle = vi.fn();
   await act(async () =>
     root.render(
       <ExerciseOptionsMenu
         exerciseName="My bench press"
         hidden
-        onRename={rename}
+        onEdit={edit}
         onMerge={merge}
         onToggleHidden={toggle}
       />,
@@ -81,7 +81,7 @@ it('offers rename and hide, moves between items with the arrow keys and shows hi
   await click(trigger());
   const items = () => [...host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')];
   expect(items().map((entry) => entry.textContent)).toEqual([
-    'Rename',
+    'Edit',
     'Merge with another exercise',
     'Show in exercise lists',
   ]);
@@ -103,7 +103,7 @@ it('offers rename and hide, moves between items with the arrow keys and shows hi
   expect(toggle).toHaveBeenCalledOnce();
   await click(trigger());
   await click(items()[0]);
-  expect(rename).toHaveBeenCalledExactlyOnceWith(trigger());
+  expect(edit).toHaveBeenCalledExactlyOnceWith(trigger());
 });
 it('renders nothing when no option applies', async () => {
   await act(async () => root.render(<ExerciseOptionsMenu exerciseName="Bench press" />));

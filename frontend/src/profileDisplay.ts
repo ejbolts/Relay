@@ -15,3 +15,8 @@ export function formatMemberSince(
   if (Number.isNaN(date.getTime())) return null;
   return date.toLocaleDateString('en-GB', { month, year: 'numeric' });
 }
+
+/** A profile total, such as "1,204", or a dash while it is unknown. */
+export function formatProfileTotal(value: number | null | undefined): string {
+  return value == null ? '–' : value.toLocaleString();
+}

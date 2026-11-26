@@ -2,29 +2,18 @@ import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import { Icon } from './Icon';
 import { RoutineExerciseSearch } from './RoutineExerciseSearch';
 import { REP_RANGE_PRESETS, repRangeFromKey, repRangeKey, repRangeLabel } from './repProgression';
+import {
+  atPlannedMinimum,
+  canPlanMore,
+  MAX_PLANNED_EXERCISES,
+  newRoutineMovement,
+  planFewer,
+  planMore,
+  plannedMinutes,
+  swapPlannedExercise,
+} from './splitEditing';
 import { exerciseMuscles } from './splitTargets';
-import type { Exercise, RoutineMovement, RoutineSet } from './types';
-
-const emptyRoutineSet = (): RoutineSet => ({
-  reps: null,
-  weight_kg: null,
-  duration_seconds: null,
-  distance_km: null,
-  rest_seconds: 180,
-  set_type: 'normal',
-});
-
-/** A new planned exercise: three empty sets, or a 30 minute session for cardio. */
-function newRoutineMovement(exercise: Exercise): RoutineMovement {
-  return {
-    exercise_id: exercise.id,
-    exercise,
-    sets:
-      exercise.kind === 'cardio'
-        ? [{ ...emptyRoutineSet(), duration_seconds: 1800 }]
-        : [emptyRoutineSet(), emptyRoutineSet(), emptyRoutineSet()],
-  };
-}
+import type { Exercise, RoutineMovement } from './types';
 
 /**
  * Planned exercises with set (or cardio minute) steppers and a search to add more, shared by
@@ -66,10 +55,8 @@ export function RoutineMovementList({
     <>
       {movements.map((m, mi) => {
         const cardio = m.exercise.kind === 'cardio';
-        const minutes = Math.round(
-          m.sets.reduce((total, set) => total + (set.duration_seconds ?? 0), 0) / 60,
-        );
-        const atMinimum = cardio ? minutes <= 5 : m.sets.length <= 1;
+        const minutes = plannedMinutes(m);
+        const atMinimum = atPlannedMinimum(m);
         const name = m.exercise.name;
         return (
           <div
@@ -91,14 +78,7 @@ export function RoutineMovementList({
                 value={m.exercise_id}
                 onChange={(event) => {
                   const exercise = exercises.find((e) => e.id === event.target.value)!;
-                  movement(mi, (current) => ({
-                    ...current,
-                    exercise_id: exercise.id,
-                    exercise,
-                    sets:
-                      exercise.kind === current.exercise.kind ? current.sets : [emptyRoutineSet()],
-                    rep_range: exercise.kind === 'cardio' ? null : current.rep_range,
-                  }));
+                  movement(mi, (current) => swapPlannedExercise(current, exercise));
                 }}
               >
                 {[m.exercise, ...exercises.filter((e) => e.id !== m.exercise_id)].map((e) => (
@@ -120,17 +100,7 @@ export function RoutineMovementList({
                       ? `5 fewer minutes of ${name} on ${target}`
                       : `One fewer set of ${name} on ${target}`
                 }
-                onClick={() =>
-                  movement(mi, (current) => {
-                    if (atMinimum) return null;
-                    if (!cardio) return { ...current, sets: current.sets.slice(0, -1) };
-                    return {
-                      ...current,
-                      // One planned duration; earlier interval sets fold into it.
-                      sets: [{ ...current.sets[0], duration_seconds: (minutes - 5) * 60 }],
-                    };
-                  })
-                }
+                onClick={() => movement(mi, planFewer)}
               >
                 <Icon name={atMinimum && !cards ? 'close' : 'minus'} />
               </button>
@@ -142,20 +112,8 @@ export function RoutineMovementList({
                     ? `5 more minutes of ${name} on ${target}`
                     : `One more set of ${name} on ${target}`
                 }
-                disabled={cardio ? minutes >= 600 : m.sets.length >= 50}
-                onClick={() =>
-                  movement(mi, (current) =>
-                    cardio
-                      ? {
-                          ...current,
-                          sets: [{ ...current.sets[0], duration_seconds: (minutes + 5) * 60 }],
-                        }
-                      : {
-                          ...current,
-                          sets: [...current.sets, { ...current.sets.at(-1)!, set_type: 'normal' }],
-                        },
-                  )
-                }
+                disabled={!canPlanMore(m)}
+                onClick={() => movement(mi, planMore)}
               >
                 <Icon name="plus" />
               </button>
@@ -199,7 +157,7 @@ export function RoutineMovementList({
           target={target}
           label={cards ? 'Add exercise' : undefined}
           exercises={exercises}
-          disabled={movements.length >= 20 || exercises.length === 0}
+          disabled={movements.length >= MAX_PLANNED_EXERCISES || exercises.length === 0}
           onAdd={(exercise) => onChange([...movements, newRoutineMovement(exercise)])}
         />
       )}

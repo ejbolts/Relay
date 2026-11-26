@@ -1,5 +1,5 @@
 {
-  "version": "1.3.2",
+  "version": "1.3.3",
   "notesVersion": "1.3.0",
   "date": "2026-11-19",
   "title": "See how you measure up",
@@ -70,7 +70,22 @@
     "**Settings:** Units, week start and set goals save themselves; a faster admin console and forgiving search.",
     "**Appearance:** A new Automatic mode follows your phone's light or dark setting, plus light-mode readability fixes.",
     "**Sign-in:** Forgot username? asks your admin; Sign out affects only this device, offline sets survive being signed out elsewhere, and display names are unique.",
-    "**Training blocks:** Blocks without a planned end say No set date."
+    "**Training blocks:** Blocks without a planned end say No set date.",
+    "**Workout finish and cardio scan:** Clearer errors when a set value is out of range or sync fails, and stray characters next to heart rate are ignored when scanning cardio screenshots.",
+    "**Opening Relay:** Your workouts, exercises and records appear straight away from saved copies, and every tab's data loads together.",
+    "**Splits:** Skip Up next's day with Undo, splits always follow your logged workouts, and a split day can mix workout types such as Upper body + Cardio.",
+    "**Calendar:** Today's square shows the colour of the workout planned or being logged, in arcs on a mixed day, and friends' calendars show their split.",
+    "**Live logger:** Exercises stay open after their last set with a collapse button beside Add set, a rest timer button sits in the header, cards say when you last did each exercise and planned days fill blanks from last time.",
+    "**Default rest:** New sets no longer start with 3:00; choose a Default rest in Settings or leave it at None.",
+    "**Pop-ups:** Each pop-up stays as long as it needs, from 2.5 seconds for a deleted set's Undo to 7 for errors, and closing a dialog no longer leaves a highlight ring.",
+    "**Cardio PRs:** Each cardio exercise records its longest distance, longest session and fastest times over distances that suit it, such as 5 km for running.",
+    "**Profiles:** All sessions, Workouts and Cardio tabs, reactions and comments on each workout, colours that match the calendar and a Head to head card that no longer pops in.",
+    "**Social:** Feed cards list up to three exercises with icons, +N exercises opens the full workout, and Reply on a comment notice opens it in the feed.",
+    "**Exercises:** EZ Bar Preacher Curl is built in, and Edit on a custom exercise changes its name or equipment.",
+    "**Home:** The training block timeline marks today, and cards keep wiggling after a Customise dialog closes.",
+    "**Machine conversions:** Clearing a machine's weight and typing a new one keeps its conversion.",
+    "**Reliability:** A slow check-in save no longer stalls the server or sticks on Waiting to sync, and screens keep loading while the server saves.",
+    "**Relay app:** The server is ready for the Relay app for iPhone and Android, with secure sign-in, phone alerts, friend links that open the app, YouTube from the app, live presence and app builds in Admin."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#130",
   "video": {

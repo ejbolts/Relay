@@ -258,7 +258,7 @@ def test_account_snapshot_preserves_only_the_owners_split_and_custom_types(clien
         ).fetchall()
         assert len(rows) == 1
         assert rows[0][0] == client.user["id"]
-        progress = ("next_step", "rest_saved", "next_date", "missed_days")
+        progress = ("next_step", "rest_saved", "next_date", "missed_days", "shift")
         stored = {key: value for key, value in saved.items() if key not in progress}
         assert json.loads(rows[0][1]) == stored
         assert connection.execute("SELECT id FROM workout_types").fetchall() == [(custom["id"],)]
@@ -431,8 +431,8 @@ def test_a_followed_split_misses_only_the_days_off_beyond_its_saved_rest(client)
     assert client.get("/api/training-split", params={"on_date": "2026-10-31"}).json()[
         "missed_days"
     ] == [
-        {"workout_date": "2026-10-28", "workout_type_id": "lower"},
-        {"workout_date": "2026-10-29", "workout_type_id": "lower"},
+        {"workout_date": "2026-10-28", "workout_type_id": "lower", "workout_type_ids": ["lower"]},
+        {"workout_date": "2026-10-29", "workout_type_id": "lower", "workout_type_ids": ["lower"]},
     ]
 
 

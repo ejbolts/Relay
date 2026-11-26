@@ -481,7 +481,21 @@ class TrainingBlockSummaryRead(BaseModel):
     previous: BlockStatsRead | None = None
 
 
-class HistoryBestRead(BaseModel):
+class DistanceTimeRead(BaseModel):
+    distance_km: float
+    seconds: float
+
+
+class CardioBestsRead(BaseModel):
+    """A cardio exercise's bests, for live distance, time and pace PR checks."""
+
+    best_distance_km: float | None = None
+    best_duration_seconds: float | None = None
+    # The fastest time over each set distance reached, shortest distance first.
+    best_times: list[DistanceTimeRead] = Field(default_factory=list)
+
+
+class HistoryBestRead(CardioBestsRead):
     best_relative_strength: float | None = None
     best_weight_kg: float | None
     reps_by_weight: list[WeightRepsRead]
@@ -495,7 +509,7 @@ class FreshStartBaselineRead(HistoryBestRead):
     start_date: date
 
 
-class ExerciseHistoryBaselineRead(BaseModel):
+class ExerciseHistoryBaselineRead(CardioBestsRead):
     """An exercise's history before a date, condensed for PR checks and set suggestions."""
 
     block_bests: list[BlockHistoryBaselineRead] = Field(default_factory=list)
@@ -595,19 +609,38 @@ class WorkoutTypeExercisesRead(BaseModel):
     movements: list[RoutineMovementRead] = []
 
 
+# A mixed day plans more than one workout type, such as Upper body + Cardio. The first type stays
+# in ``workout_type_id`` (what older apps read); the others follow here, in order.
+MAX_EXTRA_DAY_TYPES = 3
+DayTypeId = Annotated[str, Field(min_length=1, max_length=64)]
+
+
+def _check_extra_types(primary: str | None, extras: list[str]) -> None:
+    if primary is None and extras:
+        raise ValueError("Rest days cannot include workout types.")
+    if primary in extras or len(set(extras)) != len(extras):
+        raise ValueError("Choose each workout type once per day.")
+
+
 class RoutineDay(BaseModel):
     workout_type_id: str | None = None
+    extra_workout_type_ids: list[DayTypeId] = Field(
+        default_factory=list, max_length=MAX_EXTRA_DAY_TYPES
+    )
     movements: list[RoutineMovement] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")
     def rest_has_no_exercises(self) -> RoutineDay:
         if self.workout_type_id is None and self.movements:
             raise ValueError("Rest days cannot contain exercises.")
+        _check_extra_types(self.workout_type_id, self.extra_workout_type_ids)
         return self
 
 
 class RoutineDayRead(RoutineDay):
     workout_type: WorkoutTypeRead | None = None
+    # A mixed day's other types, resolved like ``workout_type`` for viewers without them.
+    extra_workout_types: list[WorkoutTypeRead] = []
     movements: list[RoutineMovementRead] = []
 
 
@@ -678,6 +711,8 @@ class WorkoutRecommendationRead(BaseModel):
     routine_day: RoutineDayRead | None = None
     # On a split's rest day: the next training day, which starting a workout then trains.
     next_training_day: WorkoutRecommendationRead | None = None
+    # The split day's other workout types on a mixed day; the workout starts as ``workout_type``.
+    extra_workout_types: list[WorkoutTypeRead] = Field(default_factory=list)
 
 
 class WeeklyMuscleContributionRead(BaseModel):
@@ -910,6 +945,19 @@ class CardioSessionRead(CardioSessionFields):
 class TrainingSplitStep(BaseModel):
     # A null type is a rest day; custom types retain their account-owned identity.
     workout_type_id: str | None = Field(default=None, min_length=1, max_length=64)
+    extra_workout_type_ids: list[DayTypeId] = Field(
+        default_factory=list, max_length=MAX_EXTRA_DAY_TYPES
+    )
+
+    @model_validator(mode="after")
+    def distinct_types(self) -> TrainingSplitStep:
+        _check_extra_types(self.workout_type_id, self.extra_workout_type_ids)
+        return self
+
+    @property
+    def type_ids(self) -> list[str]:
+        """Every workout type the day plans, the main one first; empty on a rest day."""
+        return [self.workout_type_id, *self.extra_workout_type_ids] if self.workout_type_id else []
 
 
 class TrainingSplit(BaseModel):
@@ -937,6 +985,21 @@ class TrainingSplit(BaseModel):
 class SplitMissedDay(BaseModel):
     workout_date: date
     workout_type_id: str
+    # Every type the missed day planned, ``workout_type_id`` first.
+    workout_type_ids: list[str] = Field(default_factory=list)
+
+
+class SplitShift(BaseModel):
+    # From this date the split stands at this step, after a skipped day. ``rest_saved`` carries
+    # a workout-following split's saved rest across it.
+    from_date: date
+    step: int = Field(ge=0, lt=28)
+    rest_saved: bool = False
+
+
+class SplitPositionUpdate(BaseModel):
+    step: int = Field(ge=0, lt=28)
+    rest_saved: bool = False
 
 
 class TrainingSplitRead(TrainingSplit):
@@ -947,6 +1010,8 @@ class TrainingSplitRead(TrainingSplit):
     # Past days, within the last year, whose planned workout was not done. A workout-following
     # split leaves out the one day off it absorbs as a rest.
     missed_days: list[SplitMissedDay] = Field(default_factory=list)
+    # The latest skip, which calendar previews count from instead of the start.
+    shift: SplitShift | None = None
 
 
 class TrainingPreferencesUpdate(BaseModel):
@@ -962,6 +1027,9 @@ class TrainingPreferencesUpdate(BaseModel):
         ]
         | None
     ) = Field(default=None, max_length=200)
+    # The rest a new set gets when last time gives none. Unset by default; null clears it, and
+    # omission (an older app) keeps the saved value.
+    default_rest_seconds: int | None = Field(default=None, ge=1, le=7_200)
 
 
 class TrainingPreferencesRead(TrainingPreferencesUpdate):

@@ -1,7 +1,7 @@
 import { setKindOf } from './setFieldValues';
 import type { WorkoutSetInput } from './types';
+import type { WorkoutDraftSet } from './workoutMovements';
 import type { ExerciseHistoryEntry } from './exerciseHistory';
-import { DEFAULT_REST_SECONDS } from './workoutSets';
 
 /** Match the nth set of its kind, so an extra warm-up cannot shift working-set history. */
 export function previousSetRests(
@@ -26,13 +26,14 @@ export function previousSetRests(
 
 /**
  * The rest to give a set that has none shown: its own hidden rest, else what this set had last
- * time, else the nearest rest in this exercise, else the default.
+ * time, else the nearest rest in this exercise, else the user's default rest, if any.
  */
 export function restToAdd(
   sets: WorkoutSetInput[],
   index: number,
   history: ExerciseHistoryEntry[],
-): number {
+  defaultRest: number | null = null,
+): number | undefined {
   const own = sets[index].rest_seconds;
   if (own && own > 0) return own;
   const previous = previousSetRests(sets, index, history).find((rest) => (rest.seconds ?? 0) > 0);
@@ -42,5 +43,23 @@ export function restToAdd(
       if (other?.rest_seconds && other.rest_seconds > 0) return other.rest_seconds;
     }
   }
-  return DEFAULT_REST_SECONDS;
+  return defaultRest ?? undefined;
+}
+
+/**
+ * Whether a set's rest shows between it and the next set: with Show rest times on, a strength
+ * set's rest shows once the set is logged, or straight away on a set that isn't a suggestion
+ * from last time, unless "+" slotted the set in (`restRevealed`).
+ */
+export function restRowShown(
+  item: Pick<WorkoutDraftSet, 'completed' | 'restRevealed' | 'fromPrevious' | 'rest_seconds'>,
+  cardio: boolean,
+  showRestTimes: boolean,
+): boolean {
+  return (
+    !cardio &&
+    showRestTimes &&
+    (item.completed || (item.restRevealed ?? !item.fromPrevious)) &&
+    (item.rest_seconds ?? 0) > 0
+  );
 }

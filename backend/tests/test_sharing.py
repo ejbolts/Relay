@@ -72,6 +72,29 @@ def jpeg() -> bytes:
     return buffer.getvalue()
 
 
+def test_shared_consistency_includes_an_enabled_split_without_its_routine(client, other_client):
+    share(other_client)
+    assert profile(client, other_client).json()["consistency"]["training_split"] is None
+    start = date.today() - timedelta(days=4)
+    split = {
+        "name": "Upper / Lower",
+        "start_date": start.isoformat(),
+        "progression": "calendar",
+        "steps": [{"workout_type_id": "upper"}, {"workout_type_id": "lower"}],
+    }
+    assert other_client.put("/api/training-split", json=split).is_success
+    shared = profile(client, other_client).json()["consistency"]["training_split"]
+    assert shared["name"] == "Upper / Lower"
+    assert shared["routine_id"] is None
+    assert [step["workout_type_id"] for step in shared["steps"]] == ["upper", "lower"]
+    # Nothing was logged, so every planned day before today was missed.
+    assert [day["workout_date"] for day in shared["missed_days"]] == [
+        (start + timedelta(days=offset)).isoformat() for offset in range(4)
+    ]
+    assert other_client.put("/api/training-split", json={**split, "enabled": False}).is_success
+    assert profile(client, other_client).json()["consistency"]["training_split"] is None
+
+
 @pytest.mark.parametrize("stored_choices", [True, False])
 def test_private_owner_can_preview_without_exposing_profile(client, other_client, stored_choices):
     share(other_client)
@@ -690,6 +713,45 @@ def test_shared_workout_filters_cover_full_history_and_filtered_pagination(clien
         ).status_code
         == 422
     )
+
+
+def test_shared_workouts_split_strength_from_cardio_only_sessions(client, other_client):
+    bench = named(client, "Barbell Bench Press")["id"]
+    running = named(client, "Running")["id"]
+    today = date.today()
+    sessions = {
+        "Push": [{"exercise_id": bench, "sets": [{"reps": 8, "weight_kg": 60}]}],
+        "Run": [{"exercise_id": running, "sets": [{"duration_seconds": 1500, "distance_km": 5}]}],
+        "Push and run": [
+            {"exercise_id": bench, "sets": [{"reps": 8, "weight_kg": 60}]},
+            {"exercise_id": running, "sets": [{"duration_seconds": 600}]},
+        ],
+    }
+    for days, (name, movements) in enumerate(sessions.items()):
+        response = client.post(
+            "/api/workouts",
+            json={
+                "name": name,
+                "workout_date": (today - timedelta(days=days)).isoformat(),
+                "category": "other",
+                "movements": movements,
+            },
+        )
+        assert response.status_code == 201, response.text
+    share(client, "public")
+    base = f"/api/sharing/profiles/{client.user['id']}/workouts"
+
+    def names(**params):
+        page = other_client.get(base, params=params).json()
+        assert page["total"] == len(page["workouts"])
+        return [workout["name"] for workout in page["workouts"]]
+
+    assert names() == ["Push", "Run", "Push and run"]
+    # A workout with any strength exercise stays under Workouts, as the profile counts it.
+    assert names(kind="strength") == ["Push", "Push and run"]
+    assert names(kind="cardio") == ["Run"]
+    assert names(kind="cardio", exercise_id=bench) == []
+    assert other_client.get(base, params={"kind": "yoga"}).status_code == 422
 
 
 def test_shared_filter_options_respect_profile_access_and_photo_sharing(client, other_client):

@@ -10,7 +10,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
 from starlette.concurrency import run_in_threadpool
 
-from .auth import as_utc, hash_token, origin_matches_host, utc_now
+from .auth import as_utc, hash_token, origin_matches_host, session_token, utc_now
 from .database import SessionLocal
 from .models import User, UserSession
 
@@ -68,7 +68,7 @@ async def session_socket(websocket: WebSocket) -> None:
     if origin is not None and not origin_matches_host(origin, websocket.headers.get("host")):
         await websocket.close(code=1008)
         return
-    token = websocket.cookies.get(websocket.app.state.settings.session_cookie)
+    token = session_token(websocket, websocket.app.state.settings)
     user_id = await run_in_threadpool(session_user_id, token) if token else None
     await websocket.accept()
     if user_id is None:

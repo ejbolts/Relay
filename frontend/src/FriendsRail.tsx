@@ -1,26 +1,11 @@
 import { useEffect } from 'react';
-import { lastWeek } from './friendFeedData';
+import { firstName, lastWeek } from './friendFeedData';
 import { PresenceAvatar } from './PresenceAvatar';
 import { byLiveActivity, presenceStatus, presenceText, useNow, workoutElapsed } from './presence';
-import {
-  prefetchSharedProfile,
-  prefetchSharedProfiles,
-  PREFETCH_LIMIT,
-} from './sharedProfileCache';
+import { PREFETCH_REFRESH_MS, profilePrefetchTargets, profileSignature } from './profilePrefetch';
+import { prefetchSharedProfile, prefetchSharedProfiles } from './sharedProfileCache';
 import type { FriendActivity } from './types';
 import { useUserSession } from './userContext';
-
-/** How often the profiles at the start of the row are refreshed while the feed stays open. */
-const PREFETCH_REFRESH_MS = 5 * 60_000;
-
-/** Changes when a friend logs a session, so their background copy is loaded again. */
-function profileSignature(friend: FriendActivity): string {
-  return `${friend.latest?.workout.id ?? ''}:${friend.recent_workout_count}`;
-}
-
-function firstName(name: string): string {
-  return name.trim().split(/\s+/)[0] || name;
-}
 
 /**
  * The feed's row of friends: training now first, then online, with a dot for each of the last
@@ -43,11 +28,7 @@ export function FriendsRail({
   const ordered = byLiveActivity(friends, (friend) => friend.presence);
   const week = lastWeek(today);
   // Opening one of the first few friends is instant: their profiles load while the feed is idle.
-  const prefetchKey = JSON.stringify(
-    ordered
-      .slice(0, PREFETCH_LIMIT)
-      .map((friend) => ({ id: friend.id, signature: profileSignature(friend) })),
-  );
+  const prefetchKey = JSON.stringify(profilePrefetchTargets(friends));
   useEffect(() => {
     if (!active) return;
     const targets = JSON.parse(prefetchKey) as { id: string; signature: string }[];

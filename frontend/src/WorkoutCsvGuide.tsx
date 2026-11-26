@@ -1,9 +1,10 @@
 ﻿import { useRef } from 'react';
 import { PopupDialog } from './PopupDialog';
 import { useWeightUnit } from './trainingPreferencesContext';
-import { downloadWorkoutCsvTemplate } from './workoutCsvTemplate';
+import { downloadWorkoutCsvTemplate } from './workoutCsvTemplateDownload';
 import { WorkoutImportSource } from './WorkoutImportSource';
 import type { WorkoutImportOptions } from './types';
+import { IMPORT_FILE_TYPES, IMPORT_GUIDE_INTRO } from './workoutImport';
 import './workoutCsvGuide.css';
 
 /** A quick guide to choosing the source app and its original CSV export. */
@@ -47,10 +48,7 @@ export function WorkoutCsvGuide({
       }
     >
       <div className="workout-csv-guide-body">
-        <p>
-          Select the app your CSV came from. Export your history as CSV from that app, then choose
-          the original file below. No column changes are needed.
-        </p>
+        <p>{IMPORT_GUIDE_INTRO}</p>
         <WorkoutImportSource value={options} onChange={onOptionsChange} />
         <p className="workout-csv-guide-note">
           Review the totals and warnings, then choose <strong>Save import</strong>. Nothing is saved
@@ -71,7 +69,7 @@ export function WorkoutCsvGuide({
         className="sr-only"
         aria-label="Workout CSV file"
         type="file"
-        accept=".csv,.tsv,.txt,text/csv,text/tab-separated-values"
+        accept={IMPORT_FILE_TYPES.join(',')}
         onChange={(event) => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = '';

@@ -1,4 +1,4 @@
-import { exerciseSetCredits } from './splitTargets';
+import { goalMuscles } from './muscleGoalEditing';
 import type { MuscleSetGoals } from './muscleSetGoals';
 import type { Exercise } from './types';
 import './muscleGoals.css';
@@ -17,12 +17,7 @@ export function MuscleGoalEditor({
   /** Leaving a target's field, for saving what was typed. */
   onCommit?: () => void;
 }) {
-  const muscles = [
-    ...new Set([
-      ...exercises.flatMap((exercise) => exerciseSetCredits(exercise).map((item) => item.muscle)),
-      ...Object.keys(goals),
-    ]),
-  ].sort((a, b) => a.localeCompare(b));
+  const muscles = goalMuscles(exercises, goals);
   const custom = Object.keys(goals).length;
   const reset = (muscle: string) => {
     const next = { ...goals };
