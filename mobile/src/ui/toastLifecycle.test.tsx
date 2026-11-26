@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { AccessibilityInfo, AppState, Platform } from 'react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { AccessibilityInfo, AppState, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { nextSessionEpoch } from '../session/sessionEpoch';
 import { pendingActions } from './pendingActions';
@@ -254,4 +254,105 @@ it('lets only its own token clear a pending removal', () => {
   pendingActions.remove(second!);
   expect(pendingActions.add('friend', 'casey', account)).not.toBeNull();
   pendingActions.clear();
+});
+
+describe('a screen with its own host opening over a toast', () => {
+  // The root host, and a screen (or sheet) above it with its own host when `open`.
+  const stacked = (open: boolean, own?: boolean) => (
+    <SafeAreaProvider
+      initialMetrics={{
+        frame: { x: 0, y: 0, width: 390, height: 844 },
+        insets: { top: 0, left: 0, right: 0, bottom: 0 },
+      }}
+    >
+      <View testID="root">
+        <ToastHost />
+      </View>
+      {open && (
+        <View testID="screen">
+          <ToastHost key={own ? 'own' : 'screen'} />
+        </View>
+      )}
+    </SafeAreaProvider>
+  );
+  const undoIn = (testID: string) =>
+    within(screen.getByTestId(testID)).queryByRole('button', { name: 'Undo' });
+
+  it('moves the toast over the screen, keeping its time left, then settles it once', async () => {
+    const tree = await render(stacked(false));
+    const action = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+    await act(async () => showToast('Set removed', action, { duration: 'critical' }));
+    await act(async () => jest.advanceTimersByTime(3000));
+    await tree.rerender(stacked(true));
+    expect(undoIn('screen')).toBeOnTheScreen();
+    expect(undoIn('root')).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(1);
+    expect(action.onDismiss).not.toHaveBeenCalled();
+    // 7 s in all: 3 s went by under the root, so it ends 4 s after moving.
+    await act(async () => jest.advanceTimersByTime(3900));
+    expect(undoIn('screen')).toBeOnTheScreen();
+    await act(async () => jest.advanceTimersByTime(200));
+    expect(undo()).toBeNull();
+    expect(action.onDismiss).toHaveBeenCalledTimes(1);
+    expect(action.run).not.toHaveBeenCalled();
+  });
+
+  it('runs Undo once from the screen above', async () => {
+    const tree = await render(stacked(false));
+    const action = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+    await act(async () => showToast('Set removed', action, { duration: 'critical' }));
+    await tree.rerender(stacked(true));
+    await fireEvent.press(
+      within(screen.getByTestId('screen')).getByRole('button', { name: 'Undo' }),
+    );
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(action.run).toHaveBeenCalledTimes(1);
+    expect(action.onDismiss).not.toHaveBeenCalled();
+  });
+
+  it('goes back under the root, with its time left, when the screen closes', async () => {
+    const tree = await render(stacked(false));
+    const action = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+    await act(async () => showToast('Set removed', action, { duration: 'critical' }));
+    await act(async () => jest.advanceTimersByTime(2000));
+    await tree.rerender(stacked(true));
+    await act(async () => jest.advanceTimersByTime(2000));
+    await tree.rerender(stacked(false));
+    expect(undoIn('root')).toBeOnTheScreen();
+    expect(action.onDismiss).not.toHaveBeenCalled();
+    // 7 s in all: 2 s under the root and 2 s over the screen leave 3 s.
+    await act(async () => jest.advanceTimersByTime(2900));
+    expect(undoIn('root')).toBeOnTheScreen();
+    await act(async () => jest.advanceTimersByTime(200));
+    expect(undo()).toBeNull();
+    expect(action.onDismiss).toHaveBeenCalledTimes(1);
+    expect(action.run).not.toHaveBeenCalled();
+  });
+
+  it('still settles a toast shown on the screen itself when the screen closes', async () => {
+    const tree = await render(stacked(true));
+    const action = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+    await act(async () => showToast('Photo removed', action));
+    expect(undoIn('screen')).toBeOnTheScreen();
+    await tree.rerender(stacked(false));
+    expect(undo()).toBeNull();
+    expect(action.onDismiss).toHaveBeenCalledTimes(1);
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(action.onDismiss).toHaveBeenCalledTimes(1);
+    expect(action.run).not.toHaveBeenCalled();
+  });
+
+  it('drops a moved toast without callbacks when the account changes', async () => {
+    const tree = await render(stacked(false));
+    const action = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+    await act(async () => showToast('Set removed', action, { duration: 'critical' }));
+    await tree.rerender(stacked(true));
+    mockStatus = { kind: 'signed-in', user: { id: 'b' } };
+    await tree.rerender(stacked(true, true));
+    await tree.rerender(stacked(false));
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(undo()).toBeNull();
+    expect(action.onDismiss).not.toHaveBeenCalled();
+    expect(action.run).not.toHaveBeenCalled();
+  });
 });
