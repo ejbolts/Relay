@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import {
   BACK_ONLINE_MS,
+  CHECK_BACKOFF_MS,
   CONFIRM_OFFLINE_MS,
   MIN_OFFLINE_SHOWN_MS,
+  OFFLINE_CHECK_MS,
   connectionDetailRows,
   createConnectionMonitor,
   nextCheckText,
@@ -148,4 +150,107 @@ it('counts down to the next check', () => {
     'Next check in 5 s',
   );
   expect(nextCheckText({ checking: false, nextCheckAt: now - 10 }, now)).toBe('Next check in 1 s');
+});
+
+/** When each check ran, in milliseconds from the start of the test. */
+function checkTimes() {
+  const start = Date.now();
+  const times: number[] = [];
+  check.mockImplementation(async () => {
+    times.push(Date.now() - start);
+    return false;
+  });
+  return times;
+}
+
+it('backs off 2, 4 then 8 s while checking quietly, then checks every 10 s once offline', async () => {
+  const status = monitor();
+  status.subscribe(() => undefined);
+  const times = checkTimes();
+  status.reportConnectionFailure();
+  await vi.advanceTimersByTimeAsync(CONFIRM_OFFLINE_MS - 1);
+  const [two, four, eight] = CHECK_BACKOFF_MS;
+  expect(times).toEqual([two, two + four, two + four + eight]);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(status.view().phase).toBe('offline');
+  // The 8 s back-off already due at 22 s runs, then the offline re-check every 10 s.
+  await vi.advanceTimersByTimeAsync(2 * OFFLINE_CHECK_MS + 2_000);
+  expect(times.slice(3)).toEqual([
+    22_000,
+    22_000 + OFFLINE_CHECK_MS,
+    22_000 + 2 * OFFLINE_CHECK_MS,
+  ]);
+});
+
+it('stays silent after twenty seconds with only one failure', async () => {
+  const status = monitor();
+  status.subscribe(() => undefined);
+  // The check never answers, so there is never a second failure.
+  check.mockImplementation(() => new Promise<CheckOutcome>(() => undefined));
+  status.reportConnectionFailure();
+  await vi.advanceTimersByTimeAsync(CONFIRM_OFFLINE_MS * 3);
+  expect(status.state().phase).toBe('checking');
+  expect(status.view().phase).toBe('online');
+});
+
+it('keeps the notice at least four seconds when an answer comes sooner', async () => {
+  const status = monitor();
+  status.subscribe(() => undefined);
+  check.mockImplementation(() => new Promise<CheckOutcome>(() => undefined));
+  status.reportConnectionFailure();
+  status.reportConnectionFailure();
+  await vi.advanceTimersByTimeAsync(CONFIRM_OFFLINE_MS);
+  expect(status.view().phase).toBe('offline');
+  await vi.advanceTimersByTimeAsync(1_000);
+  status.reportServerReached();
+  await vi.advanceTimersByTimeAsync(MIN_OFFLINE_SHOWN_MS - 1_000 - 1);
+  expect(status.view().phase).toBe('offline');
+  await vi.advanceTimersByTimeAsync(1);
+  expect(status.view().phase).toBe('back');
+});
+
+it('checks at once when the app wakes during an outage, and not otherwise', async () => {
+  const status = monitor();
+  status.subscribe(() => undefined);
+  events!.wake();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(check).not.toHaveBeenCalled();
+  status.reportConnectionFailure();
+  events!.wake();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(check).toHaveBeenCalledTimes(1);
+});
+
+it('checks a slow read quietly at most every fifteen seconds', async () => {
+  const status = monitor();
+  status.subscribe(() => undefined);
+  check.mockResolvedValue(true);
+  status.verifyConnection();
+  await vi.advanceTimersByTimeAsync(0);
+  status.verifyConnection();
+  await vi.advanceTimersByTimeAsync(14_999);
+  status.verifyConnection();
+  expect(check).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  status.verifyConnection();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(check).toHaveBeenCalledTimes(2);
+  expect(status.view().phase).toBe('online');
+});
+
+it('ignores a check that finishes after nothing shows the status any more', async () => {
+  const status = monitor();
+  const stop = status.subscribe(() => undefined);
+  let answer!: (outcome: CheckOutcome) => void;
+  check.mockImplementation(() => new Promise<CheckOutcome>((resolve) => (answer = resolve)));
+  status.reportConnectionFailure();
+  await vi.advanceTimersByTimeAsync(CHECK_BACKOFF_MS[0]);
+  expect(check).toHaveBeenCalledTimes(1);
+  stop();
+  answer(false);
+  await vi.advanceTimersByTimeAsync(CONFIRM_OFFLINE_MS * 2);
+  // The late failure is dropped: no outage, no further checks.
+  expect(status.state().phase).toBe('online');
+  expect(status.progress()).toEqual({ checking: false, nextCheckAt: null });
+  expect(check).toHaveBeenCalledTimes(1);
 });
