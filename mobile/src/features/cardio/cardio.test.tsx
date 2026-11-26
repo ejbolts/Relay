@@ -593,6 +593,11 @@ it('deletes standalone sessions and lone cardio workouts, and shares a card', as
 });
 
 test('offline with nothing saved, cardio says so instead of loading, then loads', async () => {
-  await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<CardioSection />));
+  jest.mocked(apiGet).mockImplementation(async () => overview([historySession('a', null)]));
+  await expectOfflineUntilOnline(
+    jest.mocked(apiGet),
+    () => open(<CardioSection />),
+    () => expect(screen.getByRole('button', { name: 'Import screenshot' })).toBeTruthy(),
+  );
   expect(screen.queryByText('Loading cardio…')).toBeNull();
 });

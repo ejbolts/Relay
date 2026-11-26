@@ -228,7 +228,11 @@ describe('Settings', () => {
   });
 
   it('says Settings is offline instead of spinning, then loads once back online', async () => {
-    await expectOfflineUntilOnline(jest.mocked(apiGet), () => show(<SettingsScreen />));
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => show(<SettingsScreen />),
+      () => expect(screen.getByText('Between sets')).toBeVisible(),
+    );
   });
 
   it('shows the split row as offline, not blank, while the split waits for the network', async () => {
@@ -559,14 +563,28 @@ describe('offline with nothing saved', () => {
   });
 
   test('Fresh starts says it is offline, then loads once back online', async () => {
-    await expectOfflineUntilOnline(jest.mocked(apiGet), () => show(<FreshStartsScreen />));
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => show(<FreshStartsScreen />),
+      () => expect(screen.getByRole('button', { name: 'Start fresh' })).toBeVisible(),
+    );
   });
 
   test("What's new says it is offline, then loads once back online", async () => {
-    await expectOfflineUntilOnline(jest.mocked(apiGet), () => show(<WhatsNewScreen />));
+    const release = jest.requireActual<{ title: string }>('../../../../frontend/release.json');
+    responses['/release.json'] = release;
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => show(<WhatsNewScreen />),
+      () => expect(screen.getByText(release.title)).toBeVisible(),
+    );
   });
 
   test('a workout type’s exercises say they are offline, then load once back online', async () => {
-    await expectOfflineUntilOnline(jest.mocked(apiGet), () => show(<WorkoutTypeExercisesScreen />));
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => show(<WorkoutTypeExercisesScreen />),
+      () => expect(screen.getByRole('button', { name: 'Save exercises' })).toBeOnTheScreen(),
+    );
   });
 });

@@ -607,20 +607,36 @@ it('lets leaving go again when the reset confirmation is cancelled', async () =>
 
 describe('offline with nothing saved', () => {
   test('the admin console says so instead of spinning, then loads', async () => {
-    await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<AdminScreen />));
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => open(<AdminScreen />),
+      () => expect(screen.getByText('3 accounts')).toBeTruthy(),
+    );
   });
 
   test('an account says so instead of spinning, then loads', async () => {
     mockParams = { id: 'riley' };
-    await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<AdminAccountScreen />));
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => open(<AdminAccountScreen />),
+      () => expect(screen.getByRole('button', { name: 'Reset password' })).toBeTruthy(),
+    );
   });
 
   test('the server panel says so instead of spinning, then loads', async () => {
-    await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<AdminServerScreen />));
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => open(<AdminServerScreen />),
+      () => expect(screen.getByText('Version 1.4.0')).toBeTruthy(),
+    );
   });
 
   test('changing a username says so instead of spinning, then loads', async () => {
     mockParams = { id: 'riley' };
-    await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<AdminUsernameScreen />));
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => open(<AdminUsernameScreen />),
+      () => expect(screen.getByLabelText('Username')).toBeTruthy(),
+    );
   });
 });

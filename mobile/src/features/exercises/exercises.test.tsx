@@ -634,12 +634,18 @@ describe('machine weights', () => {
 });
 
 test('offline with nothing saved, the exercises say so instead of loading, then load', async () => {
-  await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<ExercisesSection />));
+  await expectOfflineUntilOnline(
+    jest.mocked(apiGet),
+    () => open(<ExercisesSection />),
+    () => expect(screen.getByRole('button', { name: /^Bench Press/ })).toBeTruthy(),
+  );
   expect(screen.queryByText('Loading exercises…')).toBeNull();
 });
 
 test('offline with nothing saved, editing an exercise says so instead of spinning', async () => {
-  await expectOfflineUntilOnline(jest.mocked(apiGet), () =>
-    open(<ExerciseEditScreen exerciseId="raises" />),
+  await expectOfflineUntilOnline(
+    jest.mocked(apiGet),
+    () => open(<ExerciseEditScreen exerciseId="raises" />),
+    () => expect(screen.getByLabelText('Name')).toBeTruthy(),
   );
 });

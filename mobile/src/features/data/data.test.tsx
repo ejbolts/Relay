@@ -695,5 +695,9 @@ describe('backups', () => {
 });
 
 test('offline with nothing saved, the import history says so instead of spinning', async () => {
-  await expectOfflineUntilOnline(jest.mocked(apiGet), () => renderWith(<ImportHistoryScreen />));
+  await expectOfflineUntilOnline(
+    jest.mocked(apiGet),
+    () => renderWith(<ImportHistoryScreen />),
+    () => expect(screen.getByText(/^No tracked imports yet/)).toBeTruthy(),
+  );
 });

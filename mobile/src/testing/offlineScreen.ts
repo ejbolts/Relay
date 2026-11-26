@@ -4,12 +4,14 @@ import { OFFLINE_MESSAGE } from '../data/offline';
 
 /**
  * Mounts a screen offline with nothing saved and checks that it says it is offline (rather than
- * spinning) without asking the server, then loads by itself once the phone is back online.
+ * spinning) without asking the server, then loads by itself once the phone is back online:
+ * `loaded` asserts something only the loaded screen shows, so a screen that went from offline
+ * to a spinner or an error fails.
  */
 export async function expectOfflineUntilOnline(
   get: jest.Mock,
   mount: () => Promise<unknown>,
-  loaded?: () => void,
+  loaded: () => void,
 ) {
   onlineManager.setOnline(false);
   try {
@@ -20,7 +22,7 @@ export async function expectOfflineUntilOnline(
     await act(async () => onlineManager.setOnline(true));
     await waitFor(() => expect(screen.queryByText(OFFLINE_MESSAGE)).toBeNull());
     expect(get).toHaveBeenCalled();
-    if (loaded) await waitFor(loaded);
+    await waitFor(loaded);
   } finally {
     onlineManager.setOnline(true);
   }

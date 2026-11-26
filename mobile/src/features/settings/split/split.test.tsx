@@ -213,7 +213,11 @@ describe('the split library', () => {
 
   it('says the split editor is offline instead of spinning, then loads once back online', async () => {
     mockParams = { template: 'ppl' };
-    await expectOfflineUntilOnline(jest.mocked(apiGet), () => show(<SplitEditorScreen />));
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => show(<SplitEditorScreen />),
+      () => expect(screen.getByDisplayValue('Push / Pull / Legs')).toBeTruthy(),
+    );
   });
 
   it('shows the same active split in both preview views', async () => {
