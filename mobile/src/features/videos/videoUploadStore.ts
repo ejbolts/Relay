@@ -11,7 +11,7 @@ import {
   TERMINAL_SESSION_STATUSES,
 } from '../../../../frontend/src/videoSessions';
 import { ApiError, serverOrigin } from '../../data/api';
-import { forgetSessionTokenIf, sessionToken } from '../../data/session';
+import { forgetSessionTokenIf, SessionChanged, sessionToken } from '../../data/session';
 import { UploadStopped } from '../../data/uploadFile';
 import { registerBeforeSignOut, sessionEpoch } from '../../session/sessionEpoch';
 import { useOptionalSession } from '../../session/SessionProvider';
@@ -448,10 +448,15 @@ function follow(next: WorkoutSession) {
   setState({ session: next, step: nextStep });
 }
 
+/**
+ * The session the upload is sent with, read when it starts. A session change during the read
+ * fails the upload (`SessionChanged`) rather than letting a later step read whichever is saved.
+ */
 async function captureBoundToken(): Promise<string | undefined> {
   try {
     return (await sessionToken(serverOrigin())) ?? undefined;
-  } catch {
+  } catch (reason) {
+    if (reason instanceof SessionChanged) throw reason;
     return undefined;
   }
 }
@@ -707,6 +712,8 @@ export const videoUploadActions = {
       if (uploaded && isRunCurrent(myRun, myEpoch) && currentPhase() === 'uploading') {
         await startWhenAnswered(target, myRun, myEpoch);
       }
+    } catch (reason) {
+      if (isRunCurrent(myRun, myEpoch)) setState({ message: errorMessage(reason) });
     } finally {
       if (isRunCurrent(myRun, myEpoch)) {
         setState((current) => ({

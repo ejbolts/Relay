@@ -93,3 +93,14 @@ test.each([
     await result.unmount();
   },
 );
+
+test('a stack opened straight from a link has nothing beneath it, so no back button out', async () => {
+  // The app's root has no anchor under a linked stack: the summary is the only screen, so
+  // HeaderBack (which needs somewhere to go back to) shows nothing, as before. No warning either.
+  const result = await renderRouter(routes, { initialUrl: '/blocks/summary/b1' });
+  expect(result.getPathname()).toBe('/blocks/summary/b1');
+  expect(screen.getByText('Block summary')).toBeTruthy();
+  expect(backButtons()).toBe(0);
+  expect(stateWarnings()).toEqual([]);
+  await result.unmount();
+});

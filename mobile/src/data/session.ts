@@ -78,20 +78,25 @@ export const saveSessionToken = (origin: string, token: string) =>
 export const forgetSessionToken = () =>
   inTurn(() => changeSession(() => SecureStore.deleteItemAsync(SESSION)));
 
-/** Whether `token` is still the saved session, so a refusal of it ended this phone's session. */
-export const isSavedSession = (origin: string, token: string) =>
-  inTurn(async () => (await read(SESSION, origin)) === token);
+/**
+ * What forgetting a refused session found: `forgotten` (it was the saved one), `other` (another
+ * session is saved, so the refusal was an earlier account's) or `none` (nothing is saved, or it
+ * couldn't be read).
+ */
+export type ForgetResult = 'forgotten' | 'other' | 'none';
 
 /**
- * Forgets the saved session only while it is still `token`, and says whether it was. A request
+ * Forgets the saved session only while it is still `token`, and says what it found. A request
  * that was refused after another account signed in carries the old token; it mustn't delete the
  * new account's. A refusal of the token still saved clears it.
  */
 export const forgetSessionTokenIf = (origin: string, token: string) =>
-  inTurn(async () => {
-    if ((await read(SESSION, origin)) !== token) return false;
+  inTurn(async (): Promise<ForgetResult> => {
+    const saved = await read(SESSION, origin);
+    if (saved === null) return 'none';
+    if (saved !== token) return 'other';
     await changeSession(() => SecureStore.deleteItemAsync(SESSION));
-    return true;
+    return 'forgotten';
   });
 
 const isSaved = (item: unknown): item is Saved =>

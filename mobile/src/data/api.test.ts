@@ -524,3 +524,26 @@ test("a refusal of an old account's request says it was for a session that has e
     staleSession: false,
   });
 });
+
+test('a refusal after another caller already forgot the session is not stale: it ended here', async () => {
+  const api = signedIn();
+  let answer!: (response: Response) => void;
+  fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+  const query = api.apiGet('/api/dashboard');
+  await settle();
+  // An explicit-token caller (a clip upload, a tip sync) was refused first and forgot the token.
+  mockKeychain.delete('relay.session');
+  answer(reply(401, { error: { message: 'Sign in to continue.' } }));
+  await expect(query).rejects.toMatchObject({ status: 401, staleSession: false });
+});
+
+test("a refusal while the keystore can't be read is not stale either", async () => {
+  const api = signedIn();
+  let answer!: (response: Response) => void;
+  fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+  const query = api.apiGet('/api/dashboard');
+  await settle();
+  mockFailingReads.add('relay.session');
+  answer(reply(401, { error: { message: 'Sign in to continue.' } }));
+  await expect(query).rejects.toMatchObject({ status: 401, staleSession: false });
+});

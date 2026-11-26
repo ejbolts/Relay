@@ -22,8 +22,9 @@ export class ApiError extends Error {
     /** The server's error code, such as `invalid_password` or `sharing_required`, when it sent one. */
     readonly code?: string,
     /**
-     * A 401 for a session that is no longer this phone's: signed out, or another account signed
-     * in, while the request was on its way. It says nothing about the session saved now.
+     * A 401 for a session that is no longer this phone's: another account signed in while the
+     * request was on its way. It says nothing about the session saved now. A refusal when nothing
+     * is saved is not stale: that session has ended.
      */
     readonly staleSession = false,
   ) {
@@ -106,7 +107,7 @@ export async function request<T>(
       response.status === 401 &&
       token === undefined &&
       !!bearer &&
-      (await forgetSessionTokenIf(origin, bearer)) === false;
+      (await forgetSessionTokenIf(origin, bearer)) === 'other';
     const body = await response.json().catch(() => null);
     throw new ApiError(
       response.status,

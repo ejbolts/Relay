@@ -231,3 +231,11 @@ test("a late refusal of an old session's request leaves the session signed in no
   });
   expect(await screen.findByText('signed-out')).toBeVisible();
 });
+
+test("a session change while the offline account is checked at launch doesn't leave it loading", async () => {
+  rememberUser(user);
+  jest.mocked(currentUser).mockRejectedValue(unreachable());
+  jest.mocked(sessionToken).mockRejectedValue(new Error('Your account changed'));
+  await open();
+  expect(await screen.findByText('error')).toBeVisible();
+});
