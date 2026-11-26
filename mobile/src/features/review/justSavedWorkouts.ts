@@ -2,7 +2,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useSyncExternalStore } from 'react';
 import type { FinishedWorkout } from '../../../../frontend/src/finishedWorkoutQueue';
 import { localDate } from '../../../../frontend/src/utils';
-import { queryKeys } from '../../data/queries';
+import { dashboardSource, queryKeys } from '../../data/queries';
 
 /**
  * A finished workout the server just confirmed. It leaves the queue at once, but the dashboard
@@ -50,8 +50,13 @@ export function awaitingDashboard(
   owner: string,
   dashboard: unknown,
 ) {
-  return entries.filter((item) => item.owner === owner && item.dashboard === (dashboard ?? null));
+  // A dashboard shown without a deleted workout is matched by the response it came from.
+  const source = dashboardSource(dashboard) ?? null;
+  return entries.filter((item) => item.owner === owner && item.dashboard === source);
 }
+
+/** The saved workouts now, for event handlers (a deletion checks whether its workout was saved since). */
+export const justSavedWorkouts = () => saved;
 
 export function useJustSavedWorkouts() {
   return useSyncExternalStore(subscribe, () => saved);

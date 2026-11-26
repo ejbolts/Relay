@@ -1,5 +1,10 @@
-import { useQuery, type QueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import {
+  replaceEqualDeep,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query';
+import { useCallback, useMemo, useSyncExternalStore } from 'react';
 import { initialHistoryStart } from '../../../frontend/src/historyWindow';
 import type {
   DashboardData,
@@ -14,7 +19,9 @@ import type {
 import { upNextSession } from '../../../frontend/src/upNextSession';
 import { localDate } from '../../../frontend/src/utils';
 import type { WeightUnit } from '../../../frontend/src/weightUnits';
+import { heatmapWithoutWorkouts, type ExerciseByName } from '../../../frontend/src/workoutDeletion';
 import { DEFAULT_WORKOUT_TYPES } from '../../../frontend/src/workoutTypes';
+import { sessionEpoch } from '../session/sessionEpoch';
 import { apiGet } from './api';
 
 /**
@@ -32,22 +39,121 @@ export const queryKeys = {
   personalRecords: ['personal-records'] as const,
 };
 
+/**
+ * Saved workouts deleted in this session (features/training/workoutDeletion), by id: those whose
+ * Undo still shows, and those the server has since deleted. Every read below leaves them out, so
+ * a refresh while the Undo shows can't bring one back, and a confirmed delete needs no rewrite of
+ * any cached response. Kept outside the query cache, so resetting queries can't empty it, and tied
+ * to the session number, so another session never reads it.
+ */
+let deleted: { epoch: number; ids: readonly string[] } = { epoch: -1, ids: [] };
+const deletedListeners = new Set<() => void>();
+const NO_IDS: readonly string[] = [];
+
+/** Marks a workout deleted in the current session, or brings it back. */
+export function setWorkoutDeleted(id: string, isDeleted: boolean) {
+  const epoch = sessionEpoch();
+  const ids = deleted.epoch === epoch ? deleted.ids : NO_IDS;
+  const next = isDeleted
+    ? ids.includes(id)
+      ? ids
+      : [...ids, id]
+    : ids.filter((item) => item !== id);
+  if (next === ids && deleted.epoch === epoch) return;
+  deleted = { epoch, ids: next };
+  deletedListeners.forEach((listener) => listener());
+}
+
+const deletedNow = () => (deleted.epoch === sessionEpoch() ? deleted.ids : NO_IDS);
+const subscribeDeleted = (listener: () => void) => {
+  deletedListeners.add(listener);
+  return () => void deletedListeners.delete(listener);
+};
+
+export function useDeletedWorkouts(): readonly string[] {
+  return useSyncExternalStore(subscribeDeleted, deletedNow);
+}
+
+/** Exercises by name from the cached library, so a calendar day is rebuilt as the server does. */
+export function cachedExerciseByName(client: QueryClient): ExerciseByName {
+  const byName = new Map(
+    (client.getQueryData<Exercise[]>(queryKeys.exercises) ?? []).map((item) => [item.name, item]),
+  );
+  return (name) => byName.get(name);
+}
+
+// A dashboard shown without deleted workouts, mapped to the response it came from, so code that
+// recognises a response by identity (the weekly review's just-saved workouts) still can.
+const dashboardSources = new WeakMap<object, unknown>();
+
+/**
+ * While a workout is hidden: a response shown as it is keeps its own identity (the cached object,
+ * as without any filter), and a filtered copy keeps its link to the response it came from.
+ */
+function shareDashboard(previous: unknown, next: unknown): unknown {
+  const source = next && typeof next === 'object' ? dashboardSources.get(next) : undefined;
+  if (!source) return replaceEqualDeep(previous, next) === previous ? previous : next;
+  const shared = replaceEqualDeep(previous, next);
+  if (shared && typeof shared === 'object') dashboardSources.set(shared, source);
+  return shared;
+}
+
+/** The cached response a dashboard from `useDashboard` was read from. */
+export function dashboardSource(dashboard: unknown): unknown {
+  return (
+    (dashboard && typeof dashboard === 'object' && dashboardSources.get(dashboard)) || dashboard
+  );
+}
+
 export function useDashboard() {
   const today = localDate();
+  const client = useQueryClient();
+  const ids = useDeletedWorkouts();
+  const select = useCallback(
+    (data: DashboardData): DashboardData => {
+      const holds = (list: readonly { id?: string }[] | undefined) =>
+        Array.isArray(list) && list.some((item) => ids.includes(item?.id ?? ''));
+      // Untouched (same object) unless it still holds a deleted workout.
+      if (
+        !data ||
+        !ids.length ||
+        (!holds(data.recent_workouts) &&
+          !(Array.isArray(data.heatmap) && data.heatmap.some((day) => holds(day.workouts))))
+      )
+        return data;
+      const shown = {
+        ...data,
+        heatmap: heatmapWithoutWorkouts(data.heatmap ?? [], ids, cachedExerciseByName(client)),
+        recent_workouts: (data.recent_workouts ?? []).filter((item) => !ids.includes(item.id)),
+      };
+      dashboardSources.set(shown, data);
+      return shown;
+    },
+    [client, ids],
+  );
   return useQuery({
     queryKey: queryKeys.dashboard(today),
     queryFn: ({ signal }) => apiGet<DashboardData>(`/api/dashboard?on_date=${today}`, signal),
+    // With nothing hidden, exactly as before: no select, the cached object itself.
+    ...(ids.length ? { select, structuralSharing: shareDashboard } : {}),
   });
 }
 
 /** The history window the web opens with (frontend/src/historyWindow.ts), newest first. */
 export function useWorkoutHistory() {
   const start = initialHistoryStart();
+  const ids = useDeletedWorkouts();
   return useQuery({
     queryKey: queryKeys.workouts(start),
     queryFn: ({ signal }) =>
       apiGet<WorkoutSnapshot>(`/api/workouts/snapshot?start=${start}`, signal),
-    select: (snapshot) => snapshot.workouts,
+    select: useCallback(
+      (snapshot: WorkoutSnapshot) =>
+        ids.length && snapshot.workouts.some((item) => ids.includes(item.id))
+          ? snapshot.workouts.filter((item) => !ids.includes(item.id))
+          : snapshot.workouts,
+      [ids],
+    ),
   });
 }
 

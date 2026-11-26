@@ -367,6 +367,11 @@ import {
 } from './finishedWorkoutQueue';
 import { useDeferredDelete } from './useDeferredDelete';
 import {
+  queuedWorkoutIds,
+  WORKOUT_SYNCING_MESSAGE,
+  workoutBlockedWhileSyncing,
+} from './workoutDeletion';
+import {
   dashboardWithPreview,
   isPendingWorkoutId,
   pendingWorkoutPreview,
@@ -934,19 +939,11 @@ function AppContent() {
     [finishedPreviews],
   );
   // A workout still syncing, or with changes waiting to sync, cannot be edited or deleted yet.
-  const queuedWorkoutIds = useMemo(
-    () =>
-      new Set(
-        finishedQueue.items.flatMap((finished) =>
-          finished.pendingSave.workoutId ? [finished.pendingSave.workoutId] : [],
-        ),
-      ),
-    [finishedQueue.items],
-  );
+  const queuedIds = useMemo(() => queuedWorkoutIds(finishedQueue.items), [finishedQueue.items]);
   /** Reports and refuses changes to a workout whose save has not reached the server yet. */
   const blockedWhileSyncing = (id: string) => {
-    if (!isPendingWorkoutId(id) && !queuedWorkoutIds.has(id)) return false;
-    showToast({ message: 'You can change this workout once it has synced.', variant: 'warning' });
+    if (!workoutBlockedWhileSyncing(id, queuedIds)) return false;
+    showToast({ message: WORKOUT_SYNCING_MESSAGE, variant: 'warning' });
     return true;
   };
   // After each save, its on-device figures stay until the refreshed dashboard replaces them.

@@ -1,14 +1,10 @@
-import { useQueryClient } from '@tanstack/react-query';
-import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useState, type ReactNode } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import type { TrackedWorkout } from '../../../../frontend/src/types';
-import { apiSend } from '../../data/api';
-import { refreshTraining } from '../../data/queries';
 import { Button } from '../../ui/components';
 import { useTheme } from '../../ui/theme';
-import { showToast } from '../../ui/Toast';
+import { usePendingWorkoutDeletions, useWorkoutDeletion } from '../training/workoutDeletion';
 import { useWorkout } from './WorkoutProvider';
 
 const icons = {
@@ -29,42 +25,15 @@ export function SavedWorkoutActions({
 }) {
   const live = useWorkout();
   const router = useRouter();
-  const client = useQueryClient();
-  const [deleting, setDeleting] = useState(false);
+  const deletion = useWorkoutDeletion();
+  // Already deleted and waiting for its Undo to pass (a screen opened again meanwhile).
+  const deleting = usePendingWorkoutDeletions().includes(workout.id);
   const { colors, type } = useTheme();
   const resumedHere = live.live?.resumedWorkoutId === workout.id;
 
-  function confirmDelete() {
-    Alert.alert(
-      'Delete this workout?',
-      'It will be removed from your history, records and weekly totals. This cannot be undone.',
-      [
-        { text: 'Keep workout', style: 'cancel' },
-        {
-          text: 'Delete workout',
-          style: 'destructive',
-          onPress: () => {
-            setDeleting(true);
-            apiSend<void>(`/api/workouts/${encodeURIComponent(workout.id)}`, 'DELETE')
-              .then(() => {
-                // Resuming it here ends too: there is nothing left to save it over.
-                if (resumedHere) live.discard();
-                void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                void refreshTraining(client);
-                showToast('Workout deleted');
-                router.back();
-              })
-              .catch((reason) =>
-                Alert.alert(
-                  'Not deleted',
-                  reason instanceof Error ? reason.message : 'Could not delete that workout.',
-                ),
-              )
-              .finally(() => setDeleting(false));
-          },
-        },
-      ],
-    );
+  // Deleted at once with Undo, as on the web; the delete is sent when the toast ends.
+  function deleteWorkout() {
+    if (deletion.request(workout)) router.back();
   }
 
   return (
@@ -75,6 +44,8 @@ export function SavedWorkoutActions({
           accessibilityLabel={`Edit ${workout.name}`}
           icon={icons.edit}
           variant="secondary"
+          // Waiting on its Undo, it is about to be deleted: a change now would be deleted with it.
+          disabled={deleting}
           onPress={() =>
             router.push({ pathname: '/edit-workout/[id]', params: { id: workout.id } })
           }
@@ -85,6 +56,7 @@ export function SavedWorkoutActions({
           accessibilityLabel={resumedHere ? 'Open the resumed workout' : `Resume ${workout.name}`}
           icon={icons.resume}
           variant="secondary"
+          disabled={deleting}
           onPress={() => live.resume(workout)}
           style={{ flex: 1 }}
         />
@@ -94,11 +66,11 @@ export function SavedWorkoutActions({
         accessibilityRole="button"
         accessibilityState={{ disabled: deleting }}
         disabled={deleting}
-        onPress={confirmDelete}
+        onPress={deleteWorkout}
         style={({ pressed }) => [styles.delete, pressed && { opacity: 0.6 }]}
       >
         <Text style={[type.callout, { color: colors.danger, fontWeight: '600' }]}>
-          {deleting ? 'Deleting…' : 'Delete workout'}
+          {deleting ? 'Deleted' : 'Delete workout'}
         </Text>
       </Pressable>
     </View>

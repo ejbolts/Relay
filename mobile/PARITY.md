@@ -55,7 +55,6 @@ What the native app covers compared with the web app, which it will replace. Upd
 - **Guides:** a setup guide coaches each step in a docked card with a fold grabber, rings the control it's about and scrolls it into view.
 - **Phone alerts:** Settings › Notifications registers this phone for remote push. Rest alerts and "Still working out?" for a workout on this phone stay local notifications, and alerts shown by the phone use neutral text without names. Send test alert is app-only.
 - **Popups:** a toast stays on screen for the same time in both apps (`toastDuration` in `frontend/src/popupTiming.ts`): an Undo for a deleted set 2.5 seconds, a confirmation 3, a warning, a record or an Undo that is hard to redo 5, and an error 7. The app's toast has one look; the web styles warnings, errors and records differently.
-- **Deleting a saved workout:** the app asks first and can't undo it; the web deletes at once and offers Undo for five seconds.
 - **Today on the calendar:** today's ring takes the day's workout colours, as on the web, but stays still. The web's ripple repeats without end. Tried in the app, it kept Home from ever going idle: the emulator test driver could no longer read the screen, and the phone would keep redrawing for as long as Home is open.
 - **Rest timer on iPhone:** in an installed build on iOS 16.4 or later, it also shows as a Live Activity on the Lock Screen, and in the Dynamic Island on iPhones that have one, beside the rest pill and the rest alert.
 
