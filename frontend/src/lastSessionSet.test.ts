@@ -36,6 +36,27 @@ describe('matchingLastSessionSet', () => {
     expect(matchingLastSessionSet(planned, 1, last)?.id).toBe('n2');
   });
 
+  it('finds set 2 in a session that mixes warm-ups and working sets', () => {
+    // Last time: two warm-ups, then 100 and 90; today one warm-up, set 1 logged with no weight.
+    const lastTime = [
+      { ...warmup, weight_kg: 40 },
+      { ...warmup, weight_kg: 60 },
+      { ...working, weight_kg: 100 },
+      { ...working, weight_kg: 90 },
+    ];
+    const today = [
+      { ...warmup, weight_kg: 40 },
+      { ...working, weight_kg: null },
+      { ...working, weight_kg: null },
+    ];
+    expect(
+      today.map((_, index) => matchingLastSessionSet(today, index, lastTime)?.weight_kg),
+    ).toEqual([40, 100, 90]);
+    // A warm-up ticked between the working sets doesn't shift them.
+    const between = [today[1], { ...warmup, weight_kg: 60 }, today[2]];
+    expect(matchingLastSessionSet(between, 2, lastTime)?.weight_kg).toBe(90);
+  });
+
   it('has nothing for rows beyond last time or without a row', () => {
     const today = [working, working, working, working];
     expect(matchingLastSessionSet(today, 3, last)).toBeUndefined();
