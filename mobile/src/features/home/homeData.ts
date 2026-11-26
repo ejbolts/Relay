@@ -5,7 +5,7 @@ import { withMuscleSetGoal } from '../../../../frontend/src/muscleGoalEditing';
 import type { TrainingPreferences, TrainingSplit } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { builtinTypeColors, DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
-import { apiGet, apiSend } from '../../data/api';
+import { ApiError, apiGet, apiSend } from '../../data/api';
 import { readJson, writeJson } from '../../data/deviceStorage';
 import { queryKeys, useWorkoutTypes } from '../../data/queries';
 import { useUser } from '../../session/SessionProvider';
@@ -45,15 +45,15 @@ export const homeKeys = { layout: ['home-layout'] as const };
 const LAYOUT_COPY = 'relay.mobile.home-layout.v1';
 type LayoutCopy = { userId: string; layout: HomeLayout };
 
+/** How often a layout that failed to load is asked for again. */
+const LAYOUT_RETRY_MS = 10_000;
+
 /**
  * The account's saved Home layout, the one the web reads and saves. Until the server answers (or
  * while it can't be reached), Home shows this phone's last copy, or else the default layout.
  * `confirmed` waits for the server's answer, so the editor never saves an older layout over a
  * newer one.
  */
-/** How often a layout that failed to load is asked for again. */
-const LAYOUT_RETRY_MS = 10_000;
-
 export function useHomeLayout() {
   const userId = useUser().id;
   const [copy] = useState(() => {
@@ -68,11 +68,16 @@ export function useHomeLayout() {
       return saved;
     },
     placeholderData: copy ?? undefined,
-    // A failed load asks again every so often, so "Could not load your saved layout" clears by
-    // itself once Relay answers: an outage of the server alone fires no reconnect. React Query
-    // skips the retry while the phone is offline or the app is in the background.
-    refetchInterval: (query) =>
-      query.state.status === 'error' && query.state.data === undefined ? LAYOUT_RETRY_MS : false,
+    // A load that failed for a reason a retry can fix (Relay couldn't be reached, or a server
+    // error) asks again every so often, so "Could not load your saved layout" clears by itself
+    // once Relay answers: an outage of the server alone fires no reconnect. A refusal (4xx, such
+    // as an older server without layouts) won't change, so it isn't asked again, as the query's
+    // own retry rule does. React Query skips the retry while offline or in the background.
+    refetchInterval: (query) => {
+      const { status, data, error } = query.state;
+      if (status !== 'error' || data !== undefined) return false;
+      return error instanceof ApiError && error.status < 500 ? false : LAYOUT_RETRY_MS;
+    },
   });
   const [fallback] = useState(defaultHomeLayout);
   return {

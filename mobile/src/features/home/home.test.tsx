@@ -28,7 +28,7 @@ import type {
 import { localDate } from '../../../../frontend/src/utils';
 import { workoutTypeColor } from '../../../../frontend/src/dayColors';
 import { builtinTypeColors, DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
-import { apiGet, apiSend } from '../../data/api';
+import { ApiError, apiGet, apiSend } from '../../data/api';
 import { ToastHost } from '../../ui/Toast';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { HomeScreen } from './HomeScreen';
@@ -1200,6 +1200,32 @@ test('a layout that failed to load keeps retrying and clears once Relay answers 
     responses['/api/home-layout'] = defaultHomeLayout();
     await act(async () => jest.advanceTimersByTime(10_000));
     await waitFor(() => expect(screen.queryByText('Could not load your saved layout.')).toBeNull());
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('a layout the server refuses is not asked for again, but a server error is', async () => {
+  const layoutReads = () =>
+    jest.mocked(apiGet).mock.calls.filter(([path]) => path === '/api/home-layout').length;
+  // An older server without layouts: asking again won't change the answer.
+  responses['/api/home-layout'] = new ApiError(404, 'Not found');
+  jest.useFakeTimers();
+  try {
+    await renderHome();
+    expect(await screen.findByText('Could not load your saved layout.')).toBeVisible();
+    const reads = layoutReads();
+    await act(async () => jest.advanceTimersByTime(30_000));
+    expect(layoutReads()).toBe(reads);
+
+    // A server error may pass: it is asked for again.
+    responses['/api/home-layout'] = new ApiError(500, 'Server error');
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['home-layout'] });
+    });
+    const afterError = layoutReads();
+    await act(async () => jest.advanceTimersByTime(10_000));
+    expect(layoutReads()).toBe(afterError + 1);
   } finally {
     jest.useRealTimers();
   }
