@@ -52,6 +52,20 @@ export function sheetShowing() {
 }
 
 /**
+ * Counts another full-window overlay (an RN `Modal` such as a chart full screen) as an open sheet
+ * while `visible`, so tips wait for it too.
+ */
+export function useCountAsSheet(visible: boolean) {
+  useEffect(() => {
+    if (!visible) return;
+    openSheets += 1;
+    return () => {
+      openSheets -= 1;
+    };
+  }, [visible]);
+}
+
+/**
  * A sheet that doesn't need its own route: a native page sheet on iOS (swipe down to close), and
  * a bottom sheet over a dimmed backdrop on Android, where tapping the backdrop closes it.
  */
@@ -83,13 +97,7 @@ export function Sheet({
   const measureSeq = useRef(0);
   const [keyboardOverlap, setKeyboardOverlap] = useState(0);
 
-  useEffect(() => {
-    if (!visible) return;
-    openSheets += 1;
-    return () => {
-      openSheets -= 1;
-    };
-  }, [visible]);
+  useCountAsSheet(visible);
 
   const updateOverlap = useCallback((coords: { screenY?: number; height?: number } | null) => {
     keyboardCoords.current = coords;

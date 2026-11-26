@@ -5,6 +5,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
+import { useCountAsSheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 import { bodyIcons } from './bodyIcons';
 
@@ -57,6 +58,8 @@ export function LandscapeChartView({
 }) {
   const { colors, type } = useTheme();
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  // Full screen covers everything, as a sheet does: tips wait until it closes.
+  useCountAsSheet(visible);
   useEffect(() => {
     if (!visible) return;
     void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(

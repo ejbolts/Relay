@@ -441,6 +441,21 @@ test('reaching a loss goal suggests a maintenance range until it is dismissed', 
   expect(screen.queryByLabelText('Quick tip')).toBeNull();
 });
 
+test('the maintenance tip waits while a chart is open full screen', async () => {
+  jest.useFakeTimers();
+  responses['/api/body-measurements'] = [checkIn('m1', 0, 79.6), ...measurements.slice(1)];
+  await renderBody('79.6 kg');
+  await fireEvent.press(
+    screen.getByRole('button', { name: 'View Bodyweight trend full screen in landscape' }),
+  );
+  const exit = await screen.findByRole('button', { name: 'Exit full-screen Bodyweight trend' });
+  await quietMoment();
+  await quietMoment();
+  expect(screen.queryByLabelText('Quick tip')).toBeNull();
+  await fireEvent.press(exit);
+  expect(await findTip()).toBeVisible();
+});
+
 test('Home’s maintenance tip opens the goal form on Maintain', async () => {
   requestMaintainGoal();
   await renderBody();
