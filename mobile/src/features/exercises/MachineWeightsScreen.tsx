@@ -29,8 +29,10 @@ import {
   liveMapping,
   machineWeightsLayout,
   pairForFactor,
+  pairSettled,
   pairTexts,
   pairWithMachineWeight,
+  pairWithReferenceWeight,
   parsedMapping,
   sessionCount,
   suggestionLabel,
@@ -168,6 +170,15 @@ function MachineWeightsEditor({
       const next = { ...current };
       delete next[machineId];
       return next;
+    });
+  }
+
+  /** Leaving the weight box ends that edit; see `pairSettled`. */
+  function settleMachineWeight(machineId: string) {
+    setTexts((current) => {
+      const text = current[machineId];
+      const settled = text && pairSettled(text);
+      return !settled || settled === text ? current : { ...current, [machineId]: settled };
     });
   }
 
@@ -327,6 +338,7 @@ function MachineWeightsEditor({
                         onChange={(value) =>
                           setPair(machine.id, pairWithMachineWeight(text, value))
                         }
+                        onBlur={() => settleMachineWeight(machine.id)}
                       />
                       <Text style={[type.title, { color: colors.muted }]}>=</Text>
                       <WeightBox
@@ -335,7 +347,9 @@ function MachineWeightsEditor({
                         unit={unit}
                         label={`Matching weight on ${reference.caption} for ${machine.caption}`}
                         invalid={!!errors[machine.id]}
-                        onChange={(value) => setPair(machine.id, { ...text, reference: value })}
+                        onChange={(value) =>
+                          setPair(machine.id, pairWithReferenceWeight(text, value))
+                        }
                       />
                     </View>
                     <View style={styles.slider}>
@@ -437,6 +451,7 @@ function WeightBox({
   label,
   invalid,
   onChange,
+  onBlur,
 }: {
   caption: string;
   value: string;
@@ -444,6 +459,7 @@ function WeightBox({
   label: string;
   invalid: boolean;
   onChange: (value: string) => void;
+  onBlur?: () => void;
 }) {
   const { colors, type, radius } = useTheme();
   return (
@@ -462,6 +478,7 @@ function WeightBox({
           accessibilityLabel={label}
           value={value}
           onChangeText={onChange}
+          onBlur={onBlur}
           keyboardType="decimal-pad"
           selectTextOnFocus
           style={[type.headline, type.number, { color: colors.text, flex: 1, paddingVertical: 8 }]}

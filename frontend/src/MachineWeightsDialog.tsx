@@ -19,8 +19,10 @@ import {
   liveMapping,
   machineWeightsLayout,
   pairForFactor,
+  pairSettled,
   pairTexts,
   pairWithMachineWeight,
+  pairWithReferenceWeight,
   parsedMapping,
   sessionCount,
   sliderPosition,
@@ -168,6 +170,15 @@ function MachineWeightsEditor({
   /** Your weight on the machine changes; the conversion, and so the trend, stays. */
   function setMachineWeight(machineId: string, text: PairText, value: string) {
     setPair(machineId, pairWithMachineWeight(text, value));
+  }
+
+  /** Leaving the weight box ends that edit; see `pairSettled`. */
+  function settleMachineWeight(machineId: string) {
+    setTexts((current) => {
+      const text = current[machineId];
+      const settled = text && pairSettled(text);
+      return !settled || settled === text ? current : { ...current, [machineId]: settled };
+    });
   }
 
   function chooseReference(machineId: string) {
@@ -354,6 +365,7 @@ function MachineWeightsEditor({
                             onChange={(event) =>
                               setMachineWeight(machine.id, text, event.target.value)
                             }
+                            onBlur={() => settleMachineWeight(machine.id)}
                           />
                           <span>{weightUnit}</span>
                         </label>
@@ -375,7 +387,7 @@ function MachineWeightsEditor({
                             aria-invalid={Boolean(errors[machine.id])}
                             aria-describedby={errors[machine.id] ? errorId : undefined}
                             onChange={(event) =>
-                              setPair(machine.id, { ...text, reference: event.target.value })
+                              setPair(machine.id, pairWithReferenceWeight(text, event.target.value))
                             }
                           />
                           <span>{weightUnit}</span>

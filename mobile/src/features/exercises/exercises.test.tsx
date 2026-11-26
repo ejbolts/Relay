@@ -587,6 +587,34 @@ describe('machine weights', () => {
     expect(screen.getByText('Switch on Normalise weights')).toBeVisible();
   });
 
+  test('your weight keeps its conversion when it is emptied and typed again', async () => {
+    await open(<MachineWeightsScreen exerciseId="press" />);
+    await fireEvent(
+      await screen.findByRole('switch', { name: 'Normalise weights' }),
+      'valueChange',
+      true,
+    );
+    const weight = () => screen.getByLabelText('Weight on Cybex');
+    const match = () => screen.getByLabelText('Matching weight on Hammer for Cybex');
+    const type = async (...values: string[]) => {
+      for (const value of values) await fireEvent.changeText(weight(), value);
+    };
+    await screen.findByLabelText('Weight on Cybex');
+    // A round pair to start from: 150 on the Cybex is 120 on the Hammer.
+    await type('150');
+    await fireEvent.changeText(match(), '120');
+
+    // Cleared, then typed again a digit at a time.
+    await type('', '1', '15', '150');
+    expect(match().props.value).toBe('120');
+
+    // Leaving the emptied box and coming back to it returns to the same conversion.
+    await type('');
+    await fireEvent(weight(), 'blur');
+    await type('2', '20', '200');
+    expect(match().props.value).toBe('160');
+  });
+
   test('an unfinished pair is refused', async () => {
     await open(<MachineWeightsScreen exerciseId="press" />);
     await fireEvent(
