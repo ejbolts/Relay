@@ -1,6 +1,6 @@
 import { workoutTypeColor } from './dayColors';
-import type { HeatmapDay, WorkoutType, WorkoutTypeColors } from './types';
-import { calendarDayTypes } from './workoutTypes';
+import type { HeatmapDay, WorkoutCategory, WorkoutType, WorkoutTypeColors } from './types';
+import { calendarDayTypes, effectiveWorkoutType } from './workoutTypes';
 
 // Plain functions with no React or browser APIs: the web's calendar and week strip and the native
 // app (mobile/) both colour days from here. Keep this file and its imports free of packages and
@@ -52,6 +52,22 @@ export function calendarDayLook({
       ? `${scheduled.map((type) => type.name).join(' + ')} ${date < today ? 'missed' : 'planned'}`
       : null,
   };
+}
+
+/**
+ * The colour of the workout in progress, for its day's tint, outline and live dot: its workout
+ * type's colour, even when that type is switched off in the legend. Null with no live workout.
+ */
+export function liveWorkoutColor(
+  live: { category: WorkoutCategory; workoutTypeId?: string | null } | null | undefined,
+  types: WorkoutType[],
+  categoryColors?: WorkoutTypeColors,
+): string | null {
+  if (!live) return null;
+  return workoutTypeColor(
+    effectiveWorkoutType({ category: live.category, workout_type_id: live.workoutTypeId }, types),
+    categoryColors,
+  );
 }
 
 /**

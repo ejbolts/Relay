@@ -103,7 +103,9 @@ const DayCell = memo(function DayCell({
   const trained = !!day.entry;
   const count = day.entry?.workout_count ?? 0;
   const ring = day.filteredOut ? [colors.deemph] : day.ring;
-  const disabled = readOnly && !trained;
+  const disabled = readOnly && !trained && !day.live;
+  // The workout in progress: its day tinted and outlined in the type being logged, as the web's.
+  const liveColor = day.liveColor ?? colors.accent;
   return (
     <Pressable
       accessible={!hidden}
@@ -116,9 +118,11 @@ const DayCell = memo(function DayCell({
       accessibilityLabel={
         hidden
           ? ''
-          : trained
-            ? `View ${count} ${count === 1 ? 'workout' : 'workouts'} for ${prettyDate(day.date)}`
-            : `${readOnly ? 'No workouts for ' : ''}${prettyDate(day.date)}${day.scheduledNote ? `, ${day.scheduledNote}` : ''}`
+          : day.live
+            ? `Resume workout in progress for ${prettyDate(day.date)}`
+            : trained
+              ? `View ${count} ${count === 1 ? 'workout' : 'workouts'} for ${prettyDate(day.date)}`
+              : `${readOnly ? 'No workouts for ' : ''}${prettyDate(day.date)}${day.scheduledNote ? `, ${day.scheduledNote}` : ''}`
       }
       onPress={() => {
         haptics.selection();
@@ -135,14 +139,30 @@ const DayCell = memo(function DayCell({
             pressed && !disabled && { opacity: 0.6 },
           ]}
         >
-          {ring.length > 0 ? (
+          {day.live && (
+            <View
+              testID="live-day"
+              pointerEvents="none"
+              style={[styles.fill, styles.liveTint, { backgroundColor: liveColor }]}
+            />
+          )}
+          {day.live && (
+            <View
+              pointerEvents="none"
+              style={[styles.fill, styles.liveEdge, { borderColor: liveColor }]}
+            />
+          )}
+          {day.live ? null : ring.length > 0 ? (
             <DayRing colors={ring} />
           ) : day.scheduled.length > 0 ? (
             // A planned day's outline, faint once it has passed unlogged (missed), as on the web.
             <DayRing colors={day.scheduled} opacity={day.future || day.today ? 1 : 0.32} />
           ) : null}
-          {day.today && !ring.length && !day.scheduled.length && (
-            <View style={[styles.todayRing, { borderColor: colors.accent }]} />
+          {day.today && (day.live || (!ring.length && !day.scheduled.length)) && (
+            <View
+              testID={day.live ? 'live-today-ring' : undefined}
+              style={[styles.todayRing, { borderColor: day.live ? liveColor : colors.accent }]}
+            />
           )}
           <Text
             style={[
@@ -157,6 +177,9 @@ const DayCell = memo(function DayCell({
             {day.day}
           </Text>
           <View style={styles.dots}>
+            {day.live && (
+              <View testID="live-day-dot" style={[styles.dot, { backgroundColor: liveColor }]} />
+            )}
             {day.dots.slice(0, 3).map((color, index) => (
               <View key={index} style={[styles.dot, { backgroundColor: color ?? colors.deemph }]} />
             ))}
@@ -466,6 +489,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  fill: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, borderRadius: RADIUS },
+  liveTint: { opacity: 0.14 },
+  liveEdge: { borderWidth: 1, opacity: 0.45 },
   todayRing: {
     position: 'absolute',
     top: 0,

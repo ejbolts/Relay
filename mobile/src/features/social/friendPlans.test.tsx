@@ -416,7 +416,7 @@ describe('history filters', () => {
     const [title, choices] = jest.mocked(showMenu).mock.calls.at(-1)!;
     expect(title).toBe('Exercise');
     expect(choices.map((choice) => choice.label)).toEqual([
-      'All exercises',
+      'All exercises ✓',
       'Cable row',
       'Back squat',
     ]);

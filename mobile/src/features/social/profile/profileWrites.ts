@@ -41,6 +41,31 @@ async function bound<T>(session: ProfileSession, send: (token: string) => Promis
   }
 }
 
+/** What a profile draft started from: advanced to what the server saved after each save. */
+export type ProfileBaseline = { name: string; sex: Sex | null };
+
+/**
+ * The details a profile draft changes, against what it started from rather than the account as
+ * it is now: a name changed on another device meanwhile is never sent back as the draft's stale
+ * copy, and only fields the person changed are sent. Sex is set once, while the account has none.
+ */
+export function profileDetailChanges(
+  user: Pick<User, 'sex'>,
+  baseline: ProfileBaseline,
+  draft: { displayName: string; sex: Sex | null },
+) {
+  const nameDirty = draft.displayName.trim() !== baseline.name;
+  const sexDirty = !user.sex && !baseline.sex && draft.sex !== null;
+  return {
+    nameDirty,
+    sexDirty,
+    changes: {
+      ...(nameDirty ? { display_name: draft.displayName.trim() } : {}),
+      ...(sexDirty && draft.sex ? { sex: draft.sex } : {}),
+    } as { display_name?: string; sex?: Sex },
+  };
+}
+
 /** Name and (once) sex, as Settings' `updateProfile` sends them. */
 export const saveProfileDetails = (
   session: ProfileSession,
