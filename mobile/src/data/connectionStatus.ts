@@ -20,17 +20,29 @@ import { onRequestOutcome, type RequestOutcome } from './requestOutcome';
 // Query's onlineManager (data/queryClient.ts); the server's from every request data/api.ts sends
 // and from the health check.
 
+/**
+ * Asks Relay's health check once. It always settles within the web's 8 s: React Native's fetch
+ * can ignore an abort when the network changes under it (airplane mode, Wi-Fi coming back), and a
+ * check that never settled would stop the monitor checking at all.
+ */
 async function askServer(): Promise<CheckOutcome> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timedOut = new Promise<CheckOutcome>((resolve) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      resolve('unreachable');
+    }, CHECK_TIMEOUT_MS);
+  });
+  const asked = fetch(serverOrigin() + HEALTH_PATH, {
+    credentials: 'omit',
+    signal: controller.signal,
+  }).then(
+    (response): CheckOutcome => (GATEWAY_FAILURES.has(response.status) ? 'down' : true),
+    (): CheckOutcome => 'unreachable',
+  );
   try {
-    const response = await fetch(serverOrigin() + HEALTH_PATH, {
-      credentials: 'omit',
-      signal: controller.signal,
-    });
-    return GATEWAY_FAILURES.has(response.status) ? 'down' : true;
-  } catch {
-    return 'unreachable';
+    return await Promise.race([asked, timedOut]);
   } finally {
     clearTimeout(timer);
   }

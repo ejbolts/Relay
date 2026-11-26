@@ -107,3 +107,16 @@ it('checks at once when the app returns to the foreground during an outage', asy
   await jest.advanceTimersByTimeAsync(0);
   expect(health()).toBe(1);
 });
+
+it('keeps checking when a health check never settles, even ignoring its abort', async () => {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url.endsWith('/api/health')) return new Promise<Response>(() => undefined);
+    throw new TypeError('Network request failed');
+  });
+  await expect(api.apiGet('/api/dashboard')).rejects.toThrow();
+  // The first check starts after 2 s and gives up after 8 s; the next follows 4 s later.
+  await jest.advanceTimersByTimeAsync(2_000 + 8_000 + 4_000);
+  expect(health()).toBe(2);
+  await jest.advanceTimersByTimeAsync(20_000);
+  expect(status.connection.view().phase).toBe('offline');
+});
