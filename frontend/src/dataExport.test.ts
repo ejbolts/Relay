@@ -36,12 +36,12 @@ describe('data export rules', () => {
 
   it('names the files after the time frame, or today for all time', () => {
     expect(exportFileNames({}, '2026-10-09')).toEqual({
-      workouts: 'gym-workouts-2026-10-09.csv',
+      workouts: 'relay-workouts-2026-10-09.csv',
       bodyweight: 'body-weight-2026-10-09.csv',
     });
     expect(
       exportFileNames({ start_date: '2026-07-09', end_date: '2026-10-09' }, '2026-11-01').workouts,
-    ).toBe('gym-workouts-2026-07-09-to-2026-10-09.csv');
+    ).toBe('relay-workouts-2026-07-09-to-2026-10-09.csv');
   });
 });
 
