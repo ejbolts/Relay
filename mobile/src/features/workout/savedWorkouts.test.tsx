@@ -9,6 +9,7 @@ import { deviceStorage } from '../../data/deviceStorage';
 import { useUpNext } from '../../data/queries';
 import { SessionProvider } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
+import { showToast } from '../../ui/Toast';
 import { EditWorkoutScreen } from './EditWorkoutScreen';
 import { loggerFromDraft, loggerToDraft, resumeLogger } from './loggerState';
 import { SavedWorkoutActions } from './SavedWorkoutActions';
@@ -70,6 +71,7 @@ jest.mock('../../ui/Toast', () => ({
   toastAccount: () => 'u1',
   toastAccountFor: () => 'u1',
   isToastAccountCurrent: () => true,
+  onToastAccountChange: () => () => undefined,
 }));
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/api', () => ({
@@ -355,12 +357,28 @@ test('an edit sends the whole workout with its revision, and asks on a conflict'
   await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
 });
 
-test('a saved workout is deleted after asking', async () => {
-  jest.mocked(apiSend).mockResolvedValue(undefined);
+test('a saved workout is deleted at once with Undo, and sent when the toast ends', async () => {
   await renderApp(<SavedWorkoutActions workout={saved} />);
   await fireEvent.press(screen.getByRole('button', { name: 'Delete workout' }));
+  // No question first, as on the web: it goes at once and the toast offers Undo.
+  expect(alerts).toEqual([]);
+  expect(mockRouter.back).toHaveBeenCalled();
+  const [message, action, options] = jest.mocked(showToast).mock.calls.at(-1)!;
+  expect(message).toBe('Workout deleted');
+  expect(options).toMatchObject({ duration: 'important' });
   expect(apiSend).not.toHaveBeenCalledWith('/api/workouts/w1', 'DELETE');
-  await press('Delete this workout?', 'Delete workout');
-  await waitFor(() => expect(apiSend).toHaveBeenCalledWith('/api/workouts/w1', 'DELETE'));
-  await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+  expect(screen.getByRole('button', { name: 'Deleted', disabled: true })).toBeVisible();
+  await act(async () => action!.onDismiss!());
+  expect(apiSend).toHaveBeenCalledWith('/api/workouts/w1', 'DELETE');
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Delete workout' })).toBeEnabled());
+});
+
+test('deleting the workout being resumed ends the resumed workout once the delete is sent', async () => {
+  const captured = await renderApp(<SavedWorkoutActions workout={saved} />);
+  await act(async () => captured.workout!.resume(saved));
+  await waitFor(() => expect(readActiveWorkoutDraft(deviceStorage)?.resumingWorkoutId).toBe('w1'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Delete workout' }));
+  expect(readActiveWorkoutDraft(deviceStorage)?.resumingWorkoutId).toBe('w1');
+  await act(async () => jest.mocked(showToast).mock.calls.at(-1)![1]!.onDismiss!());
+  await waitFor(() => expect(captured.workout!.live).toBeNull());
 });

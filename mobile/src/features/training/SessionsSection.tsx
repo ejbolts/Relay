@@ -42,11 +42,14 @@ import { trainingKeys, type useTrainingHistory } from './trainingQueries';
 import { useTrainingContext } from './useTrainingContext';
 import { CalendarLegend, WorkoutCalendar } from './WorkoutCalendar';
 import { WorkoutCard, WorkoutDetails } from './WorkoutCard';
+import { useWithoutPendingDeletions } from './workoutDeletion';
 
 type History = ReturnType<typeof useTrainingHistory>;
 
 /** Sessions: the calendar, then the log two weeks at a time, as the web's Training tab. */
-export function SessionsSection({ history }: { history: History }) {
+export function SessionsSection({ history: loaded }: { history: History }) {
+  // A workout deleted while its Undo shows stays out, even if a refresh brings it back.
+  const history = useWithoutPendingDeletions(loaded);
   const { colors, type } = useTheme();
   const router = useRouter();
   const client = useQueryClient();
