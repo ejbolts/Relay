@@ -30,6 +30,7 @@ import {
 import { nextSessionEpoch } from '../../../session/sessionEpoch';
 import { resetTipsForTests, tipsFor } from '../../guides/tips';
 import { SplitEditorScreen } from './SplitEditorScreen';
+import { expectOfflineUntilOnline } from '../../../testing/offlineScreen';
 import { SplitLibraryScreen } from './SplitLibraryScreen';
 
 const mockRouter = { push: jest.fn(), back: jest.fn(), canGoBack: () => true };
@@ -208,6 +209,15 @@ describe('the split library', () => {
     } finally {
       onlineManager.setOnline(true);
     }
+  });
+
+  it('says the split editor is offline instead of spinning, then loads once back online', async () => {
+    mockParams = { template: 'ppl' };
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => show(<SplitEditorScreen />),
+      () => expect(screen.getByDisplayValue('Push / Pull / Legs')).toBeTruthy(),
+    );
   });
 
   it('shows the same active split in both preview views', async () => {

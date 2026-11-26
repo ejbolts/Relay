@@ -28,6 +28,7 @@ import type {
   WorkoutReactions,
 } from '../../../../frontend/src/types';
 import { Button, errorMessage } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { ContextMenu } from '../../ui/ContextMenu';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
@@ -211,6 +212,12 @@ export function CommentList({
     const { group, row } = target.current;
     if (group !== undefined && row !== undefined) onTarget?.(group + row);
   };
+  if (waitingForNetwork(query))
+    return (
+      <Text accessibilityRole="alert" style={[type.callout, { color: colors.secondary }]}>
+        {OFFLINE_MESSAGE}
+      </Text>
+    );
   if (query.isPending)
     return <ActivityIndicator accessibilityLabel="Loading comments" color={colors.accentText} />;
   if (query.error && !items.length)

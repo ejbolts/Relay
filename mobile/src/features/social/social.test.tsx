@@ -26,7 +26,8 @@ import { FriendQrSheet } from './FriendQrSheet';
 import { FriendsActivityCard } from './FriendsActivityCard';
 import * as linkedScroll from './linkedScroll';
 import { ProfileScreen } from './ProfileScreen';
-import { commentSpoken } from './Comments';
+import { commentSpoken, CommentsSheet } from './Comments';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 import { SharedWorkoutScreen } from './SharedWorkoutScreen';
 import { SharingSettingsScreen } from './SharingSettingsScreen';
 import { SocialScreen } from './SocialScreen';
@@ -1274,4 +1275,22 @@ test('one reaction picker opens at a time, and a refused reaction can be tried a
     }),
   ).toBeVisible();
   expect(screen.queryByLabelText(alexPicker)).toBeNull();
+});
+
+test('offline with nothing saved, comments say so instead of spinning, then load', async () => {
+  workoutWithComments({ 0: { items: [comment('c1', alex, 'Strong pressing!')], next: null } });
+  await expectOfflineUntilOnline(
+    jest.mocked(apiGet),
+    () =>
+      show(
+        <CommentsSheet
+          workoutId="w1"
+          title="Comments"
+          onClose={jest.fn()}
+          onOpenPerson={jest.fn()}
+        />,
+      ),
+    () => expect(screen.getByText('Strong pressing!')).toBeVisible(),
+  );
+  expect(screen.queryByLabelText('Loading comments')).toBeNull();
 });

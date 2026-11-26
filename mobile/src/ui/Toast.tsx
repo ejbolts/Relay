@@ -23,7 +23,10 @@ import { useTheme } from './theme';
 
 // Brief, non-blocking confirmations such as "Workout saved". Any screen calls `showToast`; the
 // most recently mounted <ToastHost /> shows it (a sheet mounts its own, since native sheets sit
-// above the app's root view), then it clears by itself or when tapped.
+// above the app's root view), then it clears by itself or when tapped. A host that mounts while
+// another shows a toast (a screen or sheet opening over it) takes the toast over, with its time
+// left and its callbacks, so it isn't left behind what opened; when that host goes, the toast goes
+// back to the host it came from.
 //
 // A toast stays as long as the web's does (`toastDuration`, shared with it): a confirmation
 // briefly, a warning or a record longer, an error longest, and an Undo for as long as what it
@@ -130,11 +133,16 @@ export function onToastAccountChange(listener: (account: string) => void) {
 }
 
 interface Host {
-  show: (toast: Toast) => void;
+  show: (toast: Toast | Shown) => void;
   /** A longer time for a toast that is still showing (Android's accessibility timeout). */
   extend: (id: number, ms: number) => void;
   /** A toast is on screen. */
   showing: () => boolean;
+  /**
+   * Gives up the toast it shows, without ending it, for a host that opened above to show: the
+   * toast with the time it has left. Null if it shows none.
+   */
+  lend: () => Shown | null;
 }
 const hosts: Host[] = [];
 
@@ -173,7 +181,9 @@ export function showToast(message: string, action?: ToastAction, options: ToastO
     // Promise.resolve: a test's mock may answer without a promise.
     Promise.resolve(AccessibilityInfo.getRecommendedTimeoutMillis?.(toast.ms))
       .then((ms) => {
-        if (typeof ms === 'number' && ms > toast.ms) host.extend(toast.id, ms);
+        // Whichever host shows the toast by then (it may have moved to one above).
+        if (typeof ms === 'number' && ms > toast.ms)
+          hosts.forEach((each) => each.extend(toast.id, ms));
       })
       .catch(() => undefined);
   }
@@ -196,6 +206,10 @@ function useSessionUser() {
 
 interface Shown extends Toast {
   account: string;
+  /** The time it has left, when it moved here from another host; otherwise `ms`. */
+  remaining?: number;
+  /** The hosts it moved up from, nearest last: it goes back to them when this one goes. */
+  lenders?: Host[];
 }
 
 export function ToastHost({ bottom = 24 }: { bottom?: number }) {
@@ -212,7 +226,13 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
   const [reader, setReader] = useState(false);
   // Press and focus hold the countdown separately, for the toast they happened on.
   const [hold, setHold] = useState({ id: -1, pressed: false, focused: false });
-  const clock = useRef({ id: -1, total: 0, remaining: 0 });
+  // `since`: when the running countdown started, or null while it is held or not running.
+  const clock = useRef<{ id: number; total: number; remaining: number; since: number | null }>({
+    id: -1,
+    total: 0,
+    remaining: 0,
+    since: null,
+  });
   const current = useRef<Shown | null>(null);
   const accountRef = useRef(account);
   const id = toast?.id;
@@ -239,10 +259,18 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
   });
 
   useEffect(() => {
+    /** The time toast `showing` has left here, counting a countdown that is running now. */
+    const timeLeft = (showing: Shown) => {
+      const { id: clockId, remaining, since } = clock.current;
+      if (clockId !== showing.id) return showing.remaining ?? showing.ms;
+      return Math.max(0, remaining - (since === null ? 0 : Date.now() - since));
+    };
     const host: Host = {
       show: (next) => {
         const replaced = current.current;
-        const stamped = { ...next, account: next.account ?? accountRef.current };
+        const stamped: Shown = { ...next, account: next.account ?? accountRef.current };
+        // A toast coming back from a host above counts down from the time it has left there.
+        if ('remaining' in next && next.remaining !== undefined) clock.current.id = -1;
         current.current = stamped;
         setToast(stamped);
         // A newer toast ends the one it replaces, as dismissing it would.
@@ -256,12 +284,38 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
         setToast(longer);
       },
       showing: () => current.current !== null,
+      lend: () => {
+        const showing = current.current;
+        if (!showing) return null;
+        const lent = { ...showing, remaining: timeLeft(showing) };
+        current.current = null;
+        setToast(null);
+        return lent;
+      },
     };
+    // Opening over a host that shows a toast: show it here instead, where it can be seen.
+    const below = hosts.at(-1);
     hosts.push(host);
+    const lent = below?.lend();
+    if (lent) host.show({ ...lent, lenders: [...(lent.lenders ?? []), below!] });
     return () => {
       hosts.splice(hosts.indexOf(host), 1);
+      const showing = current.current;
+      if (!showing) return;
+      // A toast that moved up from a host still there goes back to it, with its time left.
+      const lenders = showing.lenders ?? [];
+      const back = lenders.findLastIndex((lender) => hosts.includes(lender));
+      if (back >= 0 && !lenders[back].showing()) {
+        current.current = null;
+        lenders[back].show({
+          ...showing,
+          remaining: timeLeft(showing),
+          lenders: lenders.slice(0, back),
+        });
+        return;
+      }
       // A screen's own host going away settles what it was showing.
-      if (current.current) endRef.current(current.current.id, 'dismissed');
+      endRef.current(showing.id, 'dismissed');
     };
   }, []);
 
@@ -311,8 +365,9 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
   useEffect(() => {
     if (!toast) return;
     if (clock.current.id !== toast.id) {
-      clock.current = { id: toast.id, total: toast.ms, remaining: toast.ms };
-      left.setValue(1);
+      const remaining = Math.min(toast.remaining ?? toast.ms, toast.ms);
+      clock.current = { id: toast.id, total: toast.ms, remaining, since: null };
+      left.setValue(toast.ms > 0 ? remaining / toast.ms : 0);
     } else if (clock.current.total !== toast.ms) {
       // A longer time arrived for the same toast (Android's accessibility timeout).
       clock.current.remaining += toast.ms - clock.current.total;
@@ -321,6 +376,7 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
     if (held) return;
     const remaining = clock.current.remaining;
     const started = Date.now();
+    clock.current.since = started;
     const bar = Animated.timing(left, { toValue: 0, duration: remaining, useNativeDriver: false });
     if (!reduced) bar.start();
     const timer = setTimeout(() => endRef.current(toast.id, 'dismissed'), remaining);
@@ -328,6 +384,7 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
       bar.stop();
       clearTimeout(timer);
       clock.current.remaining = Math.max(0, remaining - (Date.now() - started));
+      clock.current.since = null;
     };
   }, [toast, held, left, reduced]);
 

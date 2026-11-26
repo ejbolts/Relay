@@ -28,6 +28,7 @@ import type { CardioOverview, CardioSession } from '../../../../frontend/src/typ
 import { localDate } from '../../../../frontend/src/utils';
 import { refreshTraining, useWeightUnit } from '../../data/queries';
 import { Button, Card, CardHeader, errorMessage } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
@@ -59,6 +60,16 @@ export function CardioSection() {
       mounted.current = false;
     };
   }, []);
+  if (waitingForNetwork(overview))
+    return (
+      <Note
+        action={
+          <Button label="Try again" variant="secondary" onPress={() => void overview.refetch()} />
+        }
+      >
+        {OFFLINE_MESSAGE}
+      </Note>
+    );
   if (overview.isPending) return <Note>Loading cardio…</Note>;
   if (overview.isError)
     return (

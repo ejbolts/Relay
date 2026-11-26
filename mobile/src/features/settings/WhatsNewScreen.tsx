@@ -12,6 +12,7 @@ import {
   type ReleaseImage,
 } from '../../../../frontend/src/releaseMetadata';
 import { Button, Card, errorMessage, ErrorState, Loading } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { useTheme } from '../../ui/theme';
 import { ReleaseTrailer } from '../review/ReleaseTrailer';
 import { useServerRelease } from './settingsData';
@@ -20,6 +21,8 @@ import { Row, Section, SettingsPage } from './SettingsList';
 /** The release notes of the Relay the server runs, as the web's What's new shows them. */
 export function WhatsNewScreen() {
   const release = useServerRelease();
+  if (waitingForNetwork(release))
+    return <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void release.refetch()} />;
   if (release.isPending) return <Loading label="Loading release notes" />;
   if (release.error)
     return (

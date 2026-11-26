@@ -13,6 +13,7 @@ import type {
   ImportBatch,
 } from '../../../../frontend/src/types';
 import { apiGet, apiSend, clientVersionHeaders } from '../../data/api';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 import { uploadFile } from '../../data/uploadFile';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { showMenu } from '../../ui/prompts';
@@ -691,4 +692,12 @@ describe('backups', () => {
     ).toBeTruthy();
     expect(mockFiles.upload).toHaveBeenCalledTimes(1);
   });
+});
+
+test('offline with nothing saved, the import history says so instead of spinning', async () => {
+  await expectOfflineUntilOnline(
+    jest.mocked(apiGet),
+    () => renderWith(<ImportHistoryScreen />),
+    () => expect(screen.getByText(/^No tracked imports yet/)).toBeTruthy(),
+  );
 });

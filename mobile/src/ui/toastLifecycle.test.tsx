@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
-import { AccessibilityInfo, AppState, Platform } from 'react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { AccessibilityInfo, AppState, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { nextSessionEpoch } from '../session/sessionEpoch';
 import { pendingActions } from './pendingActions';
@@ -254,4 +254,213 @@ it('lets only its own token clear a pending removal', () => {
   pendingActions.remove(second!);
   expect(pendingActions.add('friend', 'casey', account)).not.toBeNull();
   pendingActions.clear();
+});
+
+describe('a screen with its own host opening over a toast', () => {
+  // The root host, a screen above it with its own host, and a sheet above that with its own.
+  const stacked = (open: boolean | 'sheet', screenKey = 'screen') => (
+    <SafeAreaProvider
+      initialMetrics={{
+        frame: { x: 0, y: 0, width: 390, height: 844 },
+        insets: { top: 0, left: 0, right: 0, bottom: 0 },
+      }}
+    >
+      <View testID="root">
+        <ToastHost />
+      </View>
+      {open && (
+        <View testID="screen">
+          <ToastHost key={screenKey} />
+        </View>
+      )}
+      {open === 'sheet' && (
+        <View testID="sheet">
+          <ToastHost />
+        </View>
+      )}
+    </SafeAreaProvider>
+  );
+  const undoIn = (testID: string) =>
+    within(screen.getByTestId(testID)).queryByRole('button', { name: 'Undo' });
+  /** The hosts showing the Undo: one at most. */
+  const showingIn = () =>
+    ['root', 'screen', 'sheet'].filter((id) => screen.queryByTestId(id) && undoIn(id));
+  const action = () => ({ label: 'Undo', run: jest.fn(), onDismiss: jest.fn() });
+
+  it('moves the toast over the screen, keeping its time left, then settles it once', async () => {
+    const tree = await render(stacked(false));
+    const removal = action();
+    await act(async () => showToast('Set removed', removal, { duration: 'critical' }));
+    await act(async () => jest.advanceTimersByTime(3000));
+    await tree.rerender(stacked(true));
+    expect(showingIn()).toEqual(['screen']);
+    expect(screen.getAllByRole('button', { name: 'Undo' })).toHaveLength(1);
+    expect(removal.onDismiss).not.toHaveBeenCalled();
+    // 7 s in all: 3 s went by under the root, so it ends 4 s after moving.
+    await act(async () => jest.advanceTimersByTime(3900));
+    expect(showingIn()).toEqual(['screen']);
+    await act(async () => jest.advanceTimersByTime(200));
+    expect(undo()).toBeNull();
+    expect(removal.onDismiss).toHaveBeenCalledTimes(1);
+    expect(removal.run).not.toHaveBeenCalled();
+  });
+
+  it('runs Undo once from the screen above', async () => {
+    const tree = await render(stacked(false));
+    const removal = action();
+    await act(async () => showToast('Set removed', removal, { duration: 'critical' }));
+    await tree.rerender(stacked(true));
+    await fireEvent.press(
+      within(screen.getByTestId('screen')).getByRole('button', { name: 'Undo' }),
+    );
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(removal.run).toHaveBeenCalledTimes(1);
+    expect(removal.onDismiss).not.toHaveBeenCalled();
+  });
+
+  it('goes back under the root, with its time left, when the screen closes', async () => {
+    const tree = await render(stacked(false));
+    const removal = action();
+    await act(async () => showToast('Set removed', removal, { duration: 'critical' }));
+    await act(async () => jest.advanceTimersByTime(2000));
+    await tree.rerender(stacked(true));
+    expect(showingIn()).toEqual(['screen']);
+    await act(async () => jest.advanceTimersByTime(2000));
+    await tree.rerender(stacked(false));
+    expect(showingIn()).toEqual(['root']);
+    expect(removal.onDismiss).not.toHaveBeenCalled();
+    // 7 s in all: 2 s under the root and 2 s over the screen leave 3 s.
+    await act(async () => jest.advanceTimersByTime(2900));
+    expect(showingIn()).toEqual(['root']);
+    await act(async () => jest.advanceTimersByTime(200));
+    expect(undo()).toBeNull();
+    expect(removal.onDismiss).toHaveBeenCalledTimes(1);
+    expect(removal.run).not.toHaveBeenCalled();
+  });
+
+  it('climbs through a sheet over a screen and comes back down one host at a time', async () => {
+    const tree = await render(stacked(false));
+    const removal = action();
+    await act(async () => showToast('Set removed', removal, { duration: 'critical' }));
+    await tree.rerender(stacked(true));
+    expect(showingIn()).toEqual(['screen']);
+    await tree.rerender(stacked('sheet'));
+    expect(showingIn()).toEqual(['sheet']);
+    // The sheet closes: back to the screen it came from, not the root.
+    await tree.rerender(stacked(true));
+    expect(showingIn()).toEqual(['screen']);
+    await tree.rerender(stacked(false));
+    expect(showingIn()).toEqual(['root']);
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(removal.onDismiss).toHaveBeenCalledTimes(1);
+    expect(removal.run).not.toHaveBeenCalled();
+  });
+
+  it('settles a moved toast once when a newer one replaces it, and never brings it back', async () => {
+    const tree = await render(stacked(false));
+    const first = action();
+    await act(async () => showToast('Set removed', first, { duration: 'critical' }));
+    await tree.rerender(stacked(true));
+    expect(showingIn()).toEqual(['screen']);
+    const second = action();
+    await act(async () => showToast('Photo removed', second));
+    expect(first.onDismiss).toHaveBeenCalledTimes(1);
+    expect(screen.getByText('Photo removed')).toBeOnTheScreen();
+    expect(showingIn()).toEqual(['screen']);
+    // The newer toast is the screen's own, so it settles as the screen closes.
+    await tree.rerender(stacked(false));
+    expect(undo()).toBeNull();
+    expect(second.onDismiss).toHaveBeenCalledTimes(1);
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(first.onDismiss).toHaveBeenCalledTimes(1);
+    expect(first.run).not.toHaveBeenCalled();
+    expect(second.run).not.toHaveBeenCalled();
+  });
+
+  it('applies the longer Android timeout to a toast that moved up after it was shown', async () => {
+    Platform.OS = 'android';
+    let answer: (ms: number) => void = () => undefined;
+    jest
+      .spyOn(AccessibilityInfo, 'getRecommendedTimeoutMillis')
+      .mockImplementation(() => new Promise((resolve) => (answer = resolve)));
+    const tree = await render(stacked(false));
+    const removal = action();
+    await act(async () => showToast('Set removed', removal));
+    await tree.rerender(stacked(true));
+    expect(showingIn()).toEqual(['screen']);
+    await act(async () => answer(20000));
+    await act(async () => jest.advanceTimersByTime(15000));
+    expect(showingIn()).toEqual(['screen']);
+    await act(async () => jest.advanceTimersByTime(5100));
+    expect(undo()).toBeNull();
+    expect(removal.onDismiss).toHaveBeenCalledTimes(1);
+  });
+
+  it('settles a moved toast once when the app goes to the background', async () => {
+    const listeners: ((state: string) => void)[] = [];
+    jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+      listeners.push(listener as (state: string) => void);
+      return { remove: jest.fn() } as unknown as ReturnType<typeof AppState.addEventListener>;
+    });
+    const tree = await render(stacked(false));
+    const removal = action();
+    await act(async () => showToast('Set removed', removal, { duration: 'critical' }));
+    await tree.rerender(stacked(true));
+    expect(showingIn()).toEqual(['screen']);
+    await act(async () => listeners.forEach((listener) => listener('background')));
+    expect(removal.onDismiss).toHaveBeenCalledTimes(1);
+    expect(undo()).toBeNull();
+    await tree.rerender(stacked(false));
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(undo()).toBeNull();
+    expect(removal.onDismiss).toHaveBeenCalledTimes(1);
+    expect(removal.run).not.toHaveBeenCalled();
+  });
+
+  it('still settles a toast shown on the screen itself when the screen closes', async () => {
+    const tree = await render(stacked(true));
+    const removal = action();
+    await act(async () => showToast('Photo removed', removal));
+    expect(showingIn()).toEqual(['screen']);
+    await tree.rerender(stacked(false));
+    expect(undo()).toBeNull();
+    expect(removal.onDismiss).toHaveBeenCalledTimes(1);
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(removal.onDismiss).toHaveBeenCalledTimes(1);
+    expect(removal.run).not.toHaveBeenCalled();
+  });
+
+  it('drops a moved toast without callbacks when the account changes under it', async () => {
+    const tree = await render(stacked(false));
+    const removal = action();
+    await act(async () => showToast('Set removed', removal, { duration: 'critical' }));
+    await tree.rerender(stacked(true));
+    expect(showingIn()).toEqual(['screen']);
+    mockStatus = { kind: 'signed-in', user: { id: 'b' } };
+    await tree.rerender(stacked(true));
+    expect(undo()).toBeNull();
+    // Closing the screen brings nothing back for the new account.
+    await tree.rerender(stacked(false));
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(undo()).toBeNull();
+    expect(removal.onDismiss).not.toHaveBeenCalled();
+    expect(removal.run).not.toHaveBeenCalled();
+  });
+
+  it('drops a moved toast without callbacks when signing out closes the screen', async () => {
+    const tree = await render(stacked(false));
+    const removal = action();
+    await act(async () => showToast('Set removed', removal, { duration: 'critical' }));
+    await tree.rerender(stacked(true));
+    expect(showingIn()).toEqual(['screen']);
+    // Signing out closes the screen in the same render; the sign-in screen then opens its own.
+    mockStatus = { kind: 'signed-out' };
+    await tree.rerender(stacked(false));
+    expect(undo()).toBeNull();
+    await tree.rerender(stacked(true, 'sign-in'));
+    await act(async () => jest.advanceTimersByTime(10000));
+    expect(undo()).toBeNull();
+    expect(removal.onDismiss).not.toHaveBeenCalled();
+    expect(removal.run).not.toHaveBeenCalled();
+  });
 });

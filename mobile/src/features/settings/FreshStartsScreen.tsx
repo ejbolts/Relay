@@ -8,6 +8,7 @@ import { localDate } from '../../../../frontend/src/utils';
 import { apiGet, apiSend } from '../../data/api';
 import { queryKeys } from '../../data/queries';
 import { Button, errorMessage, ErrorState, Loading } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { promptText } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { Row, Section, SectionError, SettingsPage } from './SettingsList';
@@ -37,6 +38,8 @@ export function FreshStartsScreen() {
     },
     onError: (reason) => setError(errorMessage(reason)),
   });
+  if (waitingForNetwork(query))
+    return <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void query.refetch()} />;
   if (query.isPending) return <Loading label="Loading fresh starts" />;
   if (!query.data)
     return <ErrorState message={errorMessage(query.error)} onRetry={() => void query.refetch()} />;

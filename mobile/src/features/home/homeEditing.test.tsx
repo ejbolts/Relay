@@ -14,6 +14,7 @@ import { showToast } from '../../ui/Toast';
 import { AUTO_SCROLL_EDGE, dragAutoScrollStep, type DragScrollMetrics } from './HomeLayoutGrid';
 import { HomeLayoutScreen } from './HomeLayoutScreen';
 import { MuscleGoalsScreen } from './MuscleGoalsScreen';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 
 interface MockPanConfig {
   enabled?: boolean;
@@ -172,6 +173,14 @@ async function show(screenElement: ReactElement) {
     </SafeAreaProvider>,
   );
 }
+
+test('offline with nothing saved, Edit Home says so instead of spinning, then loads', async () => {
+  await expectOfflineUntilOnline(
+    jest.mocked(apiGet),
+    () => show(<HomeLayoutScreen />),
+    () => expect(screen.getByRole('button', { name: 'Save Home layout' })).toBeVisible(),
+  );
+});
 
 const savedLayout = () => jest.mocked(apiSend).mock.calls.at(-1)?.[2] as HomeLayout;
 

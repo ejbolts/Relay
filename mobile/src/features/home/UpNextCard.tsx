@@ -6,6 +6,7 @@ import { latestTopSets, shortDate, upNextSetLabel } from '../../../../frontend/s
 import { localDate } from '../../../../frontend/src/utils';
 import { useDashboard, useUpNext, useWeightUnit, useWorkoutHistory } from '../../data/queries';
 import { Button, Card, ErrorState, errorMessage, Loading } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
 import { haptics } from '../../ui/haptics';
@@ -59,6 +60,15 @@ export function UpNextCard() {
       </Card>
     );
 
+  if (waitingForNetwork(dashboard) || waitingForNetwork(history))
+    return (
+      <Card>
+        <ErrorState
+          message={OFFLINE_MESSAGE}
+          onRetry={() => void Promise.all([dashboard.refetch(), history.refetch()])}
+        />
+      </Card>
+    );
   if (upNext.loading)
     return (
       <Card>

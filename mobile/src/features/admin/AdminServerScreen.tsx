@@ -18,6 +18,7 @@ import type {
   ServerStatus,
 } from '../../../../frontend/src/types';
 import { Button, errorMessage, ErrorState, Loading } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { useNow } from '../../ui/useNow';
@@ -31,6 +32,13 @@ export function AdminServerScreen() {
   const status = useServerStatus();
   const client = useQueryClient();
   const [refreshing, setRefreshing] = useState(false);
+  if (waitingForNetwork(limits) || waitingForNetwork(status))
+    return (
+      <ErrorState
+        message={OFFLINE_MESSAGE}
+        onRetry={() => void client.refetchQueries({ queryKey: adminKeys.all })}
+      />
+    );
   if (limits.isPending || status.isPending) return <Loading label="Loading the server" />;
   const failed = (!limits.data && limits.error) || (!status.data && status.error);
   if (failed)

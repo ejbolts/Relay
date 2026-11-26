@@ -20,6 +20,11 @@ import {
 import { apiSend } from '../../data/api';
 import { queryKeys, useExercises, useSavedExercises, useWorkoutTypes } from '../../data/queries';
 import { Button, errorMessage, ErrorState, Loading } from '../../ui/components';
+import {
+  OFFLINE_MESSAGE,
+  placeholderWaitingForNetwork,
+  waitingForNetwork,
+} from '../../data/offline';
 import { showToast } from '../../ui/Toast';
 import { ExercisePicker } from '../workout/ExercisePicker';
 import { SectionError, SettingsPage } from './SettingsList';
@@ -35,6 +40,12 @@ export function WorkoutTypeExercisesScreen() {
     return (
       <ErrorState message={errorMessage(failed.error)} onRetry={() => void failed.refetch()} />
     );
+  }
+  const offline =
+    [plans, exercises].find(waitingForNetwork) ??
+    (placeholderWaitingForNetwork(types) ? types : undefined);
+  if (offline) {
+    return <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void offline.refetch()} />;
   }
   if (types.isPlaceholderData || plans.isPending || exercises.isPending) {
     return <Loading label="Loading workout type exercises" />;

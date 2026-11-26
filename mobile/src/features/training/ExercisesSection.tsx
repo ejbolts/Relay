@@ -22,6 +22,7 @@ import { formatWeightNumber, weightFromKg } from '../../../../frontend/src/weigh
 import { apiSend } from '../../data/api';
 import { queryKeys, useExercises, useWeightUnit } from '../../data/queries';
 import { Button, Card, IconButton } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { Icon } from '../../ui/Icon';
 import { Sheet } from '../../ui/Sheet';
 import { showToast } from '../../ui/Toast';
@@ -110,6 +111,16 @@ export function ExercisesSection() {
     go();
   };
 
+  if (waitingForNetwork(exercises))
+    return (
+      <Note
+        action={
+          <Button label="Try again" variant="secondary" onPress={() => void exercises.refetch()} />
+        }
+      >
+        {OFFLINE_MESSAGE}
+      </Note>
+    );
   if (exercises.isPending) return <Note>Loading exercises…</Note>;
   if (exercises.isError)
     return (
