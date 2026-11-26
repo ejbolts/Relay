@@ -735,8 +735,6 @@ function SetRow({
   // Last time's RPE shows faintly in an unlogged set's RPE, as on the web.
   const rpeText = item.rpe !== null ? String(item.rpe) : lastRpe !== null ? String(lastRpe) : '–';
   const rpeInk = item.rpe !== null ? colors.text : colors.muted;
-  // Last time's numbers stand in faintly for an empty field, as the web's ghost values.
-  const ghost = !item.completed ? previous : undefined;
 
   // The set pill's menu, built each render so it always reflects the set as it is now.
   const setMenu: MenuItem[] = [
@@ -861,7 +859,6 @@ function SetRow({
                     <NumberField
                       ref={firstField}
                       label={`Duration minutes for set ${number}`}
-                      placeholder={minutesFormat(ghost?.duration_seconds ?? null)}
                       value={item.duration_seconds}
                       format={minutesFormat}
                       parse={minutesParse}
@@ -874,7 +871,6 @@ function SetRow({
                     <NumberField
                       ref={secondField}
                       label={`Distance kilometres for set ${number}`}
-                      placeholder={formatPlain(ghost?.distance_km ?? null)}
                       value={item.distance_km}
                       format={formatPlain}
                       parse={parseDecimal}
@@ -890,7 +886,6 @@ function SetRow({
                     <NumberField
                       ref={firstField}
                       label={`Weight ${weightUnit === 'lb' ? 'pounds' : 'kilograms'} for set ${number}`}
-                      placeholder={weightFormat(ghost?.weight_kg ?? null)}
                       value={item.weight_kg}
                       format={weightFormat}
                       parse={weightParse}
@@ -904,7 +899,6 @@ function SetRow({
                     <NumberField
                       ref={secondField}
                       label={`Repetitions for set ${number}`}
-                      placeholder={formatPlain(ghost?.reps ?? null)}
                       keyboardType="number-pad"
                       value={item.reps}
                       format={formatPlain}

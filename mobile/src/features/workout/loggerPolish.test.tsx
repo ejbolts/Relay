@@ -160,6 +160,22 @@ test('a cleared suggestion stops showing last time, and the set logs without tha
   expect(draftSet(0, 0)).toMatchObject({ completed: true, weight_kg: null, reps: 8 });
 });
 
+test('a cleared field stays empty after the workout is reopened, without last time’s value', async () => {
+  const first = await openLogger();
+  await fireEvent.changeText(
+    screen.getByLabelText('Weight kilograms for set 1, suggested value'),
+    '',
+  );
+  expect(draftSet(0, 0)?.weight_kg).toBeNull();
+  await first.unmount();
+  client.clear();
+  await openLogger(false);
+  const reopened = screen.getByLabelText(/^Weight kilograms for set 1/);
+  expect(reopened.props.value).toBe('');
+  // Last time's 80 doesn't come back as a hint: the web's empty set field shows nothing.
+  expect(reopened.props.placeholder).toBe('–');
+});
+
 test('the RPE column sets the RPE from its own menu', async () => {
   await openLogger();
   await fireEvent.press(screen.getAllByRole('button', { name: 'RPE for set 1' })[0]);

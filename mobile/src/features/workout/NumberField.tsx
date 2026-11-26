@@ -1,12 +1,21 @@
-import { forwardRef, useEffect, useRef, useState, type ComponentRef } from 'react';
-import { StyleSheet, TextInput, type KeyboardTypeOptions } from 'react-native';
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ComponentRef,
+} from 'react';
+import { Keyboard, Platform, StyleSheet, TextInput, type KeyboardTypeOptions } from 'react-native';
 import { decimalNumberOrNull } from '../../../../frontend/src/utils';
 import { useTheme } from '../../ui/theme';
 
 /**
  * A number entry for a set: it keeps exactly what is typed (such as "82." on the way to "82.5")
  * and reports the parsed value on every keystroke, so the stored workout always has it. A value
- * changed from outside (a suggestion moving on) replaces the text.
+ * changed from outside (a suggestion moving on) replaces the text. An empty field shows a dash,
+ * as the web's empty set input shows nothing: never last time's value, which could be read as
+ * still being there.
  */
 export const NumberField = forwardRef<
   ComponentRef<typeof TextInput>,
@@ -20,8 +29,6 @@ export const NumberField = forwardRef<
     /** Shown muted: a value copied from last time, used if the set is logged as it is. */
     suggested?: boolean;
     done?: boolean;
-    /** Shown faintly while empty, such as last time's value, until the field is edited. */
-    placeholder?: string;
     onSubmitEditing?: () => void;
   }
 >(function NumberField(
@@ -34,18 +41,23 @@ export const NumberField = forwardRef<
     keyboardType = 'decimal-pad',
     suggested,
     done,
-    placeholder,
     onSubmitEditing,
   },
   ref,
 ) {
   const { colors, type, radius, scheme } = useTheme();
   const [focused, setFocused] = useState(false);
-  // Once someone types in or clears the field, last time's value no longer stands in for it,
-  // so an emptied field can't be read as still holding the old number.
-  const [edited, setEdited] = useState(false);
   const [text, setText] = useState(() => format(value));
   const latest = useRef(value);
+  const input = useRef<ComponentRef<typeof TextInput>>(null);
+  useImperativeHandle(ref, () => input.current!, []);
+  // Android's Back hides the keyboard but leaves the field focused, with its outline and caret
+  // on a logged set's row: hiding the keyboard ends the edit, as it does on iOS.
+  useEffect(() => {
+    if (!focused || Platform.OS !== 'android') return;
+    const hidden = Keyboard.addListener('keyboardDidHide', () => input.current?.blur());
+    return () => hidden.remove();
+  }, [focused]);
   useEffect(() => {
     if (value === latest.current) return;
     latest.current = value;
@@ -53,10 +65,9 @@ export const NumberField = forwardRef<
   }, [value, format]);
   return (
     <TextInput
-      ref={ref}
+      ref={input}
       value={text}
       onChangeText={(next) => {
-        setEdited(true);
         setText(next);
         const parsed = parse(next);
         latest.current = parsed;
@@ -66,8 +77,7 @@ export const NumberField = forwardRef<
       keyboardType={keyboardType}
       returnKeyType="done"
       selectTextOnFocus
-      placeholder={(!edited && placeholder) || '–'}
-      // Fainter than a suggested value, which is logged as it is: a hint is only a hint.
+      placeholder="–"
       placeholderTextColor={`${colors.muted}8C`}
       selectionColor={colors.accent}
       cursorColor={colors.accent}
