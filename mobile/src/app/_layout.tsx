@@ -14,6 +14,7 @@ import { useImportPrompt } from '../features/data';
 import { AppTourHost } from '../features/guides/AppTourHost';
 import { TipSyncHost } from '../features/guides/TipSyncHost';
 import { RemotePushSync } from '../features/push/RemotePushSync';
+import { OfflineNotice } from '../features/shell/OfflineNotice';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { VideoUploadSessionSync } from '../features/videos';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
@@ -142,6 +143,9 @@ function Navigation() {
         {signedIn && !mustChangePassword && <CardioShareHost />}
         {/* Tips follow the account: this phone's tips merge with the server's and the web's. */}
         {signedIn && !mustChangePassword && <TipSyncHost />}
+        {/* The web's offline notice: at the top, clear of the tab bar, live workout bar and
+            toasts, after an outage has lasted. */}
+        <OfflineNotice />
         {/* Android's menu sheets and text dialogs for every screen. The logger, a separate native
             sheet, mounts its own. */}
         <PromptHost />

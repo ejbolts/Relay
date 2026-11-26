@@ -71,6 +71,5 @@ What the native app covers compared with the web app, which it will replace. Upd
   See `mobile/README.md` ("Native builds") for the variables and steps.
 
 - **Uploads after the OS stops Relay:** an upload stops if the OS suspends or kills the app, and its session stays on the server where neither app lists it. A follow-up could offer to resume or discard it on launch.
-- **Offline notice:** the web shows an offline pill after a lasting outage, and Back online when the connection returns. The app has no such notice: screens that need the server say they are waiting for a connection, and offline changes queue as usual.
 - **Remote push duplicates** are avoided in normal use, not ruled out: a phone clock far off, a report that never reached the server, several server processes, or Expo's acceptance window can still double an alert, and a server restart can drop a phone's reminder after a browser received its copy.
 - **Expo Go:** Android can't receive remote push, and tapping a background rest alert on Android opens Expo Go's own home screen.
