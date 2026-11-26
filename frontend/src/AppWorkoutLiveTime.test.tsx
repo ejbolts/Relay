@@ -207,7 +207,13 @@ describe('correcting the live workout time', () => {
     expect(timeButton()?.textContent).toBe('Live 45:00');
     expect(readActiveWorkoutDraft()?.adjustedMs).toBe(35 * MINUTE);
     await finish();
-    expect(vi.mocked(api.createWorkout).mock.calls[0][0].duration_minutes).toBe(45);
+    // Started at 09:50 and finished at 10:00: the corrected 45 minutes move the start, so the
+    // workout ends when it was finished rather than at 10:35.
+    expect(vi.mocked(api.createWorkout).mock.calls[0][0]).toMatchObject({
+      duration_minutes: 45,
+      start_time: '09:15',
+      end_time: '10:00',
+    });
   });
 
   it('takes time off a timer that was left running', async () => {
@@ -263,12 +269,25 @@ describe('correcting the live workout time', () => {
     expect(timeButton()?.textContent).toBe('Live 25:00');
   });
 
-  it('adds the corrected live time to the minutes a resumed workout already had', async () => {
+  it('corrects a resumed workout to its whole time, including the minutes already saved', async () => {
     liveDraft(10, { resumingWorkoutId: 'existing', previousDurationMinutes: 35 });
     vi.mocked(api.updateWorkout).mockReturnValue(new Promise<TrackedWorkout>(() => {}));
     await mount();
-    await correctTime('0', '20');
+    expect(timeButton()?.textContent).toBe('Live 45:00');
+    await act(async () => timeButton()!.click());
+    // The correction opens on the time the clock shows, not on this session's 10 minutes.
+    expect(fields().map((input) => input.value)).toEqual(['0', '45']);
+    // Below the 35 minutes already saved: it says so beside the fields and won't save.
+    await type(fields()[1], '30');
+    expect(editor()?.querySelector('[role="alert"]')?.textContent).toBe(
+      'At least 35 min, already saved',
+    );
+    expect(button('Set time', editor()!).disabled).toBe(true);
+    await act(async () => button('Cancel', editor()!).click());
+    await correctTime('0', '55');
+    expect(timeButton()?.textContent).toBe('Live 55:00');
     await finish();
+    // 55 in all, not 35 + 55.
     expect(vi.mocked(api.updateWorkout).mock.calls[0][1].duration_minutes).toBe(55);
   });
 });

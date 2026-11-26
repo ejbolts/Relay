@@ -403,6 +403,7 @@ import {
 } from './finishSummary';
 import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
+import { correctedSessionSeconds, workoutTimeSoFarSeconds } from './workoutTimeCorrection';
 import { useDiscardChangesGuard, type LeaveGuard } from './WorkoutEditGuard';
 import { useUnsavedWorkoutChanges } from './workoutEditChanges';
 
@@ -5518,12 +5519,20 @@ function WorkoutLogger({
 
       {timeEditorOpen && (
         <WorkoutTimeEditor
-          elapsedSeconds={elapsed}
+          elapsedSeconds={workoutTimeSoFarSeconds(elapsed, previousDurationMinutes)}
+          savedMinutes={previousDurationMinutes}
           onClose={() => setTimeEditorOpen(false)}
           onSave={(seconds) => {
-            // A corrected clock replaces a fixed total kept from an earlier finish attempt.
+            // A corrected clock replaces a fixed total kept from an earlier finish attempt. It is
+            // the whole workout's time: a resumed workout's saved minutes are already in it.
             setDurationOverrideMinutes(null);
-            setPause((current) => withElapsedSeconds(current, startedAt, seconds));
+            setPause((current) =>
+              withElapsedSeconds(
+                current,
+                startedAt,
+                correctedSessionSeconds(seconds, previousDurationMinutes),
+              ),
+            );
             setTimeEditorOpen(false);
           }}
         />

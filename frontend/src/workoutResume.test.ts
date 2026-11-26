@@ -73,15 +73,25 @@ describe('resuming a finished workout', () => {
 });
 
 describe('live workout clock times', () => {
-  it('records the real start and the end its saved duration reaches, across midnight', () => {
-    expect(liveWorkoutTimes(new Date(2026, 10, 19, 16, 15, 40).getTime(), 45)).toEqual({
+  it('ends when the workout finished and starts its duration before, across midnight', () => {
+    expect(liveWorkoutTimes(new Date(2026, 10, 19, 17, 0, 40).getTime(), 45)).toEqual({
       start: '16:15',
       end: '17:00',
     });
-    expect(liveWorkoutTimes(new Date(2026, 10, 19, 23, 30).getTime(), 60)).toEqual({
+    expect(liveWorkoutTimes(new Date(2026, 10, 20, 0, 30).getTime(), 60)).toEqual({
       start: '23:30',
       end: '00:30',
     });
+  });
+
+  it('leaves out times that would start the evening before the day the workout is dated', () => {
+    const finished = new Date(2026, 10, 27, 0, 20).getTime();
+    // Dated the 27th, a 23:50 start would read as the night of the 27th: no times.
+    expect(liveWorkoutTimes(finished, 30, '2026-11-27')).toBeNull();
+    // Dated the 26th, the evening before is right.
+    expect(liveWorkoutTimes(finished, 30, '2026-11-26')).toEqual({ start: '23:50', end: '00:20' });
+    // A start on the day itself keeps its times.
+    expect(liveWorkoutTimes(finished, 20, '2026-11-27')).toEqual({ start: '00:00', end: '00:20' });
   });
 
   it('leaves out a full day, which the times would read as zero', () => {
