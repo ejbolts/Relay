@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { HeatmapDay } from './types';
+import type { HeatmapDay, WorkoutCategory } from './types';
 import {
   heatmapWithoutWorkouts,
   queuedWorkoutIds,
@@ -55,6 +55,106 @@ describe('heatmapWithoutWorkouts', () => {
     ]);
     expect(heatmapWithoutWorkouts(days, [])).toBe(days);
     expect(heatmapWithoutWorkouts(days, ['elsewhere'])).toEqual(days);
+  });
+});
+
+describe('heatmapWithoutWorkouts on mixed days, as the server builds them', () => {
+  const builtin = (id: string) => ({
+    id,
+    name: id,
+    color: '#000000',
+    is_custom: false,
+    archived: false,
+  });
+  const arms = { id: 'arms', name: 'Arms', color: '#ec4899', is_custom: true, archived: false };
+  const entry = (
+    id: string,
+    category: WorkoutCategory,
+    exercises: string[],
+    workout_type_id: string | null = null,
+  ) => ({
+    id,
+    name: id,
+    category,
+    workout_type_id,
+    duration_minutes: 40,
+    exercises: exercises.map((exercise_name) => ({
+      exercise_name,
+      set_count: 3,
+      bodyweight_kg: null,
+    })),
+  });
+  const library: Record<string, { category: WorkoutCategory; kind: 'strength' | 'cardio' }> = {
+    Bench: { category: 'upper', kind: 'strength' },
+    Squat: { category: 'lower', kind: 'strength' },
+    Treadmill: { category: 'cardio', kind: 'cardio' },
+  };
+  const lookup = (name: string) => library[name];
+  const mixed = (
+    workouts: ReturnType<typeof entry>[],
+    categories: WorkoutCategory[],
+    types: string[],
+  ) =>
+    ({
+      workout_date: '2026-11-20',
+      categories,
+      workout_types: types.map((id) => (id === 'arms' ? arms : builtin(id))),
+      workout_count: workouts.length,
+      set_count: workouts.length * 3,
+      workouts,
+    }) as unknown as HeatmapDay;
+  const look = (day: HeatmapDay) => ({
+    categories: day.categories,
+    types: day.workout_types?.map((type) => type.id),
+  });
+
+  it('an upper + lower day keeps upper once lower is deleted', () => {
+    const day = mixed(
+      [entry('a', 'upper', ['Bench']), entry('b', 'lower', ['Squat'])],
+      ['full_body'],
+      ['upper', 'lower'],
+    );
+    const expected = { categories: ['upper'], types: ['upper'] };
+    expect(look(heatmapWithoutWorkouts([day], ['b'], lookup)[0])).toEqual(expected);
+    expect(look(heatmapWithoutWorkouts([day], ['b'])[0])).toEqual(expected);
+  });
+
+  it('a kept workout with cardio exercises keeps the cardio arc', () => {
+    const day = mixed(
+      [entry('a', 'upper', ['Bench']), entry('b', 'other', ['Bench', 'Treadmill'], 'arms')],
+      ['full_body', 'cardio'],
+      ['upper', 'arms', 'cardio'],
+    );
+    const expected = { categories: ['other', 'cardio'], types: ['arms', 'cardio'] };
+    expect(look(heatmapWithoutWorkouts([day], ['a'], lookup)[0])).toEqual(expected);
+    expect(look(heatmapWithoutWorkouts([day], ['a'])[0])).toEqual(expected);
+  });
+
+  it('a cardio-category workout with strength sets keeps its strength colour', () => {
+    const day = mixed(
+      [entry('a', 'lower', ['Squat']), entry('b', 'cardio', ['Bench'])],
+      ['full_body'],
+      ['lower', 'upper'],
+    );
+    expect(look(heatmapWithoutWorkouts([day], ['a'], lookup)[0])).toEqual({
+      categories: ['upper'],
+      types: ['upper'],
+    });
+    // Without the exercise library it can't see the strength sets, but the day keeps a colour.
+    const approximate = heatmapWithoutWorkouts([day], ['a'])[0];
+    expect(approximate.categories.length).toBeGreaterThan(0);
+  });
+
+  it('falls back to the close rule when an exercise isn’t in the library', () => {
+    const day = mixed(
+      [entry('a', 'upper', ['Bench']), entry('b', 'lower', ['Mystery'])],
+      ['full_body'],
+      ['upper', 'lower'],
+    );
+    expect(look(heatmapWithoutWorkouts([day], ['a'], lookup)[0])).toEqual({
+      categories: ['lower'],
+      types: ['lower'],
+    });
   });
 });
 

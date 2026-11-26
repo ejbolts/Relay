@@ -1,5 +1,5 @@
-import { useQuery, type QueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useCallback, useMemo } from 'react';
 import { initialHistoryStart } from '../../../frontend/src/historyWindow';
 import type {
   DashboardData,
@@ -14,6 +14,7 @@ import type {
 import { upNextSession } from '../../../frontend/src/upNextSession';
 import { localDate } from '../../../frontend/src/utils';
 import type { WeightUnit } from '../../../frontend/src/weightUnits';
+import { heatmapWithoutWorkouts, type ExerciseByName } from '../../../frontend/src/workoutDeletion';
 import { DEFAULT_WORKOUT_TYPES } from '../../../frontend/src/workoutTypes';
 import { apiGet } from './api';
 
@@ -32,22 +33,77 @@ export const queryKeys = {
   personalRecords: ['personal-records'] as const,
 };
 
+/**
+ * Saved workouts deleted while their Undo still shows (features/training/workoutDeletion), by id.
+ * They stay in the cache (the delete isn't sent yet), so every read below leaves them out, and a
+ * refresh meanwhile can't bring one back. Kept in the query cache, which every sign-in and
+ * sign-out clears, so a list never outlives its session.
+ */
+export const deletedWorkoutsKey = ['deleted-workouts'] as const;
+const NO_IDS: readonly string[] = [];
+
+export function useDeletedWorkouts(): readonly string[] {
+  const client = useQueryClient();
+  return useQuery({
+    queryKey: deletedWorkoutsKey,
+    // Nothing to fetch: a refetch keeps the list as it is.
+    queryFn: () => client.getQueryData<readonly string[]>(deletedWorkoutsKey) ?? NO_IDS,
+    initialData: NO_IDS,
+    staleTime: Infinity,
+  }).data;
+}
+
+/** Exercises by name from the cached library, so a calendar day is rebuilt as the server does. */
+export function cachedExerciseByName(client: QueryClient): ExerciseByName {
+  const byName = new Map(
+    (client.getQueryData<Exercise[]>(queryKeys.exercises) ?? []).map((item) => [item.name, item]),
+  );
+  return (name) => byName.get(name);
+}
+
 export function useDashboard() {
   const today = localDate();
+  const client = useQueryClient();
+  const deleted = useDeletedWorkouts();
+  const select = useCallback(
+    (data: DashboardData): DashboardData =>
+      data && deleted.length
+        ? {
+            ...data,
+            heatmap: heatmapWithoutWorkouts(
+              data.heatmap ?? [],
+              deleted,
+              cachedExerciseByName(client),
+            ),
+            recent_workouts: (data.recent_workouts ?? []).filter(
+              (item) => !deleted.includes(item.id),
+            ),
+          }
+        : data,
+    [client, deleted],
+  );
   return useQuery({
     queryKey: queryKeys.dashboard(today),
     queryFn: ({ signal }) => apiGet<DashboardData>(`/api/dashboard?on_date=${today}`, signal),
+    select,
   });
 }
 
 /** The history window the web opens with (frontend/src/historyWindow.ts), newest first. */
 export function useWorkoutHistory() {
   const start = initialHistoryStart();
+  const deleted = useDeletedWorkouts();
   return useQuery({
     queryKey: queryKeys.workouts(start),
     queryFn: ({ signal }) =>
       apiGet<WorkoutSnapshot>(`/api/workouts/snapshot?start=${start}`, signal),
-    select: (snapshot) => snapshot.workouts,
+    select: useCallback(
+      (snapshot: WorkoutSnapshot) =>
+        deleted.length
+          ? snapshot.workouts.filter((item) => !deleted.includes(item.id))
+          : snapshot.workouts,
+      [deleted],
+    ),
   });
 }
 

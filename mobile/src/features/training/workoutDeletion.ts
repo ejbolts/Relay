@@ -1,4 +1,4 @@
-import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { readFinishedWorkouts } from '../../../../frontend/src/finishedWorkoutQueue';
 import type { DashboardData, HeatmapDay, TrackedWorkout } from '../../../../frontend/src/types';
@@ -10,7 +10,12 @@ import {
 } from '../../../../frontend/src/workoutDeletion';
 import { apiSend } from '../../data/api';
 import { deviceStorage } from '../../data/deviceStorage';
-import { refreshTraining } from '../../data/queries';
+import {
+  cachedExerciseByName,
+  deletedWorkoutsKey,
+  refreshTraining,
+  useDeletedWorkouts,
+} from '../../data/queries';
 import { useOptionalSession } from '../../session/SessionProvider';
 import { haptics } from '../../ui/haptics';
 import { pendingActions, usePendingActions } from '../../ui/pendingActions';
@@ -20,67 +25,82 @@ import { useWorkout } from '../workout/WorkoutProvider';
 /** The `pendingActions` kind of a saved workout deleted while its Undo still shows. */
 export const WORKOUT_DELETION = 'workout';
 
-/** Saved workouts deleted in this session whose Undo still shows: hidden everywhere. */
+/** Saved workouts deleted in this session whose Undo still shows. */
 export const usePendingWorkoutDeletions = () => usePendingActions(WORKOUT_DELETION);
 
-type Edited = { queryKey: QueryKey; before: unknown; after: unknown };
-
-const withoutWorkout = <T extends { id: string }>(list: unknown, id: string) =>
-  Array.isArray(list) ? (list as T[]).filter((item) => item.id !== id) : list;
-
-/** A cached response with the workout taken out, or the same object when it isn't there. */
-function dataWithout(data: unknown, id: string): unknown {
-  if (!data || typeof data !== 'object') return data;
-  const record = data as Record<string, unknown>;
-  // An infinite query's pages (Training's older months).
-  if (Array.isArray(record.pages)) {
-    const pages = record.pages.map((page) => dataWithout(page, id));
-    return pages.every((page, index) => page === (record.pages as unknown[])[index])
-      ? data
-      : { ...record, pages };
-  }
-  let next = record;
-  for (const key of ['workouts', 'recent_workouts'] as const) {
-    const list = record[key];
-    if (Array.isArray(list) && list.some((item: { id?: string }) => item?.id === id))
-      next = { ...next, [key]: withoutWorkout(list, id) };
-  }
-  if (Array.isArray(record.heatmap)) {
-    const heatmap = heatmapWithoutWorkouts(record.heatmap as HeatmapDay[], [id]);
-    if (
-      heatmap.some((day, index) => day !== (record.heatmap as HeatmapDay[])[index]) ||
-      heatmap.length !== record.heatmap.length
-    )
-      next = { ...next, heatmap };
-  }
-  return next;
+/** Marks a workout deleted (every read leaves it out) or brings it back. */
+function markDeleted(client: QueryClient, id: string, deleted: boolean) {
+  client.setQueryData<readonly string[]>(deletedWorkoutsKey, (ids = []) =>
+    deleted ? (ids.includes(id) ? ids : [...ids, id]) : ids.filter((item) => item !== id),
+  );
 }
 
 /**
- * Takes the workout out of every cached list, calendar and dashboard at once (Home, Training and
- * their calendars read these), and returns how to put back what it changed.
+ * Takes a workout the server has deleted out of every cached list, calendar and dashboard, so
+ * it stays gone once its deleted mark is cleared, even if the refresh after it fails.
  */
-export function hideWorkoutInCache(client: QueryClient, id: string) {
-  const edited: Edited[] = [];
-  for (const [queryKey, before] of [
+export function dropDeletedWorkout(client: QueryClient, id: string) {
+  const lookup = cachedExerciseByName(client);
+  const without = (data: unknown): unknown => {
+    if (!data || typeof data !== 'object') return data;
+    const record = data as Record<string, unknown>;
+    // An infinite query's pages (Training's older months).
+    if (Array.isArray(record.pages)) return { ...record, pages: record.pages.map(without) };
+    const next = { ...record };
+    for (const key of ['workouts', 'recent_workouts'] as const)
+      if (Array.isArray(record[key]))
+        next[key] = (record[key] as { id?: string }[]).filter((item) => item?.id !== id);
+    if (Array.isArray(record.heatmap))
+      next.heatmap = heatmapWithoutWorkouts(record.heatmap as HeatmapDay[], [id], lookup);
+    return next;
+  };
+  for (const [queryKey, data] of [
     ...client.getQueriesData<DashboardData>({ queryKey: ['dashboard'] }),
     ...client.getQueriesData({ queryKey: ['workouts'] }),
   ]) {
     // A workout's own detail stays, so a screen still showing it doesn't empty.
-    if (queryKey[1] === 'detail') continue;
-    const after = dataWithout(before, id);
-    if (after === before) continue;
-    client.setQueryData(queryKey, after);
-    // What the cache holds now (it may keep a structurally shared copy), to recognise later.
-    edited.push({ queryKey, before, after: client.getQueryData(queryKey) });
+    if (queryKey[1] !== 'detail' && data !== undefined)
+      client.setQueryData(queryKey, without(data));
   }
-  return {
-    /** Puts back each response this changed, unless something newer has replaced it since. */
-    restore() {
-      for (const { queryKey, before, after } of edited)
-        if (client.getQueryData(queryKey) === after) client.setQueryData(queryKey, before);
-    },
-  };
+}
+
+// "Workout deleted" toasts whose Undo is on screen, by session. A notice about another deletion
+// (it failed, or a save got there first) waits until none shows: showing it would replace that
+// toast, which sends its delete and spends an Undo the person never saw end.
+let showing: { token: string; account: string }[] = [];
+let held: { account: string; message: string; variant: 'error' | 'warning' }[] = [];
+
+function undoShowing(account: string) {
+  return showing.some((entry) => entry.account === account);
+}
+
+function notify(account: string, message: string, variant: 'error' | 'warning') {
+  if (!isToastAccountCurrent(account)) return;
+  if (undoShowing(account)) held.push({ account, message, variant });
+  else showToast(message, undefined, { account, variant });
+}
+
+/** A "Workout deleted" toast has ended: show what waited for it, once no other Undo shows. */
+function undoEnded(token: string) {
+  showing = showing.filter((entry) => entry.token !== token);
+  const account = toastAccount();
+  // Another session's notices are dropped with it.
+  held = held.filter((entry) => entry.account === account);
+  if (undoShowing(account) || !held.length) return;
+  // The latest says the most; several at once are counted rather than replacing each other.
+  const latest = held.at(-1)!;
+  const message =
+    held.length > 1
+      ? `${held.length} workouts were not deleted. ${latest.message}`
+      : latest.message;
+  held = [];
+  showToast(message, undefined, { account, variant: latest.variant });
+}
+
+/** For tests. */
+export function resetWorkoutDeletions() {
+  showing = [];
+  held = [];
 }
 
 /**
@@ -102,10 +122,16 @@ export function useWorkoutDeletion() {
   const request = useCallback(
     (item: TrackedWorkout): boolean => {
       // A workout with changes still waiting to sync can't change until they land, as on the web.
-      const queued = queuedWorkoutIds(
-        readFinishedWorkouts(deviceStorage).filter((entry) => entry.pendingSave.userId === userId),
-      );
-      if (workoutBlockedWhileSyncing(item.id, queued)) {
+      const waitingToSync = () =>
+        workoutBlockedWhileSyncing(
+          item.id,
+          queuedWorkoutIds(
+            readFinishedWorkouts(deviceStorage).filter(
+              (entry) => entry.pendingSave.userId === userId,
+            ),
+          ),
+        );
+      if (waitingToSync()) {
         haptics.warning();
         showToast(WORKOUT_SYNCING_MESSAGE, undefined, { variant: 'warning' });
         return false;
@@ -113,43 +139,64 @@ export function useWorkoutDeletion() {
       const account = toastAccount();
       const token = pendingActions.add(WORKOUT_DELETION, item.id, account);
       if (!token) return false;
-      const hidden = hideWorkoutInCache(client, item.id);
-      const done = () => pendingActions.remove(token);
+      markDeleted(client, item.id, true);
+      // Brings it back (Undo, a failure, a save that got there first) and releases the mark.
+      const keep = () => {
+        if (isToastAccountCurrent(account)) markDeleted(client, item.id, false);
+        pendingActions.remove(token);
+      };
+      // Toasts of an ended session were dropped without ending here.
+      showing = [
+        ...showing.filter((entry) => isToastAccountCurrent(entry.account)),
+        { token, account },
+      ];
       haptics.success();
       showToast(
         'Workout deleted',
         {
           label: 'Undo',
           run: () => {
-            hidden.restore();
-            done();
+            keep();
+            undoEnded(token);
           },
-          onDismiss: () =>
+          onDismiss: () => {
+            undoEnded(token);
+            // Finished in the logger while the Undo showed: that save is still on its way, and
+            // deleting now would race it. The newer save wins, as the web blocks changing a
+            // workout until its save lands.
+            if (waitingToSync()) {
+              keep();
+              notify(account, WORKOUT_SYNCING_MESSAGE, 'warning');
+              return;
+            }
             void apiSend<void>(`/api/workouts/${encodeURIComponent(item.id)}`, 'DELETE').then(
               () => {
                 // A session that has ended keeps nothing of this; its cache is already gone.
                 if (isToastAccountCurrent(account)) {
-                  // Deleted for certain: out of the cache before the pending mark goes, so a
-                  // refresh that fails can't show it again.
-                  hideWorkoutInCache(client, item.id);
+                  // Deleted for certain: out of the cache before its mark goes, so a refresh that
+                  // fails can't show it again.
+                  dropDeletedWorkout(client, item.id);
+                  markDeleted(client, item.id, false);
                   // Resuming it in the logger ends too: there is nothing left to save it over.
                   if (live.current.live?.resumedWorkoutId === item.id) live.current.discard();
                 }
-                done();
+                pendingActions.remove(token);
                 if (isToastAccountCurrent(account)) void refreshTraining(client);
               },
               (reason: unknown) => {
-                if (isToastAccountCurrent(account)) hidden.restore();
-                done();
-                showToast(
+                keep();
+                // Back from the server's own copy, whatever else changed in the cache meanwhile.
+                if (isToastAccountCurrent(account)) void refreshTraining(client);
+                notify(
+                  account,
                   reason instanceof Error && reason.message
                     ? reason.message
                     : 'Could not delete that workout.',
-                  undefined,
-                  { account, variant: 'error' },
+                  'error',
                 );
               },
-            ),
+            );
+          },
         },
         { account, duration: 'important' },
       );
@@ -161,23 +208,25 @@ export function useWorkoutDeletion() {
 }
 
 /**
- * Training's history without the workouts deleted while their Undo shows, so a refresh in the
- * meantime can't bring one back to the sessions or the calendar.
+ * Training's history without the workouts deleted while their Undo shows. Home's reads and
+ * Training's recent weeks already leave them out (`useDashboard`, `useWorkoutHistory`); this
+ * covers Training's older months too.
  */
 export function useWithoutPendingDeletions<
   H extends { workouts: readonly TrackedWorkout[]; heatmap: readonly HeatmapDay[] },
 >(history: H): H {
-  // The hook returns a new list each render; this key changes only with its ids.
-  const key = usePendingWorkoutDeletions().join(' ');
+  const client = useQueryClient();
+  const deleted = useDeletedWorkouts();
   const { workouts, heatmap } = history;
-  const shown = useMemo(() => {
-    const ids = key ? key.split(' ') : [];
-    return ids.length
-      ? {
-          workouts: workouts.filter((item) => !ids.includes(item.id)),
-          heatmap: heatmapWithoutWorkouts(heatmap, ids),
-        }
-      : null;
-  }, [key, workouts, heatmap]);
+  const shown = useMemo(
+    () =>
+      deleted.length
+        ? {
+            workouts: workouts.filter((item) => !deleted.includes(item.id)),
+            heatmap: heatmapWithoutWorkouts(heatmap, deleted, cachedExerciseByName(client)),
+          }
+        : null,
+    [client, deleted, workouts, heatmap],
+  );
   return shown ? { ...history, ...shown } : history;
 }
