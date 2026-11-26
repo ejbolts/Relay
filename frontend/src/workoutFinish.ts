@@ -57,6 +57,8 @@ export type WorkoutFinishCheck =
       movementsToSave: MovementToSave[];
       durationMinutes: number;
       cardioDurationSeconds: number;
+      /** When the workout finished: now, or the last activity of one left running. */
+      finishedAt: number;
     };
 
 /**
@@ -249,7 +251,7 @@ export function checkWorkoutFinish(
         : 'The total workout duration is over 24 hours. Enter the actual total duration below before saving.',
     );
   }
-  return { kind: 'ready', movementsToSave, durationMinutes, cardioDurationSeconds };
+  return { kind: 'ready', movementsToSave, durationMinutes, cardioDurationSeconds, finishedAt };
 }
 
 /** The workout a ready check saves, without the shared-draft fields added when finishing. */
@@ -259,12 +261,13 @@ export function finishedWorkoutInput(
     movementsToSave,
     durationMinutes,
     cardioDurationSeconds,
+    finishedAt,
   }: Extract<WorkoutFinishCheck, { kind: 'ready' }>,
 ): WorkoutInput {
   const { editing, resumedWorkoutId, startTime, endTime, baseRevision } = state;
   const identity = liveWorkoutIdentity(state);
   const liveTimes =
-    !editing && !resumedWorkoutId ? liveWorkoutTimes(state.startedAt, durationMinutes) : null;
+    !editing && !resumedWorkoutId ? liveWorkoutTimes(finishedAt, durationMinutes) : null;
   return {
     ...(!editing && !resumedWorkoutId && { client_session_id: state.clientSessionId }),
     ...((editing || resumedWorkoutId) &&

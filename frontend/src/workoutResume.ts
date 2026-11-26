@@ -29,20 +29,21 @@ export function cardioAdjustedEndTime(start: string, end: string, cardioSeconds:
 }
 
 /**
- * A finished live workout's clock times: its real start, and the end its saved duration reaches.
- * The server derives the duration from the two times, so this keeps it equal to the logged
- * duration (paused time left out). None for a full day, whose times would read as zero.
+ * A finished live workout's clock times: it ends when it was finished, and starts its saved
+ * duration before that, so a clock corrected for a late start (or paused time) moves the start,
+ * never the end into the future. The server derives the duration from the two times, so this
+ * keeps it equal to the logged duration. None for a full day, whose times would read as zero.
  */
 export function liveWorkoutTimes(
-  startedAt: number,
+  finishedAt: number,
   durationMinutes: number,
 ): { start: string; end: string } | null {
   if (durationMinutes <= 0 || durationMinutes >= 1440) return null;
-  const started = new Date(startedAt);
-  const startMinutes = started.getHours() * 60 + started.getMinutes();
+  const finished = new Date(finishedAt);
+  const endMinutes = finished.getHours() * 60 + finished.getMinutes();
   const clock = (minutes: number) =>
     `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
-  return { start: clock(startMinutes), end: clock((startMinutes + durationMinutes) % 1440) };
+  return { start: clock((endMinutes - durationMinutes + 1440) % 1440), end: clock(endMinutes) };
 }
 
 export function completedWorkoutDurationMinutes(

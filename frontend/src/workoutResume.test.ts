@@ -73,12 +73,12 @@ describe('resuming a finished workout', () => {
 });
 
 describe('live workout clock times', () => {
-  it('records the real start and the end its saved duration reaches, across midnight', () => {
-    expect(liveWorkoutTimes(new Date(2026, 10, 19, 16, 15, 40).getTime(), 45)).toEqual({
+  it('ends when the workout finished and starts its duration before, across midnight', () => {
+    expect(liveWorkoutTimes(new Date(2026, 10, 19, 17, 0, 40).getTime(), 45)).toEqual({
       start: '16:15',
       end: '17:00',
     });
-    expect(liveWorkoutTimes(new Date(2026, 10, 19, 23, 30).getTime(), 60)).toEqual({
+    expect(liveWorkoutTimes(new Date(2026, 10, 20, 0, 30).getTime(), 60)).toEqual({
       start: '23:30',
       end: '00:30',
     });

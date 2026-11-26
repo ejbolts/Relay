@@ -213,8 +213,9 @@ test('finishing sends the web WorkoutInput, leaving paused time out', () => {
     category: 'push',
     workout_date: '2026-11-22',
     duration_minutes: 35,
-    start_time: '09:00',
-    end_time: '09:35',
+    // It ends when it was finished; the 10 paused minutes come off the start.
+    start_time: '09:10',
+    end_time: '09:45',
     notes: null,
   });
   expect(input.movements[0].sets.map((set) => [set.weight_kg, set.reps, set.completed])).toEqual([

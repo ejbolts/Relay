@@ -35,6 +35,7 @@ import {
   type PrCelebrations,
 } from '../../../../frontend/src/workoutPr';
 import { activeElapsedSeconds } from '../../../../frontend/src/workoutPause';
+import { workoutTimeSoFarSeconds } from '../../../../frontend/src/workoutTimeCorrection';
 import { isSupersetUpNext, nextInSupersetRound } from '../../../../frontend/src/workoutSupersets';
 import {
   machineTipEligible,
@@ -180,7 +181,8 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const recentRemoval = useRef<TipRemoval | null>(null);
   const identity = workoutIdentity(state, types);
   const elapsed = useElapsed(state.startedAt, state.pause, state.previousDurationMinutes);
-  // The clock correction opens on the clock as it reads then (this session's training time),
+  // The clock correction opens on the clock as it reads then (the whole workout's training time,
+  // with minutes saved before a resume),
   // for the workout it was opened for: another workout replacing it (from the web, say) closes
   // it, and its save never reaches the replacement.
   const [timeEditor, setTimeEditor] = useState({ open: false, seconds: 0, key: 0, sessionId: '' });
@@ -188,7 +190,10 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
     const latest = getState() ?? state;
     setTimeEditor((current) => ({
       open: true,
-      seconds: activeElapsedSeconds(latest.startedAt, latest.pause, Date.now()),
+      seconds: workoutTimeSoFarSeconds(
+        activeElapsedSeconds(latest.startedAt, latest.pause, Date.now()),
+        latest.previousDurationMinutes,
+      ),
       key: current.key + 1,
       sessionId: latest.clientSessionId,
     }));

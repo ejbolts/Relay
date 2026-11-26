@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Exercise } from './types';
+import { withElapsedSeconds } from './workoutPause';
+import { correctedSessionSeconds } from './workoutTimeCorrection';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 import {
   checkWorkoutFinish,
@@ -109,8 +111,9 @@ describe('finishing a live workout', () => {
       workout_type_id: null,
       notes: null,
       duration_minutes: 45,
-      start_time: '09:00',
-      end_time: '09:45',
+      // Paused time comes off the start: the workout ends when it was finished.
+      start_time: '09:10',
+      end_time: '09:55',
       movements: [
         {
           exercise_id: 'press',
@@ -214,6 +217,62 @@ describe('finishing a live workout', () => {
     expect(checkWorkoutFinish(badRpe)).toEqual({
       kind: 'blocked',
       message: 'Overhead Press, set 2: RPE (12) must be between 1 and 10.',
+    });
+  });
+});
+
+describe('saved times after correcting the live clock', () => {
+  const minutes = (count: number) => count * 60_000;
+  /** Finishes `finishing` at `finishedAt` and returns the saved times. */
+  function saved(finishing: WorkoutFinishState, finishedAt: number) {
+    const check = checkWorkoutFinish(finishing, undefined, finishedAt);
+    if (check.kind !== 'ready') throw new Error(`not ready: ${check.kind}`);
+    const { start_time, end_time, duration_minutes } = finishedWorkoutInput(finishing, check);
+    return { start_time, end_time, duration_minutes };
+  }
+  /** The clock corrected at `at` to read `totalMinutes` for the whole workout. */
+  const corrected = (finishing: WorkoutFinishState, at: number, totalMinutes: number) => ({
+    ...finishing,
+    pause: withElapsedSeconds(
+      finishing.pause,
+      finishing.startedAt,
+      correctedSessionSeconds(totalMinutes * 60, finishing.previousDurationMinutes),
+      at,
+    ),
+  });
+
+  it('ends when it was finished and moves the start back by the corrected time', () => {
+    // Started at 09:00 but begun at 08:30: at 09:10 the clock is set to 40 minutes.
+    const finishing = corrected(state(), startedAt + minutes(10), 40);
+    // Finished at 09:40, with the clock reading 70 minutes. It used to save 09:00 to 10:10.
+    expect(saved(finishing, startedAt + minutes(40))).toEqual({
+      start_time: '08:30',
+      end_time: '09:40',
+      duration_minutes: 70,
+    });
+  });
+
+  it('moves the start back across midnight', () => {
+    const lateStart = new Date(2026, 10, 22, 23, 30).getTime();
+    const finishing = corrected(state({ startedAt: lateStart }), lateStart + minutes(10), 45);
+    // Finished at 00:05 with 70 minutes on the clock. It used to save 23:30 to 00:40.
+    expect(saved(finishing, lateStart + minutes(35))).toEqual({
+      start_time: '22:55',
+      end_time: '00:05',
+      duration_minutes: 70,
+    });
+  });
+
+  it('counts the minutes already saved when a resumed workout is corrected', () => {
+    // 40 minutes were saved; resumed at 09:00, and at 09:10 the whole workout is set to 60.
+    const resumed = state({ resumedWorkoutId: 'saved', previousDurationMinutes: 40 });
+    const finishing = corrected(resumed, startedAt + minutes(10), 60);
+    // Finished at 09:20: 60 + 10 minutes. It used to save 40 + 60 + 10 = 110. A resumed
+    // workout keeps sending no clock times, as before.
+    expect(saved(finishing, startedAt + minutes(20))).toEqual({
+      start_time: null,
+      end_time: null,
+      duration_minutes: 70,
     });
   });
 });

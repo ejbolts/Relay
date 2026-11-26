@@ -42,3 +42,25 @@ export function workoutTimeFieldValid(value: string, max: number): boolean {
   const text = value.trim();
   return text === '' || (/^\d+$/.test(text) && Number(text) <= max);
 }
+
+/**
+ * The time the correction opens on: the whole workout so far, so a resumed workout includes the
+ * minutes saved before it was resumed, as its clock shows them.
+ */
+export function workoutTimeSoFarSeconds(
+  sessionSeconds: number,
+  previousDurationMinutes: number,
+): number {
+  return previousDurationMinutes * 60 + sessionSeconds;
+}
+
+/**
+ * This session's share of a corrected whole-workout time: the total less the minutes already
+ * saved before a resume (never below zero), for the live clock to read from now on.
+ */
+export function correctedSessionSeconds(
+  totalSeconds: number,
+  previousDurationMinutes: number,
+): number {
+  return Math.max(0, totalSeconds - previousDurationMinutes * 60);
+}

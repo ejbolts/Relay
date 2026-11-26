@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { MAX_LIVE_CLOCK_SECONDS } from './workoutPause';
 import {
+  correctedSessionSeconds,
   workoutTimeFields,
+  workoutTimeSoFarSeconds,
   workoutTimeFieldValid,
   workoutTimeSeconds,
 } from './workoutTimeCorrection';
@@ -29,5 +31,14 @@ describe('workout time correction', () => {
       expect(workoutTimeFieldValid(bad, 59)).toBe(false);
     expect(workoutTimeFieldValid('23', 23)).toBe(true);
     expect(workoutTimeFieldValid('24', 23)).toBe(false);
+  });
+
+  it("opens a resumed workout on its whole time, and keeps the saved minutes out of this session's", () => {
+    expect(workoutTimeSoFarSeconds(10 * 60 + 30, 40)).toBe(50 * 60 + 30);
+    expect(workoutTimeSoFarSeconds(90, 0)).toBe(90);
+    expect(correctedSessionSeconds(60 * 60, 40)).toBe(20 * 60);
+    expect(correctedSessionSeconds(25 * 60, 0)).toBe(25 * 60);
+    // Less than was already saved: this session counts nothing, never time off the saved part.
+    expect(correctedSessionSeconds(30 * 60, 40)).toBe(0);
   });
 });

@@ -4,15 +4,17 @@ import { workoutTimeFields, workoutTimeSeconds } from './workoutTimeCorrection';
 
 /**
  * Corrects the live workout clock, for a workout whose timer was started late or left running.
- * The clock keeps counting from the time entered.
+ * The clock keeps counting from the time entered, and a finished workout starts that long before
+ * it ends.
  */
 export function WorkoutTimeEditor({
   elapsedSeconds,
   onSave,
   onClose,
 }: {
+  /** The whole workout's training time so far, including minutes saved before a resume. */
   elapsedSeconds: number;
-  /** The corrected training time so far, in seconds. */
+  /** The corrected training time so far, in seconds, for the whole workout. */
   onSave: (seconds: number) => void;
   onClose: () => void;
 }) {
