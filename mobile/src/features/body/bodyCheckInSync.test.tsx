@@ -493,6 +493,71 @@ test('retries a connection failure on the sync interval, skips overlapping sends
   }
 });
 
+test('timed sends pause after sends the server did not answer; returning and Retry sync do not', async () => {
+  jest.useFakeTimers();
+  let appListener: ((state: AppStateStatus) => void) | undefined;
+  const appSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, listener) => {
+    appListener = listener;
+    return { remove: () => (appListener = undefined) };
+  });
+  const tick = (intervals = 1) =>
+    act(async () => jest.advanceTimersByTimeAsync(TRAINING_SYNC_INTERVAL_MS * intervals));
+  try {
+    const view = await render(
+      <Shell>
+        <CheckInSyncCard />
+      </Shell>,
+    );
+    jest.mocked(apiSend).mockRejectedValue(new Error('Could not reach Relay.'));
+    await act(async () => {
+      saveBodyCheckIn({
+        measurement_date: today,
+        weight_kg: 82.4,
+        body_fat_pct: null,
+        notes: null,
+      });
+    });
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(apiSend).toHaveBeenCalledTimes(1);
+
+    // One unanswered send is ordinary: the next 5 s tick tries again.
+    await tick();
+    expect(apiSend).toHaveBeenCalledTimes(2);
+    // Two in a row: the ticks keep running, but the next send waits 15 seconds.
+    await tick(2);
+    expect(apiSend).toHaveBeenCalledTimes(2);
+    await tick();
+    expect(apiSend).toHaveBeenCalledTimes(3);
+    // Then 30 seconds. The card still offers Retry sync throughout.
+    await tick(5);
+    expect(apiSend).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole('button', { name: 'Retry sync' })).toBeVisible();
+
+    // Returning to the app sends at once, and so does Retry sync.
+    await act(async () => appListener?.('background'));
+    await act(async () => appListener?.('active'));
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(apiSend).toHaveBeenCalledTimes(4);
+    await fireEvent.press(screen.getByRole('button', { name: 'Retry sync' }));
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(apiSend).toHaveBeenCalledTimes(5);
+
+    // Once the server answers, the check-in goes through and the card leaves.
+    jest.mocked(apiSend).mockImplementation(async (_path, _method, body) => ({
+      ...serverRow((body as { measurement_date: string }).measurement_date, 0),
+      ...(body as object),
+    }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Retry sync' }));
+    await act(async () => jest.advanceTimersByTimeAsync(0));
+    expect(bodyCheckInStatus().pending).toBe(0);
+    expect(screen.queryByLabelText('Check-in sync')).toBeNull();
+    await view.unmount();
+  } finally {
+    appSpy.mockRestore();
+    jest.useRealTimers();
+  }
+});
+
 test('stops the sync interval while only refused check-ins remain', async () => {
   jest.useFakeTimers();
   try {
