@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calendarDayLook, weekStripLabels } from './calendarDayLook';
+import { calendarDayLook, todayOutlineColors, weekStripLabels } from './calendarDayLook';
 import type { HeatmapDay, WorkoutType } from './types';
 import { DEFAULT_WORKOUT_TYPES, builtinTypeColors } from './workoutTypes';
 
@@ -93,6 +93,22 @@ describe('calendar day look', () => {
         splitDays,
       }).scheduled,
     ).toEqual([]);
+  });
+
+  it('colours today by its workout type whether or not it has started', () => {
+    // Before anything is started: the split's plan for today, split into arcs on a mixed day.
+    expect(todayOutlineColors({ ring: [], scheduledRing: ['#8b5cf6', '#22c55e'] })).toEqual([
+      '#8b5cf6',
+      '#22c55e',
+    ]);
+    // Logged today: the logged types, not the plan.
+    expect(todayOutlineColors({ ring: ['#f59e0b'], scheduledRing: [] })).toEqual(['#f59e0b']);
+    // While a workout is live: the type being logged.
+    expect(todayOutlineColors({ ring: ['#f59e0b'], scheduledRing: [] }, '#ec4899')).toEqual([
+      '#ec4899',
+    ]);
+    // Nothing logged or planned: the plain outline.
+    expect(todayOutlineColors({ ring: [], scheduledRing: [] })).toEqual([]);
   });
 
   it('names at most two types on a week strip tile, counting the rest', () => {

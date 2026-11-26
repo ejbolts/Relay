@@ -1,6 +1,6 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { calendarDayLook } from '../../../../frontend/src/calendarDayLook';
+import { calendarDayLook, todayOutlineColors } from '../../../../frontend/src/calendarDayLook';
 import {
   calendarMonths,
   calendarWeekdays,
@@ -16,9 +16,14 @@ import {
   weekStartDayFrom,
   weekStartDayOf,
 } from '../../../../frontend/src/trainingSummary';
-import type { HeatmapDay, WorkoutType, WorkoutTypeColors } from '../../../../frontend/src/types';
+import type {
+  HeatmapDay,
+  WorkoutCategory,
+  WorkoutType,
+  WorkoutTypeColors,
+} from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
-import { calendarLegendTypes } from '../../../../frontend/src/workoutTypes';
+import { calendarLegendTypes, effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
 import { useDashboard, useTrainingPreferences, useWorkoutHistory } from '../../data/queries';
 import { Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
@@ -30,6 +35,12 @@ import { prettyDate } from '../../../../frontend/src/appShared';
 
 const NO_ENTRIES: HeatmapDay[] = [];
 
+/** The type of the workout in progress. */
+export interface LiveWorkoutType {
+  category: WorkoutCategory;
+  workoutTypeId: string | null;
+}
+
 /**
  * Streak, training days and the weekly average over the last 12 weeks, above the training
  * calendar (newest month first, swipe back for earlier ones) and its legend, as on the web.
@@ -37,10 +48,12 @@ const NO_ENTRIES: HeatmapDay[] = [];
  */
 export function ConsistencyCard({
   liveDate,
+  liveType = null,
   onPressDay,
   onOpenLive,
 }: {
   liveDate: string | null;
+  liveType?: LiveWorkoutType | null;
   onPressDay: (date: string, entry: HeatmapDay | undefined) => void;
   onOpenLive: () => void;
 }) {
@@ -89,6 +102,7 @@ export function ConsistencyCard({
             split={data.training_split}
             weekStartDay={weekStartDayOf(preferences.data?.week_start)}
             liveDate={liveDate}
+            liveType={liveType}
             onPressDay={onPressDay}
             onOpenLive={onOpenLive}
           />
@@ -113,6 +127,7 @@ function TrainingCalendar({
   split,
   weekStartDay,
   liveDate,
+  liveType,
   onPressDay,
   onOpenLive,
 }: {
@@ -120,6 +135,7 @@ function TrainingCalendar({
   split: Parameters<typeof splitCalendarDays>[0];
   weekStartDay: number;
   liveDate: string | null;
+  liveType: LiveWorkoutType | null;
   onPressDay: (date: string, entry: HeatmapDay | undefined) => void;
   onOpenLive: () => void;
 }) {
@@ -151,6 +167,17 @@ function TrainingCalendar({
     types,
   );
   const weekdays = calendarWeekdays(weekStartDay);
+  // The live day takes the colour of the workout type being logged, as on the web.
+  const liveColor =
+    liveDate && liveType
+      ? workoutTypeColor(
+          effectiveWorkoutType(
+            { category: liveType.category, workout_type_id: liveType.workoutTypeId },
+            types,
+          ),
+          categoryColors,
+        )
+      : null;
   const open = useCallback(
     (date: string) => {
       if (date === liveDate) onOpenLive();
@@ -161,6 +188,7 @@ function TrainingCalendar({
 
   return (
     <View
+      testID="consistency-calendar"
       style={{ gap: 12 }}
       onLayout={(event) => setWidth(Math.round(event.nativeEvent.layout.width))}
     >
@@ -207,6 +235,7 @@ function TrainingCalendar({
                           today={today}
                           entry={map.get(isoLocalDate(cell))}
                           live={isoLocalDate(cell) === liveDate}
+                          liveColor={isoLocalDate(cell) === liveDate ? liveColor : null}
                           types={types}
                           categoryColors={categoryColors}
                           hidden={hidden}
@@ -274,6 +303,7 @@ const CalendarDay = memo(function CalendarDay({
   today,
   entry,
   live,
+  liveColor,
   types,
   categoryColors,
   hidden,
@@ -285,6 +315,8 @@ const CalendarDay = memo(function CalendarDay({
   today: string;
   entry: HeatmapDay | undefined;
   live: boolean;
+  /** The live workout's type colour, on its day only. */
+  liveColor: string | null;
   types: WorkoutType[];
   categoryColors: WorkoutTypeColors;
   hidden: ReadonlySet<string>;
@@ -304,6 +336,11 @@ const CalendarDay = memo(function CalendarDay({
   });
   const isToday = date === today;
   const future = date > today;
+  // Today's outline always shows its workout type: the one being logged, the types logged, or
+  // before anything starts, the split's plan for today. With none, the accent.
+  const todayColors = live
+    ? [liveColor ?? colors.accent]
+    : todayOutlineColors({ ring, scheduledRing });
   const label = live
     ? `Resume workout in progress for ${prettyDate(date)}`
     : entry
@@ -312,8 +349,12 @@ const CalendarDay = memo(function CalendarDay({
   return (
     <View style={styles.cell}>
       {isToday && (
-        <View pointerEvents="none" style={styles.todayRing}>
-          <DayRing colors={ring.length ? ring : [colors.accent]} radius={13} opacity={0.55} />
+        <View testID="today-outline" pointerEvents="none" style={styles.todayRing}>
+          <DayRing
+            colors={todayColors.length ? todayColors : [colors.accent]}
+            radius={13}
+            opacity={0.55}
+          />
         </View>
       )}
       <Pressable
@@ -324,11 +365,18 @@ const CalendarDay = memo(function CalendarDay({
         style={({ pressed }) => [
           styles.day,
           isToday && { backgroundColor: colors.surface3 },
-          live && { backgroundColor: colors.accentSoft },
+          live && !liveColor && { backgroundColor: colors.accentSoft },
           future && { opacity: 0.4 },
           pressed && { opacity: 0.6 },
         ]}
       >
+        {live && liveColor && (
+          <View
+            testID="live-day-tint"
+            pointerEvents="none"
+            style={[styles.liveTint, { backgroundColor: liveColor }]}
+          />
+        )}
         {!live &&
           (ring.length || filteredOut ? (
             <DayRing colors={filteredOut ? [colors.deemph] : ring} radius={10} />
@@ -348,7 +396,7 @@ const CalendarDay = memo(function CalendarDay({
         </Text>
         <View style={styles.dots}>
           {live ? (
-            <View style={[styles.dot, { backgroundColor: colors.accent }]} />
+            <View style={[styles.dot, { backgroundColor: liveColor ?? colors.accent }]} />
           ) : (
             dayTypes.map((item, index) => (
               <View
@@ -376,6 +424,15 @@ const styles = StyleSheet.create({
   weekday: { flex: 1, textAlign: 'center', fontSize: 10, fontWeight: '600' },
   cell: { flex: 1, height: 40 },
   todayRing: { position: 'absolute', top: -3, left: -3, right: -3, bottom: -3 },
+  liveTint: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 10,
+    opacity: 0.14,
+  },
   day: {
     flex: 1,
     borderRadius: 10,
