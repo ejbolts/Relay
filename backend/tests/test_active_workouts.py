@@ -145,9 +145,22 @@ def test_validation_bounds_and_duplicate_keys_do_not_replace_valid_work(client):
     put(client, base)
     invalid = deepcopy(base)
     invalid["movements"][0]["sets"] *= 2
-    assert client.put(PATH, json={"revision": 1, "base": base, "draft": invalid}).status_code == 422
+    duplicate = client.put(PATH, json={"revision": 1, "base": base, "draft": invalid})
+    assert duplicate.status_code == 422
+    assert duplicate.json()["error"]["message"] == "Set keys must be unique."
+    bad_hr = deepcopy(base)
+    bad_hr["movements"][0]["sets"][0]["average_heart_rate_bpm"] = 1132
+    hr_response = client.put(PATH, json={"revision": 1, "base": base, "draft": bad_hr})
+    assert hr_response.status_code == 422
+    assert hr_response.json()["error"]["code"] == "validation_error"
+    assert (
+        hr_response.json()["error"]["message"]
+        == "Set 1: average heart rate (1,132 bpm) must be at most 250 bpm."
+    )
     invalid = {**base, "notes": "x" * 10001}
-    assert client.put(PATH, json={"revision": 1, "base": base, "draft": invalid}).status_code == 422
+    too_long = client.put(PATH, json={"revision": 1, "base": base, "draft": invalid})
+    assert too_long.status_code == 422
+    assert too_long.json()["error"]["message"] == "Notes must be at most 10,000 characters."
     assert client.get(PATH).json()["draft"] == base
 
 

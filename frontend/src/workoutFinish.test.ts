@@ -178,4 +178,42 @@ describe('finishing a live workout', () => {
   it('keeps a name the person typed', () => {
     expect(liveWorkoutIdentity(state({ name: 'Morning lift' })).name).toBe('Morning lift');
   });
+
+  it('names the exercise, set and allowed range when a set value is out of bounds', () => {
+    const highHeartRate = state({
+      movements: [
+        movement(row, [
+          set({ duration_seconds: 1800, average_heart_rate_bpm: 1132, completed: true }),
+        ]),
+      ],
+    });
+    expect(checkWorkoutFinish(highHeartRate)).toEqual({
+      kind: 'blocked',
+      message:
+        'Rowing Machine, set 1: average heart rate (1132 bpm) must be a whole number between 20 and 250 bpm.',
+    });
+
+    const fastSpeed = state({
+      movements: [
+        movement(row, [set({ duration_seconds: 1800, speed_kph: 120, completed: true })]),
+      ],
+    });
+    expect(checkWorkoutFinish(fastSpeed)).toEqual({
+      kind: 'blocked',
+      message: 'Rowing Machine, set 1: speed (120 km/h) must be between 0 and 100 km/h.',
+    });
+
+    const badRpe = state({
+      movements: [
+        movement(press, [
+          set({ key: 's1', reps: 5, weight_kg: 50, completed: true }),
+          set({ key: 's2', reps: 5, weight_kg: 50, rpe: 12, completed: false }),
+        ]),
+      ],
+    });
+    expect(checkWorkoutFinish(badRpe)).toEqual({
+      kind: 'blocked',
+      message: 'Overhead Press, set 2: RPE (12) must be between 1 and 10.',
+    });
+  });
 });

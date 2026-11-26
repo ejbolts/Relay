@@ -1,5 +1,5 @@
 {
-  "version": "1.3.2",
+  "version": "1.3.3",
   "notesVersion": "1.3.0",
   "date": "2026-11-19",
   "title": "See how you measure up",
@@ -70,7 +70,8 @@
     "**Settings:** Units, week start and set goals save themselves; a faster admin console and forgiving search.",
     "**Appearance:** A new Automatic mode follows your phone's light or dark setting, plus light-mode readability fixes.",
     "**Sign-in:** Forgot username? asks your admin; Sign out affects only this device, offline sets survive being signed out elsewhere, and display names are unique.",
-    "**Training blocks:** Blocks without a planned end say No set date."
+    "**Training blocks:** Blocks without a planned end say No set date.",
+    "**Workout finish and cardio scan:** Clearer errors when a set value is out of range or sync fails, and stray characters next to heart rate are ignored when scanning cardio screenshots."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#130",
   "video": {

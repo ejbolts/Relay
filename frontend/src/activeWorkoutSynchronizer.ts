@@ -57,6 +57,7 @@ export class ActiveWorkoutSynchronizer {
   private conflict: WorkoutSyncConflict | null = null;
   private replacement: SharedWorkoutSnapshot | null = null;
   private connectionFailure = false;
+  private lastError: string | null = null;
   status: WorkoutSyncStatus = 'syncing';
 
   constructor(
@@ -72,6 +73,7 @@ export class ActiveWorkoutSynchronizer {
 
   private report(status: WorkoutSyncStatus, error: string | null = null) {
     this.status = status;
+    this.lastError = error;
     this.deps.changed(status, this.conflict, error);
   }
 
@@ -227,7 +229,11 @@ export class ActiveWorkoutSynchronizer {
       // A queued offline completion still uses its last known revision. A concurrent edit
       // will be refused when it reconnects, with the finished copy retained for review.
     } else if (this.status !== 'synced') {
-      throw new Error('Could not sync the workout. Try again before finishing.');
+      throw new Error(
+        this.lastError
+          ? `Could not sync the workout: ${this.lastError}`
+          : 'Could not sync the workout. Try again before finishing.',
+      );
     }
     return this.base?.draft?.clientSessionId === before?.clientSessionId && this.base?.revision
       ? {

@@ -115,6 +115,65 @@ export function liveWorkoutIdentity(
   return identity;
 }
 
+/** Checks set metric bounds against the server's limits so finish errors name the exact field. */
+function invalidSetFieldMessage(movements: WorkoutDraftMovement[]): string | null {
+  for (const movement of movements) {
+    for (let index = 0; index < movement.sets.length; index += 1) {
+      const set = movement.sets[index];
+      const where = `${movement.exercise.name}, set ${index + 1}`;
+      const checkRange = (
+        value: number | null | undefined,
+        min: number,
+        max: number,
+        label: string,
+        unit = '',
+        integer = false,
+      ): string | null => {
+        if (value == null) return null;
+        if (
+          !Number.isFinite(value) ||
+          value < min ||
+          value > max ||
+          (integer && !Number.isInteger(value))
+        ) {
+          const shown = Number.isFinite(value) ? ` (${value}${unit})` : '';
+          const kind = integer ? 'a whole number ' : '';
+          return `${where}: ${label}${shown} must be ${kind}between ${min.toLocaleString('en-US')} and ${max.toLocaleString('en-US')}${unit}.`;
+        }
+        return null;
+      };
+      const error =
+        checkRange(set.average_heart_rate_bpm, 20, 250, 'average heart rate', ' bpm', true) ??
+        checkRange(set.speed_kph, 0, 100, 'speed', ' km/h') ??
+        checkRange(set.incline_percent, 0, 100, 'incline', '%') ??
+        (set.duration_seconds != null &&
+        (!Number.isFinite(set.duration_seconds) ||
+          !Number.isInteger(set.duration_seconds) ||
+          set.duration_seconds < 0 ||
+          set.duration_seconds > 172_800)
+          ? `${where}: duration must be between 0 and 48 hours.`
+          : null) ??
+        checkRange(set.distance_km, 0, 10_000, 'distance', ' km') ??
+        checkRange(set.calories_kcal, 0, 100_000, 'calories', ' kcal', true) ??
+        checkRange(set.reps, 0, 10_000, 'reps', '', true) ??
+        checkRange(set.weight_kg, 0, 10_000, 'weight', ' kg') ??
+        checkRange(set.rpe, 1, 10, 'RPE') ??
+        (set.rest_seconds != null &&
+        (!Number.isFinite(set.rest_seconds) ||
+          !Number.isInteger(set.rest_seconds) ||
+          set.rest_seconds < 0 ||
+          set.rest_seconds > 7_200)
+          ? `${where}: rest must be between 0 and 120 minutes.`
+          : null) ??
+        checkRange(set.bodyweight_kg, 0, 1_000, 'bodyweight', ' kg') ??
+        checkRange(set.percentile, 0, 100, 'percentile', '%') ??
+        checkRange(set.target_reps, 0, 10_000, 'target reps', '', true);
+      if (error) return error;
+    }
+  }
+  return null;
+}
+
 /** Checks whether the workout can be saved now, without saving it. */
 export function checkWorkoutFinish(
   state: WorkoutFinishState,
@@ -175,6 +234,8 @@ export function checkWorkoutFinish(
         : 'No sets have been marked complete. Add or fill in a set, then tap the tick beside that set or its exercise. You need at least one completed set to save your workout.',
     );
   }
+  const invalidSet = invalidSetFieldMessage(movements);
+  if (invalidSet) return blocked(invalidSet);
   if (editing && Boolean(state.startTime) !== Boolean(state.endTime)) {
     return blocked('Enter both a workout start time and end time, or leave both blank.');
   }

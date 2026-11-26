@@ -8,7 +8,7 @@ import {
   readActiveWorkoutDraft,
   type ActiveWorkoutDraft,
 } from '../../../../frontend/src/workoutDraft';
-import { apiGet, apiSend, currentUser } from '../../data/api';
+import { ApiError, apiGet, apiSend, currentUser } from '../../data/api';
 import { deviceStorage } from '../../data/deviceStorage';
 import { connectLivePresence } from '../../data/livePresence';
 import { useUpNext } from '../../data/queries';
@@ -300,6 +300,46 @@ test('finishing consumes the shared copy it agreed with, exactly once', async ()
   await reconnect();
   expect(saved).toHaveLength(1);
   expect(readFinishedWorkouts(deviceStorage)).toEqual([]);
+});
+
+test('finishing names the set and the field that is out of range, before anything is sent', async () => {
+  // A cardio screenshot scan once read "1 132 bpm" as 1132, and the finish only said it failed.
+  const draft = remoteDraft();
+  draft.movements[0].sets[0] = { ...draft.movements[0].sets[0], average_heart_rate_bpm: 1132 };
+  server = { revision: 3, draft, refuseNextEdit: false };
+  await openApp();
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Finish workout' }));
+  expect(Alert.alert).toHaveBeenCalledWith(
+    "Can't finish yet",
+    'Bench Press, set 1: average heart rate (1132 bpm) must be a whole number between 20 and 250 bpm.',
+    expect.anything(),
+  );
+  expect(saved).toHaveLength(0);
+  expect(screen.queryByText('Workout complete')).toBeNull();
+});
+
+test('a finish whose sync the server refuses says why', async () => {
+  server = { revision: 3, draft: remoteDraft(), refuseNextEdit: false };
+  await openApp();
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  // The server refuses this phone's edit and names the field at fault.
+  const accept = jest.mocked(apiSend).getMockImplementation()!;
+  jest.mocked(apiSend).mockImplementation(async (path, method, body) => {
+    if (path === '/api/active-workout')
+      throw new ApiError(422, 'Set 1: reps (20,000) must be at most 10,000.');
+    return accept(path, method, body);
+  });
+  await fireEvent.changeText(screen.getByLabelText('Repetitions for set 1'), '9');
+  await fireEvent.press(screen.getByRole('button', { name: 'Finish workout' }));
+  await waitFor(() =>
+    expect(Alert.alert).toHaveBeenCalledWith(
+      "Can't finish yet",
+      'Could not sync the workout: Set 1: reps (20,000) must be at most 10,000.',
+    ),
+  );
+  expect(saved).toHaveLength(0);
+  expect(screen.queryByText('Workout complete')).toBeNull();
 });
 
 test('edits on both devices that cannot combine ask which to keep', async () => {
