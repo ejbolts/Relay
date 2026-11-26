@@ -145,6 +145,18 @@ describe('heatmapWithoutWorkouts on mixed days, as the server builds them', () =
     expect(approximate.categories.length).toBeGreaterThan(0);
   });
 
+  it('drops cardio a deleted workout brought, when the rest of the day can’t be read', () => {
+    const day = mixed(
+      [entry('a', 'upper', ['Bench', 'Treadmill']), entry('b', 'lower', ['Mystery'])],
+      ['full_body', 'cardio'],
+      ['upper', 'lower', 'cardio'],
+    );
+    expect(look(heatmapWithoutWorkouts([day], ['a'], lookup)[0])).toEqual({
+      categories: ['lower'],
+      types: ['lower'],
+    });
+  });
+
   it('falls back to the close rule when an exercise isn’t in the library', () => {
     const day = mixed(
       [entry('a', 'upper', ['Bench']), entry('b', 'lower', ['Mystery'])],

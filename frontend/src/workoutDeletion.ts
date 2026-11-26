@@ -105,13 +105,19 @@ function approximateDayLook(
   day: HeatmapDay,
   kept: readonly CalendarWorkout[],
   gone: readonly CalendarWorkout[],
+  lookup?: ExerciseByName,
 ) {
   const strength = [
     ...new Set(kept.filter((item) => item.category !== 'cardio').map((item) => item.category)),
   ];
+  // Cardio the day had stays only if no deleted workout could have brought it: a cardio one, or
+  // one with a cardio exercise the library knows.
+  const broughtCardio = (item: CalendarWorkout) =>
+    item.category === 'cardio' ||
+    (item.exercises ?? []).some((exercise) => lookup?.(exercise.exercise_name)?.kind === 'cardio');
   const cardio =
     kept.some((item) => item.category === 'cardio') ||
-    (day.categories.includes('cardio') && !gone.some((item) => item.category === 'cardio'));
+    (day.categories.includes('cardio') && !gone.some(broughtCardio));
   const categories: WorkoutCategory[] = [
     ...(strength.length > 1 ? ['full_body' as const] : strength),
     ...(cardio ? ['cardio' as const] : []),
@@ -144,7 +150,8 @@ export function heatmapWithoutWorkouts(
     if (!kept.length) return [];
     const gone = workouts.filter((workout) => removed.has(workout.id));
     const look =
-      (exerciseByName && exactDayLook(kept, exerciseByName)) ?? approximateDayLook(day, kept, gone);
+      (exerciseByName && exactDayLook(kept, exerciseByName)) ??
+      approximateDayLook(day, kept, gone, exerciseByName);
     const types = day.workout_types?.filter((type) => look.typeIds.has(type.id));
     return [
       {
