@@ -1,4 +1,5 @@
 import { Redirect, Stack } from 'expo-router';
+import { useNavigationState, useRoute } from 'expo-router/react-navigation';
 import { HeaderBack } from '../../features/settings/HeaderBack';
 import { useUser } from '../../session/SessionProvider';
 import { headerOptions } from '../../ui/navigation';
@@ -18,11 +19,18 @@ export default function AdminLayout() {
 
 function AdminStack() {
   const { colors } = useTheme();
+  // This stack's first screen, from the state its parent renders with: navigation.getState()
+  // while rendering can be stale, and canGoBack counts the stacks underneath. Until the stack has
+  // reported its state, its screens are the ones it opened with.
+  const { key } = useRoute();
+  const first = useNavigationState(
+    (state) => state.routes.find((route) => route.key === key)?.state?.routes[0]?.key,
+  );
   return (
     <Stack
-      screenOptions={({ navigation, route }) => ({
+      screenOptions={({ route }) => ({
         ...headerOptions(colors),
-        headerLeft: navigation.getState().routes[0]?.key === route.key ? HeaderBack : undefined,
+        headerLeft: (first ?? route.key) === route.key ? HeaderBack : undefined,
       })}
     >
       <Stack.Screen name="index" options={{ title: 'Admin', headerLargeTitle: true }} />
