@@ -249,6 +249,12 @@ describe('correcting the workout time', () => {
     );
     // The clock and the correction both count the 35 minutes already saved.
     expect(screen.getByLabelText('Minutes').props.value).toBe('35');
+    // Below the 35 minutes already saved: it says so beside the fields and won't save.
+    await fireEvent.changeText(screen.getByLabelText('Minutes'), '30');
+    expect(screen.getByText('At least 35 min, already saved')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Set time' }).props.accessibilityState).toMatchObject(
+      { disabled: true },
+    );
     await fireEvent.changeText(screen.getByLabelText('Minutes'), '50');
     await fireEvent.press(screen.getByRole('button', { name: 'Set time' }));
     expect(

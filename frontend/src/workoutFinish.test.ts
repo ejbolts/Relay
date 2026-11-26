@@ -263,6 +263,24 @@ describe('saved times after correcting the live clock', () => {
     });
   });
 
+  it('saves no clock times when the corrected start falls before the midnight it is dated after', () => {
+    // The timer started at 00:10 on the 27th, so the workout is dated the 27th. At 00:15 it is
+    // set to 30 minutes, as the session began at 23:45, and it finishes at 00:20 with 35 on the
+    // clock. A 23:45 start would read as the night of the 27th, a day late (it used to save
+    // 00:10 to 00:45), so no times are saved; the date and duration stay.
+    const afterMidnight = new Date(2026, 10, 27, 0, 10).getTime();
+    const finishing = corrected(
+      state({ startedAt: afterMidnight, workoutDate: '2026-11-27' }),
+      afterMidnight + minutes(5),
+      30,
+    );
+    expect(saved(finishing, afterMidnight + minutes(10))).toEqual({
+      start_time: null,
+      end_time: null,
+      duration_minutes: 35,
+    });
+  });
+
   it('counts the minutes already saved when a resumed workout is corrected', () => {
     // 40 minutes were saved; resumed at 09:00, and at 09:10 the whole workout is set to 60.
     const resumed = state({ resumedWorkoutId: 'saved', previousDurationMinutes: 40 });

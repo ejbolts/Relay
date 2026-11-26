@@ -84,6 +84,16 @@ describe('live workout clock times', () => {
     });
   });
 
+  it('leaves out times that would start the evening before the day the workout is dated', () => {
+    const finished = new Date(2026, 10, 27, 0, 20).getTime();
+    // Dated the 27th, a 23:50 start would read as the night of the 27th: no times.
+    expect(liveWorkoutTimes(finished, 30, '2026-11-27')).toBeNull();
+    // Dated the 26th, the evening before is right.
+    expect(liveWorkoutTimes(finished, 30, '2026-11-26')).toEqual({ start: '23:50', end: '00:20' });
+    // A start on the day itself keeps its times.
+    expect(liveWorkoutTimes(finished, 20, '2026-11-27')).toEqual({ start: '00:00', end: '00:20' });
+  });
+
   it('leaves out a full day, which the times would read as zero', () => {
     expect(liveWorkoutTimes(new Date(2026, 10, 19, 9, 0).getTime(), 1440)).toBeNull();
   });

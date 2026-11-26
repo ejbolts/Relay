@@ -277,6 +277,12 @@ describe('correcting the live workout time', () => {
     await act(async () => timeButton()!.click());
     // The correction opens on the time the clock shows, not on this session's 10 minutes.
     expect(fields().map((input) => input.value)).toEqual(['0', '45']);
+    // Below the 35 minutes already saved: it says so beside the fields and won't save.
+    await type(fields()[1], '30');
+    expect(editor()?.querySelector('[role="alert"]')?.textContent).toBe(
+      'At least 35 min, already saved',
+    );
+    expect(button('Set time', editor()!).disabled).toBe(true);
     await act(async () => button('Cancel', editor()!).click());
     await correctTime('0', '55');
     expect(timeButton()?.textContent).toBe('Live 55:00');

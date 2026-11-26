@@ -33,14 +33,22 @@ export function cardioAdjustedEndTime(start: string, end: string, cardioSeconds:
  * duration before that, so a clock corrected for a late start (or paused time) moves the start,
  * never the end into the future. The server derives the duration from the two times, so this
  * keeps it equal to the logged duration. None for a full day, whose times would read as zero.
+ *
+ * The server reads the times as starting on `workoutDate`. A workout dated the day it finished
+ * whose start would fall before that day's midnight (a timer started at 00:10 and corrected to
+ * begin at 23:45) would read as the next night, so it saves no clock times, as a resumed workout
+ * doesn't; its date and duration stay as they are.
  */
 export function liveWorkoutTimes(
   finishedAt: number,
   durationMinutes: number,
+  workoutDate?: string,
 ): { start: string; end: string } | null {
   if (durationMinutes <= 0 || durationMinutes >= 1440) return null;
   const finished = new Date(finishedAt);
   const endMinutes = finished.getHours() * 60 + finished.getMinutes();
+  if (endMinutes < durationMinutes && workoutDate === localDateOf(finished.toISOString()))
+    return null;
   const clock = (minutes: number) =>
     `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
   return { start: clock((endMinutes - durationMinutes + 1440) % 1440), end: clock(endMinutes) };

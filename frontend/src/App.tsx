@@ -5530,6 +5530,7 @@ function WorkoutLogger({
       {timeEditorOpen && (
         <WorkoutTimeEditor
           elapsedSeconds={workoutTimeSoFarSeconds(elapsed, previousDurationMinutes)}
+          savedMinutes={previousDurationMinutes}
           onClose={() => setTimeEditorOpen(false)}
           onSave={(seconds) => {
             // A corrected clock replaces a fixed total kept from an earlier finish attempt. It is

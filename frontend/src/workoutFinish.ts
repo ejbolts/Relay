@@ -267,7 +267,9 @@ export function finishedWorkoutInput(
   const { editing, resumedWorkoutId, startTime, endTime, baseRevision } = state;
   const identity = liveWorkoutIdentity(state);
   const liveTimes =
-    !editing && !resumedWorkoutId ? liveWorkoutTimes(finishedAt, durationMinutes) : null;
+    !editing && !resumedWorkoutId
+      ? liveWorkoutTimes(finishedAt, durationMinutes, state.workoutDate)
+      : null;
   return {
     ...(!editing && !resumedWorkoutId && { client_session_id: state.clientSessionId }),
     ...((editing || resumedWorkoutId) &&

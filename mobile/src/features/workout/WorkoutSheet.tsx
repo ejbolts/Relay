@@ -185,7 +185,13 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   // with minutes saved before a resume),
   // for the workout it was opened for: another workout replacing it (from the web, say) closes
   // it, and its save never reaches the replacement.
-  const [timeEditor, setTimeEditor] = useState({ open: false, seconds: 0, key: 0, sessionId: '' });
+  const [timeEditor, setTimeEditor] = useState({
+    open: false,
+    seconds: 0,
+    savedMinutes: 0,
+    key: 0,
+    sessionId: '',
+  });
   const openTimeEditor = () => {
     const latest = getState() ?? state;
     setTimeEditor((current) => ({
@@ -194,6 +200,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         activeElapsedSeconds(latest.startedAt, latest.pause, Date.now()),
         latest.previousDurationMinutes,
       ),
+      savedMinutes: latest.previousDurationMinutes,
       key: current.key + 1,
       sessionId: latest.clientSessionId,
     }));
@@ -983,6 +990,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         key={timeEditor.key}
         visible={timeEditor.open}
         elapsedSeconds={timeEditor.seconds}
+        savedMinutes={timeEditor.savedMinutes}
         onClose={closeTimeEditor}
         onSave={(seconds) => {
           const { sessionId } = timeEditor;
