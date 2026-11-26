@@ -250,6 +250,34 @@ test('the workout in progress marks its day in its type’s colour, and the day 
   ).toBeVisible();
 });
 
+test('a live workout dated in an earlier month with no history there is still reachable', async () => {
+  mockWorkout.live = {
+    name: 'Legs',
+    startedAt: 0,
+    workoutDate: '2026-10-30',
+    category: 'lower',
+    workoutTypeId: null,
+  } as never;
+  // A new account: nothing logged, so only the live workout reaches back to October.
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/dashboard?on_date=2026-11-22')
+      return { ...dashboard, heatmap: [], history: null } as never;
+    if (path === '/api/workouts/snapshot?start=2026-08-01')
+      return { revision: '1', workouts: [] } as never;
+    if (!(path in responses)) throw new Error(`Unexpected request ${path}`);
+    return responses[path] as never;
+  });
+  await open(<TrainingTabScreen />);
+  const previous = await screen.findByRole('button', { name: 'Previous month' });
+  expect(previous).toBeEnabled();
+  await fireEvent.press(previous);
+  const day = await screen.findByRole('button', {
+    name: `Resume workout in progress for ${prettyDate('2026-10-30')}`,
+  });
+  await fireEvent.press(day);
+  expect(mockWorkout.open).toHaveBeenCalledTimes(1);
+});
+
 test('an empty day ahead opens its plan, and an empty past day offers a workout dated then', async () => {
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   try {

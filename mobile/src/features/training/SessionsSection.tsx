@@ -58,17 +58,16 @@ export function SessionsSection({ history }: { history: History }) {
   const { workouts, heatmap, summary, historyStart, hasOlder, loadingOlder, olderError } = history;
 
   // The workout in progress is marked on its day, and tapping that day resumes it, as on the web.
-  const liveWorkout = workout.live;
+  // Only the fields the calendar draws: the logger's every edit makes a new live object, which
+  // must not rebuild the month views.
+  const liveDate = workout.live
+    ? (workout.live.workoutDate ?? isoLocalDate(new Date(workout.live.startedAt)))
+    : null;
+  const liveCategory = workout.live?.category ?? null;
+  const liveTypeId = workout.live?.workoutTypeId ?? null;
   const live = useMemo(
-    () =>
-      liveWorkout
-        ? {
-            date: liveWorkout.workoutDate ?? isoLocalDate(new Date(liveWorkout.startedAt)),
-            category: liveWorkout.category ?? null,
-            workoutTypeId: liveWorkout.workoutTypeId ?? null,
-          }
-        : null,
-    [liveWorkout],
+    () => (liveDate ? { date: liveDate, category: liveCategory, workoutTypeId: liveTypeId } : null),
+    [liveDate, liveCategory, liveTypeId],
   );
   // The calendar pages month by month, from the oldest workout to this month.
   const bounds = calendarBounds(today, [

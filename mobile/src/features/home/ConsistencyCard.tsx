@@ -1,6 +1,10 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
-import { calendarDayLook, todayOutlineColors } from '../../../../frontend/src/calendarDayLook';
+import {
+  calendarDayLook,
+  liveWorkoutColor,
+  todayOutlineColors,
+} from '../../../../frontend/src/calendarDayLook';
 import {
   calendarMonths,
   calendarWeekdays,
@@ -23,7 +27,7 @@ import type {
   WorkoutTypeColors,
 } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
-import { calendarLegendTypes, effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
+import { calendarLegendTypes } from '../../../../frontend/src/workoutTypes';
 import { useDashboard, useTrainingPreferences, useWorkoutHistory } from '../../data/queries';
 import { Card, CardHeader, ErrorState, errorMessage, Loading } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
@@ -168,16 +172,7 @@ function TrainingCalendar({
   );
   const weekdays = calendarWeekdays(weekStartDay);
   // The live day takes the colour of the workout type being logged, as on the web.
-  const liveColor =
-    liveDate && liveType
-      ? workoutTypeColor(
-          effectiveWorkoutType(
-            { category: liveType.category, workout_type_id: liveType.workoutTypeId },
-            types,
-          ),
-          categoryColors,
-        )
-      : null;
+  const liveColor = liveDate ? liveWorkoutColor(liveType, types, categoryColors) : null;
   const open = useCallback(
     (date: string) => {
       if (date === liveDate) onOpenLive();

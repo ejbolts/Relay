@@ -161,7 +161,8 @@ export function EditProfileScreen() {
       showToast('Profile saved.', undefined, { account });
       router.back();
     } catch (reason) {
-      if (!isToastAccountCurrent(account)) return;
+      // The session changed meanwhile: say nothing for it, but don't leave the screen spinning.
+      if (!isToastAccountCurrent(account)) return setSaving(false);
       const message =
         reason instanceof ApiError
           ? reason.code && PROFILE_PHOTO_ERRORS.has(reason.code)

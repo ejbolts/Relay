@@ -568,6 +568,20 @@ describe('Edit profile', () => {
     expect(request).toHaveBeenCalledTimes(1);
   });
 
+  it('stops the spinner when a save fails after an account switch, showing nothing', async () => {
+    let fail!: (reason: Error) => void;
+    jest.mocked(request).mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
+    await show(<EditProfileScreen />);
+    await fireEvent.changeText(screen.getByLabelText('Name'), 'Sam');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('button', { name: 'Save profile' })).toBeNull();
+    mockAccount = 'user:u2';
+    await act(async () => fail(new ApiError(500, 'Server error')));
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeVisible();
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('shows the web copy for a name another account uses', async () => {
     jest
       .mocked(request)

@@ -112,6 +112,7 @@ import {
   type OlderHistoryProps,
 } from './WorkoutCalendar';
 import { workoutTypeColor } from './dayColors';
+import { liveWorkoutColor } from './calendarDayLook';
 import {
   appendOlderWorkouts,
   hasOlderHistory,
@@ -3298,15 +3299,7 @@ function InteractiveWorkoutCalendar({
   const splitDays = useMemo(() => splitCalendarDays(split, today, 42), [split, today]);
   // The live day takes the colour of the workout type being logged.
   const activeDraft = activeWorkoutDate ? readActiveWorkoutDraft() : null;
-  const activeWorkoutColor = activeDraft
-    ? workoutTypeColor(
-        effectiveWorkoutType(
-          { category: activeDraft.category, workout_type_id: activeDraft.workoutTypeId },
-          types,
-        ),
-        categoryColors,
-      )
-    : null;
+  const activeWorkoutColor = liveWorkoutColor(activeDraft, types, categoryColors);
   const toggleCategory = (category: string) => {
     const next = new Set(hiddenCategories);
     if (!next.delete(category)) next.add(category);

@@ -199,3 +199,17 @@ test('the workout in progress takes over its day, in its type’s colour, as the
   expect(day(view(), '2026-11-21')).toMatchObject({ live: false, liveColor: null });
   expect(day(view(), '2026-11-21').ring.length).toBeGreaterThan(0);
 });
+
+test('a live workout whose type is switched off in the legend keeps its colour, as on the web', () => {
+  const month = calendarMonthView({
+    month: '2026-11',
+    entries: dashboard.heatmap,
+    types: DEFAULT_WORKOUT_TYPES,
+    categoryColors: builtinTypeColors(DEFAULT_WORKOUT_TYPES),
+    hidden: new Set(['lower']),
+    weekStartDay: 1,
+    today: '2026-11-22',
+    live: { date: '2026-11-22', category: 'lower', workoutTypeId: null },
+  });
+  expect(day(month, '2026-11-22')).toMatchObject({ live: true, liveColor: '#f59e0b' });
+});

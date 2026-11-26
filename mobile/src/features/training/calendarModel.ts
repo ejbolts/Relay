@@ -3,7 +3,7 @@ import {
   calendarWeekdays,
   entriesInMonths,
 } from '../../../../frontend/src/calendarRange';
-import { calendarDayLook } from '../../../../frontend/src/calendarDayLook';
+import { calendarDayLook, liveWorkoutColor } from '../../../../frontend/src/calendarDayLook';
 import { RING_GAP_DEG, workoutTypeColor } from '../../../../frontend/src/dayColors';
 import { isoLocalDate } from '../../../../frontend/src/trainingSummary';
 import type {
@@ -12,7 +12,7 @@ import type {
   WorkoutType,
   WorkoutTypeColors,
 } from '../../../../frontend/src/types';
-import { calendarLegendTypes, effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
+import { calendarLegendTypes } from '../../../../frontend/src/workoutTypes';
 
 /** A calendar month as `YYYY-MM`. */
 export type MonthKey = string;
@@ -138,19 +138,6 @@ export interface CalendarLiveWorkout {
   workoutTypeId: string | null;
 }
 
-/** The colour of the live workout's type, as the web's `activeWorkoutColor`; null without one. */
-export function liveWorkoutColor(
-  live: CalendarLiveWorkout | null | undefined,
-  types: WorkoutType[],
-  categoryColors: WorkoutTypeColors,
-): string | null {
-  if (!live?.category) return null;
-  return workoutTypeColor(
-    effectiveWorkoutType({ category: live.category, workout_type_id: live.workoutTypeId }, types),
-    categoryColors,
-  );
-}
-
 export interface CalendarMonthView {
   month: MonthKey;
   title: string;
@@ -190,7 +177,13 @@ export function calendarMonthView({
 }): CalendarMonthView {
   const [geometry] = calendarMonths(`${month}-01`, 1, 0, weekStartDay);
   const byDate = new Map(entries.map((entry) => [entry.workout_date, entry]));
-  const liveColor = liveWorkoutColor(live, types, categoryColors);
+  const liveColor = live?.category
+    ? liveWorkoutColor(
+        { category: live.category, workoutTypeId: live.workoutTypeId },
+        types,
+        categoryColors,
+      )
+    : null;
   const cells = geometry.cells.map((cell): CalendarDay | null => {
     if (!cell) return null;
     const date = isoLocalDate(cell);

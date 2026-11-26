@@ -20,6 +20,7 @@ import { useTheme } from '../../../ui/theme';
 import { settingsIcons } from '../../settings/icons';
 import {
   deleteProfilePhoto,
+  profileDetailChanges,
   profileSession,
   saveProfileDetails,
   saveProfilePhoto,
@@ -59,9 +60,8 @@ export function ProfileEditor({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sexDirty = !user.sex && !baseline.sex && sex !== null;
-  const nameDirty = displayName.trim() !== baseline.name;
-  const textDirty = nameDirty || sexDirty;
+  const { sexDirty, changes } = profileDetailChanges(user, baseline, { displayName, sex });
+  const textDirty = Object.keys(changes).length > 0;
   const dirty = textDirty || photo !== null || removePhoto;
   const hasPhoto = !!photo || (!!user.profile_photo_url && !removePhoto);
   const joined = formatMemberSince(user.created_at);
@@ -142,10 +142,7 @@ export function ProfileEditor({
       const session = await profileSession(account);
       if (!session) return setSaving(false);
       if (textDirty) {
-        const updated = await saveProfileDetails(session, {
-          ...(nameDirty ? { display_name: displayName.trim() } : {}),
-          ...(sexDirty && sex ? { sex } : {}),
-        });
+        const updated = await saveProfileDetails(session, changes);
         if (!updated) return setSaving(false);
         await onSaved(updated, { refresh: !hasPhotoChange });
         if (!isToastAccountCurrent(account)) return;
