@@ -11,6 +11,7 @@ import {
   NOTHING_LEFT_TO_REMOVE,
 } from '../../../../frontend/src/workoutImport';
 import { errorMessage, ErrorState, Loading } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { Section, SectionError, SettingsPage } from '../settings/SettingsList';
@@ -28,6 +29,8 @@ export function ImportHistoryScreen() {
   const [pulling, setPulling] = useState(false);
   const writes = useLocalWorkoutWrites();
 
+  if (waitingForNetwork(batches))
+    return <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void batches.refetch()} />;
   if (batches.isPending) return <Loading label="Loading imports" />;
   if (batches.error && !batches.data)
     return (

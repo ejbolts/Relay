@@ -11,6 +11,7 @@ import type {
   WeightMapping,
 } from '../../../../frontend/src/types';
 import { apiGet, apiSend } from '../../data/api';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { showMenu, type MenuOption } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
@@ -630,4 +631,15 @@ describe('machine weights', () => {
     expect(await screen.findByText('Enter both weights, or leave both blank.')).toBeVisible();
     expect(apiSend).not.toHaveBeenCalled();
   });
+});
+
+test('offline with nothing saved, the exercises say so instead of loading, then load', async () => {
+  await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<ExercisesSection />));
+  expect(screen.queryByText('Loading exercises…')).toBeNull();
+});
+
+test('offline with nothing saved, editing an exercise says so instead of spinning', async () => {
+  await expectOfflineUntilOnline(jest.mocked(apiGet), () =>
+    open(<ExerciseEditScreen exerciseId="raises" />),
+  );
 });

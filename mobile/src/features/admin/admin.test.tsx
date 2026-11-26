@@ -13,6 +13,7 @@ import type {
   User,
 } from '../../../../frontend/src/types';
 import { ApiError, apiGet, apiSend } from '../../data/api';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 import { onAdminActivity, type AdminActivity } from '../../data/livePresence';
 import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
@@ -602,4 +603,24 @@ it('lets leaving go again when the reset confirmation is cancelled', async () =>
   await answerAlert('Cancel');
   expect(mockPrevent.blocking).toBe(false);
   expect(apiSend).not.toHaveBeenCalled();
+});
+
+describe('offline with nothing saved', () => {
+  test('the admin console says so instead of spinning, then loads', async () => {
+    await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<AdminScreen />));
+  });
+
+  test('an account says so instead of spinning, then loads', async () => {
+    mockParams = { id: 'riley' };
+    await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<AdminAccountScreen />));
+  });
+
+  test('the server panel says so instead of spinning, then loads', async () => {
+    await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<AdminServerScreen />));
+  });
+
+  test('changing a username says so instead of spinning, then loads', async () => {
+    mockParams = { id: 'riley' };
+    await expectOfflineUntilOnline(jest.mocked(apiGet), () => open(<AdminUsernameScreen />));
+  });
 });

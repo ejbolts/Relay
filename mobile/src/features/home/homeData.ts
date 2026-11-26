@@ -51,6 +51,9 @@ type LayoutCopy = { userId: string; layout: HomeLayout };
  * `confirmed` waits for the server's answer, so the editor never saves an older layout over a
  * newer one.
  */
+/** How often a layout that failed to load is asked for again. */
+const LAYOUT_RETRY_MS = 10_000;
+
 export function useHomeLayout() {
   const userId = useUser().id;
   const [copy] = useState(() => {
@@ -65,6 +68,11 @@ export function useHomeLayout() {
       return saved;
     },
     placeholderData: copy ?? undefined,
+    // A failed load asks again every so often, so "Could not load your saved layout" clears by
+    // itself once Relay answers: an outage of the server alone fires no reconnect. React Query
+    // skips the retry while the phone is offline or the app is in the background.
+    refetchInterval: (query) =>
+      query.state.status === 'error' && query.state.data === undefined ? LAYOUT_RETRY_MS : false,
   });
   const [fallback] = useState(defaultHomeLayout);
   return {

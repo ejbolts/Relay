@@ -23,6 +23,7 @@ import type {
 } from '../../../../frontend/src/types';
 import { useSession, useUser } from '../../session/SessionProvider';
 import { Button, errorMessage, ErrorState, Loading } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { Icon } from '../../ui/Icon';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
@@ -61,6 +62,8 @@ export function AdminScreen() {
   const [refreshing, setRefreshing] = useState(false);
   useAdminActivity();
 
+  if (waitingForNetwork(users))
+    return <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void users.refetch()} />;
   if (users.isPending) return <Loading label="Loading accounts" />;
   if (users.error && !users.data)
     return <ErrorState message={errorMessage(users.error)} onRetry={() => void users.refetch()} />;

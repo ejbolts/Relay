@@ -1,3 +1,4 @@
+import { onlineManager } from '@tanstack/react-query';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -15,6 +16,7 @@ import { setCredits } from '../../../../frontend/src/muscleSetRows';
 import type { MuscleSetGoals } from '../../../../frontend/src/muscleSetGoals';
 import { isPendingWorkoutId } from '../../../../frontend/src/pendingWorkoutPreview';
 import { shortDate } from '../../../../frontend/src/trainingSummary';
+import { OFFLINE_MESSAGE } from '../../data/offline';
 import { Button, errorMessage } from '../../ui/components';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
@@ -117,6 +119,11 @@ function MuscleWeek({
     if (save.isPending) return;
     if (value !== null && !validMuscleSetGoal(value)) {
       setError(MUSCLE_SET_GOAL_ERROR);
+      return;
+    }
+    // Offline the save would wait, showing Saving… until the connection returns: say so instead.
+    if (!onlineManager.isOnline()) {
+      setError(OFFLINE_MESSAGE);
       return;
     }
     setError(null);

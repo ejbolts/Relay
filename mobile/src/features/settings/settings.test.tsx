@@ -17,10 +17,14 @@ import { PasswordRequiredScreen } from './PasswordRequiredScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { sectionScrollOffset } from './SettingsSearch';
 import { WorkoutTypesScreen } from './WorkoutTypesScreen';
+import { WhatsNewScreen } from './WhatsNewScreen';
+import { WorkoutTypeExercisesScreen } from './WorkoutTypeExercisesScreen';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 
 const mockRouter = { push: jest.fn(), back: jest.fn(), canGoBack: () => true };
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
+  useLocalSearchParams: () => ({ id: 'arms' }),
   // Header buttons render in place, so tests can press them.
   Stack: {
     Screen: ({ options }: { options?: { headerRight?: () => ReactElement } }) =>
@@ -221,6 +225,10 @@ describe('Settings', () => {
     // Places the app doesn't have stay out of its results.
     await fireEvent.changeText(search, 'youtube');
     expect(screen.getByText('No sections found. Try “timer” or “username”.')).toBeVisible();
+  });
+
+  it('says Settings is offline instead of spinning, then loads once back online', async () => {
+    await expectOfflineUntilOnline(jest.mocked(apiGet), () => show(<SettingsScreen />));
   });
 
   it('shows the split row as offline, not blank, while the split waits for the network', async () => {
@@ -540,5 +548,25 @@ describe('Password change required', () => {
       'Choose a different password from the temporary one.',
     );
     expect(mockSession.updateUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('offline with nothing saved', () => {
+  beforeEach(() => {
+    responses['/api/training-blocks'] = { blocks: [], fresh_starts: [] };
+    responses['/api/workout-type-exercises'] = [];
+    responses['/api/exercises'] = [];
+  });
+
+  test('Fresh starts says it is offline, then loads once back online', async () => {
+    await expectOfflineUntilOnline(jest.mocked(apiGet), () => show(<FreshStartsScreen />));
+  });
+
+  test("What's new says it is offline, then loads once back online", async () => {
+    await expectOfflineUntilOnline(jest.mocked(apiGet), () => show(<WhatsNewScreen />));
+  });
+
+  test('a workout type’s exercises say they are offline, then load once back online', async () => {
+    await expectOfflineUntilOnline(jest.mocked(apiGet), () => show(<WorkoutTypeExercisesScreen />));
   });
 });

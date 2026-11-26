@@ -1,4 +1,4 @@
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { Alert, Platform, StyleSheet, TextInput } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -32,6 +32,8 @@ import { apiGet, apiSend } from '../../data/api';
 import { ToastHost } from '../../ui/Toast';
 import { useWorkout } from '../workout/WorkoutProvider';
 import { HomeScreen } from './HomeScreen';
+import { OFFLINE_MESSAGE } from '../../data/offline';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
@@ -1185,5 +1187,72 @@ test('a hold that starts while a text field is focused fails before it can activ
     expect(mockRouter.push).not.toHaveBeenCalledWith('/home-layout');
   } finally {
     focusedSpy.mockRestore();
+  }
+});
+
+test('a layout that failed to load keeps retrying and clears once Relay answers again', async () => {
+  // The phone stays online while Relay is out of reach, so no reconnect fires.
+  responses['/api/home-layout'] = new Error('Could not reach Relay.');
+  jest.useFakeTimers();
+  try {
+    await renderHome();
+    expect(await screen.findByText('Could not load your saved layout.')).toBeVisible();
+    responses['/api/home-layout'] = defaultHomeLayout();
+    await act(async () => jest.advanceTimersByTime(10_000));
+    await waitFor(() => expect(screen.queryByText('Could not load your saved layout.')).toBeNull());
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('a layout that failed to load is asked for again when the phone reconnects', async () => {
+  responses['/api/home-layout'] = new Error('Could not reach Relay.');
+  await renderHome();
+  expect(await screen.findByText('Could not load your saved layout.')).toBeVisible();
+  responses['/api/home-layout'] = defaultHomeLayout();
+  try {
+    await act(async () => onlineManager.setOnline(false));
+    await act(async () => onlineManager.setOnline(true));
+  } finally {
+    onlineManager.setOnline(true);
+  }
+  await waitFor(() => expect(screen.queryByText('Could not load your saved layout.')).toBeNull());
+});
+
+test('offline with nothing saved, Up next says so instead of spinning, then loads', async () => {
+  await expectOfflineUntilOnline(jest.mocked(apiGet), renderHome, () =>
+    expect(screen.getByText('Upper body day')).toBeVisible(),
+  );
+  expect(screen.queryByLabelText('Loading Up next')).toBeNull();
+});
+
+test('offline, a muscle goal says so beside the field instead of saving forever', async () => {
+  onAndroid();
+  responses['/api/dashboard'] = dashboard({
+    weekly_sets: {
+      ...dashboard().weekly_sets,
+      muscle_groups: [
+        {
+          muscle_group: 'Glutes',
+          raw_sets: 3,
+          effective_sets: 3,
+          average_rpe: null,
+          contributions: [],
+        },
+      ],
+    } as DashboardData['weekly_sets'],
+  });
+  await open();
+  await fireEvent.press(screen.getByRole('button', { name: /^Glutes: 3 of 10 sets/ }));
+  await fireEvent.press(await screen.findByRole('button', { name: 'Edit goal for Glutes' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'One set more' }));
+  onlineManager.setOnline(false);
+  try {
+    await fireEvent.press(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText(OFFLINE_MESSAGE)).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Saving…' })).toBeNull();
+    expect(apiSend).not.toHaveBeenCalledWith('/api/training-preferences', 'PUT', expect.anything());
+  } finally {
+    onlineManager.setOnline(true);
   }
 });

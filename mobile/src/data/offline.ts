@@ -12,3 +12,14 @@ export const OFFLINE_MESSAGE = "You're offline. Connect to the internet, then tr
 export function waitingForNetwork(query: { isPending: boolean; fetchStatus: FetchStatus }) {
   return query.isPending && query.fetchStatus === 'paused';
 }
+
+/**
+ * The same for a query that shows placeholder data (such as the default workout types) until the
+ * server answers: offline, the placeholder stays and the query waits for the network.
+ */
+export function placeholderWaitingForNetwork(query: {
+  isPlaceholderData: boolean;
+  fetchStatus: FetchStatus;
+}) {
+  return query.isPlaceholderData && query.fetchStatus === 'paused';
+}

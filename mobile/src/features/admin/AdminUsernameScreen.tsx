@@ -7,6 +7,7 @@ import { validateUsername } from '../../../../frontend/src/authRules';
 import type { AdminUser } from '../../../../frontend/src/types';
 import { ApiError } from '../../data/api';
 import { Button, errorMessage, ErrorState, Loading } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { SettingsPage } from '../settings/SettingsList';
@@ -21,6 +22,8 @@ import { adminApi, adminKeys, useAdminUsers } from './adminData';
 export function AdminUsernameScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const users = useAdminUsers();
+  if (waitingForNetwork(users))
+    return <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void users.refetch()} />;
   if (users.isPending) return <Loading label="Loading account" />;
   const account = users.data?.find((row) => row.id === id);
   if (!account)
