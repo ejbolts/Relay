@@ -26,6 +26,12 @@ import { showMenu } from '../../ui/prompts';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 
+/** A menu choice, ticked when it is the one chosen, as the app's other choice menus are. */
+const choice = (label: string, chosen: boolean, onPress: () => void) => ({
+  label: chosen ? `${label} ✓` : label,
+  onPress,
+});
+
 /** The filter button beside a profile's Workouts title, with the number of filters set. */
 export function HistoryFilterButton({
   filters,
@@ -88,14 +94,15 @@ export function HistoryFilterSheet({
       <View style={{ gap: 12 }}>
         <ChoiceRow
           label="Workout type"
-          value={typeChoices.find((choice) => choice.value === typeValue)?.label ?? 'All types'}
+          value={typeChoices.find((item) => item.value === typeValue)?.label ?? 'All types'}
           onPress={() =>
             showMenu(
               'Workout type',
-              typeChoices.map((choice) => ({
-                label: choice.label,
-                onPress: () => onChange(withSharedWorkoutType(filters, choice.value)),
-              })),
+              typeChoices.map((item) =>
+                choice(item.label, item.value === typeValue, () =>
+                  onChange(withSharedWorkoutType(filters, item.value)),
+                ),
+              ),
             )
           }
         />
@@ -124,14 +131,14 @@ export function HistoryFilterSheet({
               value={exercise?.name ?? 'All exercises'}
               onPress={() =>
                 showMenu('Exercise', [
-                  {
-                    label: 'All exercises',
-                    onPress: () => onChange({ ...filters, exercise_id: '' }),
-                  },
-                  ...exercises.map((item) => ({
-                    label: item.name,
-                    onPress: () => onChange({ ...filters, exercise_id: item.id }),
-                  })),
+                  choice('All exercises', !exercise, () =>
+                    onChange({ ...filters, exercise_id: '' }),
+                  ),
+                  ...exercises.map((item) =>
+                    choice(item.name, item.id === exercise?.id, () =>
+                      onChange({ ...filters, exercise_id: item.id }),
+                    ),
+                  ),
                 ])
               }
             />
@@ -141,14 +148,14 @@ export function HistoryFilterSheet({
                 value={machine?.caption ?? 'All shared machines'}
                 onPress={() =>
                   showMenu('Machine', [
-                    {
-                      label: 'All shared machines',
-                      onPress: () => onChange({ ...filters, machine_photo_id: '' }),
-                    },
-                    ...machines.map((item) => ({
-                      label: item.caption,
-                      onPress: () => onChange({ ...filters, machine_photo_id: item.id }),
-                    })),
+                    choice('All shared machines', !machine, () =>
+                      onChange({ ...filters, machine_photo_id: '' }),
+                    ),
+                    ...machines.map((item) =>
+                      choice(item.caption, item.id === machine?.id, () =>
+                        onChange({ ...filters, machine_photo_id: item.id }),
+                      ),
+                    ),
                   ])
                 }
               />
