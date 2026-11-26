@@ -285,6 +285,10 @@
 .logger-screen .completed-set-weight .pr-badge {
   white-space: nowrap;
 }
+.logger-screen .completed-set-weight .pr-badge.is-all-time {
+  margin-block: 2px;
+  margin-right: 3px;
+}
 
 /* Home indicator */
 button.pulse-card.training-block-home {

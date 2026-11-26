@@ -412,7 +412,8 @@ export function SetTable({
                         .join(', ')}
                     >
                       <Badge
-                        tone={setRecords.some(isAllTimeRecord) ? 'allTime' : 'gold'}
+                        tone="gold"
+                        halo={setRecords.some(isAllTimeRecord)}
                         label={
                           setRecords.some(isAllTimeRecord) ? 'PR' : recordBadgeLabel(setRecords)
                         }

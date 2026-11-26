@@ -74,21 +74,25 @@ export function Badge({
   label,
   tone = 'neutral',
   sentence,
+  halo = false,
 }: {
   label: string;
-  tone?: 'neutral' | 'gold' | 'good' | 'allTime';
+  tone?: 'neutral' | 'gold' | 'good';
   sentence?: boolean;
+  /** Draws a bright turquoise outer halo ring around the badge (for all-time PRs). */
+  halo?: boolean;
 }) {
   const { colors, radius } = useTheme();
   // Tinted badges keep 4.5:1 on their fill on every theme (contrast.ts).
   const toned = tone === 'neutral' ? null : toneBadge(colors, tone);
   const ink = toned?.ink ?? colors.muted;
   const fill = toned?.fill ?? colors.surface2;
-  return (
+  const corner = sentence ? 7 : radius.sm;
+  const badge = (
     <View
       style={[
         styles.badge,
-        { borderRadius: sentence ? 7 : radius.sm, backgroundColor: fill },
+        { borderRadius: corner, backgroundColor: fill },
         sentence && styles.sentenceBadge,
       ]}
     >
@@ -101,6 +105,20 @@ export function Badge({
       >
         {sentence ? label : label.toUpperCase()}
       </Text>
+    </View>
+  );
+  if (!halo) return badge;
+  return (
+    <View
+      style={{
+        alignSelf: 'flex-start',
+        borderWidth: 1.5,
+        borderColor: colors.allTimeRing,
+        borderRadius: corner + 2,
+        padding: 1.5,
+      }}
+    >
+      {badge}
     </View>
   );
 }

@@ -86,7 +86,7 @@
     "**Machine conversions:** Clearing a machine's weight and typing a new one keeps its conversion.",
     "**Reliability:** A slow check-in save no longer stalls the server or sticks on Waiting to sync, and screens keep loading while the server saves.",
     "**Relay app:** The server is ready for the Relay app for iPhone and Android, with secure sign-in, phone alerts, friend links that open the app, YouTube from the app, live presence and app builds in Admin.",
-    "**All-time PRs:** All-time PR badges highlight in bright turquoise so they stand out from block and fresh-start records."
+    "**All-time PRs:** All-time PR badges keep their gold colour with an animated bright turquoise halo ring so they stand out from block and fresh-start records."
   ],
   "url": "https://github.com/ejbolts/Relay/blob/main/docs/RELEASE-NOTES.md#130",
   "video": {

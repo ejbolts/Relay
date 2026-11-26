@@ -5224,9 +5224,57 @@ body,
   line-height: 1;
 }
 
+/* All-time PR keeps its gold pill and adds a solid bright turquoise ring with an outward halo pulse. */
 .pr-badge.is-all-time {
-  background: var(--p-all-time-fill, #2ee6d6);
-  color: var(--p-on-all-time, #042422);
+  position: relative;
+  outline: 1.5px solid var(--p-all-time-ring, #2ee6d6);
+  outline-offset: 1.5px;
+  box-shadow: 0 0 7px var(--p-all-time-glow, rgb(46 230 214 / 36%));
+}
+
+.pr-badge.is-all-time::after,
+.pr-chip.is-all-time::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 1.5px solid var(--p-all-time-ring, #2ee6d6);
+  pointer-events: none;
+  animation: all-time-pr-halo 2.4s cubic-bezier(0.22, 0.61, 0.36, 1) infinite;
+}
+
+/* Reset scale while invisible so Safari/iPhone never flashes a full-size ring at loop restart. */
+@keyframes all-time-pr-halo {
+  0% {
+    transform: scale(1);
+    opacity: 0.78;
+  }
+  70% {
+    transform: scale(1.18, 1.48);
+    opacity: 0;
+  }
+  88% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.78;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pr-badge.is-all-time::after,
+  .pr-chip.is-all-time::after {
+    animation: none;
+    opacity: 0;
+  }
+}
+
+html[data-reduce-motion] .pr-badge.is-all-time::after,
+html[data-reduce-motion] .pr-chip.is-all-time::after {
+  animation: none;
+  opacity: 0;
 }
 
 .pr-callout {
@@ -5234,10 +5282,6 @@ body,
   color: #f6ca68;
   font-size: 0.62rem;
   font-weight: 850;
-}
-
-.pr-callout.is-all-time {
-  color: var(--p-all-time, #2ee6d6);
 }
 
 .set-extras {

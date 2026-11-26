@@ -1033,31 +1033,32 @@ function SetDetails({
       {records &&
         (() => {
           const allTime = isAllTimePr(records);
-          return (
+          const pill = (
             <View
               accessible
               accessibilityLabel={`Set ${number}: ${records.join(', ')}`}
-              style={[
-                styles.record,
-                {
-                  backgroundColor: allTime ? colors.allTimeFill : colors.goldSoft,
-                  borderRadius: radius.sm,
-                },
-              ]}
+              style={[styles.record, { backgroundColor: colors.goldSoft, borderRadius: radius.sm }]}
             >
-              <Icon name="trophy" size={12} color={allTime ? colors.onAllTime : colors.gold} />
+              <Icon name="trophy" size={12} color={colors.gold} />
               <Text
-                style={[
-                  type.caption,
-                  {
-                    color: allTime ? colors.onAllTime : colors.text,
-                    fontWeight: '700',
-                    flexShrink: 1,
-                  },
-                ]}
+                style={[type.caption, { color: colors.text, fontWeight: '700', flexShrink: 1 }]}
               >
                 {records.join(' · ')}
               </Text>
+            </View>
+          );
+          if (!allTime) return pill;
+          return (
+            <View
+              style={{
+                alignSelf: 'flex-start',
+                borderWidth: 1.5,
+                borderColor: colors.allTimeRing,
+                borderRadius: radius.sm + 2,
+                padding: 1.5,
+              }}
+            >
+              {pill}
             </View>
           );
         })()}

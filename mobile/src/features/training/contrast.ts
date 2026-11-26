@@ -91,13 +91,8 @@ export const chartNeutral = (colors: Palette) =>
   readable(colors.deemph, colors.surface, 3, colors.muted);
 
 /** A badge's tinted fill on a card, and an ink that reads on it at 4.5:1. */
-export function toneBadge(colors: Palette, tone: 'good' | 'gold' | 'allTime') {
-  const fill =
-    tone === 'good'
-      ? colors.goodSoft
-      : tone === 'allTime'
-        ? colors.allTimeSoft
-        : colors.goldSoft;
+export function toneBadge(colors: Palette, tone: 'good' | 'gold') {
+  const fill = tone === 'good' ? colors.goodSoft : colors.goldSoft;
   const solid = composite(fill, colors.surface);
   return { fill, ink: readable(colors[tone], solid, 4.5, colors.text) };
 }

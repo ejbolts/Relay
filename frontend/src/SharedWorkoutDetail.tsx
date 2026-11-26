@@ -59,9 +59,7 @@ export function SharedSetList({
             <li
               key={item.id}
               data-set-type={kind}
-              className={
-                earned.length ? (allTime ? 'is-record is-all-time' : 'is-record') : undefined
-              }
+              className={earned.length ? 'is-record' : undefined}
             >
               <span
                 className="shared-set-number"

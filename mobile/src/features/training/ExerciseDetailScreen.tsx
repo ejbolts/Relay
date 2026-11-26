@@ -403,7 +403,8 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                                   );
                                   return (
                                     <Badge
-                                      tone={pointRecords.some(isAllTimeRecord) ? 'allTime' : 'gold'}
+                                      tone="gold"
+                                      halo={pointRecords.some(isAllTimeRecord)}
                                       label={
                                         view.defaultView ? recordBadgeLabel(pointRecords) : 'PR'
                                       }

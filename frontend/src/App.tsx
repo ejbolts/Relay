@@ -6475,10 +6475,7 @@ function MovementCard({
           )}
         </div>
         {prBadges.has(item.key) && (
-          <div
-            className={`pr-callout${isAllTimePr(prBadges.get(item.key)!) ? ' is-all-time' : ''}`}
-            role="status"
-          >
+          <div className="pr-callout" role="status">
             🏆 {prBadges.get(item.key)?.join(' · ')}
           </div>
         )}
