@@ -5,11 +5,13 @@ import { sessionEpoch } from '../../session/sessionEpoch';
 /**
  * The session the work belongs to has ended on this phone: signed out (its token is already gone
  * while the sign-out finishes), refused by the server, or replaced by another sign-in. The work
- * waits for its own account to sign in again; it is never a refusal of the workout itself.
+ * stays on the phone for this account's next sign-in here; it is never a refusal of the workout
+ * itself. (Another account signing in on this phone first clears it: see
+ * keepFinishedWorkoutsFor.)
  */
 export class SessionEnded extends Error {
   constructor() {
-    super('Signed out on this phone. It is sent when this account signs in again.');
+    super('Signed out on this phone. Sign in again to send it.');
     this.name = 'SessionEnded';
   }
 }
@@ -30,23 +32,36 @@ export interface SessionBound {
  * number on this phone and the token it was first sent with, so a sign-out (which deletes the
  * token before the session ends) or a later sign-in never sends this session's work.
  */
-export function sessionBound(): SessionBound {
+export function sessionBound({
+  onEnded,
+}: {
+  /**
+   * The server refused this session (signed out elsewhere, password changed): called so the app
+   * checks its sign-in and shows the sign-in form, rather than looking signed in while the work
+   * waits.
+   */
+  onEnded?: () => void;
+} = {}): SessionBound {
   const epoch = sessionEpoch();
   let pinned: string | null = null;
 
   async function token() {
     if (sessionEpoch() !== epoch) throw new SessionEnded();
-    const saved = await sessionToken(serverOrigin());
+    // The saved sign-in can't be read (or is changing): this session can't send now either.
+    const saved = await sessionToken(serverOrigin()).catch(() => null);
     if (!saved || sessionEpoch() !== epoch || (pinned !== null && saved !== pinned))
       throw new SessionEnded();
     pinned = saved;
     return saved;
   }
 
-  async function refused(error: unknown, used: string): Promise<never> {
+  /** A 401 ends this session here; `forget` is false where the request already forgot it. */
+  async function refused(error: unknown, used: string, forget: boolean): Promise<never> {
     if (error instanceof ApiError && error.status === 401) {
-      // The server ended this session: forget its token only while it is still the saved one.
-      await forgetSessionTokenIf(serverOrigin(), used);
+      // Forget its token only while it is still the saved one. A keychain that can't be written
+      // still ends the session here.
+      if (forget) await forgetSessionTokenIf(serverOrigin(), used).catch(() => undefined);
+      onEnded?.();
       throw new SessionEnded();
     }
     throw error;
@@ -58,7 +73,7 @@ export function sessionBound(): SessionBound {
       try {
         return await request(used);
       } catch (error) {
-        return refused(error, used);
+        return refused(error, used, true);
       }
     },
     async read(request) {
@@ -67,7 +82,8 @@ export function sessionBound(): SessionBound {
       try {
         result = await request();
       } catch (error) {
-        return refused(error, used);
+        // apiGet sends the saved sign-in and forgets it itself on a 401.
+        return refused(error, used, false);
       }
       if (sessionEpoch() !== epoch) throw new SessionEnded();
       return result;

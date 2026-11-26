@@ -8,12 +8,13 @@ import {
   readActiveWorkoutDraft,
   type ActiveWorkoutDraft,
 } from '../../../../frontend/src/workoutDraft';
-import { ApiError, apiGet, apiSend, currentUser } from '../../data/api';
+import { ApiError, apiGet, apiSend, currentUser, signIn } from '../../data/api';
 import { deviceStorage } from '../../data/deviceStorage';
 import { sessionToken } from '../../data/session';
 import { connectLivePresence } from '../../data/livePresence';
 import { useUpNext } from '../../data/queries';
-import { SessionProvider } from '../../session/SessionProvider';
+import { SessionProvider, useSession } from '../../session/SessionProvider';
+import { nextSessionEpoch } from '../../session/sessionEpoch';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { showMenu, type MenuOption } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
@@ -63,7 +64,10 @@ jest.mock('../../ui/Toast', () => ({
   toastAccountFor: () => 'u1',
   isToastAccountCurrent: () => true,
 }));
-jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
+jest.mock('../../data/session', () => ({
+  sessionToken: jest.fn(async () => 'token'),
+  forgetSessionTokenIf: jest.fn(async () => undefined),
+}));
 jest.mock('../../data/livePresence', () => ({
   connectLivePresence: jest.fn(() => ({ report: jest.fn(), stop: jest.fn() })),
 }));
@@ -74,6 +78,8 @@ jest.mock('../../data/api', () => ({
   currentUser: jest.fn(),
   apiSend: jest.fn(),
   apiGet: jest.fn(),
+  signIn: jest.fn(),
+  signOut: jest.fn(async () => undefined),
 }));
 jest.mock('../../data/queries', () => {
   const fixtures = jest.requireActual<typeof import('./testFixtures')>('./testFixtures');
@@ -161,6 +167,8 @@ beforeEach(() => {
   saved = [];
   jest.replaceProperty(Platform, 'OS', 'android');
   jest.mocked(currentUser).mockResolvedValue(user);
+  jest.mocked(sessionToken).mockResolvedValue('token');
+  onlineManager.setOnline(true);
   jest.mocked(useUpNext).mockReturnValue({
     template: pushDay,
     label: 'Push',
@@ -208,11 +216,16 @@ afterEach(() => client.clear());
 
 async function openApp() {
   client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
-  const captured: { workout?: ReturnType<typeof useWorkout> } = {};
+  const captured: {
+    workout?: ReturnType<typeof useWorkout>;
+    session?: ReturnType<typeof useSession>;
+  } = {};
   function Probe() {
     const workout = useWorkout();
+    const session = useSession();
     useEffect(() => {
       captured.workout = workout;
+      captured.session = session;
     });
     return null;
   }
@@ -306,7 +319,41 @@ test('finishing consumes the shared copy it agreed with, exactly once', async ()
   expect(readFinishedWorkouts(deviceStorage)).toEqual([]);
 });
 
-test('a finish made while signing out waits for its own session, then is sent once', async () => {
+const workoutSends = () =>
+  jest.mocked(apiSend).mock.calls.filter(([path]) => path === '/api/workouts');
+
+test('a finish waiting through a real sign-out is sent once after signing back in', async () => {
+  server = { revision: 3, draft: remoteDraft(), refuseNextEdit: false };
+  const { captured } = await openApp();
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  // Finished offline, so it waits on the phone.
+  await act(async () => onlineManager.setOnline(false));
+  await fireEvent.press(screen.getByRole('button', { name: 'Finish workout' }));
+  expect(await screen.findByText('Workout complete')).toBeVisible();
+  expect(readFinishedWorkouts(deviceStorage)).toHaveLength(1);
+
+  // Signing out deletes the saved sign-in and ends the session; the engine goes with it.
+  jest.mocked(sessionToken).mockResolvedValue(null);
+  await act(async () => captured.session!.signOut());
+  expect(captured.session!.status.kind).toBe('signed-out');
+  await reconnect();
+  expect(workoutSends()).toHaveLength(0);
+  expect(readFinishedWorkouts(deviceStorage)).toHaveLength(1);
+
+  // The same account signs in again with a new sign-in: a new engine sends it, once.
+  jest.mocked(sessionToken).mockResolvedValue('token-2');
+  jest.mocked(signIn).mockResolvedValue(user as Awaited<ReturnType<typeof signIn>>);
+  await act(async () => captured.session!.signIn('preview', 'password'));
+  await waitFor(() => expect(saved).toHaveLength(1));
+  await reconnect();
+  await reconnect();
+  expect(saved).toHaveLength(1);
+  expect(saved[0].client_session_id).toBe(sessionId);
+  expect(workoutSends().map((call) => call[4])).toEqual(['token-2']);
+  expect(readFinishedWorkouts(deviceStorage)).toEqual([]);
+});
+
+test('a finish made in the sign-out gap waits instead of being refused', async () => {
   server = { revision: 3, draft: remoteDraft(), refuseNextEdit: false };
   await openApp();
   expect(await screen.findByText('Bench Press')).toBeVisible();
@@ -316,23 +363,65 @@ test('a finish made while signing out waits for its own session, then is sent on
   expect(await screen.findByText('Workout complete')).toBeVisible();
   await reconnect();
   // Nothing goes out with no sign-in, and the workout isn't held as a refused save.
-  expect(saved).toHaveLength(0);
+  expect(workoutSends()).toHaveLength(0);
   expect(readFinishedWorkouts(deviceStorage)).toHaveLength(1);
   expect(showToast).not.toHaveBeenCalledWith(
     expect.stringContaining("wasn't saved"),
     expect.anything(),
     expect.anything(),
   );
-  // The same session's sign-in is back: it is sent once, with that session's token.
-  jest.mocked(sessionToken).mockResolvedValue('token');
+});
+
+test("the session's refusal shows the sign-in form, and the workout waits for it", async () => {
+  server = { revision: 3, draft: remoteDraft(), refuseNextEdit: false };
+  const { captured } = await openApp();
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  // Signed out elsewhere (a password change): the server refuses this sign-in.
+  const accept = jest.mocked(apiSend).getMockImplementation()!;
+  jest.mocked(apiSend).mockImplementation(async (path, method, body, signal, token) => {
+    if (path === '/api/workouts') throw new ApiError(401, 'Sign in to continue.');
+    return accept(path, method, body, signal, token);
+  });
+  const checks = jest.mocked(currentUser).mock.calls.length;
+  jest.mocked(currentUser).mockRejectedValue(new ApiError(401, 'Sign in to continue.'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Finish workout' }));
+  // The engine asks the server about this sign-in, and the app goes to the sign-in form.
+  await waitFor(() => expect(captured.session!.status.kind).toBe('signed-out'));
+  expect(jest.mocked(currentUser).mock.calls.length).toBeGreaterThan(checks);
+  expect(readFinishedWorkouts(deviceStorage)).toHaveLength(1);
+  expect(saved).toHaveLength(0);
+});
+
+test('the shared copy is written with the pinned sign-in', async () => {
+  server = { revision: 3, draft: remoteDraft(), refuseNextEdit: false };
+  await openApp();
+  expect(await screen.findByText('Bench Press')).toBeVisible();
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set to Bench Press' }));
+  await waitFor(() => expect(puts.length).toBeGreaterThan(0), { timeout: 2000 });
+  const writes = jest.mocked(apiSend).mock.calls.filter(([path]) => path === '/api/active-workout');
+  expect(writes.length).toBeGreaterThan(0);
+  expect(writes.every((call) => call[4] === 'token')).toBe(true);
+});
+
+test('a shared-copy reply that arrives after the session ends is dropped', async () => {
+  await openApp();
+  await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/active-workout'));
+  // The next read is answered only after another sign-in has begun on this phone.
+  let answer: (value: unknown) => void = () => undefined;
+  jest
+    .mocked(apiGet)
+    .mockImplementation(
+      (path: string) =>
+        new Promise((resolve) =>
+          path === '/api/active-workout' ? (answer = resolve) : resolve([]),
+        ) as never,
+    );
   await reconnect();
-  await waitFor(() => expect(saved).toHaveLength(1));
-  await reconnect();
-  expect(saved).toHaveLength(1);
-  expect(saved[0].client_session_id).toBe(sessionId);
-  const sends = jest.mocked(apiSend).mock.calls.filter(([path]) => path === '/api/workouts');
-  expect(sends.map((call) => call[4])).toEqual(['token']);
-  expect(readFinishedWorkouts(deviceStorage)).toEqual([]);
+  await waitFor(() => expect(jest.mocked(apiGet).mock.calls.length).toBeGreaterThan(1));
+  nextSessionEpoch();
+  await act(async () => answer({ revision: 5, draft: remoteDraft() }));
+  expect(readActiveWorkoutDraft(deviceStorage)).toBeNull();
+  expect(screen.queryByText('Bench Press')).toBeNull();
 });
 
 test('finishing names the set and the field that is out of range, before anything is sent', async () => {

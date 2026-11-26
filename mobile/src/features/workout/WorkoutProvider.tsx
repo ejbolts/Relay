@@ -1,4 +1,4 @@
-import { onlineManager, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import {
@@ -445,6 +445,20 @@ function sameIds(left: Exercise[], right: Exercise[]) {
 }
 
 // Memoised: its parent re-renders whenever the engine publishes, which must not loop back.
+/**
+ * Asks the server whether this sign-in still holds. A 401 lands in the query cache, where the
+ * session provider sees it and shows the sign-in form; the account's waiting work stays queued.
+ */
+function checkSession(client: QueryClient, userId: string) {
+  void client
+    .fetchQuery({
+      queryKey: ['live-session-check', userId],
+      queryFn: ({ signal }) => currentUser(signal),
+      retry: false,
+    })
+    .catch(() => undefined);
+}
+
 const WorkoutEngine = memo(function WorkoutEngine({
   user,
   publish,
@@ -685,7 +699,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
     // Each save goes with this session's own token: never with none (a sign-out deletes the
     // token before the session ends) or another account's. A session that has ended here leaves
     // the workout queued for its account, as a connection failure would, rather than refused.
-    const session = sessionBound();
+    const session = sessionBound({ onEnded: () => checkSession(client, user.id) });
     const sender = new FinishedQueueSender({
       storage: deviceStorage,
       userId: user.id,
@@ -1243,7 +1257,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
         : null;
     // The shared copy is read and written for this session only, as the finished queue is: a
     // reply after a sign-out or another sign-in never lands in this account's workout.
-    const session = sessionBound();
+    const session = sessionBound({ onEnded: () => checkSession(client, user.id) });
     const sync = new ActiveWorkoutSynchronizer(
       {
         read: async () =>
@@ -1295,14 +1309,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
       // The bell refreshes at once, as the web's does, instead of on its next check.
       onNotifications: () => void client.invalidateQueries({ queryKey: socialKeys.notifications }),
       // The session provider observes 401s in the query cache.
-      onSignedOut: () =>
-        void client
-          .fetchQuery({
-            queryKey: ['live-session-check', user.id],
-            queryFn: ({ signal }) => currentUser(signal),
-            retry: false,
-          })
-          .catch(() => undefined),
+      onSignedOut: () => checkSession(client, user.id),
     });
     presenceRef.current = presence;
     // Keep pulling periodically in case the socket is down or silently drops an event.

@@ -184,6 +184,35 @@ describe('the finished-workout queue sends under its own session', () => {
   });
 });
 
+test("the server's refusal of this session tells the app, so it can show the sign-in form", async () => {
+  const onEnded = jest.fn();
+  const session = sessionBound({ onEnded });
+  await expect(
+    session.send(async () => {
+      throw new ApiError(401, 'Sign in to continue.');
+    }),
+  ).rejects.toBeInstanceOf(SessionEnded);
+  expect(onEnded).toHaveBeenCalledTimes(1);
+  // A read's refusal tells it too; apiGet has already forgotten the sign-in itself.
+  jest.mocked(forgetSessionTokenIf).mockClear();
+  mockSavedToken = 'token-a';
+  const reader = sessionBound({ onEnded });
+  await expect(
+    reader.read(async () => {
+      throw new ApiError(401, 'Sign in to continue.');
+    }),
+  ).rejects.toBeInstanceOf(SessionEnded);
+  expect(onEnded).toHaveBeenCalledTimes(2);
+  expect(forgetSessionTokenIf).not.toHaveBeenCalled();
+  // Other failures don't end the session.
+  await expect(
+    reader.send(async () => {
+      throw new ApiError(422, 'Workout date is invalid.');
+    }),
+  ).rejects.toMatchObject({ status: 422 });
+  expect(onEnded).toHaveBeenCalledTimes(2);
+});
+
 describe('reads for the session', () => {
   test('a reply that arrives after another sign-in is dropped', async () => {
     const session = sessionBound();
