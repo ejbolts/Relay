@@ -248,13 +248,16 @@ function resolveStopQuestion(choice: 'keep' | 'stop') {
   open?.settle(choice);
 }
 
-async function deleteSessionBestEffort(sessionId: string, token: string): Promise<void> {
+/** True once the server confirms the session is gone (deleted now, or already). */
+async function deleteSessionBestEffort(sessionId: string, token: string): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), SIGN_OUT_DELETE_TIMEOUT_MS);
   try {
     await videoApi.removeWithToken(sessionId, token, controller.signal);
-  } catch {
+    return true;
+  } catch (reason) {
     // Best effort: never block sign-out or account switches when the server is unreachable.
+    return reason instanceof ApiError && reason.status === 404;
   } finally {
     clearTimeout(timer);
   }
@@ -280,8 +283,28 @@ async function cleanupActiveUploadForSignOut(): Promise<void> {
   const token = activeToken;
   if (!session || !token || !isMidTransferUpload(state)) return;
   activeToken = undefined;
+  const myRun = runId;
+  const myEpoch = sessionEpoch();
   stopActiveTransfers(true);
-  await deleteSessionBestEffort(session.id, token);
+  if (!(await deleteSessionBestEffort(session.id, token))) return;
+  // The server session is gone. If sign-out then fails and this account stays signed in, Retry
+  // mustn't send to it: the clips go back to the form, so uploading again makes a new session.
+  if (sessionEpoch() !== myEpoch || myRun !== runId || state.session?.id !== session.id) return;
+  runId += 1;
+  setState((current) => ({
+    ...current,
+    session: null,
+    step: 'upload',
+    phase: 'idle',
+    busy: false,
+    processFailed: false,
+    clips: current.clips.map((clip) => ({
+      ...clip,
+      status: 'waiting',
+      progress: 0,
+      error: undefined,
+    })),
+  }));
 }
 
 function abortAndReset(nextUserId: string | null, nextEpoch: number, cleanup = false) {

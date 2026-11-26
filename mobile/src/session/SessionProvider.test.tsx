@@ -212,3 +212,22 @@ test('a hanging beforeSignOut handler still lets signOut proceed after about 2 s
     jest.useRealTimers();
   }
 });
+
+test("a late refusal of an old session's request leaves the session signed in now alone", async () => {
+  jest.mocked(currentUser).mockResolvedValue(user);
+  await open();
+  await screen.findByText('Signed in as preview');
+
+  const refused = (stale: boolean) => () =>
+    Promise.reject(new ApiError(401, 'Sign in to continue.', undefined, stale));
+  await act(async () => {
+    await client.fetchQuery({ queryKey: ['old-request'], queryFn: refused(true) }).catch(() => {});
+  });
+  expect(screen.getByText('Signed in as preview')).toBeVisible();
+
+  // A refusal of the session saved now still signs out.
+  await act(async () => {
+    await client.fetchQuery({ queryKey: ['request'], queryFn: refused(false) }).catch(() => {});
+  });
+  expect(await screen.findByText('signed-out')).toBeVisible();
+});

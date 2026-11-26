@@ -21,6 +21,11 @@ export class ApiError extends Error {
     message: string,
     /** The server's error code, such as `invalid_password` or `sharing_required`, when it sent one. */
     readonly code?: string,
+    /**
+     * A 401 for a session that is no longer this phone's: signed out, or another account signed
+     * in, while the request was on its way. It says nothing about the session saved now.
+     */
+    readonly staleSession = false,
   ) {
     super(message);
   }
@@ -57,6 +62,8 @@ export function clientVersionHeaders(): Record<string, string> {
 /**
  * Sends the saved session as a bearer header. Cookies are never sent or kept, so the session is
  * exactly the token in secure storage. `token` overrides it: null for none, or a given token.
+ * The saved session is the one at the moment of the call: when it changes before the request
+ * goes out, the request is never sent and rejects with `SessionChanged`.
  */
 export async function request<T>(
   path: string,
@@ -95,13 +102,17 @@ export async function request<T>(
     // The session ended on the server (signed out elsewhere, password changed or expired).
     // Only while it is still the saved one: a late refusal of a previous account's token mustn't
     // delete the account that signed in since.
-    if (response.status === 401 && token === undefined && bearer)
-      await forgetSessionTokenIf(origin, bearer);
+    const stale =
+      response.status === 401 &&
+      token === undefined &&
+      !!bearer &&
+      (await forgetSessionTokenIf(origin, bearer)) === false;
     const body = await response.json().catch(() => null);
     throw new ApiError(
       response.status,
       body?.error?.message ?? 'Relay could not complete this request.',
       typeof body?.error?.code === 'string' ? body.error.code : undefined,
+      stale,
     );
   }
   return response.status === 204 ? (undefined as T) : response.json();
