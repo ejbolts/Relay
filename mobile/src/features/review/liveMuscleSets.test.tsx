@@ -34,6 +34,7 @@ const mockRouter = {
   canGoBack: () => true,
   setParams: jest.fn(),
 };
+jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
   useIsFocused: () => true,

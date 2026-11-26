@@ -43,6 +43,7 @@ jest.mock('react-native-gesture-handler', () => ({
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
+  serverOrigin: () => 'https://relay.test',
   apiOrigin: 'https://relay.test',
   currentUser: jest.fn(),
   apiSend: jest.fn(),
@@ -220,7 +221,14 @@ test('logs Up next, starts the rest, and finishes into a saved summary', async (
   expect(await screen.findByText('Workout complete')).toBeVisible();
   await waitFor(() => expect(screen.getByText('Saved')).toBeVisible());
   expect(apiSend).toHaveBeenCalledTimes(1);
-  expect(apiSend).toHaveBeenCalledWith('/api/workouts', 'POST', expect.anything());
+  // Sent with the signed-in session's own token.
+  expect(apiSend).toHaveBeenCalledWith(
+    '/api/workouts',
+    'POST',
+    expect.anything(),
+    undefined,
+    'token',
+  );
   expect(saved[0]).toMatchObject({
     client_session_id: expect.stringMatching(/^[0-9a-f-]{36}$/),
     name: 'Push workout',
