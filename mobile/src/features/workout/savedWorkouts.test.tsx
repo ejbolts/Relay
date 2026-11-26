@@ -368,6 +368,9 @@ test('a saved workout is deleted at once with Undo, and sent when the toast ends
   expect(options).toMatchObject({ duration: 'important' });
   expect(apiSend).not.toHaveBeenCalledWith('/api/workouts/w1', 'DELETE');
   expect(screen.getByRole('button', { name: 'Deleted', disabled: true })).toBeVisible();
+  // While it waits on its Undo it can't be edited or resumed: that change would be deleted too.
+  expect(screen.getByRole('button', { name: 'Edit Push workout' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Resume Push workout' })).toBeDisabled();
   await act(async () => action!.onDismiss!());
   expect(apiSend).toHaveBeenCalledWith('/api/workouts/w1', 'DELETE');
   await waitFor(() => expect(screen.getByRole('button', { name: 'Delete workout' })).toBeEnabled());

@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { readFinishedWorkouts } from '../../../../frontend/src/finishedWorkoutQueue';
 import type { HeatmapDay, TrackedWorkout } from '../../../../frontend/src/types';
@@ -77,6 +77,43 @@ function undoEnded(token: string) {
   flushHeld();
 }
 
+/**
+ * After a confirmed delete the workout stays hidden only until the server's copies have replaced
+ * the cached ones: every dashboard and workout list on screen has loaded since, and those not on
+ * screen are marked to load again when they are. Then it is shown again if the server has it,
+ * as after a backup restore that brings it back.
+ */
+function unhideOnceReloaded(client: QueryClient, id: string, account: string) {
+  const deletedAt = Date.now();
+  const cache = client.getQueryCache();
+  const reloaded = () =>
+    cache
+      .findAll({
+        predicate: (query) =>
+          query.queryKey[0] === 'dashboard' ||
+          (query.queryKey[0] === 'workouts' && query.queryKey[1] !== 'detail'),
+      })
+      .every((query) =>
+        query.getObserversCount() > 0
+          ? query.state.dataUpdatedAt >= deletedAt && !query.state.isInvalidated
+          : query.state.isInvalidated || query.state.dataUpdatedAt >= deletedAt,
+      );
+  let unsubscribe: (() => void) | null = null;
+  const check = () => {
+    if (!isToastAccountCurrent(account)) {
+      unsubscribe?.();
+      return true;
+    }
+    if (!reloaded()) return false;
+    unsubscribe?.();
+    setWorkoutDeleted(id, false);
+    return true;
+  };
+  return () => {
+    if (!check()) unsubscribe = cache.subscribe(() => void check());
+  };
+}
+
 /** For tests. */
 export function resetWorkoutDeletions() {
   showing = [];
@@ -92,7 +129,7 @@ export function resetWorkoutDeletions() {
  * sending anything.
  *
  * Nothing cached is rewritten: the workout is marked deleted (`setWorkoutDeleted`) and every read
- * leaves it out, during the Undo and, once the server confirms, for the rest of the session.
+ * leaves it out, during the Undo and, once the server confirms, until its copies have reloaded.
  */
 export function useWorkoutDeletion() {
   const client = useQueryClient();
@@ -161,14 +198,17 @@ export function useWorkoutDeletion() {
             }
             void apiSend<void>(`/api/workouts/${encodeURIComponent(item.id)}`, 'DELETE').then(
               () => {
-                // Deleted for certain: it stays marked, so every read keeps leaving it out even
-                // if the refresh fails. A session that has ended keeps nothing of this.
+                // Deleted for certain: it stays marked until the server's copies have reloaded, so
+                // a refresh that fails can't show it again. A session that has ended keeps nothing.
                 if (isToastAccountCurrent(account)) {
                   // Resuming it in the logger ends too: there is nothing left to save it over.
                   if (live.current.live?.resumedWorkoutId === item.id) live.current.discard();
                 }
                 pendingActions.remove(token);
-                if (isToastAccountCurrent(account)) void refreshTraining(client);
+                if (isToastAccountCurrent(account)) {
+                  const settle = unhideOnceReloaded(client, item.id, account);
+                  void refreshTraining(client).then(settle, settle);
+                }
               },
               (reason: unknown) => {
                 keep();

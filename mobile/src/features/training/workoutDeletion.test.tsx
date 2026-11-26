@@ -224,14 +224,7 @@ test('a confirmed delete leaves every other cached response exactly as it was', 
     older: client.getQueryData(['workouts', 'older', initialHistoryStart()]),
   };
   await deleteNow(a);
-  await wait(20000);
-  expect(deletes()).toEqual(['/api/workouts/a']);
-  // Same objects: arrays stay arrays, and nothing was rewritten.
-  expect(client.getQueryData(['workouts', 'body-measurements'])).toBe(before.body);
-  expect(client.getQueryData(['workouts', 'progress'])).toBe(before.progress);
-  expect(client.getQueryData(['workouts', 'older', initialHistoryStart()])).toBe(before.older);
-  expect(Array.isArray(client.getQueryData(['workouts', 'body-measurements']))).toBe(true);
-  // Training's older months still leave it out.
+  // Training's older months leave it out while the Undo shows.
   let olderShown: { workouts: readonly TrackedWorkout[] } | undefined;
   function Older() {
     const history = useWithoutPendingDeletions({
@@ -249,6 +242,13 @@ test('a confirmed delete leaves every other cached response exactly as it was', 
     </QueryClientProvider>,
   );
   expect(olderShown!.workouts.map((item) => item.id)).toEqual(['b']);
+  await wait(20000);
+  expect(deletes()).toEqual(['/api/workouts/a']);
+  // Same objects: arrays stay arrays, and nothing was rewritten.
+  expect(client.getQueryData(['workouts', 'body-measurements'])).toBe(before.body);
+  expect(client.getQueryData(['workouts', 'progress'])).toBe(before.progress);
+  expect(client.getQueryData(['workouts', 'older', initialHistoryStart()])).toBe(before.older);
+  expect(Array.isArray(client.getQueryData(['workouts', 'body-measurements']))).toBe(true);
 });
 
 test('a second delete sends the first; its Undo brings back only the second', async () => {
@@ -383,14 +383,69 @@ test('a workout still waiting to sync can’t be deleted; another account’s qu
   expect(shown().training).toEqual(['c', 'a']);
 });
 
-test('a workout saved before the dashboard loaded still counts while a delete is pending', async () => {
+// The weekly review and Home's muscle sets count a just-saved workout until a dashboard that
+// includes it loads, matching the dashboard the save was pinned to by identity.
+const awaiting = () =>
+  awaitingDashboard(justSavedWorkouts(), 'u1', seen.dashboard).map((entry) => entry.id);
+const refetchDashboard = async () => {
+  await act(async () => void client.refetchQueries({ queryKey: ['dashboard'] }));
+  await wait(10);
+};
+
+test('with nothing deleted, workouts saved across a dashboard refetch all still count', async () => {
   await show();
-  rememberSavedWorkout(client, 'u1', 'new', finished('new'));
-  const raw = client.getQueryData(dashboardKey);
+  // Home reads the cached response itself, as on develop.
+  expect(seen.dashboard).toBe(client.getQueryData(dashboardKey));
+  rememberSavedWorkout(client, 'u1', 'w1', finished('w1'));
+  expect(awaiting()).toEqual(['w1']);
+  // The refresh after it: the server now counts W1 (here: its figures changed).
+  server = [workout('w1', '2026-11-22'), ...server];
+  await refetchDashboard();
+  expect(seen.dashboard).toBe(client.getQueryData(dashboardKey));
+  // The second workout saved in the session, pinned to the refetched dashboard, still counts.
+  rememberSavedWorkout(client, 'u1', 'w2', finished('w2'));
+  expect(awaiting()).toEqual(['w2']);
+});
+
+test('while a delete is pending, saves across a refetch still count', async () => {
+  await show();
   await deleteNow(a);
-  // Home reads a filtered copy, which still matches the response the save was pinned to.
-  expect(seen.dashboard).not.toBe(raw);
-  expect(awaitingDashboard(justSavedWorkouts(), 'u1', seen.dashboard).map((e) => e.id)).toEqual([
-    'new',
-  ]);
+  rememberSavedWorkout(client, 'u1', 'w1', finished('w1'));
+  expect(seen.dashboard).not.toBe(client.getQueryData(dashboardKey));
+  expect(awaiting()).toEqual(['w1']);
+  server = [workout('w1', '2026-11-22'), ...server];
+  await refetchDashboard();
+  rememberSavedWorkout(client, 'u1', 'w2', finished('w2'));
+  expect(awaiting()).toEqual(['w2']);
+  expect(shown().home).not.toContain('a');
+});
+
+test('a deleted workout a restore brings back shows again once the data has reloaded', async () => {
+  await show();
+  await deleteNow(a);
+  await wait(6000);
+  expect(deletes()).toEqual(['/api/workouts/a']);
+  await wait(10);
+  expect(shown().training).toEqual(['c', 'b']);
+  // A backup restore puts A back with the same id; the app then reloads every query.
+  server = [...all];
+  await act(async () => void client.resetQueries());
+  await wait(10);
+  expect(shown().training).toEqual(['c', 'b', 'a']);
+  expect(shown().home).toEqual(['c', 'b', 'a']);
+});
+
+test('a deleted workout stays hidden if the refresh after its delete fails', async () => {
+  await show();
+  await deleteNow(a);
+  // The connection drops just after the delete is confirmed: the server's copies can't load.
+  jest.mocked(apiSend).mockImplementationOnce(async () => {
+    jest.mocked(apiGet).mockRejectedValue(new Error('No connection.'));
+    return undefined as never;
+  });
+  await wait(6000);
+  await wait(10);
+  expect(deletes()).toEqual(['/api/workouts/a']);
+  expect(shown().training).toEqual(['c', 'b']);
+  expect(shown().home).toEqual(['c', 'b']);
 });

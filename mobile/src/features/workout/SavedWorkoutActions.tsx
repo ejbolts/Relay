@@ -44,6 +44,8 @@ export function SavedWorkoutActions({
           accessibilityLabel={`Edit ${workout.name}`}
           icon={icons.edit}
           variant="secondary"
+          // Waiting on its Undo, it is about to be deleted: a change now would be deleted with it.
+          disabled={deleting}
           onPress={() =>
             router.push({ pathname: '/edit-workout/[id]', params: { id: workout.id } })
           }
@@ -54,6 +56,7 @@ export function SavedWorkoutActions({
           accessibilityLabel={resumedHere ? 'Open the resumed workout' : `Resume ${workout.name}`}
           icon={icons.resume}
           variant="secondary"
+          disabled={deleting}
           onPress={() => live.resume(workout)}
           style={{ flex: 1 }}
         />

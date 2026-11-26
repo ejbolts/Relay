@@ -86,11 +86,15 @@ export function cachedExerciseByName(client: QueryClient): ExerciseByName {
 // recognises a response by identity (the weekly review's just-saved workouts) still can.
 const dashboardSources = new WeakMap<object, unknown>();
 
-/** Structural sharing as usual, keeping a filtered dashboard's link to its response. */
+/**
+ * While a workout is hidden: a response shown as it is keeps its own identity (the cached object,
+ * as without any filter), and a filtered copy keeps its link to the response it came from.
+ */
 function shareDashboard(previous: unknown, next: unknown): unknown {
-  const shared = replaceEqualDeep(previous, next);
   const source = next && typeof next === 'object' ? dashboardSources.get(next) : undefined;
-  if (source && shared && typeof shared === 'object') dashboardSources.set(shared, source);
+  if (!source) return replaceEqualDeep(previous, next) === previous ? previous : next;
+  const shared = replaceEqualDeep(previous, next);
+  if (shared && typeof shared === 'object') dashboardSources.set(shared, source);
   return shared;
 }
 
@@ -130,8 +134,8 @@ export function useDashboard() {
   return useQuery({
     queryKey: queryKeys.dashboard(today),
     queryFn: ({ signal }) => apiGet<DashboardData>(`/api/dashboard?on_date=${today}`, signal),
-    select,
-    structuralSharing: shareDashboard,
+    // With nothing hidden, exactly as before: no select, the cached object itself.
+    ...(ids.length ? { select, structuralSharing: shareDashboard } : {}),
   });
 }
 
