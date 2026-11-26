@@ -52,10 +52,15 @@ export const NumberField = forwardRef<
   const input = useRef<ComponentRef<typeof TextInput>>(null);
   useImperativeHandle(ref, () => input.current!, []);
   // Android's Back hides the keyboard but leaves the field focused, with its outline and caret
-  // on a logged set's row: hiding the keyboard ends the edit, as it does on iOS.
+  // on a logged set's row: hiding the keyboard ends the edit, as it does on iOS. A hide that
+  // arrives just as this field takes focus belongs to the hand-off from the field before it
+  // (Done moving on, or a tap from one keyboard type to another), so it is left alone.
+  const focusedAt = useRef(0);
   useEffect(() => {
     if (!focused || Platform.OS !== 'android') return;
-    const hidden = Keyboard.addListener('keyboardDidHide', () => input.current?.blur());
+    const hidden = Keyboard.addListener('keyboardDidHide', () => {
+      if (Date.now() - focusedAt.current >= FOCUS_HAND_OFF_MS) input.current?.blur();
+    });
     return () => hidden.remove();
   }, [focused]);
   useEffect(() => {
@@ -82,7 +87,10 @@ export const NumberField = forwardRef<
       selectionColor={colors.accent}
       cursorColor={colors.accent}
       keyboardAppearance={scheme}
-      onFocus={() => setFocused(true)}
+      onFocus={() => {
+        focusedAt.current = Date.now();
+        setFocused(true);
+      }}
       onBlur={() => setFocused(false)}
       accessibilityLabel={suggested ? `${label}, suggested value` : label}
       style={[
@@ -102,6 +110,9 @@ export const NumberField = forwardRef<
     />
   );
 });
+
+/** How soon after a field takes focus a keyboard hide still belongs to the field before it. */
+export const FOCUS_HAND_OFF_MS = 400;
 
 const styles = StyleSheet.create({
   field: {

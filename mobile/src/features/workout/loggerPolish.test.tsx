@@ -160,7 +160,7 @@ test('a cleared suggestion stops showing last time, and the set logs without tha
   expect(draftSet(0, 0)).toMatchObject({ completed: true, weight_kg: null, reps: 8 });
 });
 
-test('a cleared field stays empty after the workout is reopened, without last time’s value', async () => {
+test('an empty set field never shows last time’s value, even after the workout is reopened', async () => {
   const first = await openLogger();
   await fireEvent.changeText(
     screen.getByLabelText('Weight kilograms for set 1, suggested value'),

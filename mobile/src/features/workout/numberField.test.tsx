@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { createRef, type ComponentRef } from 'react';
 import { Keyboard, Platform, TextInput } from 'react-native';
-import { formatPlain, NumberField, parseWhole } from './NumberField';
+import { FOCUS_HAND_OFF_MS, formatPlain, NumberField, parseWhole } from './NumberField';
 
 type Listener = () => void;
 let listeners: Map<string, Set<Listener>>;
@@ -16,6 +16,16 @@ beforeEach(() => {
   }) as typeof Keyboard.addListener);
 });
 afterEach(() => jest.restoreAllMocks());
+
+let now = 1_000_000;
+beforeEach(() => {
+  now = 1_000_000;
+  jest.spyOn(Date, 'now').mockImplementation(() => now);
+});
+/** Time passes after the field took focus, as the keyboard settles. */
+const later = () => {
+  now += FOCUS_HAND_OFF_MS;
+};
 
 const keyboardHides = async () =>
   act(async () => listeners.get('keyboardDidHide')?.forEach((listener) => listener()));
@@ -42,6 +52,7 @@ async function renderField() {
 test('on Android, hiding the keyboard with Back ends the edit, so a logged set loses its outline', async () => {
   jest.replaceProperty(Platform, 'OS', 'android');
   const { blur, field } = await renderField();
+  later();
   await keyboardHides();
   expect(blur).toHaveBeenCalled();
   await fireEvent(field, 'blur');
@@ -50,6 +61,16 @@ test('on Android, hiding the keyboard with Back ends the edit, so a logged set l
   });
   // Once the field has let go, hiding the keyboard again leaves it alone.
   blur.mockClear();
+  await keyboardHides();
+  expect(blur).not.toHaveBeenCalled();
+});
+
+test('a hide that arrives as the field takes focus belongs to the field before it', async () => {
+  // Done on weight moving on to reps, or a tap into another keyboard type: Android can report
+  // the old keyboard hiding just after the new field is focused.
+  jest.replaceProperty(Platform, 'OS', 'android');
+  const { blur } = await renderField();
+  now += FOCUS_HAND_OFF_MS - 1;
   await keyboardHides();
   expect(blur).not.toHaveBeenCalled();
 });
