@@ -3,6 +3,7 @@ import { forgetSessionTokenIf, sessionToken } from '../../../data/session';
 import { uploadFile } from '../../../data/uploadFile';
 import {
   deleteProfilePhoto,
+  profileDetailChanges,
   profileSession,
   saveProfileDetails,
   saveProfilePhoto,
@@ -108,4 +109,29 @@ test('a refusal forgets only the token it was sent with', async () => {
     'Sign in again.',
   );
   expect(forgetSessionTokenIf).toHaveBeenCalledWith('https://relay.test', 'token-a');
+});
+
+test('a draft sends only the fields changed from where it started, and a sex only once', () => {
+  const baseline = { name: 'Sam', sex: null };
+  expect(
+    profileDetailChanges({ sex: null }, baseline, { displayName: ' Sam ', sex: null }),
+  ).toEqual({ nameDirty: false, sexDirty: false, changes: {} });
+  expect(
+    profileDetailChanges({ sex: null }, baseline, { displayName: 'Sam B', sex: 'female' }).changes,
+  ).toEqual({ display_name: 'Sam B', sex: 'female' });
+  // Renamed elsewhere since the draft opened: the draft's untouched name isn't sent back.
+  expect(
+    profileDetailChanges({ sex: null }, baseline, { displayName: 'Sam', sex: 'male' }).changes,
+  ).toEqual({ sex: 'male' });
+  // Once the account has a sex (saved here or elsewhere), it isn't sent again.
+  expect(
+    profileDetailChanges({ sex: 'male' }, baseline, { displayName: 'Sam', sex: 'female' }).sexDirty,
+  ).toBe(false);
+  expect(
+    profileDetailChanges(
+      { sex: null },
+      { name: 'Sam', sex: 'male' },
+      { displayName: 'Sam', sex: 'female' },
+    ).sexDirty,
+  ).toBe(false);
 });

@@ -21,15 +21,21 @@ import { formatMemberSince, SEX_LABELS } from '../../../../frontend/src/profileD
 import type { Sex } from '../../../../frontend/src/types';
 import { ApiError } from '../../data/api';
 import { useSession, useUser } from '../../session/SessionProvider';
-import { errorMessage } from '../../ui/components';
+import { Button, errorMessage } from '../../ui/components';
 import { Segmented } from '../../ui/controls';
 import { Icon } from '../../ui/Icon';
 import { showMenu } from '../../ui/prompts';
-import { showToast } from '../../ui/Toast';
+import { isToastAccountCurrent, showToast, toastAccount } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { settingsIcons } from './icons';
 import { ProfilePhoto } from '../../ui/ProfilePhoto';
-import { removeProfilePhoto, updateProfile, uploadProfilePhoto } from './settingsData';
+import {
+  deleteProfilePhoto,
+  profileDetailChanges,
+  profileSession,
+  saveProfileDetails,
+  saveProfilePhoto,
+} from '../social/profile/profileWrites';
 import { Row, Section, SettingsPage } from './SettingsList';
 
 const SEXES: Sex[] = ['male', 'female'];
@@ -41,6 +47,14 @@ export function EditProfileScreen() {
   const { updateUser } = useSession();
   const router = useRouter();
   const { colors, type, radius } = useTheme();
+  // The session the draft belongs to: every write checks it and sends with its token, so a late
+  // answer or confirmation never saves this draft into an account signed in since.
+  const [account] = useState(toastAccount);
+  // What the draft started from, advanced to what the server saved: only changed fields are sent.
+  const [baseline, setBaseline] = useState(() => ({
+    name: user.display_name,
+    sex: user.sex ?? null,
+  }));
   const [displayName, setDisplayName] = useState(user.display_name);
   // Chosen once: the draft exists only until the account has a sex.
   const [sex, setSex] = useState<Sex | null>(null);
@@ -49,8 +63,8 @@ export function EditProfileScreen() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const sexDirty = !user.sex && sex !== null;
-  const textDirty = displayName.trim() !== user.display_name || sexDirty;
+  const { sexDirty, changes } = profileDetailChanges(user, baseline, { displayName, sex });
+  const textDirty = Object.keys(changes).length > 0;
   const dirty = textDirty || photo !== null || removePhoto;
   const hasPhoto = !!photo || (!!user.profile_photo_url && !removePhoto);
   const joined = formatMemberSince(user.created_at);
@@ -105,7 +119,7 @@ export function EditProfileScreen() {
   }
 
   async function save(sexConfirmed = false) {
-    if (saving || !dirty) return;
+    if (saving || !dirty || !isToastAccountCurrent(account)) return;
     setError(null);
     const nameError = profileNameError(displayName);
     if (nameError) {
@@ -127,22 +141,27 @@ export function EditProfileScreen() {
     setSaving(true);
     let detailsSaved = false;
     try {
+      // Null once another session has taken over: nothing more is sent, shown or navigated.
+      const session = await profileSession(account);
+      if (!session) return setSaving(false);
       if (textDirty) {
-        updateUser(
-          await updateProfile({
-            ...(displayName.trim() !== user.display_name
-              ? { display_name: displayName.trim() }
-              : {}),
-            ...(sexDirty && sex ? { sex } : {}),
-          }),
-        );
+        const updated = await saveProfileDetails(session, changes);
+        if (!updated) return setSaving(false);
+        updateUser(updated);
+        setBaseline({ name: updated.display_name, sex: updated.sex ?? null });
         detailsSaved = true;
       }
-      if (photo) updateUser(await uploadProfilePhoto(photo));
-      else if (removePhoto) updateUser(await removeProfilePhoto());
-      showToast('Profile saved.');
+      if (photo || removePhoto) {
+        const updated = photo
+          ? await saveProfilePhoto(session, photo)
+          : await deleteProfilePhoto(session);
+        if (!updated) return setSaving(false);
+        updateUser(updated);
+      }
+      showToast('Profile saved.', undefined, { account });
       router.back();
     } catch (reason) {
+      if (!isToastAccountCurrent(account)) return;
       const message =
         reason instanceof ApiError
           ? reason.code && PROFILE_PHOTO_ERRORS.has(reason.code)
@@ -234,14 +253,27 @@ export function EditProfileScreen() {
             <Row
               label="Sex"
               accessory={
-                <Segmented
-                  accessibilityLabel="Sex"
-                  style={{ width: 170 }}
-                  values={SEXES.map((option) => SEX_LABELS[option])}
-                  selectedIndex={sex ? SEXES.indexOf(sex) : -1}
-                  enabled={!saving}
-                  onChange={(index) => setSex(SEXES[index] ?? null)}
-                />
+                <View style={styles.sex}>
+                  {/* The web clears a choice with a second press; a native segmented control can't. */}
+                  {sex !== null && (
+                    <Button
+                      label="Clear"
+                      variant="link"
+                      size="small"
+                      accessibilityLabel="Clear sex"
+                      disabled={saving}
+                      onPress={() => setSex(null)}
+                    />
+                  )}
+                  <Segmented
+                    accessibilityLabel="Sex"
+                    style={{ width: 170 }}
+                    values={SEXES.map((option) => SEX_LABELS[option])}
+                    selectedIndex={sex ? SEXES.indexOf(sex) : -1}
+                    enabled={!saving}
+                    onChange={(index) => setSex(SEXES[index] ?? null)}
+                  />
+                </View>
               }
             />
           )}
@@ -275,4 +307,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   name: { minHeight: 50, paddingHorizontal: 16 },
+  sex: { flexDirection: 'row', alignItems: 'center', gap: 4 },
 });
