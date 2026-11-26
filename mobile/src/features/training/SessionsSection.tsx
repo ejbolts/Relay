@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import {
   groupWorkoutsByWeek,
   addDays,
+  isoLocalDate,
   dayMonth,
   weekGroupLabel,
   weekGroupSummary,
@@ -56,8 +57,25 @@ export function SessionsSection({ history }: { history: History }) {
   const today = localDate();
   const { workouts, heatmap, summary, historyStart, hasOlder, loadingOlder, olderError } = history;
 
+  // The workout in progress is marked on its day, and tapping that day resumes it, as on the web.
+  const liveWorkout = workout.live;
+  const live = useMemo(
+    () =>
+      liveWorkout
+        ? {
+            date: liveWorkout.workoutDate ?? isoLocalDate(new Date(liveWorkout.startedAt)),
+            category: liveWorkout.category ?? null,
+            workoutTypeId: liveWorkout.workoutTypeId ?? null,
+          }
+        : null,
+    [liveWorkout],
+  );
   // The calendar pages month by month, from the oldest workout to this month.
-  const bounds = calendarBounds(today, [summary?.first_workout_date, heatmap[0]?.workout_date]);
+  const bounds = calendarBounds(today, [
+    summary?.first_workout_date,
+    heatmap[0]?.workout_date,
+    live?.date,
+  ]);
   const [month, setMonth] = useState(() => monthOf(today));
   const shownMonth =
     month < bounds.first ? bounds.first : month > bounds.last ? bounds.last : month;
@@ -69,8 +87,9 @@ export function SessionsSection({ history }: { history: History }) {
   // History is grouped by month once; each month's view is then built at most once.
   const byMonth = useMemo(() => entriesByMonth(heatmap), [heatmap]);
   const viewFor = useMemo(
-    () => monthViews({ byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays }),
-    [byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays],
+    () =>
+      monthViews({ byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays, live }),
+    [byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays, live],
   );
   const months = useMemo(
     () => monthsBetween(bounds.first, bounds.last),
@@ -187,7 +206,7 @@ export function SessionsSection({ history }: { history: History }) {
           viewFor={viewFor}
           onMonthChange={setMonth}
           selectedDate={selectedDay?.workout_date ?? plannedDate}
-          onSelectDay={(day) => pressDay(day.date, day.entry)}
+          onSelectDay={(day) => (day.live ? workout.open() : pressDay(day.date, day.entry))}
           loadingOlder={loadingOlder && `${shownMonth}-01` < historyStart}
           olderError={`${shownMonth}-01` < historyStart ? olderError : null}
           onRetryOlder={history.retryOlder}

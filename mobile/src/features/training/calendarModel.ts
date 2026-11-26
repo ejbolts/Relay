@@ -6,8 +6,13 @@ import {
 import { calendarDayLook } from '../../../../frontend/src/calendarDayLook';
 import { RING_GAP_DEG, workoutTypeColor } from '../../../../frontend/src/dayColors';
 import { isoLocalDate } from '../../../../frontend/src/trainingSummary';
-import type { HeatmapDay, WorkoutType, WorkoutTypeColors } from '../../../../frontend/src/types';
-import { calendarLegendTypes } from '../../../../frontend/src/workoutTypes';
+import type {
+  HeatmapDay,
+  WorkoutCategory,
+  WorkoutType,
+  WorkoutTypeColors,
+} from '../../../../frontend/src/types';
+import { calendarLegendTypes, effectiveWorkoutType } from '../../../../frontend/src/workoutTypes';
 
 /** A calendar month as `YYYY-MM`. */
 export type MonthKey = string;
@@ -120,6 +125,30 @@ export interface CalendarDay {
   scheduledNote: string | null;
   today: boolean;
   future: boolean;
+  /** The day of the workout in progress: tapping it resumes that workout, as on the web. */
+  live: boolean;
+  /** The colour of the workout type being logged, on the live day only (null: the accent). */
+  liveColor: string | null;
+}
+
+/** The workout in progress, as the calendar marks it. */
+export interface CalendarLiveWorkout {
+  date: string;
+  category: WorkoutCategory | null;
+  workoutTypeId: string | null;
+}
+
+/** The colour of the live workout's type, as the web's `activeWorkoutColor`; null without one. */
+export function liveWorkoutColor(
+  live: CalendarLiveWorkout | null | undefined,
+  types: WorkoutType[],
+  categoryColors: WorkoutTypeColors,
+): string | null {
+  if (!live?.category) return null;
+  return workoutTypeColor(
+    effectiveWorkoutType({ category: live.category, workout_type_id: live.workoutTypeId }, types),
+    categoryColors,
+  );
 }
 
 export interface CalendarMonthView {
@@ -145,6 +174,7 @@ export function calendarMonthView({
   weekStartDay,
   today,
   splitDays,
+  live = null,
 }: {
   month: MonthKey;
   entries: HeatmapDay[];
@@ -155,17 +185,22 @@ export function calendarMonthView({
   today: string;
   /** The types a split plans on each date (trainingSplit's `splitCalendarDays`). */
   splitDays?: ReadonlyMap<string, readonly string[]>;
+  /** The workout in progress, marked on its day as the web's calendar marks it. */
+  live?: CalendarLiveWorkout | null;
 }): CalendarMonthView {
   const [geometry] = calendarMonths(`${month}-01`, 1, 0, weekStartDay);
   const byDate = new Map(entries.map((entry) => [entry.workout_date, entry]));
+  const liveColor = liveWorkoutColor(live, types, categoryColors);
   const cells = geometry.cells.map((cell): CalendarDay | null => {
     if (!cell) return null;
     const date = isoLocalDate(cell);
     const entry = byDate.get(date);
+    const inProgress = date === live?.date;
     const look = calendarDayLook({
       date,
       today,
       entry,
+      inProgress,
       types,
       categoryColors,
       hiddenCategories: hidden,
@@ -175,15 +210,20 @@ export function calendarMonthView({
       date,
       day: cell.getDate(),
       entry,
-      ring: look.ring,
-      dots: look.dayTypes.map((type) =>
-        hidden.has(type.id) ? null : workoutTypeColor(type, categoryColors),
-      ),
-      filteredOut: look.filteredOut,
+      // The live day drops its logged outline and dots for the live tint and dot, as on the web.
+      ring: inProgress ? [] : look.ring,
+      dots: inProgress
+        ? []
+        : look.dayTypes.map((type) =>
+            hidden.has(type.id) ? null : workoutTypeColor(type, categoryColors),
+          ),
+      filteredOut: inProgress ? false : look.filteredOut,
       scheduled: look.scheduledRing,
       scheduledNote: look.scheduledNote,
       today: date === today,
       future: date > today,
+      live: inProgress,
+      liveColor: inProgress ? liveColor : null,
     };
   });
   return {
