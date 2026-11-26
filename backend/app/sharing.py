@@ -21,12 +21,12 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import date, datetime, timedelta
-from typing import Annotated, Literal, NamedTuple, get_args
+from typing import Annotated, Literal, NamedTuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import AfterValidator, BaseModel, ConfigDict
 from sqlalchemy import and_, case, delete, exists, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -64,6 +64,7 @@ from .models import (
 from .photo_storage import profile_photo_path
 from .presence import FriendPresence, hub, presence_by_member
 from .profile_sex import Sex, known_sex
+from .reactions import ordered_counts, reaction_key
 from .relative_strength import BodyweightHistory
 from .tracker import build_heatmap, training_preferences, workout_options, zone2_week
 from .tracker_schemas import (
@@ -270,7 +271,8 @@ class ConnectionRead(BaseModel):
     since: datetime
 
 
-Reaction = Literal["like", "love", "strong", "fire", "clap", "trophy", "run"]
+# Any single emoji. The seven original reactions keep their names, which older apps read.
+Reaction = Annotated[str, AfterValidator(reaction_key)]
 
 
 class ReactionChoice(BaseModel):
@@ -1303,9 +1305,8 @@ def reaction_summaries(
             summaries[workout_id].yours = reaction
     for workout_id, counter in counts.items():
         summaries[workout_id].counts = [
-            ReactionCount(reaction=reaction, count=counter[reaction])
-            for reaction in get_args(Reaction)
-            if counter[reaction]
+            ReactionCount(reaction=reaction, count=count)
+            for reaction, count in ordered_counts(counter)
         ]
     from .comments import visible_comments
 

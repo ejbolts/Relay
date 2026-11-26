@@ -1,7 +1,6 @@
 """Workout discussion, always checked against current sharing access."""
 
 from collections import Counter
-from typing import get_args
 
 from fastapi import HTTPException, Query
 from pydantic import BaseModel, Field, field_validator
@@ -20,6 +19,7 @@ from .models import (
     utc_now,
 )
 from .presence import hub
+from .reactions import ordered_counts
 from .sharing import (
     Db,
     FeedFriend,
@@ -141,9 +141,7 @@ def read_comment(db, user, row):
         or db.get(TrainingWorkout, row.workout_id).user_id == user.id,
         reactions=WorkoutReactions(
             counts=[
-                ReactionCount(reaction=kind, count=counts[kind])
-                for kind in get_args(Reaction)
-                if counts[kind]
+                ReactionCount(reaction=kind, count=count) for kind, count in ordered_counts(counts)
             ],
             yours=yours,
         ),

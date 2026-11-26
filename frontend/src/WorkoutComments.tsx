@@ -1,14 +1,14 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
-import { REACTIONS, reactionEmoji } from './friendFeedData';
+import { reactionChoice, reactionEmoji } from './friendFeedData';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { useHeightAnimation } from './motionHooks';
 import { ProfileAvatar } from './ProfileAvatar';
 import { PopupDialog } from './PopupDialog';
 import { ShowMoreButton } from './ShowMoreButton';
-import type { WorkoutComment, WorkoutReactions } from './types';
+import type { WorkoutComment, WorkoutReactionKind, WorkoutReactions } from './types';
 import {
   canSendComment,
   clampComment,
@@ -18,6 +18,9 @@ import {
   COMMENT_MAX_LENGTH,
   deleteCommentMessage,
 } from './commentDisplay';
+
+// Loaded when first opened, so the emoji catalogue stays out of the app's first download.
+const EmojiReactionSheet = lazy(() => import('./EmojiReactionSheet'));
 
 export function WorkoutComments({
   workoutId,
@@ -124,6 +127,13 @@ export function WorkoutComments({
     setItems(rows);
     setNext(offset);
   }
+  function react(item: WorkoutComment, reaction: WorkoutReactionKind | null, close = false) {
+    void run(async () => {
+      const updated = await api.sharing.reactToComment(item.id, reaction);
+      setItems((current) => current.map((row) => (row.id === item.id ? updated : row)));
+      if (close) setPicker(null);
+    });
+  }
   async function run(action: () => Promise<unknown>) {
     if (busy) return;
     setBusy(true);
@@ -181,8 +191,12 @@ export function WorkoutComments({
             <button
               type="button"
               className="pulse-button link small"
+              aria-haspopup="dialog"
               aria-expanded={picker === item.id}
-              onClick={() => setPicker(picker === item.id ? null : item.id)}
+              onClick={() => {
+                setError(null);
+                setPicker(picker === item.id ? null : item.id);
+              }}
             >
               React
             </button>
@@ -226,19 +240,11 @@ export function WorkoutComments({
                 type="button"
                 key={rx.reaction}
                 className="comment-reaction"
-                aria-label={`${rx.reaction}, ${rx.count}`}
+                aria-label={`${reactionChoice(rx.reaction)?.label ?? rx.reaction}, ${rx.count}`}
                 aria-pressed={item.reactions.yours === rx.reaction}
                 disabled={busy}
                 onClick={() =>
-                  void run(async () => {
-                    const updated = await api.sharing.reactToComment(
-                      item.id,
-                      item.reactions.yours === rx.reaction ? null : rx.reaction,
-                    );
-                    setItems((current) =>
-                      current.map((row) => (row.id === item.id ? updated : row)),
-                    );
-                  })
+                  react(item, item.reactions.yours === rx.reaction ? null : rx.reaction)
                 }
               >
                 {reactionEmoji(rx.reaction)} {rx.count}
@@ -246,35 +252,16 @@ export function WorkoutComments({
             ))}
           </div>
           {picker === item.id && (
-            <div
-              className="comment-emoji-picker"
-              role="group"
-              aria-label={`React to ${item.author.display_name}'s comment`}
-            >
-              {REACTIONS.map((rx) => (
-                <button
-                  key={rx.kind}
-                  type="button"
-                  aria-label={rx.label}
-                  aria-pressed={item.reactions.yours === rx.kind}
-                  disabled={busy}
-                  onClick={() =>
-                    void run(async () => {
-                      const updated = await api.sharing.reactToComment(
-                        item.id,
-                        item.reactions.yours === rx.kind ? null : rx.kind,
-                      );
-                      setItems((current) =>
-                        current.map((row) => (row.id === item.id ? updated : row)),
-                      );
-                      setPicker(null);
-                    })
-                  }
-                >
-                  {rx.emoji}
-                </button>
-              ))}
-            </div>
+            <Suspense fallback={null}>
+              <EmojiReactionSheet
+                title={`React to ${item.author.display_name}'s comment`}
+                yours={item.reactions.yours}
+                busy={busy}
+                error={error}
+                onChoose={(reaction) => react(item, reaction, true)}
+                onClose={() => setPicker(null)}
+              />
+            </Suspense>
           )}
         </div>
       </article>

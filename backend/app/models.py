@@ -232,9 +232,6 @@ class Friendship(Base):
         return self.member_b_id if user_id == self.member_a_id else self.member_a_id
 
 
-WORKOUT_REACTIONS = ("like", "love", "strong", "fire", "clap", "trophy", "run")
-
-
 class ProfileBlock(Base):
     """An account's persistent block of another member, independent of profile visibility."""
 
@@ -257,10 +254,8 @@ class WorkoutReaction(Base):
 
     __tablename__ = "workout_reactions"
     __table_args__ = (
-        CheckConstraint(
-            "reaction IN ('like', 'love', 'strong', 'fire', 'clap', 'trophy', 'run')",
-            name="workout_reaction_known",
-        ),
+        # One emoji, or the name of an original reaction; see reactions.py.
+        CheckConstraint("length(reaction) BETWEEN 1 AND 16", name="workout_reaction_length"),
     )
 
     workout_id: Mapped[str] = mapped_column(
@@ -303,10 +298,8 @@ class WorkoutComment(Base):
 class CommentReaction(Base):
     __tablename__ = "comment_reactions"
     __table_args__ = (
-        CheckConstraint(
-            "reaction IN ('like', 'love', 'strong', 'fire', 'clap', 'trophy', 'run')",
-            name="comment_reaction_known",
-        ),
+        # One emoji, or the name of an original reaction; see reactions.py.
+        CheckConstraint("length(reaction) BETWEEN 1 AND 16", name="comment_reaction_length"),
     )
 
     comment_id: Mapped[str] = mapped_column(

@@ -21,7 +21,7 @@ import {
   COMMENT_MAX_LENGTH,
   deleteCommentMessage,
 } from '../../../../frontend/src/commentDisplay';
-import { REACTIONS, reactionEmoji } from '../../../../frontend/src/friendFeedData';
+import { reactionChoice, reactionEmoji } from '../../../../frontend/src/friendFeedData';
 import type {
   WorkoutComment,
   WorkoutReactionKind,
@@ -36,6 +36,7 @@ import type { MenuItem } from '../../ui/MenuButton';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 import { Avatar } from './Avatar';
+import { EmojiReactionSheet } from './EmojiReactionSheet';
 import { useScrollToComment } from './scrollToComment';
 import { socialIcons } from './icons';
 import { socialApi } from './socialApi';
@@ -106,8 +107,13 @@ export function useCommentThread(workoutId: string, reactions: WorkoutReactions 
   });
   const reactTo = useMutation({
     mutationKey,
-    mutationFn: ({ comment, kind }: { comment: WorkoutComment; kind: WorkoutReactionKind }) =>
-      socialApi.reactToComment(comment.id, comment.reactions.yours === kind ? null : kind),
+    mutationFn: ({
+      comment,
+      reaction,
+    }: {
+      comment: WorkoutComment;
+      reaction: WorkoutReactionKind | null;
+    }) => socialApi.reactToComment(comment.id, reaction),
     onSuccess: () => refresh(),
   });
 
@@ -151,9 +157,10 @@ export function useCommentThread(workoutId: string, reactions: WorkoutReactions 
       if (writing() || !comment.can_delete) return;
       remove.mutate(comment);
     },
-    react: (comment: WorkoutComment, kind: WorkoutReactionKind) => {
+    /** Reacts to a comment, or removes your reaction when `reaction` is null. */
+    react: (comment: WorkoutComment, reaction: WorkoutReactionKind | null) => {
       if (writing()) return;
-      reactTo.mutate({ comment, kind });
+      reactTo.mutate({ comment, reaction });
     },
     writing,
     send,
@@ -169,7 +176,7 @@ export type CommentThread = ReturnType<typeof useCommentThread>;
 /** What a screen reader says for a comment: who, any reaction, who it answers, and its text. */
 export function commentSpoken(item: WorkoutComment) {
   const reaction = item.reaction
-    ? `, reacted ${REACTIONS.find((choice) => choice.kind === item.reaction)?.label ?? reactionEmoji(item.reaction)}`
+    ? `, reacted ${reactionChoice(item.reaction)?.label ?? item.reaction}`
     : '';
   const to = item.reply_to ? `, replying to ${item.reply_to.display_name}` : '';
   return `${item.author.display_name}${reaction}${to}: ${item.body}`;
@@ -243,15 +250,16 @@ export function CommentList({
       picking={picker === item.id}
       busy={thread.busy}
       onOpenPerson={onOpenPerson}
-      onReact={(kind) => {
+      onReact={(reaction) => {
         haptics.tap();
         setPicker(null);
-        thread.react(item, kind);
+        thread.react(item, reaction);
       }}
       onTogglePicker={() => {
         if (thread.writing()) return;
         setPicker((current) => (current === item.id ? null : item.id));
       }}
+      onClosePicker={() => setPicker(null)}
       onReply={() => {
         if (thread.startReply(item)) onCompose();
       }}
@@ -304,6 +312,7 @@ function CommentRow({
   picking,
   busy,
   onTogglePicker,
+  onClosePicker,
   onOpenPerson,
   onReact,
   onReply,
@@ -318,8 +327,10 @@ function CommentRow({
   picking: boolean;
   busy: boolean;
   onTogglePicker: () => void;
+  onClosePicker: () => void;
   onOpenPerson: (person: Person) => void;
-  onReact: (kind: WorkoutReactionKind) => void;
+  /** Saves a reaction, or removes yours when null. */
+  onReact: (reaction: WorkoutReactionKind | null) => void;
   onReply: () => void;
   onEdit: () => void;
   onDelete: () => void;
@@ -422,11 +433,11 @@ function CommentRow({
               <Pressable
                 key={count.reaction}
                 accessibilityRole="button"
-                accessibilityLabel={`${count.reaction}, ${count.count}`}
+                accessibilityLabel={`${reactionChoice(count.reaction)?.label ?? count.reaction}, ${count.count}`}
                 accessibilityState={{ selected: mine }}
                 hitSlop={8}
                 disabled={busy}
-                onPress={() => onReact(count.reaction)}
+                onPress={() => onReact(mine ? null : count.reaction)}
                 style={[
                   styles.chip,
                   {
@@ -444,44 +455,13 @@ function CommentRow({
           })}
         </View>
         {picking && (
-          <View
-            accessibilityLabel={`React to ${item.author.display_name}'s comment`}
-            style={[
-              styles.picker,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.lineStrong,
-                borderRadius: radius.card,
-              },
-            ]}
-          >
-            {REACTIONS.map((choice) => {
-              const mine = item.reactions.yours === choice.kind;
-              return (
-                <Pressable
-                  key={choice.kind}
-                  accessibilityRole="button"
-                  accessibilityLabel={choice.label}
-                  accessibilityState={{ selected: mine }}
-                  disabled={busy}
-                  onPress={() => onReact(choice.kind)}
-                  style={({ pressed }) => [
-                    styles.choice,
-                    pressed && { transform: [{ scale: 1.15 }] },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.choiceFace,
-                      mine && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-                    ]}
-                  >
-                    <Text style={styles.choiceEmoji}>{choice.emoji}</Text>
-                  </View>
-                </Pressable>
-              );
-            })}
-          </View>
+          <EmojiReactionSheet
+            title={`React to ${item.author.display_name}'s comment`}
+            yours={item.reactions.yours}
+            busy={busy}
+            onChoose={onReact}
+            onClose={onClosePicker}
+          />
         )}
       </View>
     </View>
@@ -650,33 +630,6 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   actionLink: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 4 },
   chip: { paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1 },
-  // Seven 44 pt choices need 316 pt; on a narrow phone, under an indented reply, they wrap
-  // inside the comment's column instead of running off the screen.
-  picker: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-    borderWidth: 1,
-    padding: 3,
-  },
-  choice: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  choiceFace: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  choiceEmoji: { fontSize: 22 },
   replying: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   composer: { flexDirection: 'row', alignItems: 'flex-end', gap: 8 },
   input: {

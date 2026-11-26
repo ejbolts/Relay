@@ -100,12 +100,12 @@ it('closes straight away when motion is reduced', async () => {
 it('keeps reacting separate from viewing people on someone else’s workout', async () => {
   await openPeople(false);
   expect(document.querySelector('dialog')?.textContent).toContain('Alex Preview');
-  expect(host.querySelector('.friend-react-picker')).toBeNull();
+  expect(document.querySelector('.emoji-reaction-sheet')).toBeNull();
   await act(async () =>
     document.querySelector<HTMLButtonElement>('[aria-label="Close Reactions"]')!.click(),
   );
   await act(async () => host.querySelector<HTMLButtonElement>('.friend-react-button')!.click());
-  expect(host.querySelector('.friend-react-picker')).not.toBeNull();
+  await vi.waitFor(() => expect(document.querySelector('.emoji-reaction-sheet')).not.toBeNull());
 });
 it('retries a failed request and handles a reaction removed before opening', async () => {
   vi.mocked(api.sharing.reactionPeople).mockRejectedValueOnce(new Error('Connection lost'));
@@ -134,7 +134,7 @@ it('loads additional people without duplicates and keeps existing rows on a page
   );
   expect(document.querySelector('dialog')?.textContent).toContain('Alex Preview');
   vi.mocked(api.sharing.reactionPeople).mockResolvedValue({
-    items: [person, { ...person, id: 'sam', display_name: 'Sam Preview', reaction: 'fire' }],
+    items: [person, { ...person, id: 'sam', display_name: 'Sam Preview', reaction: '🫡' }],
     total: 2,
     next_offset: null,
   });
@@ -143,6 +143,10 @@ it('loads additional people without duplicates and keeps existing rows on a page
   );
   expect(api.sharing.reactionPeople).toHaveBeenLastCalledWith('w1', 1);
   expect(document.querySelectorAll('.reaction-people-list li')).toHaveLength(2);
+  // Any emoji someone chose shows beside their name.
+  const sam = document.querySelectorAll('.reaction-person-emoji')[1];
+  expect(sam.textContent).toBe('🫡');
+  expect(sam.getAttribute('aria-label')).toBe('🫡');
 });
 it('loads pages until a highlighted person appears, and opening it yourself drops the highlight', async () => {
   const sam = { ...person, id: 'sam', display_name: 'Sam Preview', reaction: 'fire' as const };

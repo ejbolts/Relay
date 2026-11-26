@@ -74,6 +74,16 @@ async function click(text: string) {
   expect(button).toBeTruthy();
   await act(async () => button!.click());
 }
+/** Opens a comment's emoji sheet and chooses an emoji by its Unicode name. */
+async function reactWith(name: string) {
+  await click('React');
+  await vi.waitFor(() => expect(document.querySelector('.emoji-reaction-sheet')).not.toBeNull());
+  await act(async () =>
+    document
+      .querySelector<HTMLButtonElement>(`.emoji-reaction-sheet button[aria-label="${name}"]`)!
+      .click(),
+  );
+}
 async function type(body: string) {
   await act(async () => {
     const input = host.querySelector('textarea')!;
@@ -106,12 +116,42 @@ it('shows inline replies, opens mention profiles, posts replies, and toggles rea
   await type('What was your warm-up?');
   await click('Send');
   expect(add).toHaveBeenCalledWith('w1', 'What was your warm-up?', 'c1', null);
-  await click('React');
-  await click('Run');
+  await reactWith('person running');
   expect(react).toHaveBeenCalledWith('c1', 'run');
-  expect(host.querySelector('[aria-label="run, 1"]')?.getAttribute('aria-pressed')).toBe('true');
-  await click('run, 1');
+  expect(document.querySelector('.emoji-reaction-sheet')).toBeNull();
+  expect(host.querySelector('[aria-label="Run, 1"]')?.getAttribute('aria-pressed')).toBe('true');
+  await click('Run, 1');
   expect(react).toHaveBeenLastCalledWith('c1', null);
+});
+
+it('reacts to a comment with any emoji and shows emojis others chose', async () => {
+  vi.spyOn(api.sharing, 'comments').mockResolvedValue({
+    items: [
+      {
+        ...rootComment,
+        reaction: '😮‍💨',
+        reactions: { counts: [{ reaction: '🫠', count: 1 }], yours: null },
+      },
+    ],
+    total: 1,
+    next_offset: null,
+  });
+  const react = vi.spyOn(api.sharing, 'reactToComment').mockResolvedValue({
+    ...rootComment,
+    reactions: {
+      counts: [
+        { reaction: '🫠', count: 1 },
+        { reaction: '🫡', count: 1 },
+      ],
+      yours: '🫡',
+    },
+  });
+  await act(async () => root.render(<WorkoutComments workoutId="w1" onCountChange={vi.fn()} />));
+  expect(host.querySelector('.comment-attached-reaction')?.textContent).toBe('reacted 😮‍💨');
+  expect(host.querySelector('[aria-label="🫠, 1"]')?.textContent).toBe('🫠 1');
+  await reactWith('saluting face');
+  expect(react).toHaveBeenCalledWith('c1', '🫡');
+  expect(host.querySelector('[aria-label="🫡, 1"]')?.getAttribute('aria-pressed')).toBe('true');
 });
 
 it('counts Unicode characters, retains failed edits, and retries', async () => {

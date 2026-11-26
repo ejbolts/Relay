@@ -1,0 +1,172 @@
+.popup-dialog.emoji-reaction-sheet > header {
+  flex: none;
+}
+
+.emoji-reaction-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.625rem;
+  min-height: 0;
+  padding: 0 1rem;
+}
+
+.emoji-reaction-search {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 2.875rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 13px;
+  padding: 0 0.8rem;
+  background: var(--p-surface-2);
+  color: var(--p-muted);
+}
+
+.emoji-reaction-search:focus-within {
+  border-color: var(--p-accent);
+}
+
+.emoji-reaction-search > .pulse-icon {
+  flex: none;
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+.emoji-reaction-search input {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.75rem;
+  border: 0;
+  border-radius: 0;
+  padding: 0;
+  background: none;
+  color: var(--p-ink);
+  font: inherit;
+  /* Sixteen pixels keeps iPhone from zooming the page when the field takes focus. */
+  font-size: 1rem;
+  outline: none;
+}
+
+.emoji-reaction-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.emoji-reaction-search button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border: 0;
+  border-radius: 8px;
+  padding: 0;
+  background: none;
+  color: var(--p-muted);
+  cursor: pointer;
+}
+
+.emoji-reaction-search button .pulse-icon {
+  width: 1rem;
+  height: 1rem;
+}
+
+.emoji-reaction-tabs {
+  display: flex;
+  flex: none;
+  justify-content: space-between;
+  gap: 0.125rem;
+  border-bottom: 1px solid var(--p-line);
+  padding-bottom: 0.375rem;
+}
+
+.emoji-reaction-tabs button {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  max-width: 2.75rem;
+  height: 2.375rem;
+  border: 0;
+  border-radius: 10px;
+  padding: 0;
+  background: none;
+  font-size: 1.2rem;
+  opacity: 0.55;
+  filter: grayscale(0.6);
+  cursor: pointer;
+}
+
+.emoji-reaction-tabs button[aria-current='true'] {
+  background: var(--p-accent-soft);
+  opacity: 1;
+  filter: none;
+}
+
+.emoji-reaction-scroll {
+  /* Category offsets are measured from here, for the tabs. */
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin: 0 -1rem;
+  padding: 0 1rem 0.75rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.emoji-reaction-scroll h3 {
+  margin: 0.5rem 0 0.25rem;
+  color: var(--p-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.emoji-reaction-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(2.75rem, 1fr));
+}
+
+.emoji-reaction-grid button {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 12px;
+  padding: 0;
+  background: none;
+  font-size: 1.75rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.emoji-reaction-grid button:hover,
+.emoji-reaction-grid button:focus-visible {
+  background: var(--p-surface-2);
+}
+
+.emoji-reaction-grid button[aria-pressed='true'] {
+  background: var(--p-accent-soft);
+  outline: 1px solid var(--p-accent);
+}
+
+.emoji-reaction-grid button:disabled {
+  cursor: progress;
+}
+
+.emoji-reaction-empty {
+  margin: 2rem 0;
+  color: var(--p-muted);
+  text-align: center;
+}
+
+.emoji-reaction-error {
+  flex: none;
+  margin: 0 0 0.5rem;
+}
+
+.popup-dialog-footer > .emoji-reaction-remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+}

@@ -1220,7 +1220,11 @@ export interface LiftRanking {
   best: LiftBest;
 }
 
-export type WorkoutReactionKind = 'like' | 'love' | 'strong' | 'fire' | 'clap' | 'trophy' | 'run';
+/**
+ * A saved reaction: one of the original names ('like', 'love', 'strong', 'fire', 'clap',
+ * 'trophy', 'run') or any single emoji. See `reactionEmoji` in friendFeedData.
+ */
+export type WorkoutReactionKind = string;
 
 export interface WorkoutReactions {
   counts: Array<{ reaction: WorkoutReactionKind; count: number }>;

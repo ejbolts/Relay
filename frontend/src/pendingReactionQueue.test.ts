@@ -67,6 +67,9 @@ it('says what waits to send', () => {
   expect(pendingReactionLabel('Alex’s Push', 'fire')).toBe(
     "Fire reaction to Alex’s Push sends when you're back online",
   );
+  expect(pendingReactionLabel('Alex’s Push', '🫡')).toBe(
+    "🫡 reaction to Alex’s Push sends when you're back online",
+  );
   expect(pendingReactionLabel('Alex’s Push', null)).toBe(
     "Reaction removal to Alex’s Push sends when you're back online",
   );
