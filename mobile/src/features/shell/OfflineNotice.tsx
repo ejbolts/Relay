@@ -1,4 +1,3 @@
-import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { AccessibilityInfo, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -11,12 +10,7 @@ import {
   type ConnectionState,
   type WaitingToSync,
 } from '../../../../frontend/src/connectionMonitor';
-import {
-  connection,
-  useConnectionCheck,
-  useConnectionReports,
-  useConnectionState,
-} from '../../data/connectionStatus';
+import { connection, useConnectionCheck, useConnectionState } from '../../data/connectionStatus';
 import { Button } from '../../ui/components';
 import { Icon, type IconPair } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
@@ -61,7 +55,6 @@ function useWaitingToSync(): WaitingToSync {
  * the tab bar, the live workout bar and toasts, which are all at the bottom.
  */
 export function OfflineNotice() {
-  useConnectionReports(useQueryClient());
   const state = useConnectionState();
   const offline = state.phase === 'offline';
   const label = offlineNoticeLabel(state);

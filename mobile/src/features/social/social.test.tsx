@@ -1020,6 +1020,33 @@ test('scanning a friend code opens their invite, and other codes say why not', a
   expect(onScanned).toHaveBeenCalledWith('alex');
 });
 
+test('the QR code leaves out the invite only for an older server, never hiding a failure', async () => {
+  const unreachable = new Error('Could not reach Relay. Check your connection, then try again.');
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/auth/friend-invite') throw unreachable;
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  const sheet = (
+    <FriendQrSheet visible onClose={jest.fn()} onChooseSharing={jest.fn()} onScanned={jest.fn()} />
+  );
+  await show(sheet);
+  expect(await screen.findByLabelText('QR code to add Preview as a friend')).toBeVisible();
+  // No connection stays a failure: it is never turned into an answer from Relay.
+  await waitFor(() =>
+    expect(client.getQueryState(['social', 'friend-invite'])?.status).toBe('error'),
+  );
+  expect(client.getQueryData(['social', 'friend-invite'])).toBeUndefined();
+
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/auth/friend-invite') throw new ApiError(404, 'Not found');
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  await act(async () => {
+    await client.refetchQueries({ queryKey: ['social', 'friend-invite'] });
+  });
+  expect(client.getQueryData(['social', 'friend-invite'])).toEqual({ invite_code: null });
+});
+
 test("Home's card lists friends' latest sessions and opens Social", async () => {
   const feed: FriendFeed = {
     items: [{ friend: alex, workout: upper, reactions }],

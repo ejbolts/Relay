@@ -1,4 +1,4 @@
-import { onlineManager, QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { onlineManager } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { AccessibilityInfo } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -9,15 +9,14 @@ import {
   MINIMISE_AFTER_MS,
   type CheckOutcome,
 } from '../../../../frontend/src/connectionMonitor';
-import { ApiError } from '../../data/api';
 import { connection } from '../../data/connectionStatus';
+import { reportRequestOutcome } from '../../data/requestOutcome';
 import { OfflineNotice } from './OfflineNotice';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../../testing/memoryKvStore'));
 jest.mock('../workout/WorkoutProvider', () => ({ useWorkout: () => ({ queue: { waiting: 1 } }) }));
 
 const check = jest.fn<Promise<CheckOutcome>, []>();
-let client: QueryClient;
 let view: Awaited<ReturnType<typeof render>>;
 
 beforeEach(async () => {
@@ -30,7 +29,6 @@ beforeEach(async () => {
   // Relay answered earlier this session.
   connection.reportServerReached();
   jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockClear();
-  client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: Infinity } } });
   view = await render(
     <SafeAreaProvider
       initialMetrics={{
@@ -38,16 +36,13 @@ beforeEach(async () => {
         insets: { top: 47, left: 0, right: 0, bottom: 34 },
       }}
     >
-      <QueryClientProvider client={client}>
-        <OfflineNotice />
-      </QueryClientProvider>
+      <OfflineNotice />
     </SafeAreaProvider>,
   );
 });
 
 afterEach(async () => {
   await act(async () => view.unmount());
-  client.clear();
   connection.setCheck();
   connection.reset();
   onlineManager.setOnline(true);
@@ -56,20 +51,11 @@ afterEach(async () => {
 });
 
 const advance = (ms: number) => act(async () => void (await jest.advanceTimersByTimeAsync(ms)));
-let key = 0;
-/** A read that reaches nothing, as data/api.ts reports it. */
-const unreachableRead = () =>
-  act(async () => {
-    await client
-      .fetchQuery({
-        queryKey: ['read', ++key],
-        queryFn: () =>
-          Promise.reject(
-            new Error('Could not reach Relay. Check your connection, then try again.'),
-          ),
-      })
-      .catch(() => undefined);
-  });
+/** A request data/api.ts sent that reached nothing. */
+const unreachableRead = () => act(async () => reportRequestOutcome({ kind: 'unreachable' }));
+/** A request Relay (or a proxy in front of it) answered. */
+const answered = (status: number) =>
+  act(async () => reportRequestOutcome({ kind: 'answered', status }));
 const pill = (name: string) => screen.queryByRole('button', { name });
 
 it('names a lasting outage, shrinks to an icon, opens the details and confirms it is back', async () => {
@@ -128,28 +114,19 @@ it('says there is no internet when the phone is offline, without asking the serv
 it('says nothing about a drop that an answer ends within twenty seconds', async () => {
   await unreachableRead();
   await advance(10_000);
-  await act(async () => {
-    await client.fetchQuery({ queryKey: ['answer'], queryFn: async () => 'ok' });
-  });
+  // Any answer from Relay, even a refusal, means it is reachable.
+  await answered(500);
   await advance(CONFIRM_OFFLINE_MS * 2);
   expect(pill('Offline')).toBeNull();
   expect(AccessibilityInfo.announceForAccessibility).not.toHaveBeenCalled();
 });
 
-it('names a server that a proxy says is down, and ignores answers it writes itself', async () => {
-  // The app writing its own cache is no answer from Relay.
-  const down = () =>
-    act(async () => {
-      await client
-        .fetchQuery({
-          queryKey: ['down', ++key],
-          queryFn: () => Promise.reject(new ApiError(503, 'Service unavailable')),
-        })
-        .catch(() => undefined);
-      client.setQueryData(['local'], key);
-    });
-  check.mockResolvedValue('down');
-  await down();
+it('names a server that a proxy says is down from the answers alone', async () => {
+  // The health check never answers, so only the requests' 503s say what is wrong.
+  check.mockImplementation(() => new Promise<CheckOutcome>(() => undefined));
+  await answered(503);
+  await advance(10_000);
+  await answered(502);
   await advance(CONFIRM_OFFLINE_MS);
   await fireEvent.press(pill('Offline')!);
   expect(screen.getByLabelText('Server: Offline')).toBeOnTheScreen();

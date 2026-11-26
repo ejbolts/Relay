@@ -469,3 +469,74 @@ test('a refusal of the token still saved clears it', async () => {
   await expect(api.apiGet('/api/dashboard')).rejects.toMatchObject({ status: 401 });
   expect(mockKeychain.has('relay.session')).toBe(false);
 });
+
+/** The API and the outcome hook from the same module load, with what the hook heard. */
+function heardOutcomes(origin = 'https://relay.test') {
+  mockKeychain.set('relay.session', saved(origin, 'sample-token'));
+  process.env.EXPO_PUBLIC_RELAY_API_ORIGIN = origin;
+  let api!: Api;
+  const heard: unknown[] = [];
+  jest.isolateModules(() => {
+    const outcomes = jest.requireActual<typeof import('./requestOutcome')>('./requestOutcome');
+    outcomes.onRequestOutcome((outcome) => heard.push(outcome));
+    api = jest.requireActual<Api>('./api');
+  });
+  return { api, heard };
+}
+
+test('reports every answer with its status, for the offline notice', async () => {
+  const { api, heard } = heardOutcomes();
+  await api.apiGet('/api/workout-types');
+  for (const status of [401, 404, 422, 500, 503]) {
+    fetchMock.mockResolvedValueOnce(reply(status, { error: { message: 'No' } }));
+    await expect(api.apiSend('/api/workouts', 'POST', {})).rejects.toBeInstanceOf(api.ApiError);
+  }
+  expect(heard).toEqual(
+    [200, 401, 404, 422, 500, 503].map((status) => ({ kind: 'answered', status })),
+  );
+});
+
+test('reports a request that reached nothing, but not one the screen cancelled', async () => {
+  const { api, heard } = heardOutcomes();
+  fetchMock.mockRejectedValueOnce(new TypeError('Network request failed'));
+  await expect(api.apiSend('/api/workouts', 'POST', {})).rejects.toThrow(unreachable);
+  expect(heard).toEqual([{ kind: 'unreachable' }]);
+
+  const screen = new AbortController();
+  fetchMock.mockImplementationOnce(
+    (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(new Error('Aborted')));
+      }),
+  );
+  const cancelled = expect(api.apiGet('/api/dashboard', screen.signal)).rejects.toThrow('Aborted');
+  await settle();
+  screen.abort();
+  await cancelled;
+  // A read cancelled before it went out reports nothing either.
+  fetchMock.mockImplementationOnce(async (_url, init) => {
+    if (init?.signal?.aborted) throw new Error('Aborted');
+    return reply(200, {});
+  });
+  await expect(api.apiGet('/api/dashboard', screen.signal)).rejects.toThrow();
+  expect(heard).toEqual([{ kind: 'unreachable' }]);
+});
+
+test('a server that never answers in 15 seconds counts as unreachable', async () => {
+  jest.useFakeTimers();
+  try {
+    const { api, heard } = heardOutcomes();
+    fetchMock.mockImplementationOnce(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () => reject(new Error('Aborted')));
+        }),
+    );
+    const failed = expect(api.apiGet('/api/dashboard')).rejects.toThrow(unreachable);
+    await jest.advanceTimersByTimeAsync(15_000);
+    await failed;
+    expect(heard).toEqual([{ kind: 'unreachable' }]);
+  } finally {
+    jest.useRealTimers();
+  }
+});

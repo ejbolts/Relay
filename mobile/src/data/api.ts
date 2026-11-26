@@ -9,6 +9,7 @@ import {
   sessionToken,
   startSignOut,
 } from './session';
+import { reportRequestOutcome } from './requestOutcome';
 
 export const apiOrigin = process.env.EXPO_PUBLIC_RELAY_API_ORIGIN?.trim();
 
@@ -86,11 +87,13 @@ export async function request<T>(
     });
   } catch (error) {
     if (caller?.aborted) throw error;
+    reportRequestOutcome({ kind: 'unreachable' });
     throw new Error(UNREACHABLE);
   } finally {
     clearTimeout(timer);
     caller?.removeEventListener('abort', cancel);
   }
+  reportRequestOutcome({ kind: 'answered', status: response.status });
   if (!response.ok) {
     // The session ended on the server (signed out elsewhere, password changed or expired).
     // Only while it is still the saved one: a late refusal of a previous account's token mustn't

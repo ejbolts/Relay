@@ -1,5 +1,5 @@
-import { onlineManager, type QueryClient } from '@tanstack/react-query';
-import { useEffect, useSyncExternalStore } from 'react';
+import { onlineManager } from '@tanstack/react-query';
+import { useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import {
   CHECK_TIMEOUT_MS,
@@ -12,12 +12,13 @@ import {
   type ConnectionCheck,
   type ConnectionState,
 } from '../../../frontend/src/connectionMonitor';
-import { ApiError, serverOrigin } from './api';
+import { serverOrigin } from './api';
+import { onRequestOutcome, type RequestOutcome } from './requestOutcome';
 
 // The app's side of the shared connection monitor (frontend/src/connectionMonitor.ts), which holds
 // the web's outage rules and timings. The phone's connection comes from NetInfo through React
-// Query's onlineManager (data/queryClient.ts); the server's from the app's own requests and the
-// health check.
+// Query's onlineManager (data/queryClient.ts); the server's from every request data/api.ts sends
+// and from the health check.
 
 async function askServer(): Promise<CheckOutcome> {
   const controller = new AbortController();
@@ -50,47 +51,20 @@ export const connection = createConnectionMonitor({
   },
 });
 
-/** The app's requests throw this message when nothing answered (data/api.ts). */
-const UNREACHABLE = /^Could not reach Relay\b/;
-
-/** What a failed request says about the server: nothing, a down server, or none reached. */
-function reportRequestError(error: unknown) {
-  if (error instanceof ApiError) {
-    if (GATEWAY_FAILURES.has(error.status)) connection.reportConnectionFailure('down');
-    // Any other answer came from Relay itself.
-    else connection.reportServerReached();
-  } else if (error instanceof Error && UNREACHABLE.test(error.message)) {
-    connection.reportConnectionFailure('unreachable');
-  }
-}
-
 /**
- * Feeds the monitor from the app's own reads and saves, as the web's api.ts does: an answer to a
- * read means Relay is reachable, and every request that reached nothing counts as a failure.
+ * Every request to Relay reports what it showed, from data/api.ts's request layer as the web's
+ * api.ts does: any answer means Relay is reachable, except a proxy saying it is down (502–504); a
+ * request that reached nothing is a failure. A caller's cancel reports nothing. Requests that a
+ * screen then turns into data of its own (a fallback) still report what really happened, so a
+ * swallowed failure can never read as Relay answering. React Query's caches are not listened to:
+ * every read and save goes through this layer, and hearing both would count each failure twice.
  */
-export function useConnectionReports(client: QueryClient) {
-  useEffect(() => {
-    const queries = client.getQueryCache().subscribe((event) => {
-      if (event.type !== 'updated') return;
-      const { action } = event;
-      // A manual success is the app writing the cache itself (setQueryData), not an answer.
-      if (action.type === 'success' && !action.manual) connection.reportServerReached();
-      else if (action.type === 'failed' || action.type === 'error')
-        reportRequestError(action.error);
-    });
-    // A save can succeed on the phone alone (a check-in or workout queued offline), so only a
-    // save's failure says anything about the connection.
-    const mutations = client.getMutationCache().subscribe((event) => {
-      if (event.type !== 'updated') return;
-      const { action } = event;
-      if (action.type === 'failed' || action.type === 'error') reportRequestError(action.error);
-    });
-    return () => {
-      queries();
-      mutations();
-    };
-  }, [client]);
+export function reportRequestOutcome(outcome: RequestOutcome) {
+  if (outcome.kind === 'unreachable') connection.reportConnectionFailure('unreachable');
+  else if (GATEWAY_FAILURES.has(outcome.status)) connection.reportConnectionFailure('down');
+  else connection.reportServerReached();
 }
+onRequestOutcome(reportRequestOutcome);
 
 /** The connection as the person should see it. Subscribing also starts the quiet checks. */
 export function useConnectionState(): ConnectionState {
