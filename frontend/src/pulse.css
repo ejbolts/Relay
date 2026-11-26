@@ -44,6 +44,10 @@
   --p-gold: #e9b44a;
   --p-gold-soft: rgb(201 133 0 / 15%);
   --p-on-gold: #1c1404;
+  --p-all-time: #2ee6d6;
+  --p-all-time-soft: rgb(46 230 214 / 16%);
+  --p-all-time-fill: #2ee6d6;
+  --p-on-all-time: #042422;
   --p-danger: #e66767;
   /* Filled buttons: text on the accent or danger fill, and a red that keeps white text readable. */
   --p-on-accent: #fff;
@@ -2492,6 +2496,11 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-size: 0.625rem;
 }
 
+.history-set-pill .pr-badge.is-all-time {
+  background: var(--p-all-time-soft);
+  color: var(--p-all-time);
+}
+
 .history-rest-gap {
   display: none;
 }
@@ -2967,6 +2976,11 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-size: 0.625rem;
   font-style: normal;
   font-weight: 700;
+}
+
+.pr-chip.is-all-time {
+  background: var(--p-all-time-soft);
+  color: var(--p-all-time);
 }
 
 .session-set {
@@ -4317,6 +4331,10 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: var(--p-gold);
   font-size: 0.75rem;
   font-weight: 650;
+}
+
+.logger-screen .set-editor > .pr-callout.is-all-time {
+  color: var(--p-all-time);
 }
 
 .logger-screen .set-editor .cardio-set-screenshot-actions > label,

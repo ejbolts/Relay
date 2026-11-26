@@ -59,7 +59,9 @@ export function SharedSetList({
             <li
               key={item.id}
               data-set-type={kind}
-              className={earned.length ? 'is-record' : undefined}
+              className={
+                earned.length ? (allTime ? 'is-record is-all-time' : 'is-record') : undefined
+              }
             >
               <span
                 className="shared-set-number"
@@ -76,7 +78,7 @@ export function SharedSetList({
                 )}
                 {earned.length > 0 && (
                   <strong
-                    className="pr-badge"
+                    className={allTime ? 'pr-badge is-all-time' : 'pr-badge'}
                     title={describeRecord ? earned.map(describeRecord).join(', ') : undefined}
                   >
                     {allTime ? 'PR' : recordBadgeLabel(earned)}

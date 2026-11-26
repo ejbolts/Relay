@@ -915,7 +915,7 @@ describe('saving and pinning a machine photo while logging', () => {
     });
     await act(async () => root.render(<App />));
     const picker = container.querySelector<HTMLElement>('.machine-photo-picker')!;
-    await click(button('Merge', picker));
+    await click(button('Select', picker));
     const tiles = picker.querySelectorAll<HTMLButtonElement>('.machine-merge-grid button');
     await click(tiles[0]);
     await click(tiles[1]);

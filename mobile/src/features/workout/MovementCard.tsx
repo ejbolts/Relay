@@ -41,6 +41,7 @@ import {
   weightInputValue,
   type WeightUnit,
 } from '../../../../frontend/src/weightUnits';
+import { isAllTimePr } from '../../../../frontend/src/workoutPr';
 import type {
   WorkoutDraftMovement,
   WorkoutDraftSet,
@@ -1029,18 +1030,37 @@ function SetDetails({
       {!!ratio && (
         <Text style={[type.footnote, type.number, { color: colors.secondary }]}>{ratio}</Text>
       )}
-      {records && (
-        <View
-          accessible
-          accessibilityLabel={`Set ${number}: ${records.join(', ')}`}
-          style={[styles.record, { backgroundColor: colors.goldSoft, borderRadius: radius.sm }]}
-        >
-          <Icon name="trophy" size={12} color={colors.gold} />
-          <Text style={[type.caption, { color: colors.text, fontWeight: '700', flexShrink: 1 }]}>
-            {records.join(' · ')}
-          </Text>
-        </View>
-      )}
+      {records &&
+        (() => {
+          const allTime = isAllTimePr(records);
+          return (
+            <View
+              accessible
+              accessibilityLabel={`Set ${number}: ${records.join(', ')}`}
+              style={[
+                styles.record,
+                {
+                  backgroundColor: allTime ? colors.allTimeFill : colors.goldSoft,
+                  borderRadius: radius.sm,
+                },
+              ]}
+            >
+              <Icon name="trophy" size={12} color={allTime ? colors.onAllTime : colors.gold} />
+              <Text
+                style={[
+                  type.caption,
+                  {
+                    color: allTime ? colors.onAllTime : colors.text,
+                    fontWeight: '700',
+                    flexShrink: 1,
+                  },
+                ]}
+              >
+                {records.join(' · ')}
+              </Text>
+            </View>
+          );
+        })()}
       {machine !== undefined && (
         <Text
           style={[

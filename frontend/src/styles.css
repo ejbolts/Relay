@@ -5224,11 +5224,20 @@ body,
   line-height: 1;
 }
 
+.pr-badge.is-all-time {
+  background: var(--p-all-time-fill, #2ee6d6);
+  color: var(--p-on-all-time, #042422);
+}
+
 .pr-callout {
   grid-column: 2 / -1;
   color: #f6ca68;
   font-size: 0.62rem;
   font-weight: 850;
+}
+
+.pr-callout.is-all-time {
+  color: var(--p-all-time, #2ee6d6);
 }
 
 .set-extras {

@@ -197,18 +197,45 @@ it('shows each workout with its owner, summary, photos and reactions, newest fir
   expect(collage.querySelector('img')?.getAttribute('srcset')).toBe(
     '/thumb/p1 360w, /full/p1 1200w',
   );
-  // Three exercises are listed, each with its icon; the rest are counted.
-  const rows = [...friendCard.querySelectorAll('.feed-exercises > li')];
-  expect(rows.map((entry) => entry.textContent)).toEqual([
+  // Three exercises are listed, each with its icon; the rest expand inline with their icons.
+  const exerciseRows = () => [...friendCard.querySelectorAll('.feed-exercises > li')];
+  expect(exerciseRows().map((entry) => entry.textContent)).toEqual([
     'Bench press',
     'Row',
     'Curl',
     '+2 exercises',
   ]);
-  expect(rows.slice(0, 3).every((entry) => entry.querySelector('.exercise-icon img'))).toBe(true);
-  // The count opens the whole workout on its owner's profile.
-  await click(button(friendCard, 'Open Alex Sample’s Upper body workout, with 2 more exercises'));
-  expect(openProfile).toHaveBeenLastCalledWith(expect.objectContaining({ id: 'alex' }), theirs);
+  expect(
+    exerciseRows()
+      .slice(0, 3)
+      .every((entry) => entry.querySelector('.exercise-icon img')),
+  ).toBe(true);
+  const expand = button(friendCard, 'Show 2 more exercises in Alex Sample’s Upper body')!;
+  expect(expand.getAttribute('aria-expanded')).toBe('false');
+  await click(expand);
+  expect(openProfile).not.toHaveBeenCalled();
+  expect(exerciseRows().map((entry) => entry.textContent)).toEqual([
+    'Bench press',
+    'Row',
+    'Curl',
+    'Fly',
+    'Dip',
+    'Show less',
+  ]);
+  expect(
+    exerciseRows()
+      .slice(0, 5)
+      .every((entry) => entry.querySelector('.exercise-icon img')),
+  ).toBe(true);
+  const collapse = button(friendCard, 'Show fewer exercises in Alex Sample’s Upper body')!;
+  expect(collapse.getAttribute('aria-expanded')).toBe('true');
+  await click(collapse);
+  expect(exerciseRows().map((entry) => entry.textContent)).toEqual([
+    'Bench press',
+    'Row',
+    'Curl',
+    '+2 exercises',
+  ]);
   // Your one-exercise workout still names its exercise, as it differs from the workout's name.
   expect(own.querySelector('.feed-exercises')?.textContent).toBe('Bench press');
   expect(button(friendCard, 'React to Alex Sample’s Upper body')).toBeDefined();

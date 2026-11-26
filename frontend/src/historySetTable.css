@@ -126,6 +126,11 @@
   font-weight: 800;
 }
 
+.history-set-table .pr-badge.is-all-time {
+  background: var(--p-all-time-soft);
+  color: var(--p-all-time);
+}
+
 /* A set's machine and note sit under its row, in the same tint. */
 .history-set-table .history-set-extra > td {
   height: auto;

@@ -76,7 +76,7 @@ export function Badge({
   sentence,
 }: {
   label: string;
-  tone?: 'neutral' | 'gold' | 'good';
+  tone?: 'neutral' | 'gold' | 'good' | 'allTime';
   sentence?: boolean;
 }) {
   const { colors, radius } = useTheme();

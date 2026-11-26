@@ -24,12 +24,13 @@ test('keeps the cardio chart’s grey bars at 3:1 on the card', () => {
   }
 });
 
-test('keeps Current and Deload badge text at 4.5:1 on its tinted fill', () => {
+test('keeps Current, Deload and All-time PR badge text at 4.5:1 on its fill', () => {
   for (const colors of palettes) {
-    for (const tone of ['good', 'gold'] as const) {
+    for (const tone of ['good', 'gold', 'allTime'] as const) {
       const { fill, ink } = toneBadge(colors, tone);
       expect(contrast(ink, composite(fill, colors.surface))).toBeGreaterThanOrEqual(4.5);
     }
+    expect(contrast(colors.onAllTime, colors.allTimeFill)).toBeGreaterThanOrEqual(4.5);
   }
 });
 

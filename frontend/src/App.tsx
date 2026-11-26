@@ -461,6 +461,7 @@ import {
 import {
   calculateScopedDraftPrs,
   initialPrCelebrations,
+  isAllTimePr,
   newPrCelebrations,
   prBadgeLabel,
   prToastLines,
@@ -476,7 +477,7 @@ import {
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
-import { recordBadgeLabel, recordScopeLabel } from './recordScope';
+import { isAllTimeRecord, recordBadgeLabel, recordScopeLabel } from './recordScope';
 import { setResult } from './historySetFormat';
 import { canResumeWorkout } from './workoutResume';
 import { loggedSetCount as loggedSetCountRule } from './workoutAutoSave';
@@ -6227,7 +6228,10 @@ function MovementCard({
                     {item.weight_kg === null ? '–' : formatWeight(item.weight_kg, weightUnit)}
                   </span>
                   {prBadges.has(item.key) && (
-                    <b className="pr-badge" title={prBadges.get(item.key)?.join(', ')}>
+                    <b
+                      className={`pr-badge${isAllTimePr(prBadges.get(item.key)!) ? ' is-all-time' : ''}`}
+                      title={prBadges.get(item.key)?.join(', ')}
+                    >
                       {prBadgeLabel(prBadges.get(item.key)!)}
                     </b>
                   )}
@@ -6471,7 +6475,10 @@ function MovementCard({
           )}
         </div>
         {prBadges.has(item.key) && (
-          <div className="pr-callout" role="status">
+          <div
+            className={`pr-callout${isAllTimePr(prBadges.get(item.key)!) ? ' is-all-time' : ''}`}
+            role="status"
+          >
             🏆 {prBadges.get(item.key)?.join(' · ')}
           </div>
         )}
@@ -7345,7 +7352,7 @@ function MachinePhotoChooser({
                           setError(null);
                         }}
                       >
-                        Merge
+                        Select
                       </button>
                     </TipSlot>
                   </div>
@@ -8371,19 +8378,21 @@ export function ProgressScreen({
                               >
                                 <span className="session-date">
                                   {shortDate(point.workout_date)}
-                                  {recordIds.has(point.workout_id) && (
-                                    <em className="pr-chip">
-                                      {defaultView
-                                        ? recordBadgeLabel(
-                                            personalRecords.filter(
-                                              (record) =>
-                                                record.workout_id === point.workout_id &&
-                                                record.exercise_id === exerciseId,
-                                            ),
-                                          )
-                                        : 'PR'}
-                                    </em>
-                                  )}
+                                  {recordIds.has(point.workout_id) &&
+                                    (() => {
+                                      const pointRecords = personalRecords.filter(
+                                        (record) =>
+                                          record.workout_id === point.workout_id &&
+                                          record.exercise_id === exerciseId,
+                                      );
+                                      return (
+                                        <em
+                                          className={`pr-chip${pointRecords.some(isAllTimeRecord) ? ' is-all-time' : ''}`}
+                                        >
+                                          {defaultView ? recordBadgeLabel(pointRecords) : 'PR'}
+                                        </em>
+                                      );
+                                    })()}
                                 </span>
                                 <span className="session-set num">
                                   {formatWeight(point.raw_best_weight_kg, weightUnit)} ×{' '}
@@ -10161,17 +10170,20 @@ function HistorySetFlow({
                     ? 'Attempted'
                     : ''}
             </em>
-            {personalRecords.some((record) => record.set_id === item.id) && (
-              <strong
-                className="pr-badge"
-                title={personalRecords
-                  .filter((record) => record.set_id === item.id)
-                  .map((record) => `${recordScopeLabel(record)} ${recordTypeLabel(record)}`)
-                  .join(', ')}
-              >
-                {recordBadgeLabel(personalRecords.filter((record) => record.set_id === item.id))}
-              </strong>
-            )}
+            {personalRecords.some((record) => record.set_id === item.id) &&
+              (() => {
+                const setRecords = personalRecords.filter((record) => record.set_id === item.id);
+                return (
+                  <strong
+                    className={`pr-badge${setRecords.some(isAllTimeRecord) ? ' is-all-time' : ''}`}
+                    title={setRecords
+                      .map((record) => `${recordScopeLabel(record)} ${recordTypeLabel(record)}`)
+                      .join(', ')}
+                  >
+                    {recordBadgeLabel(setRecords)}
+                  </strong>
+                );
+              })()}
           </div>
           {index < sets.length - 1 && (
             <div className="history-rest-gap">

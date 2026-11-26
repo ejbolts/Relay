@@ -99,6 +99,11 @@
   background: var(--p-gold-soft);
 }
 
+.shared-set-list li.is-record.is-all-time {
+  --shared-set-rgb: 46 230 214;
+  background: var(--p-all-time-soft);
+}
+
 .shared-set-number {
   width: 1.5rem;
   height: 1.5rem;
@@ -136,6 +141,11 @@
   font-size: 0.625rem;
   font-weight: 800;
   letter-spacing: 0.02em;
+}
+
+.shared-set-notes .pr-badge.is-all-time {
+  background: var(--p-all-time-fill);
+  color: var(--p-on-all-time);
 }
 
 .shared-set-detail {
