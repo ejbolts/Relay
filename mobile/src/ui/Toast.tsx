@@ -10,6 +10,11 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  toastDuration,
+  type PopupDuration,
+  type ToastVariant,
+} from '../../../frontend/src/popupTiming';
 import { useReduceMotion } from '../features/settings/devicePreferences';
 import * as sessionModule from '../session/SessionProvider';
 import { sessionEpoch } from '../session/sessionEpoch';
@@ -20,8 +25,12 @@ import { useTheme } from './theme';
 // most recently mounted <ToastHost /> shows it (a sheet mounts its own, since native sheets sit
 // above the app's root view), then it clears by itself or when tapped.
 //
-// A toast with an action (Undo) has one lifecycle, as on the web: it stays longer, waits while it
-// is touched or focused, and stays until dismissed while a screen reader is on. When it ends
+// A toast stays as long as the web's does (`toastDuration`, shared with it): a confirmation
+// briefly, a warning or a record longer, an error longest, and an Undo for as long as what it
+// undoes is hard to redo. Callers say which with `variant` or `duration`.
+//
+// A toast with an action (Undo) has one lifecycle, as on the web: it waits while it is touched
+// or focused, and stays until dismissed while a screen reader is on. When it ends
 // without the action (it times out, is dismissed or a newer toast replaces it), its `onDismiss`
 // runs once, so a caller that defers its work (deleting a goal) commits then, never while Undo is
 // still on screen; leaving the app settles it too, so the system ending the app in the background
@@ -60,6 +69,14 @@ export interface ToastOptions {
    * account.
    */
   account?: string;
+  /**
+   * What the toast is for, which sets how long it stays: `warning` and `celebrate` (a record)
+   * longer than a confirmation, `error` longest. Left out, it is `action` when the toast has an
+   * action and `status` otherwise. The toast looks the same for all of them.
+   */
+  variant?: ToastVariant;
+  /** Replaces the variant's time: `quick` for frequent small undos, `important` for big ones. */
+  duration?: PopupDuration;
 }
 
 // The session every toast host is showing toasts for: the signed-in account (or the signed-out
@@ -127,10 +144,6 @@ export function toastShowing() {
 }
 let nextId = 0;
 
-const VISIBLE_MS = 3200;
-/** Long enough to read the message and reach an Undo. */
-const ACTION_VISIBLE_MS = 8000;
-
 /** What a screen reader hears: the message, and the action when there is one. */
 export function toastAnnouncement(message: string, action?: ToastAction) {
   return action ? `${message}. ${action.label} available.` : message;
@@ -143,7 +156,7 @@ export function showToast(message: string, action?: ToastAction, options: ToastO
     id: ++nextId,
     message,
     action,
-    ms: action ? ACTION_VISIBLE_MS : VISIBLE_MS,
+    ms: toastDuration(options.variant ?? (action ? 'action' : 'status'), message, options.duration),
     account: options.account,
   };
   const host = hosts.at(-1);

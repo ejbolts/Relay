@@ -22,7 +22,7 @@ async function setHidden(client: QueryClient, exercise: Exercise, hidden: boolea
         : undefined,
     );
   } catch (error) {
-    showToast(errorMessage(error));
+    showToast(errorMessage(error), undefined, { variant: 'error' });
   }
 }
 

@@ -282,10 +282,14 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         undefined,
         machineUse,
       );
-      showToast(`Swapped to ${replacement.name}`, {
-        label: 'Undo',
-        run: () => change((current) => ({ ...current, movements: before.movements })),
-      });
+      showToast(
+        `Swapped to ${replacement.name}`,
+        {
+          label: 'Undo',
+          run: () => change((current) => ({ ...current, movements: before.movements })),
+        },
+        { duration: 'quick' },
+      );
     },
     [change, context, getState, loggerTips],
   );
@@ -298,17 +302,22 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
       const remove = () => {
         recentRemoval.current = { kind: 'exercise', key: movementKey, at: Date.now() };
         change((current) => removeMovement(current, movementKey));
-        showToast(`${movement.exercise.name} removed`, {
-          label: 'Undo',
-          run: () => {
-            recentRemoval.current = null;
-            change((current) =>
-              current.movements.some((item) => item.key === movementKey)
-                ? current
-                : { ...current, movements: before.movements },
-            );
+        showToast(
+          `${movement.exercise.name} removed`,
+          {
+            label: 'Undo',
+            run: () => {
+              recentRemoval.current = null;
+              change((current) =>
+                current.movements.some((item) => item.key === movementKey)
+                  ? current
+                  : { ...current, movements: before.movements },
+              );
+            },
           },
-        });
+          // A whole exercise and its sets are hard to redo.
+          { duration: 'important' },
+        );
       };
       if (!movement.sets.some((item) => item.completed)) {
         remove();
@@ -512,20 +521,26 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         if (via === 'swipe') loggerTips.learn('swipe');
         else if (movement.sets.length > 1) loggerTips.event('menu-delete', 'swipe', 3);
         if (movement.sets.length === 1) {
-          showToast('An exercise needs at least one set. Remove the exercise instead.');
+          showToast('An exercise needs at least one set. Remove the exercise instead.', undefined, {
+            variant: 'warning',
+          });
           return;
         }
         const removed = movement.sets[index];
         recentRemoval.current = { kind: 'set', key: movementKey, at: Date.now() };
         void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         change((latest) => deleteSet(latest, movementKey, setKey));
-        showToast('Set deleted', {
-          label: 'Undo',
-          run: () => {
-            recentRemoval.current = null;
-            change((latest) => restoreSet(latest, movementKey, removed, index));
+        showToast(
+          'Set deleted',
+          {
+            label: 'Undo',
+            run: () => {
+              recentRemoval.current = null;
+              change((latest) => restoreSet(latest, movementKey, removed, index));
+            },
           },
-        });
+          { duration: 'quick' },
+        );
       },
       moveSet: (movementKey, setKey, move) => {
         loggerTips.learn('reorder');
@@ -1073,6 +1088,8 @@ function useLivePrBadges(logger: LoggerApi, state: LoggerState): DraftPrBadges {
       prToastLines(entries, unit)
         .map((line) => `🏆 ${line.title}\n${line.detail}`)
         .join('\n'),
+      undefined,
+      { variant: 'celebrate' },
     );
   }, [state.movements, state.workoutDate, badges, celebrations, measurements, unit]);
   return badges;

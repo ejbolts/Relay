@@ -52,7 +52,7 @@ function UsernameForm({ account }: { account: AdminUser }) {
       repeat();
       return;
     }
-    showToast('Wait for the username to save.');
+    showToast('Wait for the username to save.', undefined, { variant: 'warning' });
   });
   // Goes back once the save has settled and leaving is no longer held.
   useEffect(() => {

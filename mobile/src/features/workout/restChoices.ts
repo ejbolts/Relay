@@ -55,7 +55,10 @@ export function restMenuItems({
           submitLabel: 'Set rest time',
           onSubmit: (text) => {
             const seconds = parseRestInput(text);
-            if (seconds === null) showToast('Enter a rest such as 2:30, up to 2 hours.');
+            if (seconds === null)
+              showToast('Enter a rest such as 2:30, up to 2 hours.', undefined, {
+                variant: 'warning',
+              });
             else onPick(seconds);
           },
         }),

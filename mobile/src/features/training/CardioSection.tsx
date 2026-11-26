@@ -279,7 +279,7 @@ function CardioHistory({ overview }: { overview: CardioOverview }) {
                 void refreshTraining(client);
                 showToast('Session deleted');
               },
-              (reason) => showToast(errorMessage(reason)),
+              (reason) => showToast(errorMessage(reason), undefined, { variant: 'error' }),
             ),
         },
       ],

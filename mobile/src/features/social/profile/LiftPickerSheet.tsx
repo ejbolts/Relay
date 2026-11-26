@@ -180,7 +180,7 @@ export function LiftPickerSheet({
                   }
                 },
               },
-              { account },
+              { account, duration: 'quick' },
             );
           }}
           style={styles.unselectButton}

@@ -12,6 +12,7 @@ import { useUpNext } from '../../data/queries';
 import { SessionProvider } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { showMenu, type MenuOption } from '../../ui/prompts';
+import { showToast } from '../../ui/Toast';
 import { pushDay, types } from './testFixtures';
 import { useWorkout, WorkoutProvider } from './WorkoutProvider';
 import { setDropIndex } from './SetDrag';
@@ -477,6 +478,12 @@ describe('dragging to reorder sets', () => {
     await fireEvent.press(screen.getAllByLabelText(/^Set 2 type: /)[0]);
     await act(async () => option(menuCall('Set 2'), 'Delete set').onPress());
     expect(dragOf(0).enabled).toBe(false);
+    // The Undo clears after the web's 2.5 seconds for a deleted set.
+    expect(showToast).toHaveBeenLastCalledWith(
+      'Set deleted',
+      expect.objectContaining({ label: 'Undo' }),
+      { duration: 'quick' },
+    );
   });
 
   test('starting a drag blurs any focused input and dismisses the keyboard', async () => {

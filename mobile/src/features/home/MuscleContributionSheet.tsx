@@ -73,7 +73,8 @@ export function MuscleContributionSheet({
           goals={goals}
           onOpenWorkout={(id) => {
             if (id === liveWorkoutId) closeThen(() => onOpenLive?.());
-            else if (isPendingWorkoutId(id)) showToast('This workout is waiting to sync.');
+            else if (isPendingWorkoutId(id))
+              showToast('This workout is waiting to sync.', undefined, { variant: 'warning' });
             else
               closeThen(() =>
                 router.push(

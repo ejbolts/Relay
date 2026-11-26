@@ -84,7 +84,11 @@ export function WorkoutTypesScreen() {
     setError(null);
     actions.remove.mutate(type, {
       onSuccess: () =>
-        showToast(`${type.name} removed`, { label: 'Undo', run: () => restore(type) }),
+        showToast(
+          `${type.name} removed`,
+          { label: 'Undo', run: () => restore(type) },
+          { duration: 'important' },
+        ),
       onError: fail,
     });
   }

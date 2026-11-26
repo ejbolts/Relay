@@ -186,7 +186,12 @@ function useInvite(profileId: string, invite: boolean, profile: SharedProfile | 
     const account = toastAccount();
     const notify = (result: Omit<InviteResult, 'serial'>) => {
       const message = inviteMessage({ ...result, serial: Date.now() });
-      if (result.kind !== 'sent') return showToast(message, undefined, { account });
+      if (result.kind !== 'sent')
+        return showToast(message, undefined, {
+          account,
+          variant:
+            result.kind === 'failed' || result.kind === 'undo-failed' ? 'warning' : undefined,
+        });
       showToast(
         message,
         {
@@ -197,6 +202,7 @@ function useInvite(profileId: string, invite: boolean, profile: SharedProfile | 
               .catch(() =>
                 showToast(inviteMessage({ ...result, kind: 'undo-failed', serial: 0 }), undefined, {
                   account,
+                  variant: 'warning',
                 }),
               )
               .finally(() => {
@@ -558,11 +564,12 @@ function FriendControl({ profile, onBlocked }: { profile: SharedProfile; onBlock
               done();
               showToast('Could not remove this friend. You are still friends.', undefined, {
                 account,
+                variant: 'error',
               });
             },
           ),
       },
-      { account },
+      { account, duration: 'important' },
     );
   }
 

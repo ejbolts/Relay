@@ -261,8 +261,10 @@ describe('swapping an exercise', () => {
     expect(readActiveWorkoutDraft(deviceStorage)?.movements.map((item) => item.exerciseId)).toEqual(
       ['press'],
     );
-    const [message, undo] = jest.mocked(showToast).mock.calls.at(-1)!;
+    const [message, undo, options] = jest.mocked(showToast).mock.calls.at(-1)!;
     expect(message).toBe('Swapped to Overhead Press');
+    // A small undo mid-workout: the web's quick time.
+    expect(options).toEqual({ duration: 'quick' });
     await act(async () => undo!.run());
     expect(readActiveWorkoutDraft(deviceStorage)?.movements.map((item) => item.exerciseId)).toEqual(
       ['bench'],
@@ -430,6 +432,8 @@ describe('rest times between sets', () => {
     expect(showToast).toHaveBeenCalledWith(
       'Rest removed',
       expect.objectContaining({ label: 'Undo' }),
+      // A small, easily redone undo mid-workout: the web's quick time.
+      { duration: 'quick' },
     );
     expect(await screen.findByRole('button', { name: 'Add rest after set 1' })).toBeVisible();
 
