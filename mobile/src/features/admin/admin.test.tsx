@@ -51,6 +51,11 @@ jest.mock('expo-router', () => {
     Stack,
   };
 });
+// The layout reads its own stack's first screen from the navigator it is rendered in.
+jest.mock('expo-router/react-navigation', () => ({
+  useRoute: () => ({ key: 'admin' }),
+  useNavigationState: () => undefined,
+}));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
   apiGet: jest.fn(),

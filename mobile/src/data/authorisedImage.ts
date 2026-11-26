@@ -37,7 +37,8 @@ export function loadAuthorisedImage(url: string): Promise<string | null> {
   const promise = (async () => {
     if (!apiOrigin) return null;
     const origin = new URL(apiOrigin).origin;
-    const token = await sessionToken(origin);
+    // Bound to the session when asked for: none, or a change before it was read, loads nothing.
+    const token = await sessionToken(origin).catch(() => null);
     if (!token) return null;
     return new Promise<string | null>((resolve) => {
       const xhr = new XMLHttpRequest();

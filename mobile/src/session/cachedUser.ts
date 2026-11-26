@@ -33,7 +33,8 @@ export async function offlineUser(): Promise<User | null> {
   const origin = currentOrigin();
   const saved = readJson<Saved>(KEY);
   if (!origin || saved?.origin !== origin || !saved.user?.id) return null;
-  if (!(await sessionToken(origin))) return null;
+  // A session change while it was read opens nothing offline.
+  if (!(await sessionToken(origin).catch(() => null))) return null;
   const user = publicUser(saved.user);
   if ('session_token' in saved.user) rememberUser(user);
   return user;

@@ -103,7 +103,7 @@ export async function sendPending(client: QueryClient, userId: string): Promise<
       sendAgain.delete(userId);
       const pending = pendingFor(userId);
       if (!pending || !isActive(userId) || !onlineManager.isOnline()) return;
-      const token = await sessionToken(serverOrigin());
+      const token = await sessionToken(serverOrigin()).catch(() => null);
       // Signed out (or into another account) meanwhile: keep it for this account's next visit.
       if (!token || !isActive(userId)) return;
       let saved: AppNotices;
