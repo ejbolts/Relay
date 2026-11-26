@@ -7,7 +7,7 @@ import {
   friendInviteIdFromScan,
   friendInviteLink,
 } from '../../../../frontend/src/friendInviteLink';
-import { apiOrigin } from '../../data/api';
+import { ApiError, apiOrigin } from '../../data/api';
 import { useUser } from '../../session/SessionProvider';
 import { Button } from '../../ui/components';
 import { Segmented } from '../../ui/controls';
@@ -48,10 +48,15 @@ export function FriendQrSheet({
   const user = useUser();
   const [mode, setMode] = useState<Mode>('code');
   const choices = useSharingChoices();
-  // Older servers have no registration code to add to the link.
+  // Older servers have no registration code to add to the link (they answer 404). Anything else,
+  // such as no connection, stays a failure, and the link goes out without a code.
   const invite = useQuery({
     queryKey: ['social', 'friend-invite'],
-    queryFn: () => socialApi.friendInvite().catch(() => ({ invite_code: null })),
+    queryFn: () =>
+      socialApi.friendInvite().catch((error: unknown) => {
+        if (error instanceof ApiError && error.status === 404) return { invite_code: null };
+        throw error;
+      }),
     enabled: visible,
   });
   const url = friendInviteLink(user.id, serverOrigin(), invite.data?.invite_code);
