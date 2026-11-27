@@ -14,7 +14,8 @@ const finished = { name: 'Push Day' } as FinishedWorkout;
 afterEach(() => forgetJustSavedWorkouts());
 
 test('keeps a just-saved workout for its own account only, across an account switch', async () => {
-  const client = new QueryClient();
+  // No cache timer: the default one keeps Jest open for five minutes after the run.
+  const client = new QueryClient({ defaultOptions: { queries: { gcTime: Infinity } } });
   const dashboard = { weekly_sets: null };
   client.setQueryData(['dashboard', localDate()], dashboard);
   const { result } = await renderHook(() => useJustSavedWorkouts());

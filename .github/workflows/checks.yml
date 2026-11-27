@@ -169,4 +169,5 @@ jobs:
         run: npm run lint
       - name: Run mobile tests
         if: needs.changes.outputs.mobile == 'true'
-        run: npm test -- --ci
+        # A timer one test leaves pending would keep Jest open for five more minutes.
+        run: npm test -- --ci --forceExit
