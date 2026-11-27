@@ -42,6 +42,7 @@ import { exerciseInfoKeys } from './exerciseInfoQueries';
 import { ExerciseMuscleHelpButton, ExerciseMuscleHelpSheet } from './ExerciseMuscleHelp';
 import { trainingIcons } from './icons';
 import { LandscapeChartView } from '../body/LandscapeChart';
+import { crossesNewYear } from '../../../../frontend/src/chartYears';
 import { LiftLeaderboardCard } from './LiftLeaderboardCard';
 import { Badge, Divider, MoreButton, Note, Segmented } from './parts';
 import { ProgressChart, type ChartPoint } from './ProgressChart';
@@ -452,8 +453,9 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
           title={`${name} ${metricInfo.series}`}
           visible={landscape}
           onClose={() => setLandscape(false)}
+          yearLines={crossesNewYear(chartPoints.map((point) => point.date))}
         >
-          {(size) => (
+          {(size, showYearLines) => (
             <ProgressChart
               points={chartPoints}
               label={`${name} ${metricInfo.series}`}
@@ -461,6 +463,7 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
               height={Math.max(140, size.height - 30)}
               markRecords={metric !== 'volume_kg'}
               formatValue={formatMetric}
+              yearLines={showYearLines}
             />
           )}
         </LandscapeChartView>

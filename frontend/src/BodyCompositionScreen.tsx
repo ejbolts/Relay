@@ -45,6 +45,7 @@ import { localDate } from './utils';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from './dateRanges';
 import { HISTORY_PAGE_SIZE, RANGE_LABELS, prettyDate } from './appShared';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
+import { crossesNewYear } from './chartYears';
 import { WeighInDialog } from './WeighInDialog';
 import './bodyScreen.css';
 
@@ -851,6 +852,15 @@ function BodyTrendChart({
     ],
   );
   const showFat = series === 'fat' && hasBodyFat;
+  // Year lines are offered once the chart reaches across a 1 January.
+  const trendCrossesNewYear = crossesNewYear(
+    showFat
+      ? fatPoints.map((point) => point.date)
+      : [
+          ...dailyPoints.map((point) => point.date),
+          ...(goalPath ? [goalPath.startDate, goalPath.endDate] : []),
+        ],
+  );
   const bodyRangeIndicatorRef = useSlidingIndicator<HTMLDivElement>(displayRange);
   const bodySeriesIndicatorRef = useSlidingIndicator<HTMLDivElement>(showFat);
 
@@ -905,8 +915,12 @@ function BodyTrendChart({
           </div>
         )}
       </div>
-      <LandscapeChartFrame title={showFat ? 'Body fat trend' : 'Bodyweight trend'} controls={null}>
-        {(expanded) =>
+      <LandscapeChartFrame
+        title={showFat ? 'Body fat trend' : 'Bodyweight trend'}
+        controls={null}
+        yearLines={trendCrossesNewYear}
+      >
+        {(expanded, _close, showYearLines) =>
           showFat ? (
             <TrendChart
               points={fatPoints}
@@ -916,6 +930,7 @@ function BodyTrendChart({
               height={200}
               fillHeight={expanded}
               pinchZoom={pinchZoom}
+              yearLines={showYearLines}
             />
           ) : (
             <TrendChart
@@ -929,6 +944,7 @@ function BodyTrendChart({
               height={200}
               fillHeight={expanded}
               pinchZoom={pinchZoom}
+              yearLines={showYearLines}
             />
           )
         }

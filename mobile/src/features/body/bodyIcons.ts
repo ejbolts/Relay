@@ -16,4 +16,5 @@ export const bodyIcons = {
   cloud: { sf: 'icloud.and.arrow.up', md: 'cloud-upload' },
   expand: { sf: 'arrow.up.left.and.arrow.down.right', md: 'fullscreen' },
   rotate: { sf: 'rotate.right', md: 'screen-rotation' },
+  yearLines: { sf: 'rectangle.split.3x1', md: 'view-week' },
 } satisfies Record<string, IconPair>;
