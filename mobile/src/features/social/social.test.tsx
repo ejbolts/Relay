@@ -1159,6 +1159,44 @@ test('a comment takes any emoji as a reaction, and shows emojis others chose', a
   expect(screen.queryByLabelText('Search emoji')).toBeNull();
 });
 
+test('a comment shows two replies and folds the rest behind +N replies', async () => {
+  const root: WorkoutComment = {
+    id: 'c1',
+    author: alex,
+    body: 'Nice',
+    parent_id: null,
+    reply_to: null,
+    created_at: `${today}T09:30:00Z`,
+    edited_at: null,
+    can_edit: false,
+    can_delete: false,
+    reactions: { counts: [], yours: null },
+  };
+  const replies = ['Sheesh', 'Lol', 'Gg', 'Pop'].map((body, index) => ({
+    ...root,
+    id: `r${index}`,
+    body,
+    parent_id: 'c1',
+  }));
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path.startsWith('/api/sharing/profiles/alex/workouts'))
+      return { total: 1, workouts: [upper], personal_records: [], reactions: { w1: reactions } };
+    if (path === '/api/sharing/profiles/alex') return { ...casey, ...alex, can_view: true };
+    if (path.startsWith('/api/sharing/workouts/w1/comments'))
+      return { total: 5, next_offset: null, items: [root, ...replies] };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  await show(<SharedWorkoutScreen workoutId="w1" memberId="alex" date={today} />);
+  expect(await screen.findByText('Lol')).toBeVisible();
+  expect(screen.queryByText('Gg')).toBeNull();
+  await fireEvent.press(
+    screen.getByRole('button', { name: "Show 2 more replies to Alex Morgan's comment" }),
+  );
+  expect(screen.getByText('Gg')).toBeVisible();
+  expect(screen.getByText('Pop')).toBeVisible();
+  expect(screen.queryByText('+2 replies')).toBeNull();
+});
+
 test('profile sharing shows the visibility status badge and selectable visibility cards', async () => {
   jest.mocked(apiGet).mockImplementation(async (path: string) => {
     if (path === '/api/sharing')

@@ -296,3 +296,50 @@ it('shows the day for comments not posted today', async () => {
   const day = earlier.toLocaleDateString([], { day: 'numeric', month: 'short' });
   expect(times).toEqual([`${day}, ${clock(earlier)}`, clock(now)]);
 });
+
+it('shows two replies under a comment and folds the rest behind +N replies', async () => {
+  const replies = ['Sheesh', 'Lol', 'Gg', 'Pop'].map((body, index) => ({
+    ...replyComment,
+    id: `r${index}`,
+    body,
+  }));
+  vi.spyOn(api.sharing, 'comments').mockResolvedValue({
+    items: [rootComment, ...replies],
+    total: 5,
+    next_offset: null,
+  });
+  await act(async () => root.render(<WorkoutComments workoutId="w1" onCountChange={vi.fn()} />));
+  const shownReplies = () =>
+    [...host.querySelectorAll('.comment-replies .comment-bubble p')].map((p) => p.textContent);
+  expect(shownReplies()).toEqual(['@Alex Sample Sheesh', '@Alex Sample Lol']);
+  await click("Show 2 more replies to Alex Sample's comment");
+  expect(shownReplies()).toEqual([
+    '@Alex Sample Sheesh',
+    '@Alex Sample Lol',
+    '@Alex Sample Gg',
+    '@Alex Sample Pop',
+  ]);
+  expect(host.querySelector('.comment-more-replies')).toBeNull();
+});
+
+it('opens a folded thread when you reply to it', async () => {
+  const replies = ['One', 'Two', 'Three'].map((body, index) => ({
+    ...replyComment,
+    id: `r${index}`,
+    body,
+  }));
+  vi.spyOn(api.sharing, 'comments').mockResolvedValue({
+    items: [rootComment, ...replies],
+    total: 4,
+    next_offset: null,
+  });
+  await act(async () => root.render(<WorkoutComments workoutId="w1" onCountChange={vi.fn()} />));
+  expect(host.querySelector('.comment-more-replies')?.textContent).toBe('+1 reply');
+  const rootReply = host.querySelector<HTMLButtonElement>(
+    '.workout-comment .comment-actions button:nth-of-type(2)',
+  )!;
+  expect(rootReply.textContent).toBe('Reply');
+  await act(async () => rootReply.click());
+  expect(host.querySelector('.comment-more-replies')).toBeNull();
+  expect(host.querySelectorAll('.comment-replies .workout-comment')).toHaveLength(3);
+});

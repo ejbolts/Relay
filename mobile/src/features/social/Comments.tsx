@@ -20,6 +20,9 @@ import {
   commentTime,
   COMMENT_MAX_LENGTH,
   deleteCommentMessage,
+  moreRepliesLabel,
+  threadRoot,
+  visibleReplies,
 } from '../../../../frontend/src/commentDisplay';
 import { reactionChoice, reactionEmoji } from '../../../../frontend/src/friendFeedData';
 import type {
@@ -203,6 +206,10 @@ export function CommentList({
 }) {
   const { colors, type } = useTheme();
   const [picker, setPicker] = useState<string | null>(null);
+  // Threads showing every reply, rather than the first two, as on the web.
+  const [openThreads, setOpenThreads] = useState<string[]>([]);
+  const openThread = (id: string) =>
+    setOpenThreads((current) => (current.includes(id) ? current : [...current, id]));
   const { query, items } = thread;
   const found = !!highlightId && items.some((item) => item.id === highlightId);
   const { hasNextPage, isFetchingNextPage, isPending, fetchNextPage } = query;
@@ -261,7 +268,10 @@ export function CommentList({
       }}
       onClosePicker={() => setPicker(null)}
       onReply={() => {
-        if (thread.startReply(item)) onCompose();
+        if (!thread.startReply(item)) return;
+        // Replying opens the whole thread, so your reply shows once it is sent.
+        openThread(threadRoot(item));
+        onCompose();
       }}
       onEdit={() => {
         if (thread.startEdit(item)) onCompose();
@@ -277,21 +287,44 @@ export function CommentList({
   );
   return (
     <View style={{ gap: 14 }} accessibilityLabel="Workout comments">
-      {commentThreads(items).map(({ root, replies }) => (
-        <View
-          key={root.id}
-          testID={`comment-thread-${root.id}`}
-          style={{ gap: 10 }}
-          onLayout={
-            highlightId && (root.id === highlightId || replies.some((r) => r.id === highlightId))
-              ? (event) => placeTarget('group', event.nativeEvent.layout.y)
-              : undefined
-          }
-        >
-          {comment(root, false)}
-          {replies.map((item) => comment(item, true))}
-        </View>
-      ))}
+      {commentThreads(items).map(({ root, replies }) => {
+        const { shown, hidden } = visibleReplies(
+          replies,
+          openThreads.includes(root.id),
+          highlightId,
+        );
+        return (
+          <View
+            key={root.id}
+            testID={`comment-thread-${root.id}`}
+            style={{ gap: 10 }}
+            onLayout={
+              highlightId && (root.id === highlightId || replies.some((r) => r.id === highlightId))
+                ? (event) => placeTarget('group', event.nativeEvent.layout.y)
+                : undefined
+            }
+          >
+            {comment(root, false)}
+            {shown.map((item) => comment(item, true))}
+            {hidden > 0 && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Show ${hidden} more ${hidden === 1 ? 'reply' : 'replies'} to ${root.author.display_name}'s comment`}
+                hitSlop={8}
+                onPress={() => {
+                  haptics.selection();
+                  openThread(root.id);
+                }}
+                style={({ pressed }) => [styles.moreReplies, pressed && { opacity: 0.6 }]}
+              >
+                <Text style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}>
+                  {moreRepliesLabel(hidden)}
+                </Text>
+              </Pressable>
+            )}
+          </View>
+        );
+      })}
       {query.hasNextPage && (
         <Button
           label={query.isFetchingNextPage ? 'Loading…' : 'Show more comments'}
@@ -628,6 +661,8 @@ const styles = StyleSheet.create({
     borderColor: 'transparent',
   },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  // Lines up with the replies' avatars, which sit one indent in.
+  moreReplies: { minHeight: 32, justifyContent: 'center', alignSelf: 'flex-start', marginLeft: 40 },
   actionLink: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 4 },
   chip: { paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1 },
   replying: { flexDirection: 'row', alignItems: 'center', gap: 8 },

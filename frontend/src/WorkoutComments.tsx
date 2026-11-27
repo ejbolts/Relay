@@ -17,6 +17,9 @@ import {
   commentTime,
   COMMENT_MAX_LENGTH,
   deleteCommentMessage,
+  moreRepliesLabel,
+  threadRoot,
+  visibleReplies,
 } from './commentDisplay';
 
 // Loaded when first opened, so the emoji catalogue stays out of the app's first download.
@@ -50,6 +53,10 @@ export function WorkoutComments({
   const [editing, setEditing] = useState<WorkoutComment | null>(null);
   const [picker, setPicker] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<WorkoutComment | null>(null);
+  // Threads showing every reply, rather than the first two.
+  const [openThreads, setOpenThreads] = useState<string[]>([]);
+  const openThread = (id: string) =>
+    setOpenThreads((current) => (current.includes(id) ? current : [...current, id]));
   const input = useRef<HTMLTextAreaElement>(null);
   const focused = useRef<HTMLElement>(null);
   const section = useRef<HTMLElement>(null);
@@ -58,6 +65,7 @@ export function WorkoutComments({
     loading,
     items.map((item) => [item.id, item.body, item.reactions.counts]),
     picker,
+    openThreads,
     reply?.id,
     editing?.id,
     next,
@@ -206,6 +214,8 @@ export function WorkoutComments({
               onClick={() => {
                 setReply(item);
                 setEditing(null);
+                // Replying opens the whole thread, so your reply shows once it is sent.
+                openThread(threadRoot(item));
                 input.current?.focus();
               }}
             >
@@ -309,12 +319,31 @@ export function WorkoutComments({
       {loading ? (
         <p role="status">Loading comments…</p>
       ) : (
-        commentThreads(items).map(({ root, replies }) => (
-          <div key={root.id}>
-            {renderComment(root)}
-            <div className="comment-replies">{replies.map(renderComment)}</div>
-          </div>
-        ))
+        commentThreads(items).map(({ root, replies }) => {
+          const { shown, hidden } = visibleReplies(
+            replies,
+            openThreads.includes(root.id),
+            focusComment,
+          );
+          return (
+            <div key={root.id}>
+              {renderComment(root)}
+              <div className="comment-replies">
+                {shown.map(renderComment)}
+                {hidden > 0 && (
+                  <button
+                    type="button"
+                    className="pulse-button link small comment-more-replies"
+                    aria-label={`Show ${hidden} more ${hidden === 1 ? 'reply' : 'replies'} to ${root.author.display_name}'s comment`}
+                    onClick={() => openThread(root.id)}
+                  >
+                    {moreRepliesLabel(hidden)}
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })
       )}
       {next !== null && (
         <ShowMoreButton
