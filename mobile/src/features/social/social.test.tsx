@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { Alert, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { commentTime } from '../../../../frontend/src/commentDisplay';
+import { exerciseIconFor } from '../../../../frontend/src/exerciseIcons';
 import { feedStats } from '../../../../frontend/src/friendFeedData';
 import { connectionDate } from '../../../../frontend/src/sharedProfileDisplay';
 import { VISIBILITY_CONFIRM } from '../../../../frontend/src/sharingChoices';
@@ -308,20 +309,42 @@ test("the feed shows friends' workouts, and a reaction is sent and shown", async
   expect(screen.getByText(feedStats(upper, 'kg').join(' · '))).toBeVisible();
   expect(feedStats(upper, 'kg')[0]).toBe('1h 2min');
   expect(screen.getByText('1 PR')).toBeVisible();
-  // Three exercises with their pictures, then the rest counted, which opens the workout.
+  // Three exercises with their pictures, then the rest expand inline with their pictures.
+  const exerciseImageSources = () => {
+    const sources: unknown[] = [];
+    const visit = (node: unknown) => {
+      if (!node || typeof node !== 'object') return;
+      const element = node as { type?: unknown; props?: { source?: unknown }; children?: unknown[] };
+      if (element.type === 'Image') sources.push(element.props?.source);
+      element.children?.forEach(visit);
+    };
+    visit(screen.getByLabelText('Exercises'));
+    return sources;
+  };
   for (const name of ['Bench Press', 'Barbell Row', 'Overhead Press'])
     expect(screen.getByText(name)).toBeVisible();
   expect(screen.queryByText('Bicep Curl')).toBeNull();
-  await fireEvent.press(
-    screen.getByRole('button', {
-      name: 'Open Alex Morgan’s Upper body workout, with 1 more exercise',
-    }),
+  expect(exerciseImageSources()).toEqual(
+    upper.movements.slice(0, 3).map((item) => exerciseIconFor(item.exercise)),
   );
-  expect(mockRouter.push).toHaveBeenCalledWith(
-    expect.objectContaining({
-      pathname: '/social/workout/[id]',
-      params: expect.objectContaining({ id: 'w1' }),
-    }),
+  const expandButton = screen.getByRole('button', {
+    name: 'Show 1 more exercise in Alex Morgan’s Upper body',
+  });
+  expect(expandButton).toHaveProp('accessibilityState', { expanded: false });
+  await fireEvent.press(expandButton);
+  expect(mockRouter.push).not.toHaveBeenCalled();
+  expect(screen.getByText('Bicep Curl')).toBeVisible();
+  expect(exerciseImageSources()).toEqual(
+    upper.movements.map((item) => exerciseIconFor(item.exercise)),
+  );
+  const collapseButton = screen.getByRole('button', {
+    name: 'Show fewer exercises in Alex Morgan’s Upper body',
+  });
+  expect(collapseButton).toHaveProp('accessibilityState', { expanded: true });
+  await fireEvent.press(collapseButton);
+  expect(screen.queryByText('Bicep Curl')).toBeNull();
+  expect(exerciseImageSources()).toEqual(
+    upper.movements.slice(0, 3).map((item) => exerciseIconFor(item.exercise)),
   );
 
   await fireEvent.press(screen.getByRole('button', { name: 'React to Alex Morgan’s Upper body' }));

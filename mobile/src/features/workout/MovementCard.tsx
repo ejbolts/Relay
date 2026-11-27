@@ -41,6 +41,7 @@ import {
   weightInputValue,
   type WeightUnit,
 } from '../../../../frontend/src/weightUnits';
+import { isAllTimePr } from '../../../../frontend/src/workoutPr';
 import type {
   WorkoutDraftMovement,
   WorkoutDraftSet,
@@ -1023,18 +1024,38 @@ function SetDetails({
       {!!ratio && (
         <Text style={[type.footnote, type.number, { color: colors.secondary }]}>{ratio}</Text>
       )}
-      {records && (
-        <View
-          accessible
-          accessibilityLabel={`Set ${number}: ${records.join(', ')}`}
-          style={[styles.record, { backgroundColor: colors.goldSoft, borderRadius: radius.sm }]}
-        >
-          <Icon name="trophy" size={12} color={colors.gold} />
-          <Text style={[type.caption, { color: colors.text, fontWeight: '700', flexShrink: 1 }]}>
-            {records.join(' · ')}
-          </Text>
-        </View>
-      )}
+      {records &&
+        (() => {
+          const allTime = isAllTimePr(records);
+          const pill = (
+            <View
+              accessible
+              accessibilityLabel={`Set ${number}: ${records.join(', ')}`}
+              style={[styles.record, { backgroundColor: colors.goldSoft, borderRadius: radius.sm }]}
+            >
+              <Icon name="trophy" size={12} color={colors.gold} />
+              <Text
+                style={[type.caption, { color: colors.text, fontWeight: '700', flexShrink: 1 }]}
+              >
+                {records.join(' · ')}
+              </Text>
+            </View>
+          );
+          if (!allTime) return pill;
+          return (
+            <View
+              style={{
+                alignSelf: 'flex-start',
+                borderWidth: 1.5,
+                borderColor: colors.allTimeRing,
+                borderRadius: radius.sm + 2,
+                padding: 1.5,
+              }}
+            >
+              {pill}
+            </View>
+          );
+        })()}
       {machine !== undefined && (
         <Text
           style={[

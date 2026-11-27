@@ -31,6 +31,7 @@ const dark = {
   gold: '#e9b44a',
   goldSoft: 'rgba(201,133,0,0.15)',
   onGold: '#1c1404',
+  allTimeRing: '#2ee6d6',
   danger: '#e66767',
   /** A soft tint of `danger` (the web's danger-soft fill). Follows each style's `danger`. */
   dangerSoft: 'rgba(230,103,103,0.10)',
@@ -80,6 +81,7 @@ const light: typeof dark = {
   gold: '#a36800',
   goldSoft: 'rgba(201,133,0,0.14)',
   onGold: '#ffffff',
+  allTimeRing: '#00b8ac',
   danger: '#c53b3b',
   dangerSoft: 'rgba(197,59,59,0.10)',
   dangerFill: '#c53b3b',

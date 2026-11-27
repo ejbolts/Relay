@@ -101,6 +101,7 @@ it('lists every set in order, with W and D in the circle instead of a word', asy
   expect(rows[2].textContent).toContain('RPE 6.5');
   expect(rows[3].classList).toContain('is-record');
   expect(rows[3].querySelector('.pr-badge')?.textContent).toBe('PR');
+  expect(rows[3].querySelector('.pr-badge')?.classList.contains('is-all-time')).toBe(true);
   expect(rows[3].querySelector('.pr-badge')?.getAttribute('title')).toBe('All-time Weight PR');
   expect(rows[3].querySelector('.shared-set-detail')?.textContent).toBe('Slow last rep');
   expect(rows[1].querySelector('.shared-set-detail')?.textContent).toBe('Felt stiff');
@@ -120,6 +121,7 @@ it('labels a block record, and counts working sets apart from warm-ups', async (
     ),
   );
   expect(host.querySelector('.pr-badge')?.textContent).toBe('Block PR');
+  expect(host.querySelector('.pr-badge')?.classList.contains('is-all-time')).toBe(false);
   expect(sharedSetCount(sets)).toBe('3 sets');
   expect(sharedSetCount(sets.slice(0, 1))).toBe('1 warm-up set');
   expect(sharedSetCount(sets.slice(0, 2))).toBe('2 warm-up sets');

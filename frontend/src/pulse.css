@@ -44,6 +44,8 @@
   --p-gold: #e9b44a;
   --p-gold-soft: rgb(201 133 0 / 15%);
   --p-on-gold: #1c1404;
+  --p-all-time-ring: #2ee6d6;
+  --p-all-time-glow: rgb(46 230 214 / 36%);
   --p-danger: #e66767;
   /* Filled buttons: text on the accent or danger fill, and a red that keeps white text readable. */
   --p-on-accent: #fff;
@@ -2967,6 +2969,13 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-size: 0.625rem;
   font-style: normal;
   font-weight: 700;
+}
+
+.pr-chip.is-all-time {
+  position: relative;
+  outline: 1.5px solid var(--p-all-time-ring);
+  outline-offset: 1px;
+  box-shadow: 0 0 6px var(--p-all-time-glow);
 }
 
 .session-set {

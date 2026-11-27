@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Animated, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
-  FEED_SHOWN_EXERCISES,
   feedExercises,
+  feedExerciseView,
   feedStats,
   friendSession,
   relativeDay,
@@ -30,8 +30,8 @@ import { useWorkoutPhotoEditor, WorkoutPhotos } from './WorkoutPhotos';
 /**
  * One workout in the feed, matching the web's compact card: accent title + author · day +
  * top-right outline icons (photo, react, comment), summary stats with PRs, photos, and up to
- * three exercises with their icons. Opening the reaction picker floats it over the card without
- * shifting cards below while sibling cards fade back.
+ * three exercises with their icons, expanding inline when there are more. Opening the reaction
+ * picker floats it over the card without shifting cards below while sibling cards fade back.
  */
 export function FeedCard({
   item,
@@ -54,10 +54,9 @@ export function FeedCard({
   const owner = member.is_you ? 'Your' : `${member.display_name}’s`;
   const subject = `${owner} ${workout.name}`;
   const stats = feedStats(workout, unit);
+  const [exercisesExpanded, setExercisesExpanded] = useState(false);
   const movements = feedExercises(workout);
-  const hidden = movements.length - FEED_SHOWN_EXERCISES;
-  // The rest are counted, and open the whole workout, as on the web.
-  const listed = movements.slice(0, FEED_SHOWN_EXERCISES);
+  const exercises = feedExerciseView(movements, exercisesExpanded, subject);
   const openMember = () => nav.openProfile(member);
   const openWorkout = (comments = false) =>
     nav.openWorkout({ id: workout.id, memberId: member.id, date: workout.workout_date, comments });
@@ -203,7 +202,7 @@ export function FeedCard({
       )}
       {movements.length > 0 && (
         <View accessibilityLabel="Exercises" style={styles.exercises}>
-          {listed.map((movement) => (
+          {exercises.listed.map((movement) => (
             <View key={movement.id} style={styles.exercise}>
               <ExerciseIcon exercise={movement.exercise} size={30} />
               <Text
@@ -214,16 +213,20 @@ export function FeedCard({
               </Text>
             </View>
           ))}
-          {hidden > 0 && (
+          {exercises.canExpand && exercises.toggleText && exercises.toggleLabel && (
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Open ${subject} workout, with ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`}
+              accessibilityLabel={exercises.toggleLabel}
+              accessibilityState={{ expanded: exercisesExpanded }}
               hitSlop={6}
-              onPress={() => openWorkout()}
+              onPress={() => {
+                haptics.selection();
+                setExercisesExpanded((current) => !current);
+              }}
               style={({ pressed }) => [styles.moreLink, pressed && { opacity: 0.6 }]}
             >
               <Text style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}>
-                +{hidden} {hidden === 1 ? 'exercise' : 'exercises'}
+                {exercises.toggleText}
               </Text>
             </Pressable>
           )}
