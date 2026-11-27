@@ -3,6 +3,7 @@ import {
   calculateDraftPrs,
   calculateScopedDraftPrs,
   initialPrCelebrations,
+  isAllTimePr,
   newPrCelebrations,
   prBadgeLabel,
   prToastLines,
@@ -618,12 +619,18 @@ describe('celebrating live records', () => {
     expect(newPrCelebrations([ticked], badges(ticked), second.next, () => 80).entries).toEqual([]);
   });
 
-  it('names a badge by its broadest scope', () => {
+  it('names a badge by its broadest scope and identifies all-time records', () => {
     expect(prBadgeLabel(['Block weight PR', 'All-time volume PR for this weight'])).toBe(
       'All-time PR',
     );
     expect(prBadgeLabel(['Block weight PR', 'Fresh start weight PR'])).toBe('Fresh start PR');
     expect(prBadgeLabel(['Block weight PR'])).toBe('Block PR');
     expect(prBadgeLabel(['Weight PR'])).toBe('PR');
+
+    expect(isAllTimePr(['Block weight PR', 'All-time volume PR for this weight'])).toBe(true);
+    expect(isAllTimePr(['Weight PR'])).toBe(true);
+    expect(isAllTimePr(['Block weight PR', 'Fresh start weight PR'])).toBe(false);
+    expect(isAllTimePr(['Block weight PR'])).toBe(false);
+    expect(isAllTimePr([])).toBe(false);
   });
 });

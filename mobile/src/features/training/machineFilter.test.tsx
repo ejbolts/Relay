@@ -298,7 +298,8 @@ describe('Filtered by machine', () => {
       />,
     );
     expect(screen.getByRole('header', { name: 'Cybex chest press' })).toBeVisible();
-    expect(screen.getByText('Bench Press')).toBeVisible();
+    // The banner's exercise: the open workout below names it too once the list has loaded.
+    expect(within(screen.getByLabelText('Machine filter')).getByText('Bench Press')).toBeVisible();
     expect(
       await screen.findByText(
         `Last used ${machineDate('2026-11-21')} · ${timeSince('2026-11-21', '2026-11-22')} · 2 workouts`,

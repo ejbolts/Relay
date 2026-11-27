@@ -339,3 +339,12 @@ export function prBadgeLabel(labels: string[]): string {
   if (labels.some((label) => label.startsWith('Block'))) return 'Block PR';
   return 'PR';
 }
+
+/** Whether a live set's records include an all-time PR rather than only a block or fresh-start PR. */
+export function isAllTimePr(labels: string[]): boolean {
+  if (labels.length === 0) return false;
+  return (
+    labels.some((label) => label.startsWith('All-time')) ||
+    !labels.some((label) => label.startsWith('Fresh start') || label.startsWith('Block'))
+  );
+}

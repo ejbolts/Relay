@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import {
-  FEED_SHOWN_EXERCISES,
   feedExercises,
+  feedExerciseView,
   feedStats,
   friendSession,
   relativeDay,
@@ -86,10 +86,11 @@ function FeedCard({
   const subject = `${owner} ${workout.name}`;
   const photos = workout.photos ?? [];
   // A session of one exercise named after it (a run called "Running") needs no exercise line.
+  const [exercisesExpanded, setExercisesExpanded] = useState(false);
+  const exercisesId = useId();
   const movements = feedExercises(workout);
   const listExercises = movements.length > 0;
-  const hidden = movements.length - FEED_SHOWN_EXERCISES;
-  const listed = movements.slice(0, FEED_SHOWN_EXERCISES);
+  const exercises = feedExerciseView(movements, exercisesExpanded, subject);
   const card = useRef<HTMLLIElement>(null);
   const [highlighted, setHighlighted] = useState(false);
   const focusKey = focus?.key;
@@ -190,21 +191,23 @@ function FeedCard({
         )}
         <FeedStats workout={workout} records={item.record_count} />
         {listExercises && (
-          <ul className="feed-exercises" aria-label="Exercises">
-            {listed.map((movement) => (
+          <ul id={exercisesId} className="feed-exercises" aria-label="Exercises">
+            {exercises.listed.map((movement) => (
               <li key={movement.id}>
                 <ExerciseIcon exercise={movement.exercise} />
                 <span>{movement.exercise.name}</span>
               </li>
             ))}
-            {hidden > 0 && (
+            {exercises.canExpand && exercises.toggleText && exercises.toggleLabel && (
               <li className="feed-exercises-more">
                 <button
                   type="button"
-                  aria-label={`Open ${subject} workout, with ${hidden} more ${hidden === 1 ? 'exercise' : 'exercises'}`}
-                  onClick={onOpenWorkout}
+                  aria-expanded={exercisesExpanded}
+                  aria-controls={exercisesId}
+                  aria-label={exercises.toggleLabel}
+                  onClick={() => setExercisesExpanded((current) => !current)}
                 >
-                  +{hidden} {hidden === 1 ? 'exercise' : 'exercises'}
+                  {exercises.toggleText}
                 </button>
               </li>
             )}

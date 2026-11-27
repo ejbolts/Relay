@@ -413,6 +413,7 @@ export function SetTable({
                     >
                       <Badge
                         tone="gold"
+                        halo={setRecords.some(isAllTimeRecord)}
                         label={
                           setRecords.some(isAllTimeRecord) ? 'PR' : recordBadgeLabel(setRecords)
                         }

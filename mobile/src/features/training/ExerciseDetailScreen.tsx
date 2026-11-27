@@ -16,7 +16,7 @@ import {
   progressPointsForChart,
   type ProgressMetric,
 } from '../../../../frontend/src/progressChart';
-import { recordBadgeLabel } from '../../../../frontend/src/recordScope';
+import { isAllTimeRecord, recordBadgeLabel } from '../../../../frontend/src/recordScope';
 import { recordsForBlock } from '../../../../frontend/src/trainingBlocks';
 import {
   dayMonth,
@@ -396,20 +396,21 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                               <Text style={[type.callout, { color: colors.text }]}>
                                 {shortDate(point.workout_date)}
                               </Text>
-                              {view.recordIds.has(point.workout_id) && (
-                                <Badge
-                                  tone="gold"
-                                  label={
-                                    view.defaultView
-                                      ? recordBadgeLabel(
-                                          records.filter(
-                                            (record) => record.workout_id === point.workout_id,
-                                          ),
-                                        )
-                                      : 'PR'
-                                  }
-                                />
-                              )}
+                              {view.recordIds.has(point.workout_id) &&
+                                (() => {
+                                  const pointRecords = records.filter(
+                                    (record) => record.workout_id === point.workout_id,
+                                  );
+                                  return (
+                                    <Badge
+                                      tone="gold"
+                                      halo={pointRecords.some(isAllTimeRecord)}
+                                      label={
+                                        view.defaultView ? recordBadgeLabel(pointRecords) : 'PR'
+                                      }
+                                    />
+                                  );
+                                })()}
                             </View>
                             <Text
                               style={[type.footnote, type.number, { color: colors.secondary }]}
