@@ -16,6 +16,10 @@ import type {
 import { formatMinutesDuration } from './utils';
 import type { WeightUnit } from './weightUnits';
 
+/**
+ * The seven reactions offered before any emoji could be chosen. They keep their names as the
+ * saved key, so older releases still show them; every other emoji is saved as itself.
+ */
 export const REACTIONS: ReadonlyArray<{ kind: WorkoutReactionKind; emoji: string; label: string }> =
   [
     { kind: 'like', emoji: '👍', label: 'Like' },
@@ -27,8 +31,22 @@ export const REACTIONS: ReadonlyArray<{ kind: WorkoutReactionKind; emoji: string
     { kind: 'trophy', emoji: '🏆', label: 'Trophy' },
   ];
 
+/** The emoji a saved reaction shows: an original reaction's emoji, or the emoji itself. */
 export function reactionEmoji(kind: WorkoutReactionKind): string {
-  return REACTIONS.find((item) => item.kind === kind)?.emoji ?? '';
+  return REACTIONS.find((item) => item.kind === kind)?.emoji ?? kind;
+}
+
+/** A reaction's emoji and spoken name; screen readers name any other emoji themselves. */
+export function reactionChoice(kind: WorkoutReactionKind | null | undefined) {
+  if (!kind) return undefined;
+  const original = REACTIONS.find((item) => item.kind === kind);
+  return original ?? { kind, emoji: kind, label: kind };
+}
+
+/** The key to save for a chosen emoji: an original reaction's name, or the emoji. */
+export function reactionKey(emoji: string): WorkoutReactionKind {
+  const plain = emoji.replace(/\uFE0F/g, '');
+  return REACTIONS.find((item) => item.emoji.replace(/\uFE0F/g, '') === plain)?.kind ?? emoji;
 }
 
 export interface FriendSession {

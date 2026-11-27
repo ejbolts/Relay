@@ -69,6 +69,7 @@ import './YouTubeConnectionPanel.css';
 import './profilePhotoCrop.css';
 import './bodySizes.css';
 import './liftComparison.css';
+import './emojiReactionSheet.css';
 import './accountSession.css';
 import './sharedWorkout.css';
 import './workoutReactionPeople.css';

@@ -83,6 +83,20 @@ function button(label: string) {
   return found!;
 }
 
+const sheet = () => document.querySelector('.emoji-reaction-sheet');
+
+/** An emoji in the open reaction sheet, by its Unicode name. */
+function emoji(name: string) {
+  return document.querySelector<HTMLButtonElement>(
+    `.emoji-reaction-sheet button[aria-label="${name}"]`,
+  )!;
+}
+
+async function openPicker(trigger: HTMLButtonElement) {
+  await act(async () => trigger.click());
+  await vi.waitFor(() => expect(sheet()).not.toBeNull());
+}
+
 async function render(onOpenFriend = vi.fn(), onOpenFriends = vi.fn()) {
   await act(async () =>
     root.render(
@@ -201,7 +215,7 @@ it("shows each friend's latest session with one reaction button and opens their 
   // One picker trigger and one comments button per friend, alongside per-emoji counts.
   expect(host.querySelectorAll('.friend-react-button')).toHaveLength(2);
   expect(host.querySelectorAll('.discussion-comments-button')).toHaveLength(2);
-  expect(host.querySelector('.friend-react-picker')).toBeNull();
+  expect(sheet()).toBeNull();
 
   await act(async () => host.querySelector<HTMLButtonElement>('.friend-activity-open')!.click());
   expect(openFriend).toHaveBeenCalledWith(jordan.friend);
@@ -270,14 +284,13 @@ it('opens comments without the reaction picker, and reactions without the commen
   expect(commentsButton.getAttribute('aria-expanded')).toBe('true');
   expect(comments).toHaveBeenCalledWith('w2');
   expect(host.querySelector('.workout-discussion-thread')?.hasAttribute('hidden')).toBe(false);
-  expect(host.querySelector('.friend-react-picker')).toBeNull();
+  expect(sheet()).toBeNull();
   expect(host.querySelector('.comment-composer select')).toBeNull();
 
   const reactButton = button('React to Alex Preview’s Incline walk');
-  await act(async () => reactButton.click());
+  await openPicker(reactButton);
   expect(reactButton.getAttribute('aria-expanded')).toBe('true');
   expect(commentsButton.getAttribute('aria-expanded')).toBe('false');
-  expect(host.querySelector('.friend-react-picker')).not.toBeNull();
   expect(host.querySelector('.workout-discussion-thread')?.hasAttribute('hidden')).toBe(true);
 });
 
@@ -294,30 +307,30 @@ it('reacts from the picker, shows your reaction, and removes it when chosen agai
   await render();
 
   const trigger = button('React to Alex Preview’s Incline walk');
-  await act(async () => trigger.click());
+  await openPicker(trigger);
   expect(trigger.getAttribute('aria-expanded')).toBe('true');
-  expect(host.querySelectorAll('.friend-react-picker button')).toHaveLength(7);
-  expect(document.activeElement?.getAttribute('aria-label')).toBe('Like');
+  expect(document.querySelectorAll('.emoji-reaction-tabs button')).toHaveLength(9);
+  expect(document.querySelector('.emoji-reaction-sheet [aria-pressed="true"]')).toBeNull();
 
   feed.mockResolvedValue({
     items: [{ ...alex, reactions: { counts: [{ reaction: 'run', count: 1 }], yours: 'run' } }],
     friends: 1,
     with_sessions: 1,
   });
-  await act(async () => button('Run').click());
+  await act(async () => emoji('person running').click());
   expect(react).toHaveBeenCalledWith('w2', 'run');
   // Choosing a reaction closes the picker without opening the comments.
-  expect(host.querySelector('.friend-react-picker')).toBeNull();
+  expect(sheet()).toBeNull();
   expect(host.querySelector('.workout-comments')).toBeNull();
   const mine = button('Your reaction to Alex Preview’s Incline walk: Run. Change reaction');
   expect(mine.textContent).toBe('🏃');
   expect(host.querySelector('.discussion-reaction-summary')?.textContent).toBe('🏃 1');
   expect(document.activeElement).toBe(mine);
 
-  await act(async () => mine.click());
-  expect(button('Run').getAttribute('aria-pressed')).toBe('true');
+  await openPicker(mine);
+  expect(emoji('person running').getAttribute('aria-pressed')).toBe('true');
   feed.mockResolvedValue({ items: [alex], friends: 1, with_sessions: 1 });
-  await act(async () => button('Run').click());
+  await act(async () => emoji('person running').click());
   expect(remove).toHaveBeenCalledWith('w2');
   expect(button('React to Alex Preview’s Incline walk').textContent).not.toContain('🏃');
 });
@@ -400,7 +413,7 @@ it('pauses background refresh while hidden or away from Home', async () => {
   expect(feed).toHaveBeenCalledTimes(2);
 });
 
-it('closes the picker with Escape or a tap elsewhere without reacting', async () => {
+it('closes the emoji sheet without reacting', async () => {
   vi.spyOn(api.sharing, 'feed').mockResolvedValue({
     items: [jordan, alex],
     friends: 2,
@@ -410,17 +423,16 @@ it('closes the picker with Escape or a tap elsewhere without reacting', async ()
   await render();
 
   const trigger = button('React to Jordan Preview’s Leg day');
-  await act(async () => trigger.click());
+  await openPicker(trigger);
   expect(host.querySelector('.friend-activity-list')?.classList).toContain('is-picking');
-  await act(async () =>
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })),
-  );
-  expect(host.querySelector('.friend-react-picker')).toBeNull();
-  expect(document.activeElement).toBe(trigger);
-
-  await act(async () => trigger.click());
-  await act(async () => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
-  expect(host.querySelector('.friend-react-picker')).toBeNull();
+  document.documentElement.setAttribute('data-reduce-motion', '');
+  try {
+    await act(async () => button('Close React to Jordan Preview’s Leg day').click());
+  } finally {
+    document.documentElement.removeAttribute('data-reduce-motion');
+  }
+  expect(sheet()).toBeNull();
+  expect(host.querySelector('.friend-activity-list')?.classList).not.toContain('is-picking');
   expect(react).not.toHaveBeenCalled();
 });
 

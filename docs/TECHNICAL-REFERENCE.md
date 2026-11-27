@@ -102,6 +102,15 @@ adds this persistent relationship; run `alembic upgrade head` before serving thi
 Blocks are excluded from account snapshots because they refer to other accounts, and account
 deletion removes blocks in both directions.
 
+A reaction to a workout or comment is any single emoji, chosen from a searchable emoji sheet or
+typed into its search from the keyboard. The seven original reactions keep their stored names
+(`like`, `love`, `strong`, `fire`, `clap`, `trophy`, `run`) so older releases still show them;
+any other emoji is stored as itself, up to 16 code points. The server checks the single-emoji rule
+in `backend/app/reactions.py` and the apps share it in `frontend/src/emojiPicker.ts`. The sheet's
+catalogue, `frontend/src/emojiCatalog.ts`, is generated from Unicode's `emoji-test.txt` by
+`frontend/scripts/generate-emoji-catalog.mjs`. Migration `0067_custom_reactions` replaces the
+fixed list check with a length check.
+
 Home's Friends card refreshes its latest-workout feed every 30 seconds while visible, on
 focus, when the page becomes visible and on reconnection. Each member contributes one latest
 session, sorted by workout date and creation time; reactions do not affect this order.

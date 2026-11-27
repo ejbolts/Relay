@@ -30,8 +30,8 @@ import { useWorkoutPhotoEditor, WorkoutPhotos } from './WorkoutPhotos';
 /**
  * One workout in the feed, matching the web's compact card: accent title + author · day +
  * top-right outline icons (photo, react, comment), summary stats with PRs, photos, and up to
- * three exercises with their icons, expanding inline when there are more. Opening the reaction
- * picker floats it over the card without shifting cards below while sibling cards fade back.
+ * three exercises with their icons, expanding inline when there are more. Sibling cards fade back
+ * while its emoji sheet is open.
  */
 export function FeedCard({
   item,
@@ -233,12 +233,7 @@ export function FeedCard({
         </View>
       )}
       {reaction.picking && (
-        <ReactionPicker
-          floating
-          subject={subject}
-          yours={item.reactions.yours}
-          control={reaction}
-        />
+        <ReactionPicker subject={subject} yours={item.reactions.yours} control={reaction} />
       )}
       {(reaction.people || !!peopleFocus) && (
         <ReactionPeopleSheet

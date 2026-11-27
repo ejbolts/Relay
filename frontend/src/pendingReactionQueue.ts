@@ -1,4 +1,4 @@
-import { REACTIONS } from './friendFeedData';
+import { reactionChoice } from './friendFeedData';
 import type { WorkoutReactionKind, WorkoutReactions } from './types';
 
 // Reactions chosen without a connection, kept on the device per account until the server can be
@@ -116,6 +116,6 @@ export async function sendPendingReactions(queue: {
 
 /** The React button's spoken label while a choice waits for a connection. */
 export function pendingReactionLabel(subject: string, pending: PendingReaction): string {
-  const choice = REACTIONS.find((entry) => entry.kind === pending);
+  const choice = reactionChoice(pending);
   return `${choice ? `${choice.label} reaction` : 'Reaction removal'} to ${subject} sends when you're back online`;
 }

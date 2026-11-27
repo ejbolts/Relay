@@ -27,6 +27,12 @@ const workouts: TrackedWorkout[] = dates.map((date) => ({
 let root: Root, host: HTMLDivElement;
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -163,7 +169,12 @@ it('puts reaction and comment buttons on each profile workout, without opening i
   expect(labelled(cards[1], `0 comments on Riley’s ${pair[1].name}`)).not.toBeNull();
 
   await act(async () => labelled(cards[1], `React to Riley’s ${pair[1].name}`)!.click());
-  await act(async () => labelled(cards[1], 'Fire')!.click());
+  await vi.waitFor(() => expect(document.querySelector('.emoji-reaction-sheet')).not.toBeNull());
+  await act(async () =>
+    document
+      .querySelector<HTMLButtonElement>('.emoji-reaction-sheet button[aria-label="fire"]')!
+      .click(),
+  );
   expect(react).toHaveBeenCalledWith(pair[1].id, 'fire');
   expect(onReactionsChange).toHaveBeenCalledWith(
     pair[1].id,
