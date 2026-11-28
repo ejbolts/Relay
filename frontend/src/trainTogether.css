@@ -207,12 +207,12 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5625rem;
+  gap: 0.5rem;
   min-height: 2.75rem;
 }
 
 .tt-deck-partner-copy {
-  flex: 1 1 8.5rem;
+  flex: 1 1 6.5rem;
   min-width: 0;
 }
 
@@ -1113,8 +1113,9 @@
   gap: 0.3125rem;
   padding: 0.25rem 0.625rem;
   border-radius: 999px;
-  background: var(--p-accent-soft);
-  color: var(--p-accent-text);
+  /* Always on the white QR card: keep dark readable accent ink in both light and dark modes. */
+  background: color-mix(in srgb, var(--p-accent) 13%, #ffffff);
+  color: color-mix(in srgb, var(--p-accent) 82%, #14181c);
   font-size: 0.8125rem;
   font-weight: 800;
   flex: none;
