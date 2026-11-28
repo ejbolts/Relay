@@ -27,6 +27,7 @@ What the native app covers compared with the web app, which it will replace. Upd
 | Split editor and split library                | ✅     |                                                                                                                     |
 | Imports, exports and backups                  | ✅     |                                                                                                                     |
 | Admin and video logger                        | ✅     | Connecting YouTube in the app is built; confirm its return in a development build (below)                           |
+| Train together                                | ✅     | Opening its links from the camera or browser is built; confirm it in a development build (below)                    |
 
 ## App-only
 
@@ -63,7 +64,7 @@ What the native app covers compared with the web app, which it will replace. Upd
 ## Known platform gaps
 
 - **Built, but needs a development build to confirm.** Expo Go can't run most of these, and this PC can't build iOS:
-  - opening friend links from the camera or browser (universal links and App Links, from `RELAY_APP_LINK_HOSTS` and the server's well-known settings). Android's App Links can't match the `#friend=` fragment, so they match the server's whole root address: on a configured Android phone, any link to Relay's web address opens the app, which then reads the fragment itself;
+  - opening friend links from the camera or browser (universal links and App Links, from `RELAY_APP_LINK_HOSTS` and the server's well-known settings). Android's App Links can't match the `#friend=` fragment, so they match the server's whole root address: on a configured Android phone, any link to Relay's web address opens the app, which then reads the fragment itself. Train-together links (`#train=`) are matched and opened the same way, and joined once signed in;
   - remote push delivery (an EAS project, FCM and APNs credentials, `RELAY_GOOGLE_SERVICES_FILE`);
   - the rest timer's Live Activity (its Swift has not been compiled here);
   - YouTube sign-in returning to the app. Google returns to the server over HTTPS, and the server then sends the browser to `relay-mobile://youtube-return`. Expo Go can try it only for a Metro host listed in the server's `GYM_YOUTUBE_APP_DEV_RETURN_HOSTS`, and on the Android emulator Chrome didn't follow that redirect from a plain-HTTP test server;

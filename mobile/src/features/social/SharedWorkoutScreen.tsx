@@ -35,6 +35,7 @@ import { useScrollToComment } from './scrollToComment';
 import { useSharedProfile, useSharedWorkout } from './socialQueries';
 import { WorkoutPhotoActions } from './WorkoutPhotoActions';
 import { WorkoutPhotos } from './WorkoutPhotos';
+import { TrainedWithPill } from '../train/TrainedWithPill';
 
 /**
  * A shared workout opened from the feed or Home: who logged it, its summary, exercises and sets,
@@ -137,6 +138,8 @@ export function SharedWorkoutScreen({
             <Text accessibilityRole="header" style={[type.title, { color: colors.text }]}>
               {session.name}
             </Text>
+            {/* Train together: who it was trained with. */}
+            <TrainedWithPill workout={workout} />
             {(stats.length > 0 || records > 0) && (
               <View style={styles.statsRow}>
                 {stats.length > 0 && (
