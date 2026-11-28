@@ -683,37 +683,83 @@ describe('TrainTogetherPartnerView', () => {
     expect(row.classList.contains('is-done')).toBe(false);
   });
 
-  it('shows server refusal message instead of offline bar when edit is rejected (finding 12)', async () => {
-    const sam = makePartner('u-sam', 'Sam', true);
-    const baseDraft = makePartnerDraft(false);
-    await act(async () =>
-      root.render(
-        <TrainTogetherPartnerView
-          partner={sam}
-          palette={partnerPalettes('blue', 1, false)[0]}
-          syncState={{
-            revision: 4,
-            draft: baseDraft,
-            status: 'failed',
-            notApplied: false,
-            error: new ApiError(
-              'Reps must be between 0 and 10,000.',
-              TRAIN_ERRORS.changeNotAllowed,
-              422,
-            ),
-            exercises: null,
-          }}
-          acknowledgedDraft={baseDraft}
-          weightUnit="kg"
-          onEdit={vi.fn().mockResolvedValue(undefined)}
-          onRetry={vi.fn().mockResolvedValue(undefined)}
-          onRegisterExercises={vi.fn()}
-          onBackToMine={vi.fn()}
-        />,
-      ),
+  it('discards a refused partner edit, keeps partner logger open with no inline bar, and shows error toast (case 3)', async () => {
+    const serverDraft = makePartnerDraft(false);
+    const sam = makePartner('u-sam', 'Sam Rivera', true);
+    sam.workout = {
+      revision: 4,
+      draft: serverDraft,
+      exercises: sam.workout!.exercises,
+    };
+    const session: TrainSession = {
+      id: 'sess-refuse',
+      created_by: 'u-self',
+      started_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+      max_members: 4,
+      members: [
+        {
+          user_id: 'u-self',
+          username: 'self',
+          display_name: 'You',
+          photo_url: null,
+          joined_at: new Date().toISOString(),
+          is_self: true,
+          workout: null,
+        },
+        sam,
+      ],
+    };
+    vi.spyOn(api.trainTogether, 'read').mockResolvedValue({ session, ended: null });
+    vi.spyOn(api.trainTogether, 'changePartnerWorkout').mockRejectedValueOnce(
+      new ApiError('Reps must be between 0 and 10,000.', TRAIN_ERRORS.changeNotAllowed, 422),
     );
-    expect(container.textContent).toContain('Reps must be between 0 and 10,000.');
+
+    const errorToasts: string[] = [];
+    const retired = vi.fn();
+    function RefusedViewHarness() {
+      const tt = useTrainTogether('u-self', undefined, {
+        onErrorNotice: (msg) => errorToasts.push(msg),
+        onPartnerRetired: retired,
+      });
+      const partner = tt.partners[0];
+      if (!partner) return null;
+      return (
+        <TrainTogetherPartnerView
+          partner={partner}
+          palette={partnerPalettes('blue', 1, false)[0]}
+          syncState={tt.partnerSyncStates[partner.user_id]}
+          acknowledgedDraft={tt.partnerAcknowledgedDrafts[partner.user_id]}
+          conflictCount={tt.partnerConflictCounts[partner.user_id] ?? 0}
+          extraExercises={tt.partnerExercisesByUser[partner.user_id]}
+          viewerAddedMovementKeys={tt.viewerAddedMovements[partner.user_id]}
+          weightUnit="kg"
+          onEdit={(change, added) => tt.editPartnerWorkout(partner.user_id, change, added)}
+          onRetry={() => tt.retryPartnerSync(partner.user_id)}
+          onRegisterExercises={(list) => tt.registerPartnerExercises(partner.user_id, list)}
+          onBackToMine={vi.fn()}
+        />
+      );
+    }
+
+    await act(async () => root.render(<RefusedViewHarness />));
+    const tickBtn = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Complete Bench Press set 1"]',
+    )!;
+    await act(async () => {
+      tickBtn.click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    expect(retired).not.toHaveBeenCalled();
+    expect(errorToasts).toEqual(['Reps must be between 0 and 10,000.']);
+    expect(container.querySelector('.tt-partner-offline-bar')).toBeNull();
     expect(container.textContent).not.toContain('Offline · Unsent change');
+    // Refused tick was discarded: set 1 is neither pending nor done, and count stays 0 done.
+    const row = container.querySelector<HTMLElement>('.tt-partner-set-row[data-set-key="s1"]')!;
+    expect(row.classList.contains('is-pending')).toBe(false);
+    expect(row.classList.contains('is-done')).toBe(false);
+    expect(container.textContent).toContain('Sam’s sets · 0 done');
   });
 
   it('rejects invalid weight/reps locally without sending, while accepting kg, lb and empty clears (finding 13)', async () => {
@@ -1251,6 +1297,32 @@ describe('TrainTogetherPartnerView', () => {
     expect(repsInput.value).toBe('12');
     expect(row.classList.contains('is-pending')).toBe(false);
     expect(row.classList.contains('is-done')).toBe(true);
+
+    // Case C: Conflict on another field leaves half-typed "82." in a focused Weight field alone
+    // when it already reads as the stored weight (82 kg).
+    const halfTypedBase = makePartnerDraft(true);
+    halfTypedBase.movements[0].sets[0].weight_kg = 82;
+    halfTypedBase.movements[0].sets[0].reps = 12;
+    await renderWith(halfTypedBase, halfTypedBase, { revision: 7 }, 1);
+    await act(async () => {
+      weightInput.focus();
+      setInputValue(weightInput, '82.');
+    });
+    expect(weightInput.value).toBe('82.');
+
+    // Another field (reps) conflicts and updates to 14, while stored weight stays 82 kg.
+    const otherFieldConflict = makePartnerDraft(true);
+    otherFieldConflict.movements[0].sets[0].weight_kg = 82;
+    otherFieldConflict.movements[0].sets[0].reps = 14;
+    await renderWith(
+      otherFieldConflict,
+      otherFieldConflict,
+      { revision: 8, status: 'conflict', notApplied: true },
+      2,
+    );
+    expect(document.activeElement).toBe(weightInput);
+    expect(weightInput.value).toBe('82.');
+    expect(repsInput.value).toBe('14');
   });
 });
 

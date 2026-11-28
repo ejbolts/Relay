@@ -469,7 +469,7 @@ describe('App train-together review fixes', () => {
       rejectLeave(new Error('Offline — cannot leave right now'));
       await Promise.resolve();
     });
-    expect(document.body.textContent).toContain('Offline — cannot leave right now');
+    expect(document.body.textContent).toContain('Couldn’t leave the session. Try again.');
   });
 
   it('moves keyboard focus to partner banner on entry and restores partner Log button on return (finding 18)', async () => {
@@ -740,5 +740,58 @@ describe('App train-together review fixes', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('closes partner mode and shows partnerAccessEndedNotice as an error toast on train_no_workout (case 2)', async () => {
+    const now = Date.now();
+    writeActiveWorkoutDraft({
+      version: 1,
+      clientSessionId: '44444444-4444-4444-8444-444444444444',
+      startedAt: now - 60_000,
+      updatedAt: now - 5_000,
+      lastActiveAt: now - 5_000,
+      name: 'My Push',
+      workoutDate: '2026-11-28',
+      category: 'push',
+      notes: '',
+      movements: [],
+    });
+    vi.mocked(api.trainTogether.read)
+      .mockResolvedValueOnce({ session: makePartnerSession(), ended: null })
+      .mockResolvedValue({ session: null, ended: null });
+    vi.spyOn(api.trainTogether, 'changePartnerWorkout').mockRejectedValueOnce(
+      new ApiError('Server raw wording that must not be used.', TRAIN_ERRORS.noWorkout, 404),
+    );
+
+    window.history.replaceState(null, '', '/#log');
+    await act(async () =>
+      root.render(
+        <ToastProvider>
+          <UserContext.Provider value={makeSessionContext(ACCOUNT_A)}>
+            <App />
+          </UserContext.Provider>
+        </ToastProvider>,
+      ),
+    );
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 20)));
+
+    const logForBtn = [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+      b.textContent?.includes('Log for'),
+    )!;
+    await act(async () => logForBtn.click());
+    expect(document.querySelector('.tt-partner-view')).not.toBeNull();
+
+    const tickBtn = document.querySelector<HTMLButtonElement>(
+      '.tt-partner-view button[aria-label*="set 1"]',
+    )!;
+    await act(async () => {
+      tickBtn.click();
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+
+    // Returned to own logger, partner view closed, shared error toast shown.
+    expect(document.querySelector('.tt-partner-view')).toBeNull();
+    const errorToast = document.querySelector('[data-variant="error"][role="alert"]');
+    expect(errorToast?.textContent).toContain('Sam Rivera’s workout is no longer open to you.');
   });
 });

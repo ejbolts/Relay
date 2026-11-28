@@ -74,6 +74,20 @@ function formatCardioSet(item: StoredDraftSet, weightUnit: WeightUnit): string {
   );
 }
 
+function weightReadsAsStored(text: string, unit: WeightUnit, storedKg: number | null): boolean {
+  const checked = partnerWeightInput(text, unit, storedKg);
+  if (checked.kind === 'empty') return storedKg === null;
+  if (checked.kind === 'value') return checked.value === storedKg;
+  return false;
+}
+
+function repsReadsAsStored(text: string, storedReps: number | null): boolean {
+  const checked = partnerRepsInput(text);
+  if (checked.kind === 'empty') return storedReps === null;
+  if (checked.kind === 'value') return checked.value === storedReps;
+  return false;
+}
+
 function PartnerSetRow({
   set,
   label,
@@ -103,16 +117,33 @@ function PartnerSetRow({
   const [repsError, setRepsError] = useState<string | null>(null);
   const errorId = useId();
   const lastConflictKeyRef = useRef(conflictResetKey);
+  const weightFocusedRef = useRef(weightFocused);
+  weightFocusedRef.current = weightFocused;
+  const repsFocusedRef = useRef(repsFocused);
+  repsFocusedRef.current = repsFocused;
+  const weightTextRef = useRef(weightText);
+  weightTextRef.current = weightText;
+  const repsTextRef = useRef(repsText);
+  repsTextRef.current = repsText;
 
-  // When an edit is reported not applied (conflict), adopt the server's values even if focused.
+  // When an edit is reported not applied (conflict), replace a focused field's text only when
+  // it does not already read as the stored value (so half-typed input like "82." in another
+  // field is left alone, while a conflicted edit adopts the server's value).
   useEffect(() => {
     if (conflictResetKey === lastConflictKeyRef.current) return;
     lastConflictKeyRef.current = conflictResetKey;
     if (!conflictResetKey) return;
-    setWeightText(weightInputValue(set.weight_kg, weightUnit));
-    setWeightError(null);
-    setRepsText(set.reps === null ? '' : String(set.reps));
-    setRepsError(null);
+    if (
+      !weightFocusedRef.current ||
+      !weightReadsAsStored(weightTextRef.current, weightUnit, set.weight_kg)
+    ) {
+      setWeightText(weightInputValue(set.weight_kg, weightUnit));
+      setWeightError(null);
+    }
+    if (!repsFocusedRef.current || !repsReadsAsStored(repsTextRef.current, set.reps)) {
+      setRepsText(set.reps === null ? '' : String(set.reps));
+      setRepsError(null);
+    }
   }, [conflictResetKey, set.weight_kg, set.reps, weightUnit]);
 
   // Keep input text in sync with remote updates when not focused and not holding invalid local input.
@@ -420,7 +451,7 @@ export function TrainTogetherPartnerView({
 
   const name = memberName(partner);
   const shortName = memberShortName(partner);
-  const draft = syncState?.draft ?? partner.workout?.draft ?? null;
+  const draft = syncState?.draft ?? acknowledgedDraft ?? partner.workout?.draft ?? null;
   const pause = draftPause(draft);
   const paused = Boolean(draft && pause.pausedAt !== null);
   const now = useNow(Boolean(draft) && !paused, 1000);
@@ -459,13 +490,7 @@ export function TrainTogetherPartnerView({
     0,
   );
   const workoutTitle = draft ? partnerWorkoutName({ draft }) : 'workout';
-  const isRefusal = syncState?.status === 'failed' && isPartnerWriteRefusal(syncState.error);
-  const showOfflineBar = syncState?.status === 'failed' && !isRefusal;
-  const refusalMessage = isRefusal
-    ? syncState.error instanceof Error
-      ? syncState.error.message
-      : 'That change could not be saved.'
-    : null;
+  const showOfflineBar = syncState?.status === 'failed' && !isPartnerWriteRefusal(syncState.error);
   const conflictResetKey: number | string =
     conflictCount !== undefined
       ? conflictCount
@@ -520,13 +545,6 @@ export function TrainTogetherPartnerView({
             >
               {retrying ? 'Retrying…' : 'Retry'}
             </button>
-          </div>
-        )}
-        {refusalMessage && (
-          <div className="tt-partner-offline-bar" role="alert">
-            <span className="tt-partner-offline-copy">
-              <span>{refusalMessage}</span>
-            </span>
           </div>
         )}
 

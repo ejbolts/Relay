@@ -521,6 +521,8 @@ import { LandscapeChartFrame } from './LandscapeChartFrame';
 import { crossesNewYear } from './chartYears';
 import { onWorkoutFocusRequested } from './workoutFocus';
 import {
+  friendRequestSentNotice,
+  leaveFailedNotice,
   partners as sessionPartners,
   TRAIN_ERRORS,
   type TrainMember,
@@ -1030,8 +1032,13 @@ function AppContent() {
   // Cancel this browser's legacy elapsed-time reminder; the server tracks shared activity.
   useActiveWorkoutReminder(null);
   const workoutSync = useActiveWorkoutSync(user?.id ?? null);
+  const showTrainErrorToast = useCallback(
+    (message: string) => showToast({ message, variant: 'error' }),
+    [showToast],
+  );
   const trainTogether = useTrainTogether(user?.id ?? null, showToast, {
     confirmed: sessionConfirmed,
+    onErrorNotice: showTrainErrorToast,
     onPartnerRetired: (partnerId) =>
       setActivePartnerId((current) => (current === partnerId ? null : current)),
   });
@@ -1071,10 +1078,10 @@ function AppContent() {
       await trainTogether.leave();
       setActivePartnerId(null);
       return true;
-    } catch (reason) {
+    } catch {
       if (trainMountedRef.current) {
         showToast({
-          message: reason instanceof Error ? reason.message : 'Could not leave the session.',
+          message: leaveFailedNotice,
           variant: 'error',
         });
       }
@@ -1337,7 +1344,7 @@ function AppContent() {
                     showToast(
                       res.status === 'friends'
                         ? `Added ${target.name} as a friend`
-                        : `Friend request sent to ${target.name}`,
+                        : friendRequestSentNotice(target.name),
                     );
                   } catch (err) {
                     if (!trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
