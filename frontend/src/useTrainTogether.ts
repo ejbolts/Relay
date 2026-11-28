@@ -97,6 +97,8 @@ export function useTrainTogether(
     confirmed?: boolean;
     onErrorNotice?: (message: string) => void;
     onPartnerRetired?: (partnerId: string) => void;
+    /** Someone new is in the session: the code sheet closes, as it does in the app. */
+    onPartnerJoined?: (partnerIds: string[]) => void;
   },
 ): TrainTogetherController {
   const confirmed = options?.confirmed ?? true;
@@ -134,6 +136,8 @@ export function useTrainTogether(
   onErrorNoticeRef.current = options?.onErrorNotice;
   const onPartnerRetiredRef = useRef(options?.onPartnerRetired);
   onPartnerRetiredRef.current = options?.onPartnerRetired;
+  const onPartnerJoinedRef = useRef(options?.onPartnerJoined);
+  onPartnerJoinedRef.current = options?.onPartnerJoined;
   const refreshRef = useRef<
     ((options?: { silent?: boolean }) => Promise<TrainTogetherRead | null>) | null
   >(null);
@@ -368,6 +372,7 @@ export function useTrainTogether(
           current && (!next.session || current.session_id === next.session.id) ? null : current,
         );
         setRecentlyJoinedIds(new Set(newlyJoined));
+        onPartnerJoinedRef.current?.(newlyJoined);
         if (joinPulseTimerRef.current !== null) window.clearTimeout(joinPulseTimerRef.current);
         joinPulseTimerRef.current = window.setTimeout(() => {
           if (generationRef.current !== expectedGen) return;

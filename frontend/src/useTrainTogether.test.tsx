@@ -671,6 +671,36 @@ describe('useTrainTogether', () => {
     expect(latest.partnerAcknowledgedDrafts['u-sam']?.movements[0].sets).toHaveLength(2);
   });
 
+  it('tells the screen when a partner joins, so the code sheet can close', async () => {
+    vi.spyOn(api.trainTogether, 'read')
+      .mockResolvedValueOnce({ session: null, ended: null })
+      .mockResolvedValueOnce({ session: makeSession(), ended: null })
+      .mockResolvedValueOnce({ session: makeSession(), ended: null });
+    const joined = vi.fn();
+    function JoinHarness() {
+      latest = useTrainTogether('u-self', (message) => notices.push(message), {
+        onPartnerJoined: joined,
+      });
+      return null;
+    }
+
+    await act(async () => root.render(<JoinHarness />));
+    // The first read is quiet: nobody has joined.
+    expect(joined).not.toHaveBeenCalled();
+
+    await act(async () => {
+      window.dispatchEvent(new Event(TRAIN_TOGETHER_CHANGED));
+    });
+    expect(joined).toHaveBeenCalledTimes(1);
+    expect(joined).toHaveBeenCalledWith([latest.partners[0].user_id]);
+
+    // A later read with the same partner is not a new join.
+    await act(async () => {
+      window.dispatchEvent(new Event(TRAIN_TOGETHER_CHANGED));
+    });
+    expect(joined).toHaveBeenCalledTimes(1);
+  });
+
   it('runs no timers and causes no extra renders when no session or invite is live', async () => {
     vi.useFakeTimers();
     try {

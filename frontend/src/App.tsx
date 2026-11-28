@@ -1036,14 +1036,17 @@ function AppContent() {
     (message: string) => showToast({ message, variant: 'error' }),
     [showToast],
   );
+  const [trainSheetOpen, setTrainSheetOpen] = useState(false);
   const trainTogether = useTrainTogether(user?.id ?? null, showToast, {
     confirmed: sessionConfirmed,
     onErrorNotice: showTrainErrorToast,
     onPartnerRetired: (partnerId) =>
       setActivePartnerId((current) => (current === partnerId ? null : current)),
+    // The logger shows who joined, so the code sheet gets out of its way, as in the app.
+    // Reopening it makes another code.
+    onPartnerJoined: () => setTrainSheetOpen(false),
   });
   const trainPalettes = usePartnerPalettes(Math.max(trainTogether.partners.length, 1));
-  const [trainSheetOpen, setTrainSheetOpen] = useState(false);
   const [trainStartPartnerId, setTrainStartPartnerId] = useState<string | null>(null);
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
   const [trainInviteTick, setTrainInviteTick] = useState(0);
