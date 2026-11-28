@@ -642,6 +642,91 @@ class ActiveWorkoutReminder(Base):
     cancelled: Mapped[bool] = mapped_column(Boolean, default=False)
 
 
+TRAIN_TOGETHER_REASONS = ("left", "finished", "discarded", "expired", "unfriended")
+_TRAIN_REASON_SQL = ", ".join(f"'{reason}'" for reason in TRAIN_TOGETHER_REASONS)
+
+
+class TrainTogetherSession(Base):
+    """Friends at the gym who linked their live workouts; see train_together.py."""
+
+    __tablename__ = "train_together_sessions"
+    __table_args__ = (
+        CheckConstraint(
+            f"ended_reason IS NULL OR ended_reason IN ({_TRAIN_REASON_SQL})",
+            name="train_session_reason_known",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    # Cleared when that account is deleted; the session and everyone else's history stay.
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # Whose action ended it; kept as history, so a deleted account only clears the link.
+    ended_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
+class TrainTogetherMember(Base):
+    """One attendance: an account's time in a session, and the workout it saved from it.
+
+    A rejoin is a new row. An account has at most one open row (``left_at`` is null).
+    """
+
+    __tablename__ = "train_together_members"
+    __table_args__ = (
+        CheckConstraint(
+            f"left_reason IS NULL OR left_reason IN ({_TRAIN_REASON_SQL})",
+            name="train_member_reason_known",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("train_together_sessions.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    left_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # The member's live draft (its clientSessionId) while they were a member.
+    draft_session_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    workout_id: Mapped[str | None] = mapped_column(
+        ForeignKey("training_workouts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+
+
+Index(
+    "uq_train_together_members_open",
+    TrainTogetherMember.user_id,
+    unique=True,
+    sqlite_where=TrainTogetherMember.left_at.is_(None),
+)
+
+
+class TrainTogetherInvite(Base):
+    """A single-use code for joining a session, stored hashed."""
+
+    __tablename__ = "train_together_invites"
+
+    token_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    session_id: Mapped[str] = mapped_column(
+        ForeignKey("train_together_sessions.id", ondelete="CASCADE"), index=True
+    )
+    created_by: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    used_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+
+
 class ImportBatch(Base):
     __tablename__ = "import_batches"
 

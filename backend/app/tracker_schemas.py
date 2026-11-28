@@ -408,6 +408,15 @@ class WorkoutMovementRead(BaseModel):
     sets: list[WorkoutSetRead] = []
 
 
+class TrainedWithRead(BaseModel):
+    """Someone who trained together with the workout's owner, as the viewer may see them."""
+
+    user_id: str
+    display_name: str
+    username: str
+    photo_url: str | None = None
+
+
 class TrainingWorkoutRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -428,6 +437,9 @@ class TrainingWorkoutRead(BaseModel):
     updated_at: datetime
     movements: list[WorkoutMovementRead] = []
     photos: list[WorkoutPhotoRead] = []
+    # Train together: set by train_together.attach_trained_with, empty for older paths.
+    trained_with: list[TrainedWithRead] = []
+    trained_with_count: int = 0
 
 
 class WorkoutCacheRevisionRead(BaseModel):

@@ -93,6 +93,7 @@ from .storage import (
 from .tip_state import router as tip_state_router
 from .tracker import router as tracker_router
 from .tracker import seed_default_exercises, sync_all_workout_cardio_sessions
+from .train_together import router as train_together_router
 from .training_blocks import router as training_blocks_router
 from .training_metrics import rebuild_personal_records
 from .username_reminder_requests import admin_username_request_router, username_request_router
@@ -781,6 +782,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(weight_mapping_router)
     app.include_router(youtube_router)
     app.include_router(app_links_router)
+    app.include_router(train_together_router)
 
     frontend_dist = Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if frontend_dist.is_dir():
