@@ -6,6 +6,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
@@ -314,12 +315,17 @@ function Ticker({
   );
 }
 
+/** The name and live line's minimum width at normal text size (scaled with the font). */
+const IDENTITY_MIN_WIDTH = 160;
+
 /**
  * The live deck under the logger's header while training together: who you're with, what each is
  * doing, and the switch to log for them.
  */
 export function TrainDeck({ unit }: { unit: WeightUnit }) {
   const { colors, type } = useTheme();
+  // Larger text needs more room before the Log button wraps under the name, not over it.
+  const { fontScale } = useWindowDimensions();
   const reduced = useReduceMotion();
   const list = useTrainPartners();
   const tones = usePartnerColours();
@@ -384,7 +390,7 @@ export function TrainDeck({ unit }: { unit: WeightUnit }) {
             const sets = member.workout ? partnerSummary(member.workout, 0).totalSetsDone : 0;
             return (
               <View style={styles.single}>
-                <View style={styles.identity}>
+                <View style={[styles.identity, { minWidth: IDENTITY_MIN_WIDTH * fontScale }]}>
                   <View>
                     {fresh(member) && <JoinPulse size={38} colour={tone.accent} />}
                     <PartnerAvatar

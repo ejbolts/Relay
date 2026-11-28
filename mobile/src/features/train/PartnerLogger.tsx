@@ -90,6 +90,8 @@ export function PartnerLogger({
   const [picking, setPicking] = useState(false);
   const scrollRef = useRef<ComponentRef<typeof ScrollView>>(null);
   const cardTops = useRef(new Map<string, number>());
+  /** An exercise just added here, shown once its card has laid out. */
+  const reveal = useRef<string | null>(null);
   const member = partners(session).find((item) => item.user_id === partnerId) ?? null;
   const draft = sync?.draft ?? member?.workout?.draft ?? null;
   const exercises = useMemo(() => {
@@ -134,6 +136,7 @@ export function PartnerLogger({
     // Keys and time are made once, here: the queue may run the updater again after a conflict.
     const keys = { movementKey: newId(), setKey: newId() };
     const now = editTime();
+    reveal.current = keys.movementKey;
     edit((current) => addPartnerMovement(current, exercise.id, keys, now), keys.movementKey);
   }
 
@@ -196,7 +199,13 @@ export function PartnerLogger({
         {draft.movements.map((movement, index) => (
           <View
             key={movement.key}
-            onLayout={(event) => cardTops.current.set(movement.key, event.nativeEvent.layout.y)}
+            onLayout={(event) => {
+              const y = event.nativeEvent.layout.y;
+              cardTops.current.set(movement.key, y);
+              if (reveal.current !== movement.key) return;
+              reveal.current = null;
+              scrollRef.current?.scrollTo({ y: Math.max(0, y - space.gutter) });
+            }}
           >
             <PartnerCard
               number={index + 1}
