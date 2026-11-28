@@ -27,6 +27,7 @@ What the native app covers compared with the web app, which it will replace. Upd
 | Split editor and split library                | ✅     |                                                                                                                     |
 | Imports, exports and backups                  | ✅     |                                                                                                                     |
 | Admin and video logger                        | ✅     | Connecting YouTube in the app is built; confirm its return in a development build (below)                           |
+| Train together                                | ✅     | Opening its links from the camera or browser is built; confirm it in a development build (below)                    |
 
 ## App-only
 

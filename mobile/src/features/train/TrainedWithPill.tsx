@@ -1,9 +1,16 @@
 import { StyleSheet, Text, View } from 'react-native';
 import { trainedWithLabel } from '../../../../frontend/src/trainTogether';
 import type { TrackedWorkout } from '../../../../frontend/src/types';
-import { useOptionalSession } from '../../session/SessionProvider';
+import * as sessionModule from '../../session/SessionProvider';
 import { useTheme } from '../../ui/theme';
 import { PartnerAvatar } from './PartnerAvatar';
+
+// Screen tests often mock the session module with only the hooks they need, as the toast notes.
+type Status = NonNullable<ReturnType<typeof sessionModule.useOptionalSession>>['status'];
+const useStatus: () => Status | undefined =
+  typeof sessionModule.useOptionalSession === 'function'
+    ? () => sessionModule.useOptionalSession()?.status
+    : () => undefined;
 
 /**
  * "with Sam" on a saved workout trained together: up to three overlapping avatars and the
@@ -16,7 +23,7 @@ export function TrainedWithPill({
   workout: Pick<TrackedWorkout, 'trained_with' | 'trained_with_count'>;
 }) {
   const { colors } = useTheme();
-  const status = useOptionalSession()?.status;
+  const status = useStatus();
   const viewerId = status?.kind === 'signed-in' ? status.user.id : null;
   const label = trainedWithLabel(workout.trained_with, workout.trained_with_count, viewerId);
   if (!label) return null;

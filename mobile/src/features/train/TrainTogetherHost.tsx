@@ -173,8 +173,12 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
     }
 
     /** Takes an answer from the server as the session now. */
-    function adopt(next: TrainTogetherRead) {
-      latest.current.client.setQueryData(readKey, next);
+    async function adopt(next: TrainTogetherRead) {
+      // A read already on its way is older than this answer: drop it (its cancel settles first,
+      // so it can't put back what was there before).
+      const { client } = latest.current;
+      await client.cancelQueries({ queryKey: readKey }, { revert: false });
+      client.setQueryData(readKey, next);
     }
 
     const actions: TrainActions = {
@@ -197,7 +201,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
         }
         // The join is announced even before the first read has answered.
         previous.current ??= NOBODY;
-        adopt(result);
+        await adopt(result);
         haptics.success();
         setTrainState({ sheet: { ...getTrainState().sheet, open: false } });
         const { workout: engine, pathname: path } = latest.current;
@@ -215,7 +219,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
           .then((result) => {
             // Your own leaving says nothing.
             previous.current = result;
-            adopt(result);
+            return adopt(result);
           })
           .catch((error: unknown) =>
             showToast(failure(error).message, undefined, { variant: 'error' }),
