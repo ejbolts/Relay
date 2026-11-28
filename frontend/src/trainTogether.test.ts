@@ -7,6 +7,7 @@ import {
   inviteCountdownLabel,
   inviteSecondsLeft,
   loggingForLabel,
+  memberShortName,
   nameList,
   partnerConflictNotice,
   partners,
@@ -169,6 +170,16 @@ describe('partners and colours', () => {
     expect(partnerThemeIds('plum', 3)).toEqual(['amber', 'coral', 'emerald']);
     expect(partnerThemeIds('blue', 5)).toEqual(['plum', 'amber', 'coral', 'emerald', 'plum']);
     expect(partnerThemeIds('blue', 0)).toEqual([]);
+  });
+
+  it('shortens a name to its first word for tight controls', () => {
+    expect(memberShortName({ display_name: 'Alex Morgan', username: 'alex' })).toBe('Alex');
+    expect(memberShortName({ display_name: '  Priya  ', username: 'p' })).toBe('Priya');
+    expect(memberShortName({ display_name: 'Maximilianusbartholomew Jr', username: 'm' })).toBe(
+      'Maximilianusbart',
+    );
+    expect(memberShortName({ display_name: '   ', username: 'sam' })).toBe('sam');
+    expect(memberShortName({ display_name: null, username: null })).toBe('Your partner');
   });
 
   it('joins names the same way everywhere', () => {

@@ -145,6 +145,18 @@ export function memberName(member: { display_name?: string | null; username?: st
   return member.display_name?.trim() || member.username?.trim() || 'Your partner';
 }
 
+/**
+ * A name for tight controls: the first word of the display name, at most 16 characters ("Alex"
+ * for "Alex Morgan"), or `memberName` when there is no display name.
+ */
+export function memberShortName(member: {
+  display_name?: string | null;
+  username?: string | null;
+}): string {
+  const first = member.display_name?.trim().split(/\s+/)[0] ?? '';
+  return first ? Array.from(first).slice(0, 16).join('') : memberName(member);
+}
+
 /** The session's members who are not the caller, in the server's stable order. */
 export function partners(session: TrainSession | null | undefined): TrainMember[] {
   return session?.members.filter((member) => !member.is_self) ?? [];
