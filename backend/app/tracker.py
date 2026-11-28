@@ -1352,7 +1352,7 @@ def list_machine_photo_workouts(
         )
         .where(movement_machine_photos.c.machine_photo_id == photo_id)
     )
-    return list(
+    workouts = list(
         db.scalars(
             select(TrainingWorkout)
             .where(TrainingWorkout.user_id == user.id, TrainingWorkout.id.in_(pinned_workout_ids))
@@ -1360,6 +1360,7 @@ def list_machine_photo_workouts(
             .order_by(TrainingWorkout.workout_date.desc(), TrainingWorkout.created_at.desc())
         )
     )
+    return with_trained_with(db, user, workouts)
 
 
 @router.get("/exercises/{exercise_id}/machine-photos", response_model=list[MachinePhotoUsageRead])
@@ -2595,6 +2596,26 @@ def with_trained_with(db: Session, user: User, workouts):
     return train_together.attach_trained_with(db, user, workouts)
 
 
+def link_trained_together(
+    db: Session, user_id: str, session_id: str | None, workout_id: str
+) -> set[str]:
+    """Link a saved workout to its train-together attendance; commit, then notify the result."""
+    from . import train_together  # train_together builds on this module
+
+    return train_together.workout_saved(db, user_id, session_id, workout_id)
+
+
+def repeated_finish(
+    db: Session, user: User, session_id: str | None, workout: TrainingWorkout
+) -> TrainingWorkout:
+    """A retried finish returns the saved workout, repairing a missing train-together link."""
+    trained = link_trained_together(db, user.id, session_id, workout.id)
+    if trained:
+        db.commit()
+        presence_hub.train_together_changed(*trained)
+    return with_trained_with(db, user, workout)
+
+
 @router.get("/workouts", response_model=list[TrainingWorkoutRead])
 def list_workouts(db: DbSession, user: CurrentUser) -> list[TrainingWorkout]:
     return with_trained_with(db, user, workouts_between(db, user.id))
@@ -2839,7 +2860,7 @@ def create_workout(
     if existing is not None:
         check_repeated_finish(existing, payload)
         report_workout_revision(response, db, user_id)
-        return existing
+        return repeated_finish(db, user, client_session_id, existing)
     try:
         workout = insert_workout(db, user, settings, payload)
     except IntegrityError:
@@ -2848,7 +2869,7 @@ def create_workout(
         if existing is not None:
             check_repeated_finish(existing, payload)
             report_workout_revision(response, db, user_id)
-            return existing
+            return repeated_finish(db, user, client_session_id, existing)
         raise
     saved = load_workout(db, user.id, workout.id)
     report_workout_revision(response, db, user_id)
@@ -2891,13 +2912,12 @@ def insert_workout(
     sync_workout_cardio_sessions(db, workout)
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
+    # Train together: remember who it was trained with and leave as finished, in this commit.
+    trained = link_trained_together(db, user.id, client_session_id, workout.id)
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
     presence_hub.active_workout_changed(user.id)
-    # Train together: remember who it was trained with, and leave the session as finished.
-    from . import train_together  # train_together builds on this module
-
-    train_together.workout_saved(db, user.id, client_session_id, workout.id)
+    presence_hub.train_together_changed(*trained)
     return workout
 
 
@@ -3236,7 +3256,7 @@ def update_workout(
         ):
             check_repeated_finish(workout, payload)
             report_workout_revision(response, db, user.id)
-            return workout
+            return repeated_finish(db, user, str(payload.active_workout_session_id), workout)
     replace_workout(db, user, settings, workout, payload, client_version)
     saved = load_workout(db, user.id, workout.id)
     report_workout_revision(response, db, user.id)
@@ -3268,14 +3288,13 @@ def replace_workout(
     sync_workout_cardio_sessions(db, workout)
     rebuild_personal_records(db, user.id)
     bump_workout_cache_revision(db, user.id)
+    # Train together: a resumed draft saved from a session links the workout too.
+    session = payload.active_workout_session_id
+    trained = link_trained_together(db, user.id, str(session) if session else None, workout.id)
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
     presence_hub.active_workout_changed(user.id)
-    # Train together: a resumed draft saved from a session links the workout too.
-    from . import train_together  # train_together builds on this module
-
-    session = payload.active_workout_session_id
-    train_together.workout_saved(db, user.id, str(session) if session else None, workout.id)
+    presence_hub.train_together_changed(*trained)
 
 
 @router.delete("/workouts/{workout_id}", status_code=204)

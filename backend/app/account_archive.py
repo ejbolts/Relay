@@ -787,6 +787,13 @@ def restore_archive(
                         for table in tables
                     }
                     check_references(live, tables, user_id, kept, inserted)
+                    # Train together: a partner's attendance outlives this account's workout
+                    # (the key is SET NULL), so clear the link before the sweep removes rows.
+                    live.execute(
+                        "UPDATE main.train_together_members SET workout_id = NULL "
+                        "WHERE workout_id IS NOT NULL "
+                        "AND workout_id NOT IN (SELECT id FROM main.training_workouts)"
+                    )
                     clear_orphans(live, already_broken, tables)
                     restored = count_rows(live, user_id)
                     # Devices adopt the restored tips instead of merging older copies back in.

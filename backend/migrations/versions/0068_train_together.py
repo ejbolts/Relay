@@ -1,6 +1,7 @@
 """Train together: friends link their live workouts with a short-lived code.
 
-Three new tables, nothing existing changes. A session's members and its invites go with it.
+Three new tables, nothing existing changes. A session's attendance rows and its invites go
+with it; deleting the account that started a session only clears ``created_by``.
 
 Revision ID: 0068_train_together
 Revises: 0067_custom_reactions
@@ -24,8 +25,8 @@ def upgrade() -> None:
         sa.Column(
             "created_by",
             sa.String(36),
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
-            nullable=False,
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
+            nullable=True,
         ),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("expires_at", sa.DateTime(timezone=True), nullable=False),
@@ -47,17 +48,19 @@ def upgrade() -> None:
     )
     op.create_table(
         "train_together_members",
+        # One row per attendance: a rejoin is a new row.
+        sa.Column("id", sa.String(36), primary_key=True),
         sa.Column(
             "session_id",
             sa.String(36),
             sa.ForeignKey("train_together_sessions.id", ondelete="CASCADE"),
-            primary_key=True,
+            nullable=False,
         ),
         sa.Column(
             "user_id",
             sa.String(36),
             sa.ForeignKey("users.id", ondelete="CASCADE"),
-            primary_key=True,
+            nullable=False,
         ),
         sa.Column("joined_at", sa.DateTime(timezone=True), nullable=False),
         sa.Column("left_at", sa.DateTime(timezone=True), nullable=True),
@@ -75,6 +78,17 @@ def upgrade() -> None:
         ),
     )
     op.create_index("ix_train_together_members_user_id", "train_together_members", ["user_id"])
+    op.create_index(
+        "ix_train_together_members_session_id", "train_together_members", ["session_id"]
+    )
+    # An account is in at most one session at a time.
+    op.create_index(
+        "uq_train_together_members_open",
+        "train_together_members",
+        ["user_id"],
+        unique=True,
+        sqlite_where=sa.text("left_at IS NULL"),
+    )
     op.create_index(
         "ix_train_together_members_workout_id", "train_together_members", ["workout_id"]
     )
@@ -116,6 +130,8 @@ def downgrade() -> None:
     op.drop_index("ix_train_together_invites_session_id", "train_together_invites")
     op.drop_table("train_together_invites")
     op.drop_index("ix_train_together_members_workout_id", "train_together_members")
+    op.drop_index("uq_train_together_members_open", "train_together_members")
+    op.drop_index("ix_train_together_members_session_id", "train_together_members")
     op.drop_index("ix_train_together_members_user_id", "train_together_members")
     op.drop_table("train_together_members")
     op.drop_index("ix_train_together_sessions_created_by", "train_together_sessions")
