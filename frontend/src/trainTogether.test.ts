@@ -363,7 +363,7 @@ describe('PartnerWorkoutSync', () => {
   const answer = (revision: number, value: ActiveWorkoutDraft, conflict = false) =>
     ({ revision, draft: value, conflict, exercises }) satisfies TrainPartnerWriteResult;
 
-  it('sends one request at a time and replays later edits on the server’s answer', async () => {
+  it('sends one request at a time, and later edits against exactly what was sent', async () => {
     const first = deferred<TrainPartnerWriteResult>();
     const second = deferred<TrainPartnerWriteResult>();
     const put = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
@@ -382,15 +382,16 @@ describe('PartnerWorkoutSync', () => {
     await vi.waitFor(() => expect(put).toHaveBeenCalledTimes(2));
     const queued = put.mock.calls[1][0];
     expect(queued.revision).toBe(4);
-    expect(queued.base).toEqual({ ...sent, notes: 'merged elsewhere' });
-    expect(queued.draft.notes).toBe('merged elsewhere');
+    // The screen already shows the merged copy, but the server merges the follow-up.
+    expect(queued.base).toBe(sent);
+    expect(sync.current.draft!.notes).toBe('merged elsewhere');
     expect(queued.draft.movements[0].sets.map((item: StoredDraftSet) => item.key)).toEqual([
       's1',
       's2',
       's9',
     ]);
 
-    const merged = queued.draft;
+    const merged = { ...queued.draft, notes: 'merged elsewhere' };
     second.resolve(answer(5, merged));
     await done;
     await vi.waitFor(() => expect(sync.current.status).toBe('synced'));
@@ -465,12 +466,12 @@ describe('PartnerWorkoutSync', () => {
     await vi.waitFor(() => expect(put).toHaveBeenCalledTimes(2));
     const replayed = put.mock.calls[1][0];
     expect(replayed.revision).toBe(7);
-    expect(replayed.base).toBe(remote);
-    // The refused reps stay as the server has them; the later set is still sent.
+    // Sent against the copy the later edit was made on; the refused reps are left out.
+    expect(replayed.base).toEqual(draft());
     expect(
       replayed.draft.movements[0].sets.map((item: StoredDraftSet) => [item.key, item.reps]),
     ).toEqual([
-      ['s1', 12],
+      ['s1', 8],
       ['s2', 8],
       ['s9', 8],
     ]);
@@ -478,8 +479,69 @@ describe('PartnerWorkoutSync', () => {
       changed.mock.calls.some(([state]) => state.status === 'conflict' && state.notApplied),
     ).toBe(true);
     await vi.waitFor(() => expect(sync.current.status).toBe('synced'));
-    expect(sync.current).toMatchObject({ revision: 8, notApplied: true });
+    // Once the later edits are acknowledged, nothing is left unapplied to report.
+    expect(sync.current).toMatchObject({ revision: 8, notApplied: false });
     expect(sync.unsent).toBe(false);
+  });
+
+  it('sends a queued edit of a field the owner also changed so the server can refuse it', async () => {
+    const first = deferred<TrainPartnerWriteResult>();
+    const put = vi.fn().mockReturnValueOnce(first.promise);
+    const sync = new PartnerWorkoutSync({ put, changed: vi.fn() }, { revision: 3, draft: draft() });
+    void sync.edit((value) => updatePartnerSet(value, 'm1', 's1', { weight_kg: 65 }, NOW));
+    const sent = sync.current.draft!;
+    const done = sync.edit((value) => updatePartnerSet(value, 'm1', 's1', { reps: 6 }, NOW));
+    // The owner set those reps to 10 while the weight was on its way.
+    const owner = structuredClone(sent);
+    owner.movements[0].sets[0] = { ...owner.movements[0].sets[0], reps: 10 };
+    const refusal = draft({ notes: 'owner' });
+    put.mockResolvedValueOnce(answer(5, refusal, true));
+    first.resolve(answer(4, owner));
+    await done;
+    await vi.waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    const followUp = put.mock.calls[1][0];
+    expect(followUp.revision).toBe(4);
+    expect(followUp.base).toBe(sent);
+    expect(followUp.base.movements[0].sets[0].reps).toBe(8);
+    expect(followUp.draft.movements[0].sets[0].reps).toBe(6);
+    await vi.waitFor(() => expect(sync.current.status).toBe('conflict'));
+    expect(sync.current).toMatchObject({ revision: 5, draft: refusal, notApplied: true });
+  });
+
+  it('does not send a queued removal against a set the owner logged meanwhile', async () => {
+    const first = deferred<TrainPartnerWriteResult>();
+    const put = vi.fn().mockReturnValueOnce(first.promise);
+    const sync = new PartnerWorkoutSync({ put, changed: vi.fn() }, { revision: 3, draft: draft() });
+    void sync.edit((value) => updatePartnerSet(value, 'm1', 's1', { reps: 9 }, NOW));
+    const sent = sync.current.draft!;
+    const done = sync.edit((value) => removePartnerSet(value, 'm1', 's2', NOW));
+    const owner = structuredClone(sent);
+    owner.movements[0].sets[1] = { ...owner.movements[0].sets[1], reps: 11 };
+    put.mockResolvedValueOnce(answer(5, owner, true));
+    first.resolve(answer(4, owner));
+    await done;
+    await vi.waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    const followUp = put.mock.calls[1][0];
+    // The base still has the set as the partner saw it, so deleting the owner's edit conflicts.
+    expect(followUp.base).toBe(sent);
+    expect(followUp.base.movements[0].sets.map((item: StoredDraftSet) => item.key)).toEqual([
+      's1',
+      's2',
+    ]);
+    expect(followUp.draft.movements[0].sets.map((item: StoredDraftSet) => item.key)).toEqual([
+      's1',
+    ]);
+    await vi.waitFor(() => expect(sync.current.status).toBe('conflict'));
+    expect(sync.current.draft!.movements[0].sets[1].reps).toBe(11);
+  });
+
+  it('clears the not-applied notice when a newer copy is adopted', async () => {
+    const put = vi.fn().mockResolvedValue(answer(7, draft({ notes: 'theirs' }), true));
+    const sync = new PartnerWorkoutSync({ put, changed: vi.fn() }, { revision: 3, draft: draft() });
+    await sync.edit((value) => removePartnerSet(value, 'm1', 's1', NOW));
+    expect(sync.current.notApplied).toBe(true);
+    sync.refresh({ revision: 8, draft: draft({ notes: 'newer' }) });
+    expect(sync.current).toMatchObject({ revision: 8, notApplied: false, status: 'synced' });
   });
 
   it('applies the newest copy read during a request once the queue settles', async () => {
