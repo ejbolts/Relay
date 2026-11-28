@@ -34,12 +34,14 @@ export function FriendQrScanner({
   userId,
   mode = 'friend',
   paused = false,
+  retryKey = 0,
   onScanned,
   onScannedTrain,
 }: {
   userId: string;
   mode?: 'friend' | 'train';
   paused?: boolean;
+  retryKey?: number;
   onScanned?: (accountId: string) => void;
   onScannedTrain?: (token: string) => void;
 }) {
@@ -56,13 +58,18 @@ export function FriendQrScanner({
   const lastTrainTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (!paused) lastTrainTokenRef.current = null;
-  }, [paused]);
+    lastTrainTokenRef.current = null;
+  }, [retryKey]);
 
   useEffect(() => {
     let stopped = false;
+    let abandoned = false;
     let stream: MediaStream | null = null;
     let frame = 0;
+
+    const stopStream = (media: MediaStream | null) => {
+      media?.getTracks().forEach((track) => track.stop());
+    };
 
     async function start() {
       const canvas =
@@ -76,19 +83,36 @@ export function FriendQrScanner({
       }
       setCamera('starting');
       try {
-        const [media, decoder] = await Promise.all([
-          navigator.mediaDevices.getUserMedia({
+        const mediaPromise = navigator.mediaDevices
+          .getUserMedia({
             video: { facingMode: { ideal: 'environment' } },
             audio: false,
-          }),
+          })
+          .then((media) => {
+            if (stopped || abandoned) {
+              stopStream(media);
+              return null;
+            }
+            stream = media;
+            return media;
+          });
+        const [media, decoder] = await Promise.all([
+          mediaPromise,
           // Loaded only when someone scans, so the decoder stays out of the main bundle.
           import('jsqr'),
         ]);
-        stream = media;
-        if (stopped || !video.current) return;
+        if (stopped || abandoned || !media || !video.current) {
+          stopStream(media);
+          stream = null;
+          return;
+        }
         video.current.srcObject = media;
         await video.current.play();
-        if (stopped) return;
+        if (stopped) {
+          stopStream(stream);
+          stream = null;
+          return;
+        }
         setCamera('scanning');
         let last = 0;
         const scan = (time: number) => {
@@ -132,6 +156,7 @@ export function FriendQrScanner({
             }
             return;
           }
+          lastTrainTokenRef.current = null;
           const id = friendInviteIdFromScan(code.data);
           if (!id) setNotice(mode === 'train' ? 'not-relay-code' : 'not-friend-code');
           else if (id === userId) setNotice('own-code');
@@ -144,6 +169,9 @@ export function FriendQrScanner({
         };
         frame = requestAnimationFrame(scan);
       } catch (reason) {
+        abandoned = true;
+        stopStream(stream);
+        stream = null;
         if (!stopped) setCamera(cameraStateFor(reason));
       }
     }
@@ -152,7 +180,8 @@ export function FriendQrScanner({
     return () => {
       stopped = true;
       cancelAnimationFrame(frame);
-      stream?.getTracks().forEach((track) => track.stop());
+      stopStream(stream);
+      stream = null;
     };
   }, [userId, mode, attempt]);
 

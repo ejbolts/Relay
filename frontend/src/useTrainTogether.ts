@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { api } from './api';
+import { ApiError, api } from './api';
 import { COLOUR_THEMES, type ColourThemeId } from './appearanceChoices';
 import { colourThemePreference } from './colourThemes';
 import { partnerPalettes, type PartnerPalette } from './trainTogetherTheme';
@@ -9,6 +9,7 @@ import {
   partnerConflictNotice,
   partners as sessionPartners,
   PartnerWorkoutSync,
+  TRAIN_ERRORS,
   trainTogetherNotice,
   type PartnerSyncState,
   type TrainExercise,
@@ -44,7 +45,7 @@ export interface TrainTogetherController {
   viewerAddedMovements: Readonly<Record<string, ReadonlySet<string>>>;
   refresh: (options?: { silent?: boolean }) => Promise<TrainTogetherRead | null>;
   createInvite: () => Promise<TrainInvite | null>;
-  join: (token: string) => Promise<TrainTogetherRead>;
+  join: (token: string) => Promise<TrainTogetherRead | null>;
   leave: () => Promise<void>;
   clearInvite: () => void;
   editPartnerWorkout: (
@@ -62,10 +63,22 @@ function isOwnEndNotice(next: TrainTogetherRead, userId: string): boolean {
   return ended.reason === 'left' || ended.reason === 'finished' || ended.reason === 'discarded';
 }
 
+function pruneRecord<T>(current: Record<string, T>, keepIds: ReadonlySet<string>): Record<string, T> {
+  let pruned = false;
+  const next: Record<string, T> = {};
+  for (const [id, value] of Object.entries(current)) {
+    if (keepIds.has(id)) next[id] = value;
+    else pruned = true;
+  }
+  return pruned ? next : current;
+}
+
 export function useTrainTogether(
   userId: string | null,
   onNotice?: (message: string) => void,
+  options?: { confirmed?: boolean; onPartnerRetired?: (partnerId: string) => void },
 ): TrainTogetherController {
+  const confirmed = options?.confirmed ?? true;
   const [read, setRead] = useState<TrainTogetherRead | null>(null);
   const [invite, setInvite] = useState<TrainInvite | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -86,10 +99,22 @@ export function useTrainTogether(
   >({});
 
   const activeUserRef = useRef<string | null>(userId);
+  const confirmedRef = useRef<boolean>(confirmed);
+  confirmedRef.current = confirmed;
   const generationRef = useRef(0);
+  const readSeqRef = useRef(0);
+  const appliedSeqRef = useRef(0);
+  const inFlightReadsRef = useRef(0);
+  const inviteGenRef = useRef(0);
+  const sessionIdRef = useRef<string | null>(null);
   const previousReadRef = useRef<TrainTogetherRead | null>(null);
   const onNoticeRef = useRef(onNotice);
   onNoticeRef.current = onNotice;
+  const onPartnerRetiredRef = useRef(options?.onPartnerRetired);
+  onPartnerRetiredRef.current = options?.onPartnerRetired;
+  const refreshRef = useRef<
+    ((options?: { silent?: boolean }) => Promise<TrainTogetherRead | null>) | null
+  >(null);
 
   const syncsRef = useRef<Map<string, PartnerWorkoutSync>>(new Map());
   const partnerNamesRef = useRef<Map<string, string>>(new Map());
@@ -98,6 +123,7 @@ export function useTrainTogether(
   const stopAllSyncs = useCallback(() => {
     for (const sync of syncsRef.current.values()) sync.stop();
     syncsRef.current.clear();
+    partnerNamesRef.current.clear();
     setPartnerSyncStates({});
     setPartnerAcknowledgedDrafts({});
     setPartnerExercisesByUser({});
@@ -128,54 +154,47 @@ export function useTrainTogether(
   const reconcilePartnerSyncs = useCallback(
     (session: TrainSession | null, expectedGen: number) => {
       const currentPartners = sessionPartners(session);
-      const activeIds = new Set(currentPartners.map((member) => member.user_id));
+      const activeWorkoutIds = new Set(
+        currentPartners.filter((member) => member.workout !== null).map((member) => member.user_id),
+      );
+      const activePartnerIds = new Set(currentPartners.map((member) => member.user_id));
 
       for (const [partnerId, sync] of syncsRef.current.entries()) {
-        if (!activeIds.has(partnerId)) {
+        if (!activeWorkoutIds.has(partnerId)) {
           sync.stop();
           syncsRef.current.delete(partnerId);
-          partnerNamesRef.current.delete(partnerId);
         }
       }
+      for (const partnerId of [...partnerNamesRef.current.keys()]) {
+        if (!activePartnerIds.has(partnerId)) partnerNamesRef.current.delete(partnerId);
+      }
 
-      setPartnerSyncStates((current) => {
-        let pruned = false;
-        const next: Record<string, PartnerSyncState> = {};
-        for (const [id, state] of Object.entries(current)) {
-          if (activeIds.has(id)) next[id] = state;
-          else pruned = true;
-        }
-        return pruned ? next : current;
-      });
-
-      setPartnerAcknowledgedDrafts((current) => {
-        let pruned = false;
-        const next: Record<string, ActiveWorkoutDraft | null> = {};
-        for (const [id, draft] of Object.entries(current)) {
-          if (activeIds.has(id)) next[id] = draft;
-          else pruned = true;
-        }
-        return pruned ? next : current;
-      });
+      setPartnerSyncStates((current) => pruneRecord(current, activeWorkoutIds));
+      setPartnerAcknowledgedDrafts((current) => pruneRecord(current, activeWorkoutIds));
+      setPartnerExercisesByUser((current) => pruneRecord(current, activeWorkoutIds));
+      setViewerAddedMovements((current) => pruneRecord(current, activeWorkoutIds));
 
       for (const partner of currentPartners) {
         const partnerId = partner.user_id;
         partnerNamesRef.current.set(partnerId, memberName(partner));
         const workout = partner.workout;
-        if (workout?.exercises.length) {
+        if (!workout) continue;
+
+        if (workout.exercises.length) {
           mergePartnerExercises(partnerId, workout.exercises);
         }
         const existing = syncsRef.current.get(partnerId);
-        if (!workout) {
-          if (existing) {
-            existing.refresh({ revision: existing.current.revision + 1, draft: null });
-          }
-          setPartnerAcknowledgedDrafts((prev) =>
-            prev[partnerId] === null ? prev : { ...prev, [partnerId]: null },
-          );
-          continue;
-        }
         if (existing) {
+          const prevSessionId = existing.current.draft?.clientSessionId;
+          const nextSessionId = workout.draft.clientSessionId;
+          if (prevSessionId && nextSessionId && prevSessionId !== nextSessionId) {
+            setViewerAddedMovements((current) => {
+              if (!(partnerId in current)) return current;
+              const next = { ...current };
+              delete next[partnerId];
+              return next;
+            });
+          }
           existing.refresh({ revision: workout.revision, draft: workout.draft });
           if (!existing.unsent) {
             setPartnerAcknowledgedDrafts((prev) =>
@@ -190,6 +209,50 @@ export function useTrainTogether(
               put: (change) => api.trainTogether.changePartnerWorkout(partnerId, change),
               changed: (state) => {
                 if (generationRef.current !== expectedGen) return;
+                if (
+                  state.status === 'failed' &&
+                  state.error instanceof ApiError &&
+                  (state.error.code === TRAIN_ERRORS.notPartner ||
+                    state.error.code === TRAIN_ERRORS.noWorkout)
+                ) {
+                  const activeSync = syncsRef.current.get(partnerId);
+                  activeSync?.stop();
+                  syncsRef.current.delete(partnerId);
+                  setPartnerSyncStates((prev) => {
+                    if (!(partnerId in prev)) return prev;
+                    const next = { ...prev };
+                    delete next[partnerId];
+                    return next;
+                  });
+                  setPartnerAcknowledgedDrafts((prev) => {
+                    if (!(partnerId in prev)) return prev;
+                    const next = { ...prev };
+                    delete next[partnerId];
+                    return next;
+                  });
+                  setPartnerExercisesByUser((prev) => {
+                    if (!(partnerId in prev)) return prev;
+                    const next = { ...prev };
+                    delete next[partnerId];
+                    return next;
+                  });
+                  setViewerAddedMovements((prev) => {
+                    if (!(partnerId in prev)) return prev;
+                    const next = { ...prev };
+                    delete next[partnerId];
+                    return next;
+                  });
+                  const name = partnerNamesRef.current.get(partnerId) ?? 'Your partner';
+                  onNoticeRef.current?.(
+                    state.error.message ||
+                      (state.error.code === TRAIN_ERRORS.noWorkout
+                        ? `${name} has no workout open.`
+                        : `${name} is no longer in this session.`),
+                  );
+                  onPartnerRetiredRef.current?.(partnerId);
+                  void refreshRef.current?.({ silent: true });
+                  return;
+                }
                 setPartnerSyncStates((prev) => ({ ...prev, [partnerId]: state }));
                 if (state.status === 'synced' || state.status === 'conflict') {
                   setPartnerAcknowledgedDrafts((prev) => ({ ...prev, [partnerId]: state.draft }));
@@ -219,11 +282,23 @@ export function useTrainTogether(
       next: TrainTogetherRead,
       expectedGen: number,
       expectedUser: string,
+      seq: number,
       options: { suppressNotice?: boolean } = {},
-    ) => {
-      if (generationRef.current !== expectedGen || activeUserRef.current !== expectedUser) return;
+    ): boolean => {
+      if (generationRef.current !== expectedGen || activeUserRef.current !== expectedUser) {
+        return false;
+      }
+      if (seq <= appliedSeqRef.current) return false;
+      if (next.session) {
+        const self = next.session.members.find((member) => member.is_self);
+        if (!self || self.user_id !== expectedUser) return false;
+      }
+      appliedSeqRef.current = seq;
       const previous = previousReadRef.current;
       previousReadRef.current = next;
+      const prevSessionId = sessionIdRef.current;
+      const nextSessionId = next.session?.id ?? null;
+      sessionIdRef.current = nextSessionId;
       setRead(next);
 
       const prevPartners = new Set(sessionPartners(previous?.session).map((m) => m.user_id));
@@ -231,6 +306,15 @@ export function useTrainTogether(
       const newlyJoined = nextPartners
         .filter((m) => !prevPartners.has(m.user_id))
         .map((m) => m.user_id);
+
+      if (nextSessionId !== prevSessionId) {
+        inviteGenRef.current += 1;
+        setInvite((current) =>
+          current && nextSessionId !== null && current.session_id === nextSessionId
+            ? current
+            : null,
+        );
+      }
 
       if (newlyJoined.length > 0 && previous !== null) {
         // An invite was consumed by someone joining; clear the cached single-use token.
@@ -240,11 +324,13 @@ export function useTrainTogether(
         setRecentlyJoinedIds(new Set(newlyJoined));
         if (joinPulseTimerRef.current !== null) window.clearTimeout(joinPulseTimerRef.current);
         joinPulseTimerRef.current = window.setTimeout(() => {
+          if (generationRef.current !== expectedGen) return;
           setRecentlyJoinedIds(new Set());
           joinPulseTimerRef.current = null;
         }, 1600);
       }
       if (!next.session) {
+        inviteGenRef.current += 1;
         setInvite(null);
       }
 
@@ -254,6 +340,7 @@ export function useTrainTogether(
         const notice = trainTogetherNotice(previous, next);
         if (notice) onNoticeRef.current?.(notice);
       }
+      return true;
     },
     [reconcilePartnerSyncs],
   );
@@ -261,43 +348,78 @@ export function useTrainTogether(
   const refresh = useCallback(
     async (options?: { silent?: boolean }): Promise<TrainTogetherRead | null> => {
       const currentUser = activeUserRef.current;
-      if (!currentUser) return null;
+      if (!currentUser || !confirmedRef.current) return null;
       const gen = generationRef.current;
+      const seq = ++readSeqRef.current;
+      inFlightReadsRef.current += 1;
       setLoading(true);
       try {
         const next = await api.trainTogether.read();
         if (generationRef.current !== gen || activeUserRef.current !== currentUser) return null;
-        applyRead(next, gen, currentUser, { suppressNotice: options?.silent });
-        return next;
+        const applied = applyRead(next, gen, currentUser, seq, {
+          suppressNotice: options?.silent,
+        });
+        return applied ? next : null;
       } catch {
         return null;
       } finally {
-        if (generationRef.current === gen) setLoading(false);
+        if (generationRef.current === gen) {
+          inFlightReadsRef.current = Math.max(0, inFlightReadsRef.current - 1);
+          if (inFlightReadsRef.current === 0) setLoading(false);
+        }
       }
     },
     [applyRead],
   );
+  refreshRef.current = refresh;
 
-  // Reset cleanly on sign-out or account switch; drop all in-flight responses from prior account.
+  // Reset cleanly on sign-out, account switch, or unmount; stop all syncs and drop in-flight work.
   useEffect(() => {
+    const accountChanged = activeUserRef.current !== userId;
     activeUserRef.current = userId;
-    generationRef.current += 1;
-    previousReadRef.current = null;
-    setRead(null);
-    setInvite(null);
-    setRecentlyJoinedIds(new Set());
-    stopAllSyncs();
-    if (joinPulseTimerRef.current !== null) {
-      window.clearTimeout(joinPulseTimerRef.current);
-      joinPulseTimerRef.current = null;
+    if (accountChanged) {
+      generationRef.current += 1;
+      readSeqRef.current = 0;
+      appliedSeqRef.current = 0;
+      inFlightReadsRef.current = 0;
+      inviteGenRef.current += 1;
+      sessionIdRef.current = null;
+      previousReadRef.current = null;
+      setRead(null);
+      setInvite(null);
+      setLoading(false);
+      setRecentlyJoinedIds(new Set());
+      stopAllSyncs();
+      if (joinPulseTimerRef.current !== null) {
+        window.clearTimeout(joinPulseTimerRef.current);
+        joinPulseTimerRef.current = null;
+      }
     }
-    if (!userId) return;
+    return () => {
+      generationRef.current += 1;
+      activeUserRef.current = null;
+      inFlightReadsRef.current = 0;
+      inviteGenRef.current += 1;
+      sessionIdRef.current = null;
+      for (const sync of syncsRef.current.values()) sync.stop();
+      syncsRef.current.clear();
+      partnerNamesRef.current.clear();
+      if (joinPulseTimerRef.current !== null) {
+        window.clearTimeout(joinPulseTimerRef.current);
+        joinPulseTimerRef.current = null;
+      }
+    };
+  }, [userId, stopAllSyncs]);
+
+  // Initial read once the account is confirmed.
+  useEffect(() => {
+    if (!userId || !confirmed) return;
     void refresh();
-  }, [userId, refresh, stopAllSyncs]);
+  }, [userId, confirmed, refresh]);
 
   // Refresh on presence socket events, visibility return, focus, and reconnect.
   useEffect(() => {
-    if (!userId) return;
+    if (!userId || !confirmed) return;
     const onWake = () => {
       void refresh();
     };
@@ -314,17 +436,17 @@ export function useTrainTogether(
       window.removeEventListener('focus', onWake);
       document.removeEventListener('visibilitychange', onVisible);
     };
-  }, [userId, refresh]);
+  }, [userId, confirmed, refresh]);
 
   // 20-second fallback poll while in a session or waiting for an invite to be scanned.
   const hasSessionOrInvite = Boolean(read?.session || invite);
   useEffect(() => {
-    if (!userId || !hasSessionOrInvite) return;
+    if (!userId || !confirmed || !hasSessionOrInvite) return;
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void refresh();
     }, POLL_FALLBACK_MS);
     return () => window.clearInterval(timer);
-  }, [userId, hasSessionOrInvite, refresh]);
+  }, [userId, confirmed, hasSessionOrInvite, refresh]);
 
   // 1-second tick for the invite countdown while an invite is active.
   useEffect(() => {
@@ -350,36 +472,59 @@ export function useTrainTogether(
     const currentUser = activeUserRef.current;
     if (!currentUser) return null;
     const gen = generationRef.current;
+    const inviteGen = inviteGenRef.current;
     setCreatingInvite(true);
     try {
       const created = await api.trainTogether.invite();
-      if (generationRef.current !== gen || activeUserRef.current !== currentUser) return null;
+      if (
+        generationRef.current !== gen ||
+        activeUserRef.current !== currentUser ||
+        inviteGenRef.current !== inviteGen
+      ) {
+        return null;
+      }
+      if (sessionIdRef.current !== null && sessionIdRef.current !== created.session_id) {
+        return null;
+      }
+      // Invalidate any session read that was in flight before this invite completed.
+      appliedSeqRef.current = ++readSeqRef.current;
+      sessionIdRef.current = created.session_id;
+      if (previousReadRef.current === null) {
+        previousReadRef.current = { session: null, ended: null };
+      }
       setInvite(created);
       setNow(Date.now());
-      // Refresh session state in case creating an invite also started a new session.
-      void refresh({ silent: true });
+      // Refresh session state without suppressing real partner join/leave notices.
+      void refresh();
       return created;
+    } catch (reason) {
+      if (generationRef.current !== gen || activeUserRef.current !== currentUser) return null;
+      throw reason;
     } finally {
       if (generationRef.current === gen) setCreatingInvite(false);
     }
   }, [refresh]);
 
   const join = useCallback(
-    async (token: string): Promise<TrainTogetherRead> => {
+    async (token: string): Promise<TrainTogetherRead | null> => {
       const currentUser = activeUserRef.current;
       if (!currentUser) throw new Error('Sign in to train together.');
       const gen = generationRef.current;
       setJoining(true);
       try {
         const next = await api.trainTogether.join(token);
-        if (generationRef.current !== gen || activeUserRef.current !== currentUser) return next;
+        if (generationRef.current !== gen || activeUserRef.current !== currentUser) return null;
         // If previousReadRef was still null (e.g. link opened right on sign-in), treat previous as empty
         // so join always produces the "Training with {Name}" confirmation toast.
         if (previousReadRef.current === null) {
           previousReadRef.current = { session: null, ended: null };
         }
-        applyRead(next, gen, currentUser);
-        return next;
+        const seq = ++readSeqRef.current;
+        const applied = applyRead(next, gen, currentUser, seq);
+        return applied ? next : null;
+      } catch (reason) {
+        if (generationRef.current !== gen || activeUserRef.current !== currentUser) return null;
+        throw reason;
       } finally {
         if (generationRef.current === gen) setJoining(false);
       }
@@ -387,17 +532,25 @@ export function useTrainTogether(
     [applyRead],
   );
 
+  const leavingRef = useRef(false);
   const leave = useCallback(async (): Promise<void> => {
     const currentUser = activeUserRef.current;
-    if (!currentUser) return;
+    if (!currentUser || leavingRef.current) return;
+    leavingRef.current = true;
     const gen = generationRef.current;
     setLeaving(true);
     try {
       const next = await api.trainTogether.leave();
       if (generationRef.current !== gen || activeUserRef.current !== currentUser) return;
+      inviteGenRef.current += 1;
       setInvite(null);
-      applyRead(next, gen, currentUser, { suppressNotice: true });
+      const seq = ++readSeqRef.current;
+      applyRead(next, gen, currentUser, seq, { suppressNotice: true });
+    } catch (reason) {
+      if (generationRef.current !== gen || activeUserRef.current !== currentUser) return;
+      throw reason;
     } finally {
+      leavingRef.current = false;
       if (generationRef.current === gen) setLeaving(false);
     }
   }, [applyRead]);

@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import { api } from './api';
+import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { api, isConnectionFailure } from './api';
 import { Icon } from './Icon';
+import { motionReduced } from './motion';
 import { PopupDialog } from './PopupDialog';
 import { useNow } from './presence';
 import {
@@ -17,9 +18,66 @@ import {
 } from './trainTogether';
 import { TrainTogetherAvatar } from './TrainTogetherAvatar';
 import { partnerCssVars, type PartnerPalette } from './trainTogetherTheme';
-import { numberOrNull } from './appShared';
-import { weightInputKg, weightInputValue, weightUnitName, type WeightUnit } from './weightUnits';
+import {
+  formatWeightNumber,
+  weightInputKg,
+  weightInputValue,
+  weightUnitName,
+  type WeightUnit,
+} from './weightUnits';
 import type { ActiveWorkoutDraft, StoredDraftMovement, StoredDraftSet } from './workoutDraft';
+import { activeElapsedSeconds, draftPause } from './workoutPause';
+
+const MAX_PARTNER_WEIGHT_KG = 10_000;
+const MAX_PARTNER_REPS = 10_000;
+
+type NumericParseResult =
+  | { kind: 'valid'; value: number | null }
+  | { kind: 'incomplete' }
+  | { kind: 'invalid'; message: string };
+
+function parsePartnerWeightInput(
+  raw: string,
+  unit: WeightUnit,
+  originalKg: number | null,
+): NumericParseResult {
+  const trimmed = raw.trim();
+  if (trimmed === '') return { kind: 'valid', value: null };
+  if (/^\d*[.,]$/.test(trimmed)) return { kind: 'incomplete' };
+  if (!/^(?:\d+(?:[.,]\d+)?|[.,]\d+)$/.test(trimmed)) {
+    return {
+      kind: 'invalid',
+      message: `Enter a weight between 0 and ${formatWeightNumber(MAX_PARTNER_WEIGHT_KG, unit, 0)} ${unit}.`,
+    };
+  }
+  const kg = weightInputKg(trimmed, unit, originalKg);
+  if (kg === null || !Number.isFinite(kg) || kg < 0 || kg > MAX_PARTNER_WEIGHT_KG) {
+    return {
+      kind: 'invalid',
+      message: `Weight must be between 0 and ${formatWeightNumber(MAX_PARTNER_WEIGHT_KG, unit, 0)} ${unit}.`,
+    };
+  }
+  return { kind: 'valid', value: kg };
+}
+
+function parsePartnerRepsInput(raw: string): NumericParseResult {
+  const trimmed = raw.trim();
+  if (trimmed === '') return { kind: 'valid', value: null };
+  if (!/^\d+$/.test(trimmed)) {
+    return {
+      kind: 'invalid',
+      message: `Reps must be a whole number between 0 and ${MAX_PARTNER_REPS.toLocaleString('en-US')}.`,
+    };
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > MAX_PARTNER_REPS) {
+    return {
+      kind: 'invalid',
+      message: `Reps must be a whole number between 0 and ${MAX_PARTNER_REPS.toLocaleString('en-US')}.`,
+    };
+  }
+  return { kind: 'valid', value: parsed };
+}
 
 function formatElapsed(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -63,7 +121,7 @@ function PartnerSetRow({
   warmup,
   exerciseName,
   weightUnit,
-  acknowledgedDone,
+  pendingSync,
   onUpdate,
   onRemove,
 }: {
@@ -72,7 +130,7 @@ function PartnerSetRow({
   warmup: boolean;
   exerciseName: string;
   weightUnit: WeightUnit;
-  acknowledgedDone: boolean;
+  pendingSync: boolean;
   onUpdate: (patch: Partial<Omit<StoredDraftSet, 'key'>>) => void;
   onRemove: () => void;
 }) {
@@ -80,111 +138,148 @@ function PartnerSetRow({
   const [repsFocused, setRepsFocused] = useState(false);
   const [weightText, setWeightText] = useState(() => weightInputValue(set.weight_kg, weightUnit));
   const [repsText, setRepsText] = useState(() => (set.reps === null ? '' : String(set.reps)));
+  const [weightError, setWeightError] = useState<string | null>(null);
+  const [repsError, setRepsError] = useState<string | null>(null);
+  const errorId = useId();
 
-  // Keep input text in sync with remote updates only while that field is NOT being typed in.
+  // Keep input text in sync with remote updates when not focused and not holding invalid local input.
   useEffect(() => {
     if (!weightFocused) {
       setWeightText(weightInputValue(set.weight_kg, weightUnit));
+      setWeightError(null);
     }
   }, [set.weight_kg, weightUnit, weightFocused]);
 
   useEffect(() => {
     if (!repsFocused) {
       setRepsText(set.reps === null ? '' : String(set.reps));
+      setRepsError(null);
     }
   }, [set.reps, repsFocused]);
 
   const localDone = set.completed === true;
-  const pendingDone = localDone && !acknowledgedDone;
+  const isSavedDone = localDone && !pendingSync;
 
   const rowClass = [
     'tt-partner-set-row',
-    acknowledgedDone ? 'is-done' : pendingDone ? 'is-pending' : '',
+    pendingSync ? 'is-pending' : isSavedDone ? 'is-done' : '',
     warmup ? 'is-warmup' : '',
   ]
     .filter(Boolean)
     .join(' ');
+  const fieldError = weightError ?? repsError;
 
   return (
-    <div className={rowClass} data-set-key={set.key}>
-      <span className="tt-partner-set-num num" aria-label={warmup ? 'Warm-up set' : `Set ${label}`}>
-        {label}
-      </span>
-      <input
-        type="text"
-        inputMode="decimal"
-        className="tt-partner-input num"
-        value={weightText}
-        placeholder="–"
-        aria-label={`${exerciseName} set ${label} weight in ${weightUnitName(weightUnit)}`}
-        onFocus={() => setWeightFocused(true)}
-        onBlur={() => {
-          setWeightFocused(false);
-          setWeightText(weightInputValue(set.weight_kg, weightUnit));
-        }}
-        onChange={(event) => {
-          const next = event.target.value;
-          setWeightText(next);
-          if (next.trim() === '') {
-            onUpdate({ weight_kg: null });
-            return;
-          }
-          const kg = weightInputKg(next, weightUnit, set.weight_kg);
-          if (kg !== null) onUpdate({ weight_kg: kg });
-        }}
-      />
-      <input
-        type="text"
-        inputMode="numeric"
-        className="tt-partner-input num"
-        value={repsText}
-        placeholder="–"
-        aria-label={`${exerciseName} set ${label} reps`}
-        onFocus={() => setRepsFocused(true)}
-        onBlur={() => {
-          setRepsFocused(false);
-          setRepsText(set.reps === null ? '' : String(set.reps));
-        }}
-        onChange={(event) => {
-          const next = event.target.value;
-          setRepsText(next);
-          if (next.trim() === '') {
-            onUpdate({ reps: null });
-            return;
-          }
-          const parsed = numberOrNull(next);
-          if (parsed !== null && parsed >= 0) onUpdate({ reps: Math.round(parsed) });
-        }}
-      />
-      <span
-        className="tt-partner-rpe num"
-        aria-label={set.rpe !== null ? `RPE ${set.rpe}` : undefined}
-      >
-        {set.rpe !== null ? set.rpe : '–'}
-      </span>
-      <button
-        type="button"
-        className={`tt-partner-tick${acknowledgedDone ? ' is-done' : pendingDone ? ' is-pending' : ''}`}
-        aria-label={
-          acknowledgedDone
-            ? `Mark ${exerciseName} set ${label} incomplete`
-            : pendingDone
+    <div className="tt-partner-set-entry">
+      <div className={rowClass} data-set-key={set.key}>
+        <span className="tt-partner-set-num num" aria-label={warmup ? 'Warm-up set' : `Set ${label}`}>
+          {label}
+        </span>
+        <input
+          type="text"
+          inputMode="decimal"
+          className={`tt-partner-input num${weightError ? ' is-invalid' : ''}`}
+          value={weightText}
+          placeholder="–"
+          aria-label={`${exerciseName} set ${label} weight in ${weightUnitName(weightUnit)}`}
+          aria-invalid={weightError ? true : undefined}
+          aria-describedby={weightError ? errorId : undefined}
+          onFocus={() => setWeightFocused(true)}
+          onBlur={() => {
+            setWeightFocused(false);
+            const checked = parsePartnerWeightInput(weightText, weightUnit, set.weight_kg);
+            if (checked.kind === 'valid') {
+              setWeightError(null);
+              setWeightText(weightInputValue(checked.value, weightUnit));
+            } else if (checked.kind === 'incomplete') {
+              setWeightError(
+                `Enter a weight between 0 and ${formatWeightNumber(MAX_PARTNER_WEIGHT_KG, weightUnit, 0)} ${weightUnit}.`,
+              );
+            } else {
+              setWeightError(checked.message);
+            }
+          }}
+          onChange={(event) => {
+            const next = event.target.value;
+            setWeightText(next);
+            const checked = parsePartnerWeightInput(next, weightUnit, set.weight_kg);
+            if (checked.kind === 'valid') {
+              setWeightError(null);
+              if (checked.value !== set.weight_kg) onUpdate({ weight_kg: checked.value });
+            } else if (checked.kind === 'incomplete') {
+              setWeightError(null);
+            } else {
+              setWeightError(checked.message);
+            }
+          }}
+        />
+        <input
+          type="text"
+          inputMode="numeric"
+          className={`tt-partner-input num${repsError ? ' is-invalid' : ''}`}
+          value={repsText}
+          placeholder="–"
+          aria-label={`${exerciseName} set ${label} reps`}
+          aria-invalid={repsError ? true : undefined}
+          aria-describedby={repsError ? errorId : undefined}
+          onFocus={() => setRepsFocused(true)}
+          onBlur={() => {
+            setRepsFocused(false);
+            const checked = parsePartnerRepsInput(repsText);
+            if (checked.kind === 'valid') {
+              setRepsError(null);
+              setRepsText(checked.value === null ? '' : String(checked.value));
+            } else if (checked.kind === 'invalid') {
+              setRepsError(checked.message);
+            }
+          }}
+          onChange={(event) => {
+            const next = event.target.value;
+            setRepsText(next);
+            const checked = parsePartnerRepsInput(next);
+            if (checked.kind === 'valid') {
+              setRepsError(null);
+              if (checked.value !== set.reps) onUpdate({ reps: checked.value });
+            } else if (checked.kind === 'invalid') {
+              setRepsError(checked.message);
+            }
+          }}
+        />
+        <span
+          className="tt-partner-rpe num"
+          aria-label={set.rpe !== null ? `RPE ${set.rpe}` : undefined}
+        >
+          {set.rpe !== null ? set.rpe : '–'}
+        </span>
+        <button
+          type="button"
+          className={`tt-partner-tick${pendingSync ? ' is-pending' : isSavedDone ? ' is-done' : ''}`}
+          aria-label={
+            pendingSync
               ? `Saving ${exerciseName} set ${label}`
-              : `Complete ${exerciseName} set ${label}`
-        }
-        aria-pressed={acknowledgedDone ? true : pendingDone ? 'mixed' : false}
-        onClick={() => onUpdate({ completed: !localDone })}
-      >
-        <Icon name="check" />
-      </button>
-      <button
-        type="button"
-        className="tt-partner-remove-set"
-        aria-label={`Remove set ${label} from ${exerciseName}`}
-        onClick={onRemove}
-      >
-        <Icon name="close" />
-      </button>
+              : isSavedDone
+                ? `Mark ${exerciseName} set ${label} incomplete`
+                : `Complete ${exerciseName} set ${label}`
+          }
+          aria-pressed={pendingSync ? 'mixed' : isSavedDone ? true : false}
+          onClick={() => onUpdate({ completed: !localDone })}
+        >
+          <Icon name="check" />
+        </button>
+        <button
+          type="button"
+          className="tt-partner-remove-set"
+          aria-label={`Remove set ${label} from ${exerciseName}`}
+          onClick={onRemove}
+        >
+          <Icon name="close" />
+        </button>
+      </div>
+      {fieldError && (
+        <p id={errorId} className="tt-partner-field-error" role="alert">
+          {fieldError}
+        </p>
+      )}
     </div>
   );
 }
@@ -331,11 +426,19 @@ export function TrainTogetherPartnerView({
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [retrying, setRetrying] = useState(false);
-  const now = useNow(true, 1000);
+  const bannerRef = useRef<HTMLDivElement>(null);
 
   const name = memberName(partner);
   const draft = syncState?.draft ?? partner.workout?.draft ?? null;
+  const pause = draftPause(draft);
+  const paused = Boolean(draft && pause.pausedAt !== null);
+  const now = useNow(Boolean(draft) && !paused, 1000);
   const vars = partnerCssVars(palette) as CSSProperties;
+
+  // Move focus into the partner banner on entry so screen readers announce whose sets are edited.
+  useEffect(() => {
+    bannerRef.current?.focus({ preventScroll: true });
+  }, [partner.user_id]);
 
   const exerciseLookup = useMemo(() => {
     const map = new Map<string, TrainExercise>();
@@ -353,15 +456,25 @@ export function TrainTogetherPartnerView({
     return map;
   }, [acknowledgedDraft]);
 
-  const elapsedSeconds = draft
-    ? Math.max(0, Math.floor((now - draft.startedAt - (draft.pausedMs ?? 0)) / 1000))
-    : 0;
-  const totalDoneSets = (draft?.movements ?? []).reduce(
+  const savedDraft = acknowledgedDraft === undefined ? draft : acknowledgedDraft;
+  const sessionElapsed = draft ? activeElapsedSeconds(draft.startedAt, pause, now) : 0;
+  const elapsedSeconds = !draft
+    ? 0
+    : draft.durationOverrideMinutes != null
+      ? draft.durationOverrideMinutes * 60
+      : (draft.previousDurationMinutes ?? 0) * 60 + sessionElapsed;
+  const totalDoneSets = (savedDraft?.movements ?? []).reduce(
     (sum, movement) => sum + movement.sets.filter((s) => s.completed === true).length,
     0,
   );
   const workoutTitle = draft?.name?.trim() || 'workout';
-  const showFailedBar = syncState?.status === 'failed';
+  const showOfflineBar = syncState?.status === 'failed' && isConnectionFailure(syncState.error);
+  const refusalMessage =
+    syncState?.status === 'failed' && !showOfflineBar
+      ? syncState.error instanceof Error
+        ? syncState.error.message
+        : 'That change could not be saved.'
+      : null;
 
   const existingExerciseIds = useMemo(
     () => new Set((draft?.movements ?? []).map((m) => m.exerciseId)),
@@ -381,7 +494,13 @@ export function TrainTogetherPartnerView({
     <div className="tt-partner-view" style={vars}>
       <div className="tt-partner-frame-overlay" aria-hidden="true" />
       <div className="tt-partner-sticky-top">
-        <div className="tt-partner-banner" role="region" aria-label={loggingForLabel(name)}>
+        <div
+          ref={bannerRef}
+          tabIndex={-1}
+          className="tt-partner-banner"
+          role="region"
+          aria-label={loggingForLabel(name)}
+        >
           <TrainTogetherAvatar person={partner} size="md" palette={palette} variant="solid" />
           <strong className="tt-partner-banner-label">{loggingForLabel(name)}</strong>
           <button type="button" className="tt-back-mine-btn" onClick={onBackToMine}>
@@ -390,7 +509,7 @@ export function TrainTogetherPartnerView({
           </button>
         </div>
 
-        {showFailedBar && (
+        {showOfflineBar && (
           <div className="tt-partner-offline-bar" role="alert">
             <span className="tt-partner-offline-copy">
               <Icon name="cloud-off" />
@@ -406,13 +525,20 @@ export function TrainTogetherPartnerView({
             </button>
           </div>
         )}
+        {refusalMessage && (
+          <div className="tt-partner-offline-bar" role="alert">
+            <span className="tt-partner-offline-copy">
+              <span>{refusalMessage}</span>
+            </span>
+          </div>
+        )}
 
         <header className="tt-partner-header">
           <h1>{`${name}’s ${workoutTitle}`}</h1>
           <div className="tt-partner-meta num">
-            <span className="tt-partner-live">
+            <span className={`tt-partner-live${paused ? ' is-paused' : ''}`}>
               <span className="tt-partner-live-dot" aria-hidden="true" />
-              Live {formatElapsed(elapsedSeconds)}
+              {paused ? `Paused ${formatElapsed(elapsedSeconds)}` : `Live ${formatElapsed(elapsedSeconds)}`}
             </span>
             <span aria-hidden="true">·</span>
             <span>
@@ -441,9 +567,11 @@ export function TrainTogetherPartnerView({
                 const exercise = exerciseLookup.get(movement.exerciseId) ?? null;
                 const exerciseName = exercise?.name ?? 'Exercise';
                 const isCardio = exercise?.kind === 'cardio';
-                const doneCount = movement.sets.filter((s) => s.completed === true).length;
                 const canRemoveMovement = Boolean(viewerAddedMovementKeys?.has(movement.key));
                 const ackMovement = ackMovementByKey.get(movement.key);
+                const savedSets =
+                  acknowledgedDraft === undefined ? movement.sets : (ackMovement?.sets ?? []);
+                const doneCount = savedSets.filter((s) => s.completed === true).length;
 
                 return (
                   <article
@@ -470,11 +598,12 @@ export function TrainTogetherPartnerView({
                           type="button"
                           className="tt-partner-remove-ex"
                           aria-label={`Remove ${exerciseName} from ${name}'s workout`}
-                          onClick={() =>
+                          onClick={() => {
+                            const at = Date.now();
                             void onEdit((current) =>
-                              removePartnerMovement(current, movement.key, Date.now()),
-                            )
-                          }
+                              removePartnerMovement(current, movement.key, at),
+                            );
+                          }}
                         >
                           <Icon name="trash" />
                         </button>
@@ -512,8 +641,12 @@ export function TrainTogetherPartnerView({
                           {movement.sets.map((set, setIndex) => {
                             const { label, warmup } = setBadgeLabel(movement.sets, setIndex);
                             const ackSet = ackMovement?.sets.find((s) => s.key === set.key);
-                            const acknowledgedDone =
-                              set.completed === true && ackSet?.completed === true;
+                            const pendingSync =
+                              acknowledgedDraft !== undefined &&
+                              (!ackSet ||
+                                ackSet.completed !== set.completed ||
+                                (ackSet.weight_kg ?? null) !== (set.weight_kg ?? null) ||
+                                (ackSet.reps ?? null) !== (set.reps ?? null));
                             return (
                               <PartnerSetRow
                                 key={set.key}
@@ -522,23 +655,19 @@ export function TrainTogetherPartnerView({
                                 warmup={warmup}
                                 exerciseName={exerciseName}
                                 weightUnit={weightUnit}
-                                acknowledgedDone={acknowledgedDone}
-                                onUpdate={(patch) =>
+                                pendingSync={pendingSync}
+                                onUpdate={(patch) => {
+                                  const at = Date.now();
                                   void onEdit((current) =>
-                                    updatePartnerSet(
-                                      current,
-                                      movement.key,
-                                      set.key,
-                                      patch,
-                                      Date.now(),
-                                    ),
-                                  )
-                                }
-                                onRemove={() =>
+                                    updatePartnerSet(current, movement.key, set.key, patch, at),
+                                  );
+                                }}
+                                onRemove={() => {
+                                  const at = Date.now();
                                   void onEdit((current) =>
-                                    removePartnerSet(current, movement.key, set.key, Date.now()),
-                                  )
-                                }
+                                    removePartnerSet(current, movement.key, set.key, at),
+                                  );
+                                }}
                               />
                             );
                           })}
@@ -546,11 +675,13 @@ export function TrainTogetherPartnerView({
                         <button
                           type="button"
                           className="tt-partner-add-set"
-                          onClick={() =>
+                          onClick={() => {
+                            const newSetKey = crypto.randomUUID();
+                            const at = Date.now();
                             void onEdit((current) =>
-                              addPartnerSet(current, movement.key, crypto.randomUUID(), Date.now()),
-                            )
-                          }
+                              addPartnerSet(current, movement.key, newSetKey, at),
+                            );
+                          }}
                         >
                           + Add set
                         </button>
@@ -578,10 +709,13 @@ export function TrainTogetherPartnerView({
             setPickerOpen(false);
             if (existingExerciseIds.has(exercise.id)) {
               window.requestAnimationFrame(() => {
-                const target = document.querySelector<HTMLElement>(
-                  `[data-partner-exercise-id="${CSS.escape(exercise.id)}"]`,
-                );
-                target?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                const target = [
+                  ...document.querySelectorAll<HTMLElement>('[data-partner-exercise-id]'),
+                ].find((card) => card.dataset.partnerExerciseId === exercise.id);
+                target?.scrollIntoView?.({
+                  behavior: motionReduced() ? 'auto' : 'smooth',
+                  block: 'center',
+                });
                 target?.focus?.({ preventScroll: true });
               });
               return;
@@ -589,9 +723,9 @@ export function TrainTogetherPartnerView({
             onRegisterExercises([exercise]);
             const movementKey = crypto.randomUUID();
             const setKey = crypto.randomUUID();
+            const at = Date.now();
             void onEdit(
-              (current) =>
-                addPartnerMovement(current, exercise.id, { movementKey, setKey }, Date.now()),
+              (current) => addPartnerMovement(current, exercise.id, { movementKey, setKey }, at),
               { movementKey, exercise },
             );
           }}

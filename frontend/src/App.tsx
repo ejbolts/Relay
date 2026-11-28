@@ -520,11 +520,18 @@ import { CardioScreen } from './CardioScreen';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
 import { crossesNewYear } from './chartYears';
 import { onWorkoutFocusRequested } from './workoutFocus';
-import { partners as sessionPartners, TRAIN_ERRORS, type TrainMember } from './trainTogether';
+import {
+  partners as sessionPartners,
+  TRAIN_ERRORS,
+  type TrainMember,
+  type TrainTogetherRead,
+} from './trainTogether';
 import {
   captureTrainInvite,
-  clearTrainInvite,
+  claimTrainInviteToken,
   pendingTrainInvite,
+  releaseTrainInviteToken,
+  takePendingTrainInvite,
   TRAIN_INVITE_EVENT,
 } from './trainTogetherInvite';
 import type { PartnerPalette } from './trainTogetherTheme';
@@ -666,7 +673,7 @@ function AppContent() {
   const [settingsGroup, setSettingsGroup] = useState<SettingsGroupId | null>(() =>
     new URLSearchParams(window.location.search).has('youtube') ? 'data' : null,
   );
-  const { user, signingIn = false } = useUserSession();
+  const { user, signingIn = false, confirmed: sessionConfirmed = true } = useUserSession();
   usePresenceConnection(user?.id ?? null);
   // The workout just finished, shown on Home until it is dismissed or the next one starts.
   const [finishSummary, setFinishSummary] = useState<FinishSummary | null>(null);
@@ -929,7 +936,7 @@ function AppContent() {
     openingRevision !== null || startupRefreshed,
     exerciseCatalogue.loaded,
   );
-  const { show: showToast, active: toastActive } = useToast();
+  const { show: showToast, dismiss: dismissToast, active: toastActive } = useToast();
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [editingWorkoutSaving, setWorkoutSaving] = useState(false);
   const finishedQueue = useFinishedWorkoutQueue(user?.id ?? null, (saved, resumedId, queued) =>
@@ -1022,12 +1029,74 @@ function AppContent() {
   // Cancel this browser's legacy elapsed-time reminder; the server tracks shared activity.
   useActiveWorkoutReminder(null);
   const workoutSync = useActiveWorkoutSync(user?.id ?? null);
-  const trainTogether = useTrainTogether(user?.id ?? null, showToast);
+  const trainTogether = useTrainTogether(user?.id ?? null, showToast, {
+    confirmed: sessionConfirmed,
+    onPartnerRetired: (partnerId) =>
+      setActivePartnerId((current) => (current === partnerId ? null : current)),
+  });
   const trainPalettes = usePartnerPalettes(Math.max(trainTogether.partners.length, 1));
   const [trainSheetOpen, setTrainSheetOpen] = useState(false);
   const [trainStartPartnerId, setTrainStartPartnerId] = useState<string | null>(null);
   const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
-  const [trainInvite, setTrainInvite] = useState(() => pendingTrainInvite());
+  const [trainInviteTick, setTrainInviteTick] = useState(0);
+  const trainMountedRef = useRef(true);
+  const trainUserIdRef = useRef<string | null>(user?.id ?? null);
+  trainUserIdRef.current = user?.id ?? null;
+  const activeWorkoutStartedAtRef = useRef<number | null>(activeWorkoutStartedAt);
+  activeWorkoutStartedAtRef.current = activeWorkoutStartedAt;
+  const leavingTrainSessionRef = useRef(false);
+  const lastPartnerFocusIdRef = useRef<string | null>(null);
+  const prevActivePartnerIdRef = useRef<string | null>(null);
+  const trainActionToastOpenRef = useRef(false);
+  const completeTrainJoin = (joined: TrainTogetherRead) => {
+    const joinedPartners = sessionPartners(joined.session);
+    const currentDraft = readActiveWorkoutDraft();
+    const hasLiveWorkout =
+      activeWorkoutStartedAtRef.current !== null ||
+      Boolean(currentDraft && !currentDraft.pendingSave);
+    if (hasLiveWorkout) {
+      setEditingWorkout(null);
+      resumeLiveWorkout();
+    } else if (joinedPartners.length > 0) {
+      const withWorkout = joinedPartners.find((p) => p.workout !== null) ?? joinedPartners[0];
+      setTrainStartPartnerId(withWorkout.user_id);
+    }
+  };
+  const leaveTrainSession = async (): Promise<boolean> => {
+    if (leavingTrainSessionRef.current) return false;
+    leavingTrainSessionRef.current = true;
+    try {
+      await trainTogether.leave();
+      setActivePartnerId(null);
+      return true;
+    } catch (reason) {
+      if (trainMountedRef.current) {
+        showToast({
+          message: reason instanceof Error ? reason.message : 'Could not leave the session.',
+          variant: 'error',
+        });
+      }
+      return false;
+    } finally {
+      leavingTrainSessionRef.current = false;
+    }
+  };
+  useEffect(() => {
+    trainMountedRef.current = true;
+    return () => {
+      trainMountedRef.current = false;
+      if (trainActionToastOpenRef.current) {
+        trainActionToastOpenRef.current = false;
+        dismissToast();
+      }
+    };
+  }, [dismissToast]);
+  useEffect(() => {
+    if (trainActionToastOpenRef.current) {
+      trainActionToastOpenRef.current = false;
+      dismissToast();
+    }
+  }, [user?.id, dismissToast]);
   const [syncConflictDismissed, setSyncConflictDismissed] = useState(false);
   useEffect(() => {
     const remoteWorkout = () => {
@@ -1170,9 +1239,11 @@ function AppContent() {
   useEffect(() => {
     const onTrainHash = () => {
       const token = captureTrainInvite();
-      if (token) setTrainInvite(token);
+      if (token) setTrainInviteTick((n) => n + 1);
     };
-    const onTrainScanned = () => setTrainInvite(pendingTrainInvite());
+    const onTrainScanned = () => {
+      if (pendingTrainInvite()) setTrainInviteTick((n) => n + 1);
+    };
     window.addEventListener('hashchange', onTrainHash);
     window.addEventListener(TRAIN_INVITE_EVENT, onTrainScanned);
     return () => {
@@ -1181,6 +1252,27 @@ function AppContent() {
     };
   }, []);
   useEffect(() => {
+    const prev = prevActivePartnerIdRef.current;
+    prevActivePartnerIdRef.current = activePartnerId;
+    if (activePartnerId) {
+      lastPartnerFocusIdRef.current = activePartnerId;
+      return;
+    }
+    if (!prev) return;
+    const targetId = lastPartnerFocusIdRef.current;
+    window.requestAnimationFrame(() => {
+      const partnerBtn = targetId
+        ? ([...document.querySelectorAll<HTMLButtonElement>('[data-tt-log-for]')].find(
+            (button) => button.dataset.ttLogFor === targetId,
+          ) ?? null)
+        : null;
+      const fallback = document.querySelector<HTMLButtonElement>(
+        '.live-workout-header .live-workout-options, .live-workout-header .workout-sheet-grab',
+      );
+      (partnerBtn ?? fallback)?.focus({ preventScroll: true });
+    });
+  }, [activePartnerId]);
+  useEffect(() => {
     if (!activePartnerId) return;
     const stillActive = trainTogether.partners.some(
       (partner) => partner.user_id === activePartnerId && partner.workout !== null,
@@ -1188,59 +1280,88 @@ function AppContent() {
     if (!stillActive) setActivePartnerId(null);
   }, [activePartnerId, trainTogether.partners]);
   useEffect(() => {
-    if (!trainInvite || !user) return;
-    clearTrainInvite();
-    setTrainInvite(null);
-    void trainTogether
-      .join(trainInvite)
-      .then((joined) => {
-        const joinedPartners = sessionPartners(joined.session);
-        if (activeWorkoutStartedAt !== null) {
-          setTab('log');
-        } else if (joinedPartners.length > 0) {
-          const withWorkout = joinedPartners.find((p) => p.workout !== null) ?? joinedPartners[0];
-          setTrainStartPartnerId(withWorkout.user_id);
-        }
-      })
-      .catch((reason: unknown) => {
-        if (
-          reason instanceof ApiError &&
-          reason.code === TRAIN_ERRORS.notFriends &&
-          reason.member
-        ) {
-          const target = reason.member;
-          showToast({
-            message: reason.message,
-            variant: 'error',
-            duration: 'important',
-            action: {
-              label: 'Add friend',
-              run: async () => {
-                try {
-                  const res = await api.sharing.addFriend(target.user_id);
-                  showToast(
-                    res.status === 'friends'
-                      ? `Added ${target.name} as a friend`
-                      : `Friend request sent to ${target.name}`,
-                  );
-                } catch (err) {
-                  showToast({
-                    message: err instanceof Error ? err.message : 'Could not send friend request.',
-                    variant: 'error',
-                  });
-                }
+    if (!user || !sessionConfirmed || !pendingTrainInvite()) return;
+    const ownerUserId = user.id;
+    const accountScope = captureAccountCacheScope();
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled || !trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
+      const token = takePendingTrainInvite();
+      if (!token || !claimTrainInviteToken(token)) return;
+      void trainTogether
+        .join(token)
+        .then((joined) => {
+          if (!joined || !trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
+          completeTrainJoin(joined);
+        })
+        .catch((reason: unknown) => {
+          if (!trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
+          if (
+            reason instanceof ApiError &&
+            reason.code === TRAIN_ERRORS.notFriends &&
+            reason.member
+          ) {
+            const target = reason.member;
+            trainActionToastOpenRef.current = true;
+            showToast({
+              message: reason.message,
+              variant: 'error',
+              duration: 'important',
+              onDismiss: () => {
+                trainActionToastOpenRef.current = false;
               },
-            },
+              onTimeout: () => {
+                trainActionToastOpenRef.current = false;
+              },
+              action: {
+                label: 'Add friend',
+                run: async () => {
+                  if (
+                    !trainMountedRef.current ||
+                    trainUserIdRef.current !== ownerUserId ||
+                    !accountScope.isCurrent()
+                  ) {
+                    trainActionToastOpenRef.current = false;
+                    dismissToast();
+                    return;
+                  }
+                  try {
+                    const res = await api.sharing.addFriend(target.user_id);
+                    if (!trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
+                    trainActionToastOpenRef.current = false;
+                    showToast(
+                      res.status === 'friends'
+                        ? `Added ${target.name} as a friend`
+                        : `Friend request sent to ${target.name}`,
+                    );
+                  } catch (err) {
+                    if (!trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
+                    trainActionToastOpenRef.current = false;
+                    showToast({
+                      message:
+                        err instanceof Error ? err.message : 'Could not send friend request.',
+                      variant: 'error',
+                    });
+                  }
+                },
+              },
+            });
+            return;
+          }
+          showToast({
+            message: reason instanceof Error ? reason.message : 'Could not join this session.',
+            variant: 'error',
           });
-          return;
-        }
-        showToast({
-          message: reason instanceof Error ? reason.message : 'Could not join this session.',
-          variant: 'error',
+        })
+        .finally(() => {
+          releaseTrainInviteToken(token);
         });
-      });
+    });
+    return () => {
+      cancelled = true;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trainInvite, user]);
+  }, [user, sessionConfirmed, trainInviteTick]);
   // A notification opens the reacted or commented workout in Social's feed.
   useEffect(() => onWorkoutFocusRequested(() => setTab('social')), [setTab]);
   // A person named in a notification opens their shared profile.
@@ -3027,6 +3148,7 @@ function AppContent() {
                                 }
                                 restGoRequest={restGoRequest}
                                 screenVisible={tab === 'log'}
+                                inForeground={activePartner === null}
                                 onLiveSummaryChange={setLiveWorkoutSummary}
                                 onClose={navigateBack}
                                 workoutEditGuard={
@@ -3045,6 +3167,11 @@ function AppContent() {
                                 }
                                 onLogForPartner={
                                   !editingWorkout && !viewedWorkout ? setActivePartnerId : undefined
+                                }
+                                onLeaveTrainSession={
+                                  !editingWorkout && !viewedWorkout
+                                    ? () => void leaveTrainSession()
+                                    : undefined
                                 }
                                 onDelete={() => {
                                   if (workoutSaveBlocked) return;
@@ -3342,19 +3469,10 @@ function AppContent() {
             onCreateInvite={trainTogether.createInvite}
             onJoin={async (token) => {
               const joined = await trainTogether.join(token);
-              const joinedPartners = sessionPartners(joined.session);
-              if (activeWorkoutStartedAt !== null) {
-                setTab('log');
-              } else if (joinedPartners.length > 0) {
-                const withWorkout =
-                  joinedPartners.find((p) => p.workout !== null) ?? joinedPartners[0];
-                setTrainStartPartnerId(withWorkout.user_id);
-              }
+              if (!joined || !trainMountedRef.current) return;
+              completeTrainJoin(joined);
             }}
-            onLeave={async () => {
-              setActivePartnerId(null);
-              await trainTogether.leave();
-            }}
+            onLeave={leaveTrainSession}
             onClose={() => setTrainSheetOpen(false)}
           />
         )}
@@ -3369,12 +3487,19 @@ function AppContent() {
               <TrainTogetherStartSheet
                 partner={partner}
                 palette={trainPalettes[index]}
+                catalogueLoaded={exerciseCatalogue.loaded}
+                catalogueError={exerciseCatalogue.error}
+                onRetryCatalogue={() =>
+                  void refreshData({ activityLabel: 'Reloading exercises…' })
+                }
                 onStartWithPartner={(exerciseIds, unmatched) => {
+                  if (!exerciseCatalogue.loaded) return;
                   setTrainStartPartnerId(null);
                   const byId = new Map(exercises.map((item) => [item.id, item]));
                   const matched = exerciseIds
                     .map((id) => byId.get(id))
                     .filter((item): item is Exercise => Boolean(item));
+                  const missingMatchedCount = exerciseIds.length - matched.length;
                   const category = partner.workout?.draft.category ?? 'other';
                   const templateName = partner.workout?.draft.name?.trim() || 'Workout';
                   const date = localDate();
@@ -3403,9 +3528,10 @@ function AppContent() {
                       }
                     : null;
                   startWorkout(date, false, template, category);
-                  if (unmatched.length > 0) {
+                  const totalUnmatched = unmatched.length + missingMatchedCount;
+                  if (totalUnmatched > 0) {
                     showToast(
-                      `${unmatched.length} ${unmatched.length === 1 ? "exercise wasn't" : "exercises weren't"} in your library.`,
+                      `${totalUnmatched} ${totalUnmatched === 1 ? "exercise wasn't" : "exercises weren't"} in your library.`,
                     );
                   }
                 }}
@@ -3417,7 +3543,7 @@ function AppContent() {
               />
             );
           })()}
-        {workoutSync.conflict && !syncConflictDismissed && (
+        {activePartnerId === null && workoutSync.conflict && !syncConflictDismissed && (
           <ActiveWorkoutSyncDialog
             conflict={workoutSync.conflict}
             exercises={exercises}
@@ -3427,7 +3553,7 @@ function AppContent() {
         )}
         {/* Failed syncs retry in the background; only a conflict needs the user. This floats
             over the screen, so it never pushes the workout down. */}
-        {workoutSync.conflict && syncConflictDismissed && (
+        {activePartnerId === null && workoutSync.conflict && syncConflictDismissed && (
           <button
             type="button"
             className="workout-sync-reopen primary-action"
@@ -3743,11 +3869,13 @@ function WorkoutLogger({
   onRestDoneChange,
   restGoRequest = 0,
   screenVisible = true,
+  inForeground = true,
   onLiveSummaryChange,
   trainTogether,
   trainPalettes = [],
   onOpenTrainSheet,
   onLogForPartner,
+  onLeaveTrainSession,
 }: {
   exercises: Exercise[];
   restoredDraftMovements: DraftMovement[];
@@ -3790,11 +3918,14 @@ function WorkoutLogger({
   restGoRequest?: number;
   /** False while the workout is minimised behind another tab. */
   screenVisible?: boolean;
+  /** False while another person's workout is in the foreground (partner logging mode). */
+  inForeground?: boolean;
   onLiveSummaryChange: (summary: LiveWorkoutSummary) => void;
   trainTogether?: TrainTogetherController;
   trainPalettes?: PartnerPalette[];
   onOpenTrainSheet?: () => void;
   onLogForPartner?: (partnerId: string) => void;
+  onLeaveTrainSession?: () => void;
 }) {
   const { config: trainingBlocks } = useTrainingBlocks();
   const weightUnit = useWeightUnit();
@@ -5141,8 +5272,9 @@ function WorkoutLogger({
       : dockSpacing === 'has-rest-notch'
         ? '4rem'
         : '1rem';
+  const visibleInForeground = screenVisible && inForeground;
   useToastPlacement(
-    screenVisible ? 'bottom' : 'top',
+    visibleInForeground ? 'bottom' : 'top',
     `calc(${toastBottom} + env(safe-area-inset-bottom))`,
   );
   // The workout's toasts belong to its screen; leaving it ends them, as their countdown would.
@@ -5240,7 +5372,7 @@ function WorkoutLogger({
           }
           onLeaveTrainTogether={
             trainTogether && trainTogether.partners.length > 0
-              ? () => void trainTogether.leave()
+              ? (onLeaveTrainSession ?? (() => void trainTogether.leave()))
               : undefined
           }
           deck={
@@ -5674,7 +5806,7 @@ function WorkoutLogger({
         </div>
       )}
 
-      {screenVisible && prToastEntries.length > 0 && (
+      {visibleInForeground && prToastEntries.length > 0 && (
         <Toast
           id={prToastId}
           variant="celebrate"
@@ -5684,7 +5816,7 @@ function WorkoutLogger({
           onDismiss={closePrToast}
         />
       )}
-      {screenVisible && loggerNotice && (
+      {visibleInForeground && loggerNotice && (
         <Toast
           id={loggerNotice.id}
           variant="warning"
@@ -5693,7 +5825,7 @@ function WorkoutLogger({
           onDismiss={() => setLoggerNotice(null)}
         />
       )}
-      {screenVisible && swapUndo && (
+      {visibleInForeground && swapUndo && (
         <Toast
           id={swapUndo.id}
           message={`Swapped to ${swapUndo.exerciseName}`}
@@ -5703,7 +5835,7 @@ function WorkoutLogger({
           onDismiss={() => setSwapUndo(null)}
         />
       )}
-      {screenVisible && undoDeletion && (
+      {visibleInForeground && undoDeletion && (
         <Toast
           id={`${undoDeletion.kind}:${undoDeletion.set.key}`}
           message={undoDeletion.kind === 'rest' ? 'Rest time removed' : 'Set deleted'}
@@ -5728,7 +5860,7 @@ function WorkoutLogger({
         />
       )}
       {/* Minimised, the tab bar's Start button rings instead. */}
-      {showRestDone && screenVisible && (
+      {showRestDone && visibleInForeground && (
         <RestDoneBell endedAt={restDone.endedAt} next={restNextSet} onGo={goToRestNextSet} />
       )}
       {weeklySetsUpdate && (
@@ -5763,7 +5895,7 @@ function WorkoutLogger({
         </div>
       )}
 
-      {inactivePromptOpen && !initialWorkout && !deleteConfirmationOpen && (
+      {inForeground && inactivePromptOpen && !initialWorkout && !deleteConfirmationOpen && (
         <InactiveWorkoutDialog
           name={liveIdentity.name}
           startedAt={startedAt}
@@ -5788,9 +5920,9 @@ function WorkoutLogger({
         />
       )}
 
-      {discardChangesDialog}
+      {inForeground && discardChangesDialog}
 
-      {deleteConfirmationOpen && (
+      {inForeground && deleteConfirmationOpen && (
         <WorkoutCloseDialog
           editing={Boolean(initialWorkout)}
           resuming={Boolean(resumedWorkoutId)}
@@ -5805,7 +5937,7 @@ function WorkoutLogger({
         />
       )}
 
-      {machineAssignmentError && (
+      {inForeground && machineAssignmentError && (
         <PopupDialog
           title="Assign sets to machines"
           className="machine-assignment-dialog"
@@ -5836,7 +5968,7 @@ function WorkoutLogger({
         </PopupDialog>
       )}
 
-      {warmupReviewOpen && warmupOnlyMovements.length > 0 && (
+      {inForeground && warmupReviewOpen && warmupOnlyMovements.length > 0 && (
         <WarmupOnlyFinishDialog
           movements={warmupOnlyMovements}
           weightUnit={weightUnit}
@@ -5849,7 +5981,7 @@ function WorkoutLogger({
         />
       )}
 
-      {timeEditorOpen && (
+      {inForeground && timeEditorOpen && (
         <WorkoutTimeEditor
           elapsedSeconds={workoutTimeSoFarSeconds(elapsed, previousDurationMinutes)}
           savedMinutes={previousDurationMinutes}
@@ -5869,7 +6001,7 @@ function WorkoutLogger({
           }}
         />
       )}
-      {finishConfirmationOpen && (
+      {inForeground && finishConfirmationOpen && (
         <PopupDialog
           title={finishBlocker ? "Can't finish yet" : 'Finish workout?'}
           size="compact"
@@ -5913,7 +6045,7 @@ function WorkoutLogger({
         </PopupDialog>
       )}
 
-      {nameEditorOpen && (
+      {inForeground && nameEditorOpen && (
         <WorkoutNameDialog
           value={nameDraft}
           fallbackName={`${selectedType.name} workout`}
@@ -5926,7 +6058,7 @@ function WorkoutLogger({
         />
       )}
 
-      {swapSheetMovement && (
+      {inForeground && swapSheetMovement && (
         <ExerciseSwapSheet
           key={swapSheetMovement.key}
           exercise={swapSheetMovement.exercise}
@@ -5949,7 +6081,7 @@ function WorkoutLogger({
         />
       )}
 
-      {pickerOpen && (
+      {inForeground && pickerOpen && (
         <ExercisePicker
           key={switchingMovementKey ? `switch-${switchingMovementKey}` : 'add-exercises'}
           exercises={exercises}
@@ -5972,7 +6104,7 @@ function WorkoutLogger({
         />
       )}
 
-      {supersetPickerKey && (
+      {inForeground && supersetPickerKey && (
         <SupersetPicker
           key={supersetPickerKey}
           movementKey={supersetPickerKey}

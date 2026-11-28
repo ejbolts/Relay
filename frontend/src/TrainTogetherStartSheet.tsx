@@ -6,12 +6,18 @@ import type { PartnerPalette } from './trainTogetherTheme';
 export function TrainTogetherStartSheet({
   partner,
   palette,
+  catalogueLoaded = true,
+  catalogueError = null,
+  onRetryCatalogue,
   onStartWithPartner,
   onStartOwn,
   onClose,
 }: {
   partner: TrainMember;
   palette?: PartnerPalette;
+  catalogueLoaded?: boolean;
+  catalogueError?: string | null;
+  onRetryCatalogue?: () => void;
   onStartWithPartner: (exerciseIds: string[], unmatched: string[]) => void;
   onStartOwn: () => void;
   onClose: () => void;
@@ -72,16 +78,35 @@ export function TrainTogetherStartSheet({
           </div>
         )}
 
+        {copied.exerciseIds.length > 0 && !catalogueLoaded && catalogueError && (
+          <p className="inline-error" role="alert">
+            {catalogueError}
+          </p>
+        )}
+
         <div className="tt-start-actions">
-          {copied.exerciseIds.length > 0 && (
-            <button
-              type="button"
-              className="pulse-button primary tt-full-btn"
-              onClick={() => onStartWithPartner(copied.exerciseIds, copied.unmatched)}
-            >
-              {`Start with ${name}’s exercises`}
-            </button>
-          )}
+          {copied.exerciseIds.length > 0 &&
+            (catalogueLoaded ? (
+              <button
+                type="button"
+                className="pulse-button primary tt-full-btn"
+                onClick={() => onStartWithPartner(copied.exerciseIds, copied.unmatched)}
+              >
+                {`Start with ${name}’s exercises`}
+              </button>
+            ) : catalogueError && onRetryCatalogue ? (
+              <button
+                type="button"
+                className="pulse-button primary tt-full-btn"
+                onClick={onRetryCatalogue}
+              >
+                Retry loading exercises
+              </button>
+            ) : (
+              <button type="button" className="pulse-button primary tt-full-btn" disabled>
+                Loading your exercises…
+              </button>
+            ))}
           <button
             type="button"
             className={`pulse-button ${copied.exerciseIds.length > 0 ? 'secondary' : 'primary'} tt-full-btn`}

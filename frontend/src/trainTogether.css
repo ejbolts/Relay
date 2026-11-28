@@ -326,8 +326,9 @@
 }
 
 .tt-deck-session-btn {
-  min-height: 2.25rem;
-  padding: 0 0.5rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0 0.625rem;
   border: 0;
   border-radius: 0.5rem;
   background: transparent;
@@ -583,6 +584,10 @@
   color: var(--p-good);
 }
 
+.tt-partner-live.is-paused {
+  color: var(--p-muted);
+}
+
 .tt-partner-live-dot {
   width: 6px;
   height: 6px;
@@ -698,7 +703,7 @@
 .tt-partner-set-cols,
 .tt-partner-set-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) 30px 44px 40px;
+  grid-template-columns: 28px minmax(0, 1fr) minmax(0, 1fr) 30px 44px 44px;
   gap: 0.25rem;
   align-items: center;
 }
@@ -751,7 +756,8 @@
 .tt-partner-input {
   width: 100%;
   min-width: 0;
-  height: 2.5rem;
+  min-height: 2.75rem;
+  height: 2.75rem;
   padding: 0 0.375rem;
   border: 1px solid var(--p-line-strong);
   border-radius: 0.625rem;
@@ -766,6 +772,24 @@
   outline: none;
   border-color: var(--tt-accent);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--tt-accent) 30%, transparent);
+}
+
+.tt-partner-input.is-invalid {
+  border-color: var(--p-danger);
+  background: var(--p-danger-soft);
+}
+
+.tt-partner-set-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1875rem;
+}
+
+.tt-partner-field-error {
+  margin: 0 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--p-danger);
 }
 
 .tt-partner-rpe {
@@ -808,7 +832,8 @@
 .tt-partner-remove-set {
   display: grid;
   place-items: center;
-  width: 2.5rem;
+  width: 2.75rem;
+  min-width: 2.75rem;
   min-height: 2.75rem;
   border: 0;
   border-radius: 0.625rem;

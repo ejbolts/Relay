@@ -14,6 +14,8 @@ export interface UserSession {
   accountDeleted: () => Promise<void>;
   /** True while the sign-in screen is still animating away above the app; prompts wait. */
   signingIn?: boolean;
+  /** False while opening from a remembered account before `/api/auth/me` confirms the session. */
+  confirmed?: boolean;
 }
 
 const noop = async () => undefined;

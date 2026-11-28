@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { ApiError, api, type ApiErrorMember } from './api';
 import { QrCode } from './FriendQrCode';
 import { FriendQrScanner } from './FriendQrScanner';
@@ -57,37 +57,63 @@ export function TrainTogetherSheet({
   initialTab?: SheetTab;
   onCreateInvite: () => Promise<TrainInvite | null>;
   onJoin: (token: string) => Promise<void>;
-  onLeave: () => Promise<void>;
+  onLeave: () => Promise<boolean | void>;
   onClose: () => void;
 }) {
   const [tab, setTab] = useState<SheetTab>(initialTab);
   const [inviteError, setInviteError] = useState<string | null>(null);
+  const [inviteAttempt, setInviteAttempt] = useState(0);
+  const [scanRetryKey, setScanRetryKey] = useState(0);
   const [shareError, setShareError] = useState<string | null>(null);
   const [scanProblem, setScanProblem] = useState<ScanProblem | null>(null);
   const [addingFriendId, setAddingFriendId] = useState<string | null>(null);
   const [addedFriendIds, setAddedFriendIds] = useState<ReadonlySet<string>>(() => new Set());
   const toast = useToast();
   const canShare = typeof navigator.share === 'function';
+  const idPrefix = useId();
+  const codeTabRef = useRef<HTMLButtonElement>(null);
+  const scanTabRef = useRef<HTMLButtonElement>(null);
 
   const maxMembers = session?.max_members ?? TRAIN_MAX_MEMBERS;
   const sessionFull = (session?.members.length ?? 0) >= maxMembers;
+  // Only render a held invite that matches the current session (when a session is loaded).
+  const activeInvite = invite && (!session || invite.session_id === session.id) ? invite : null;
 
-  // Auto-fetch a fresh invite whenever the My code tab is open and no live code is held.
+  const mountedRef = useRef(true);
+  const inFlightInviteRef = useRef(false);
+  const onCreateInviteRef = useRef(onCreateInvite);
+  onCreateInviteRef.current = onCreateInvite;
   useEffect(() => {
-    if (tab !== 'code' || sessionFull || invite || creatingInvite || inviteError) return;
-    let cancelled = false;
-    void onCreateInvite().catch((reason: unknown) => {
-      if (cancelled) return;
-      setInviteError(
-        reason instanceof Error ? reason.message : 'Could not create a Train together code.',
-      );
-    });
+    mountedRef.current = true;
     return () => {
-      cancelled = true;
+      mountedRef.current = false;
     };
-  }, [tab, sessionFull, invite, creatingInvite, inviteError, onCreateInvite]);
+  }, []);
 
-  const inviteUrl = invite ? trainInviteLink(invite.token, window.location.origin) : null;
+  // Request one invite when My code is showing and no live code is held; never auto-retry errors.
+  useEffect(() => {
+    if (tab !== 'code' || sessionFull || activeInvite || inviteError || inFlightInviteRef.current) {
+      return;
+    }
+    inFlightInviteRef.current = true;
+    void onCreateInviteRef
+      .current()
+      .catch((reason: unknown) => {
+        if (!mountedRef.current) return;
+        setInviteError(
+          reason instanceof Error ? reason.message : 'Could not create a Train together code.',
+        );
+      })
+      .finally(() => {
+        inFlightInviteRef.current = false;
+      });
+  }, [tab, sessionFull, activeInvite, inviteError, inviteAttempt, user.id, session?.id]);
+
+  // Keep `creatingInvite` consumed for aria-busy while request is pending.
+  const inviteUrl = activeInvite
+    ? trainInviteLink(activeInvite.token, window.location.origin)
+    : null;
+  const inviteBusy = creatingInvite || !inviteUrl;
   const progressPct = Math.min(100, Math.max(0, (inviteSeconds / TRAIN_INVITE_SECONDS) * 100));
 
   async function shareLink() {
@@ -154,8 +180,8 @@ export function TrainTogetherSheet({
 
   async function handleLeave() {
     try {
-      await onLeave();
-      onClose();
+      const ok = await onLeave();
+      if (ok !== false) onClose();
     } catch (reason) {
       toast.show({
         message: reason instanceof Error ? reason.message : 'Could not leave the session.',
@@ -163,6 +189,19 @@ export function TrainTogetherSheet({
       });
     }
   }
+
+  function selectTab(next: SheetTab, moveFocus = false) {
+    setTab(next);
+    setScanProblem(null);
+    if (moveFocus) {
+      (next === 'code' ? codeTabRef : scanTabRef).current?.focus();
+    }
+  }
+
+  const codeTabId = `${idPrefix}-tab-code`;
+  const scanTabId = `${idPrefix}-tab-scan`;
+  const codePanelId = `${idPrefix}-panel-code`;
+  const scanPanelId = `${idPrefix}-panel-scan`;
 
   return (
     <PopupDialog
@@ -178,19 +217,32 @@ export function TrainTogetherSheet({
       >
         {(
           [
-            ['code', 'My code'],
-            ['scan', 'Scan'],
+            ['code', 'My code', codeTabId, codePanelId, codeTabRef],
+            ['scan', 'Scan', scanTabId, scanPanelId, scanTabRef],
           ] as const
-        ).map(([value, label]) => (
+        ).map(([value, label, tabId, panelId, tabRef]) => (
           <button
             key={value}
+            ref={tabRef}
+            id={tabId}
             type="button"
             role="tab"
             aria-selected={tab === value}
+            aria-controls={panelId}
+            tabIndex={tab === value ? 0 : -1}
             className={tab === value ? 'active' : ''}
-            onClick={() => {
-              setTab(value);
-              setScanProblem(null);
+            onClick={() => selectTab(value)}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+                event.preventDefault();
+                selectTab(tab === 'code' ? 'scan' : 'code', true);
+              } else if (event.key === 'Home') {
+                event.preventDefault();
+                selectTab('code', true);
+              } else if (event.key === 'End') {
+                event.preventDefault();
+                selectTab('scan', true);
+              }
             }}
           >
             {label}
@@ -199,11 +251,17 @@ export function TrainTogetherSheet({
       </div>
 
       {tab === 'scan' ? (
-        <div className="tt-sheet-scan">
+        <div
+          id={scanPanelId}
+          role="tabpanel"
+          aria-labelledby={scanTabId}
+          className="tt-sheet-scan"
+        >
           <FriendQrScanner
             userId={user.id}
             mode="train"
             paused={joining}
+            retryKey={scanRetryKey}
             onScanned={(accountId) => {
               onClose();
               openFriendInvite(accountId);
@@ -230,11 +288,26 @@ export function TrainTogetherSheet({
                       : 'Add friend'}
                 </button>
               )}
+              <button
+                type="button"
+                className="pulse-button secondary tt-full-btn"
+                onClick={() => {
+                  setScanProblem(null);
+                  setScanRetryKey((count) => count + 1);
+                }}
+              >
+                Scan again
+              </button>
             </div>
           )}
         </div>
       ) : (
-        <div className="tt-sheet-body">
+        <div
+          id={codePanelId}
+          role="tabpanel"
+          aria-labelledby={codeTabId}
+          className="tt-sheet-body"
+        >
           {sessionFull ? (
             <div className="tt-sheet-full" role="status">
               <strong>
@@ -247,7 +320,10 @@ export function TrainTogetherSheet({
               <button
                 type="button"
                 className="pulse-button secondary tt-full-btn"
-                onClick={() => setInviteError(null)}
+                onClick={() => {
+                  setInviteError(null);
+                  setInviteAttempt((count) => count + 1);
+                }}
               >
                 Try again
               </button>
@@ -255,7 +331,7 @@ export function TrainTogetherSheet({
           ) : (
             <>
               <div className="tt-qr-card">
-                <div className="tt-qr-box" aria-busy={!inviteUrl}>
+                <div className="tt-qr-box" aria-busy={inviteBusy}>
                   {inviteUrl && (
                     <QrCode
                       value={inviteUrl}

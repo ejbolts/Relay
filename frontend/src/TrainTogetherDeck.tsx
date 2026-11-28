@@ -186,6 +186,7 @@ export function TrainTogetherDeck({
                     <button
                       type="button"
                       className="tt-deck-log-btn"
+                      data-tt-log-for={partner.user_id}
                       onClick={() => onLogForPartner(partner.user_id)}
                     >
                       <span>Log for {name}</span>
@@ -244,6 +245,7 @@ export function TrainTogetherDeck({
                     <button
                       type="button"
                       className="tt-deck-mini-cta"
+                      data-tt-log-for={partner.user_id}
                       aria-label={`Log for ${name}`}
                       onClick={() => onLogForPartner(partner.user_id)}
                     >

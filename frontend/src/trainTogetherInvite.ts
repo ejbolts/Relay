@@ -26,6 +26,7 @@ interface StoredTrainInvite {
 }
 
 let memoryInvite: StoredTrainInvite | null = null;
+const inFlightTokens = new Set<string>();
 
 interface InviteLocation {
   hash: string;
@@ -105,6 +106,31 @@ export function pendingTrainInvite(
   return entry.token;
 }
 
+/**
+ * Atomically reads and clears the pending train-together token, checking its 5-minute age at
+ * consumption time. Returns null when missing or expired.
+ */
+export function takePendingTrainInvite(
+  storage?: Pick<Storage, 'getItem' | 'removeItem'>,
+  now = Date.now(),
+): string | null {
+  const token = pendingTrainInvite(storage, now);
+  if (!token) return null;
+  clearTrainInvite(storage);
+  return token;
+}
+
+/** Guards against submitting the same invite token concurrently (e.g. StrictMode double mount). */
+export function claimTrainInviteToken(token: string): boolean {
+  if (inFlightTokens.has(token)) return false;
+  inFlightTokens.add(token);
+  return true;
+}
+
+export function releaseTrainInviteToken(token: string): void {
+  inFlightTokens.delete(token);
+}
+
 /** Hands a scanned train-together token to the app's join path. */
 export function openTrainInvite(
   token: string,
@@ -114,4 +140,32 @@ export function openTrainInvite(
   if (!validToken(token)) return;
   writeStoredInvite({ token, capturedAt: now }, storage);
   window.dispatchEvent(new Event(TRAIN_INVITE_EVENT));
+}
+
+let hashCaptureRefCount = 0;
+let hashCaptureListener: (() => void) | null = null;
+
+/**
+ * Keeps `#train=<token>` fragment capture active for the lifetime of the page, including while
+ * signed out on the sign-in screen. Ref-counted so multiple callers share one listener cleanly.
+ */
+export function installTrainInviteHashCapture(): () => void {
+  hashCaptureRefCount += 1;
+  if (!hashCaptureListener) {
+    hashCaptureListener = () => {
+      const token = captureTrainInvite();
+      if (token) window.dispatchEvent(new Event(TRAIN_INVITE_EVENT));
+    };
+    window.addEventListener('hashchange', hashCaptureListener);
+  }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    hashCaptureRefCount = Math.max(0, hashCaptureRefCount - 1);
+    if (hashCaptureRefCount === 0 && hashCaptureListener) {
+      window.removeEventListener('hashchange', hashCaptureListener);
+      hashCaptureListener = null;
+    }
+  };
 }
