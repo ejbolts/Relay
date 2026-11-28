@@ -249,6 +249,7 @@ function LiveLogger({
   const syncConflictOpen = !!syncConflict && conflictSheetOpen;
   const insets = useSafeAreaInsets();
   const trainInSession = useTrainState((train) => trainPartners(train.read?.session).length > 0);
+  const loggingForPartner = useTrainState((train) => !!train.loggingFor);
   const { colors, type, space, radius } = useTheme();
   // The exercise picker adds exercises, or picks a replacement for the exercise being swapped.
   const [picker, setPicker] = useState<{ swapping: string | null } | null>(null);
@@ -797,7 +798,14 @@ function LiveLogger({
   // As the web's tips wait for its weekly sets shelf, these wait for the shelf, every sheet and
   // the sync choice.
   const tipsReady =
-    !picker && !swapping && !machinesFor && !timeEditor.open && !shelf && !syncConflictOpen;
+    !picker &&
+    !swapping &&
+    !machinesFor &&
+    !timeEditor.open &&
+    !shelf &&
+    !syncConflictOpen &&
+    // Train together: your logger is hidden while you log for a partner.
+    !loggingForPartner;
   const tipsBottom = insets.bottom + (restShown || shelf ? 150 : 28);
   const { configure: configureTips } = loggerTips;
   useEffect(() => {

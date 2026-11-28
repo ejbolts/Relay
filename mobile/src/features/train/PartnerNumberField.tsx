@@ -41,11 +41,17 @@ export function PartnerNumberField({
     // Not applied: the server's value replaces the text, even while typing.
     const notApplied = resync !== synced.current;
     synced.current = resync;
+    // A conflict elsewhere leaves text that already reads as the stored value alone (half-typed
+    // "82." included); only a field whose own edit wasn't applied takes the server's value.
+    const typed = read(text);
+    const matches =
+      (typed.kind === 'empty' ? null : typed.kind === 'value' ? typed.value : NaN) === value;
+    if (notApplied && matches) return;
     if (!notApplied && (focused || value === shown.current)) return;
     shown.current = value;
     setText(format(value));
     setInvalid(false);
-  }, [value, focused, format, resync]);
+  }, [value, focused, format, resync, read, text]);
   // A focused field whose text isn't the stored value yet looks pending, not saved.
   const typed = read(text);
   const pending =

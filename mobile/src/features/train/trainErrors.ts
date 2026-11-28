@@ -1,26 +1,20 @@
-import { TRAIN_ERRORS } from '../../../../frontend/src/trainTogether';
+import { partnerAccessEnded, partnerWriteRefused } from '../../../../frontend/src/trainTogether';
 import { ApiError } from '../../data/api';
 
-const REFUSALS: readonly string[] = [
-  TRAIN_ERRORS.notPartner,
-  TRAIN_ERRORS.noWorkout,
-  TRAIN_ERRORS.changeNotAllowed,
-];
+// Thin wrappers over the shared rule for a failed partner write (frontend/src/trainTogether.ts),
+// reading the status and code from this app's own ApiError.
 
-/**
- * Relay refused the request, so sending it again can't work: a train-together refusal, or any
- * other 4xx except a timeout (408) or too many requests (429).
- */
+/** Relay refused the change, so sending it again can't work. */
 export function isRefusal(error: unknown) {
-  if (!(error instanceof ApiError)) return false;
-  if (error.code && REFUSALS.includes(error.code)) return true;
-  return error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429;
+  return error instanceof ApiError && partnerWriteRefused(error.status, error.code);
 }
 
-/**
- * Anything else may work when sent again: no answer, a timeout, too many requests or any server
- * error. Shown as "Offline · Unsent change" with Retry, keeping the unsent edit.
- */
+/** The refusal says you can no longer change this partner's workout at all. */
+export function isAccessEnded(error: unknown) {
+  return error instanceof ApiError && partnerAccessEnded(error.code);
+}
+
+/** Anything else may work when sent again: "Offline · Unsent change" with Retry. */
 export function isConnectionFailure(error: unknown) {
   return !isRefusal(error);
 }
