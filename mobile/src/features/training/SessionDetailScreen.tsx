@@ -12,6 +12,7 @@ import { RepeatWorkoutButton } from './RepeatWorkoutButton';
 import { useSavedWorkout } from './trainingQueries';
 import { useTrainingContext } from './useTrainingContext';
 import { workoutMeta, workoutMetric, WorkoutDetails } from './WorkoutCard';
+import { TrainedWithPill } from '../train/TrainedWithPill';
 
 /** One saved workout in full, with ways to edit, resume, delete or repeat it. */
 export function SessionDetailScreen({
@@ -68,6 +69,8 @@ export function SessionDetailScreen({
                   <Text style={[type.footnote, { color: colors.secondary }]}>
                     {workoutMeta(workout, true)}
                   </Text>
+                  {/* Train together: who it was trained with. */}
+                  <TrainedWithPill workout={workout} />
                 </View>
                 <View style={{ alignItems: 'flex-end', gap: 2 }}>
                   <Text style={[type.headline, type.number, { color: colors.text }]}>
