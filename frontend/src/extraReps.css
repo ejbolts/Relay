@@ -1,0 +1,33 @@
+/* Partial and assisted reps: the line under a folded set, and their two fields in an open one. */
+.logger-screen .set-details > .completed-set-extra-reps {
+  display: block;
+  margin: -0.25rem 0 0.25rem 2.5rem;
+  border: 0;
+  border-radius: 8px;
+  padding: 0.125rem 0.5rem 0.25rem;
+  background: transparent;
+  color: var(--p-ink-2);
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  cursor: pointer;
+}
+
+.logger-screen .set-details > .completed-set-extra-reps:focus-visible {
+  outline: 2px solid var(--p-accent-text);
+  outline-offset: -2px;
+}
+
+/* Two fields share the row; the grid's own minimum would let them stretch full width. */
+.logger-screen .set-editor-extra-reps {
+  grid-template-columns: repeat(2, minmax(0, 7rem));
+}
+
+/* A set's extra reps under its full reps, in an exercise's session popup. */
+.exercise-session-sheet .session-extra-reps {
+  display: block;
+  color: var(--p-muted);
+  font-size: 0.75rem;
+}

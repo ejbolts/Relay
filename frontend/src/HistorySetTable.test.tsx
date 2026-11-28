@@ -133,6 +133,21 @@ describe('a saved workout’s sets as a table', () => {
     expect(cells(rows[3])).toEqual(['', 'Machine not assigned']);
   });
 
+  it('keeps full reps in the Reps column and puts partial and assisted reps under the set', () => {
+    const { rows, cells } = render({
+      sets: [
+        set('a', { reps: 12, partial_reps: 4, assisted_reps: 2, notes: 'Slow negatives' }),
+        set('b', { reps: 10, partial_reps: 0, assisted_reps: null }),
+      ],
+    });
+    expect(rows.map((row) => row.className)).toEqual(['', 'history-set-extra', '']);
+    expect(cells(rows[0])).toEqual(['1', '80 kg', '12', '8']);
+    expect(rows[1].querySelector('.history-set-extra-reps')?.textContent).toBe(
+      '+4 partial · +2 assisted',
+    );
+    expect(cells(rows[1])).toEqual(['', '+4 partial · +2 assistedSlow negatives']);
+  });
+
   it('keeps the ratio and record columns when the workout asks, except for cardio', () => {
     const lifts = render({ sets: [set('a')], ratioColumn: true, recordColumn: true });
     expect(lifts.head).toEqual(['Set', 'Weight', 'Reps', 'RPE', '× BW', 'Record']);

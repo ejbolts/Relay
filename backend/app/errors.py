@@ -18,6 +18,8 @@ _VALIDATION_FIELD_LABELS: dict[str, tuple[str, str]] = {
     "average_power_watts": ("average power", " W"),
     "average_mets": ("average MET", ""),
     "reps": ("reps", ""),
+    "partial_reps": ("partial reps", ""),
+    "assisted_reps": ("assisted reps", ""),
     "target_reps": ("target reps", ""),
     "weight_kg": ("weight", " kg"),
     "bodyweight_kg": ("bodyweight", " kg"),

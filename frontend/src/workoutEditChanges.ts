@@ -17,6 +17,8 @@ export interface WorkoutEditFields {
 
 const SAVED_SET_FIELDS = [
   'reps',
+  'partial_reps',
+  'assisted_reps',
   'weight_kg',
   'rpe',
   'rest_seconds',

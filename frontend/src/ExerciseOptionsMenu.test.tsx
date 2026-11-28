@@ -105,6 +105,27 @@ it('offers edit and hide, moves between items with the arrow keys and shows hidd
   await click(items()[0]);
   expect(edit).toHaveBeenCalledExactlyOnceWith(trigger());
 });
+it('switches partial and assisted reps, shown ticked once the exercise tracks them', async () => {
+  const toggle = vi.fn();
+  const switchItem = () => host.querySelector<HTMLButtonElement>('[role="menuitemcheckbox"]')!;
+  for (const tracked of [false, true]) {
+    await act(async () =>
+      root.render(
+        <ExerciseOptionsMenu
+          exerciseName="Lateral Raise"
+          extraReps={tracked}
+          onToggleExtraReps={toggle}
+        />,
+      ),
+    );
+    await click(trigger());
+    expect(switchItem().textContent).toBe('Partial & assisted reps');
+    expect(switchItem().getAttribute('aria-checked')).toBe(String(tracked));
+    await click(switchItem());
+    expect(switchItem()).toBeNull();
+  }
+  expect(toggle).toHaveBeenCalledTimes(2);
+});
 it('renders nothing when no option applies', async () => {
   await act(async () => root.render(<ExerciseOptionsMenu exerciseName="Bench press" />));
   expect(host.querySelector('.exercise-options')).toBeNull();

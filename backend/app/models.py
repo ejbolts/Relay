@@ -720,6 +720,8 @@ class Exercise(Base):
     is_custom: Mapped[bool] = mapped_column(Boolean, default=False)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     partial_sets_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    # The logger offers partial and assisted reps beside each set's full reps.
+    extra_reps_enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     movements: Mapped[list[WorkoutMovement]] = relationship(back_populates="exercise")
@@ -992,6 +994,10 @@ class WorkoutSet(Base):
     )
     order_index: Mapped[int] = mapped_column(Integer)
     reps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Reps beyond the full ones in ``reps``: through part of the range, or with help. They are
+    # recorded with the set and leave volume, records and rep targets to the full reps.
+    partial_reps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    assisted_reps: Mapped[int | None] = mapped_column(Integer, nullable=True)
     weight_kg: Mapped[float | None] = mapped_column(Float, nullable=True)
     rpe: Mapped[float | None] = mapped_column(Float, nullable=True)
     rest_seconds: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -1021,6 +1027,14 @@ class WorkoutSet(Base):
         UniqueConstraint("movement_id", "order_index", name="uq_workout_set_order"),
         CheckConstraint("order_index >= 0", name="workout_set_order_nonnegative"),
         CheckConstraint("reps IS NULL OR reps >= 0", name="workout_set_reps_nonnegative"),
+        CheckConstraint(
+            "partial_reps IS NULL OR partial_reps >= 0",
+            name="workout_set_partial_reps_nonnegative",
+        ),
+        CheckConstraint(
+            "assisted_reps IS NULL OR assisted_reps >= 0",
+            name="workout_set_assisted_reps_nonnegative",
+        ),
         CheckConstraint(
             "target_reps IS NULL OR target_reps >= 0", name="workout_set_target_reps_nonnegative"
         ),

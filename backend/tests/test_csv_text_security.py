@@ -31,6 +31,8 @@ def test_workout_names_and_exercises_round_trip_without_formula_cells():
         order_index=0,
         weight_kg=40,
         reps=8,
+        partial_reps=None,
+        assisted_reps=None,
         bodyweight_kg=None,
         percentile=None,
         warmup=False,

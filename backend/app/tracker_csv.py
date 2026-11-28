@@ -66,6 +66,12 @@ SESSION_METRICS = {
     "Elevation gain (m)": ("elevation_gain_m", float, 0, 30_000),
 }
 CARDIO_HEADERS = ("Exercise kind", *SET_METRICS, *SESSION_METRICS)
+# Reps after a set's full reps, on exercises that track them. They follow the older columns so
+# those keep their places.
+REP_METRICS = {
+    "Partial reps": ("partial_reps", int, 0, 10_000),
+    "Assisted reps": ("assisted_reps", int, 0, 10_000),
+}
 # Exports always write every column; hand-made files need only these.
 REQUIRED_HEADERS = ("Date Lifted", "Exercise", "Reps")
 WEIGHT_HEADERS = ("Weight (kg)", "Weight (lb)")
@@ -91,6 +97,7 @@ KNOWN_HEADERS = {
         *SESSION_HEADERS,
         *WORKOUT_TYPE_HEADERS,
         *CARDIO_HEADERS,
+        *REP_METRICS,
         TEXT_ENCODING_HEADER,
     )
 }
@@ -320,7 +327,7 @@ def parse_rows(raw: bytes) -> tuple[list[ParsedRow], list[str]]:
         if kind and kind not in {item.value for item in ExerciseKind}:
             raise CsvImportError(f"Row {row_number}: Exercise kind must be strength or cardio.")
         metrics = []
-        for specs in (SET_METRICS, SESSION_METRICS):
+        for specs in ({**SET_METRICS, **REP_METRICS}, SESSION_METRICS):
             values = {}
             for header, (attribute, number_type, minimum, maximum) in specs.items():
                 if header not in fieldnames:
@@ -1040,6 +1047,7 @@ def export_workouts(
             *SESSION_HEADERS,
             *WORKOUT_TYPE_HEADERS,
             *CARDIO_HEADERS,
+            *REP_METRICS,
             *((TEXT_ENCODING_HEADER,) if encoded else ()),
         )
     )
@@ -1083,6 +1091,7 @@ def export_workouts(
                                 getattr(session, spec[0], None) for spec in SESSION_METRICS.values()
                             )
                         ),
+                        *(format_number(getattr(item, spec[0])) for spec in REP_METRICS.values()),
                         *((TEXT_ENCODING,) if encoded else ()),
                     )
                 )

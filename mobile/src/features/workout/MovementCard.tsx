@@ -17,6 +17,7 @@ import {
   movementHistory,
   recentExerciseHistory,
 } from '../../../../frontend/src/exerciseHistory';
+import { EXTRA_REP_KINDS, hasExtraReps, tracksExtraReps } from '../../../../frontend/src/extraReps';
 import { matchingLastSessionSet } from '../../../../frontend/src/lastSessionSet';
 import { foldedMovementSummary, workingSetsDone } from '../../../../frontend/src/movementFold';
 import { timeSince } from '../../../../frontend/src/machineHistory';
@@ -54,7 +55,7 @@ import {
 import { hasRecordedPerformance } from '../../../../frontend/src/workoutSets';
 import { supersetGroupName } from '../../../../frontend/src/workoutSupersets';
 import { useAuthorisedImage } from '../../data/authorisedImage';
-import { useTrainingPreferences } from '../../data/queries';
+import { useExercises, useTrainingPreferences } from '../../data/queries';
 import { cardSurface } from '../../ui/components';
 import { haptics } from '../../ui/haptics';
 import { Icon, type IconPair } from '../../ui/Icon';
@@ -157,6 +158,11 @@ export const MovementCard = memo(function MovementCard({
     [machines],
   );
   const pinnedMachine = movement.machinePhotoIds.at(-1);
+  // The catalogue's copy of the exercise, as on the web, so turning partial and assisted reps on
+  // from this card's menu shows their fields at once.
+  const extraReps = tracksExtraReps(
+    useExercises().data?.find((item) => item.id === exerciseId) ?? movement.exercise,
+  );
   // A movement new to this workout starts on the machines its last session used, as on the web.
   const { restoreMachines } = actions;
   useEffect(() => {
@@ -496,6 +502,7 @@ export const MovementCard = memo(function MovementCard({
                   }
                   machines={movement.machinePhotoIds.length > 1 ? movement.machinePhotoIds : null}
                   machineNames={machineNames}
+                  extraReps={extraReps}
                   weightUnit={weightUnit}
                   skipHighRepWarning={skipHighRepWarning}
                   actions={actions}
@@ -614,6 +621,7 @@ function SetRow({
   ratio,
   machines,
   machineNames,
+  extraReps,
   weightUnit,
   skipHighRepWarning,
   actions,
@@ -631,6 +639,8 @@ function SetRow({
   /** With several machines pinned, the ones each set chooses between. */
   machines: string[] | null;
   machineNames: ReadonlyMap<string, string>;
+  /** The exercise tracks partial and assisted reps, so each set offers them. */
+  extraReps: boolean;
   weightUnit: WeightUnit;
   skipHighRepWarning: boolean;
   actions: MovementActions;
@@ -972,6 +982,9 @@ function SetRow({
               }
               onEditNote={editNote}
             />
+            {!cardio && (extraReps || hasExtraReps(item)) && (
+              <RepExtras item={item} number={number} update={update} />
+            )}
             {cardio && (
               <CardioExtras
                 item={item}
@@ -1083,6 +1096,39 @@ function SetDetails({
           )}
         </View>
       )}
+    </View>
+  );
+}
+
+/** A strength set's partial and assisted reps, under its full reps. */
+function RepExtras({
+  item,
+  number,
+  update,
+}: {
+  item: WorkoutDraftSet;
+  number: number;
+  update: (values: Partial<WorkoutDraftSet>) => void;
+}) {
+  const { colors, type } = useTheme();
+  return (
+    <View style={styles.repExtras}>
+      {EXTRA_REP_KINDS.map(({ field, label }) => (
+        <View key={field} style={styles.repExtra}>
+          <Text style={[type.caption, { color: colors.muted, fontWeight: '600' }]}>{label}</Text>
+          <View style={styles.repExtraField}>
+            <NumberField
+              label={`${label} reps for set ${number}`}
+              keyboardType="number-pad"
+              value={item[field] ?? null}
+              format={formatPlain}
+              parse={parseWhole}
+              onChange={(value) => update({ [field]: value })}
+              done={item.completed}
+            />
+          </View>
+        </View>
+      ))}
     </View>
   );
 }
@@ -1340,6 +1386,19 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
   },
   detailLine: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  // Starts under the Weight column; the second field wraps below on a narrow phone.
+  repExtras: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    columnGap: 10,
+    rowGap: 4,
+    paddingLeft: 44,
+    paddingRight: 4,
+    paddingBottom: 6,
+  },
+  repExtra: { flexDirection: 'row', alignItems: 'center', gap: 5 },
+  repExtraField: { width: 56, flexDirection: 'row' },
   extrasToggle: { flexDirection: 'row', gap: 6, paddingVertical: 4 },
   extras: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 6 },
   extraField: { width: '46%', gap: 2 },

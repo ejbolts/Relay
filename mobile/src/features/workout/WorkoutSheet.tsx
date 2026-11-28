@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import {
@@ -67,6 +68,7 @@ import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
 import { LoggerTipsProvider, useLoggerTips } from '../guides/LoggerTips';
 import { restTimerPreference, useReduceMotion } from '../settings/devicePreferences';
+import { extraRepsOption } from '../exercises/extraRepsSetting';
 import { useBodyMeasurements } from '../training/trainingQueries';
 import { FinishedSummary } from './FinishedSummary';
 import { ExercisePicker } from './ExercisePicker';
@@ -222,6 +224,7 @@ function LiveLogger({
   // Settings › Rest timer off hides the header's rest button, as on the web.
   const restTimerOn = restTimerPreference.use();
   const router = useRouter();
+  const client = useQueryClient();
   const { discard, syncConflict, syncConflictOpen: conflictSheetOpen } = useWorkout();
   const syncConflictOpen = !!syncConflict && conflictSheetOpen;
   const insets = useSafeAreaInsets();
@@ -455,6 +458,7 @@ function LiveLogger({
         ...(movement.exercise.kind === 'cardio'
           ? []
           : [{ label: 'Machines', onPress: () => openMachines(movementKey) }]),
+        ...extraRepsOption(client, movement.exercise),
       ];
       if (index > 0)
         options.push({
@@ -494,7 +498,7 @@ function LiveLogger({
       });
       showMenu(movement.exercise.name, options);
     },
-    [change, getState, removeExercise, openMachines],
+    [change, client, getState, removeExercise, openMachines],
   );
 
   // Folding a card from its bottom edge brings its header back into view, as on the web.

@@ -115,6 +115,8 @@ export function savedWorkoutMovements(
     sets: movement.sets.map((item) => ({
       key: newKey(),
       reps: item.reps,
+      partial_reps: item.partial_reps ?? null,
+      assisted_reps: item.assisted_reps ?? null,
       machine_photo_id: item.machine_photo_id,
       weight_kg: item.weight_kg,
       rpe: item.rpe,

@@ -645,6 +645,8 @@ def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> Trainin
         photo.full_url = f"{base}?variant=full"
     for movement in shared.movements:
         movement.exercise.is_favorite = False
+        # How the owner logs an exercise is theirs; the sets still show the reps they recorded.
+        movement.exercise.extra_reps_enabled = False
         if sharing.share_machine_photos:
             for photo in movement.machine_photos:
                 shared_machine_photo(photo, sharing.user_id)

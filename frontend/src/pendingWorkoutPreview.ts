@@ -68,6 +68,8 @@ export function pendingWorkoutPreview(
         order_index: setIndex,
         machine_photo_id: item.machine_photo_id ?? null,
         reps: item.reps,
+        partial_reps: item.partial_reps ?? null,
+        assisted_reps: item.assisted_reps ?? null,
         weight_kg: item.weight_kg,
         rpe: item.rpe,
         rest_seconds: item.rest_seconds,

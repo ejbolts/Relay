@@ -1,3 +1,4 @@
+import { hasExtraReps } from './extraReps';
 import type { ExerciseKind, WorkoutSetInput } from './types';
 
 type DraftSetForAutoSave = WorkoutSetInput & { fromPrevious?: boolean };
@@ -7,6 +8,8 @@ export function workoutSetAfterEdit<T extends DraftSetForAutoSave>(set: T, updat
   const performanceFields: (keyof WorkoutSetInput)[] = [
     'completed',
     'reps',
+    'partial_reps',
+    'assisted_reps',
     'weight_kg',
     'bodyweight_kg',
     'percentile',
@@ -38,7 +41,11 @@ export function isWorkoutSetAutoSavable(kind: ExerciseKind, set: DraftSetForAuto
   }
 
   return (
-    set.reps != null || set.weight_kg != null || set.bodyweight_kg != null || set.percentile != null
+    set.reps != null ||
+    set.weight_kg != null ||
+    set.bodyweight_kg != null ||
+    set.percentile != null ||
+    hasExtraReps(set)
   );
 }
 

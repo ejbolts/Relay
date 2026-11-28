@@ -85,6 +85,7 @@ def merge_exercise(db: Session, user_id: str, source_id: str, target_id: str) ->
         raise HTTPException(422, "Exercises must have the same muscle groups to merge.")
 
     target.is_favorite = target.is_favorite or source.is_favorite
+    target.extra_reps_enabled = target.extra_reps_enabled or source.extra_reps_enabled
     # Keep movement rows (even when both exercises appear in a workout), sets,
     # supersets, notes, photos and historical machine-setting snapshots intact.
     for model in (WorkoutMovement, MachinePhoto):

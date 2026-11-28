@@ -7,6 +7,12 @@ export function numberOrNull(value: string): number | null {
   return value === '' ? null : Number(value);
 }
 
+/** A typed count: its digits as a whole number, or null when it has none. */
+export function wholeNumberOrNull(value: string): number | null {
+  const digits = value.replace(/\D/g, '');
+  return digits === '' ? null : Number(digits);
+}
+
 // Building a formatter is far slower than using one, and the calendar formats thousands of days.
 const prettyDateFormat = new Intl.DateTimeFormat(undefined, {
   month: 'short',

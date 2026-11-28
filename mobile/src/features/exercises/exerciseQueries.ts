@@ -81,7 +81,7 @@ function changedExercise(client: QueryClient, exercise: Exercise) {
 export async function updateExercise(
   client: QueryClient,
   id: string,
-  changes: ExerciseEditChanges & { hidden?: boolean },
+  changes: ExerciseEditChanges & { hidden?: boolean; extra_reps_enabled?: boolean },
 ) {
   const exercise = await apiSend<Exercise>(
     `/api/exercises/${encodeURIComponent(id)}`,

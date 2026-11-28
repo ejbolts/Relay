@@ -124,6 +124,8 @@ describe('finishing a live workout', () => {
           sets: [
             {
               reps: 5,
+              partial_reps: null,
+              assisted_reps: null,
               machine_photo_id: null,
               weight_kg: 50,
               rpe: null,

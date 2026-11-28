@@ -148,6 +148,16 @@ import { barTypeForExercise } from './plateLoading';
 import { ExerciseMuscleHelp } from './ExerciseMuscleHelp';
 import type { ExerciseMachineChoices } from './exerciseMachineChoices';
 import { ExerciseCreditsContext } from './exerciseCreditsContext';
+import {
+  EXTRA_REP_KINDS,
+  EXTRA_REPS_SETTING,
+  extraRepsLabel,
+  extraRepsNotice,
+  extraRepsText,
+  hasExtraReps,
+  tracksExtraReps,
+  type ExtraRepField,
+} from './extraReps';
 import { finishedMuscleSourcesFor, type MuscleSetsWeek } from './liveMuscleSets';
 import { useLiveMuscleSets } from './useLiveMuscleSets';
 import {
@@ -482,6 +492,7 @@ import {
   savedWorkoutBodyweight,
 } from './relativeStrength';
 import './relativeStrength.css';
+import './extraReps.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
 import { isAllTimeRecord, recordBadgeLabel, recordScopeLabel } from './recordScope';
@@ -513,7 +524,13 @@ import {
   FRIEND_INVITE_EVENT,
   pendingFriendInvite,
 } from './friendInvite';
-import { HISTORY_PAGE_SIZE, RANGE_LABELS, numberOrNull, prettyDate } from './appShared';
+import {
+  HISTORY_PAGE_SIZE,
+  RANGE_LABELS,
+  numberOrNull,
+  prettyDate,
+  wholeNumberOrNull,
+} from './appShared';
 import { LoadingState } from './LoadingState';
 import { BodyCompositionScreen } from './BodyCompositionScreen';
 import { CardioScreen } from './CardioScreen';
@@ -524,7 +541,7 @@ import { onWorkoutFocusRequested } from './workoutFocus';
 // Screens that live in their own files; re-exported for existing imports of './App'.
 export { BodyCompositionScreen, CardioScreen };
 
-type SetField = 'weight' | 'reps' | 'duration' | 'distance' | 'rpe' | 'notes';
+type SetField = 'weight' | 'reps' | ExtraRepField | 'duration' | 'distance' | 'rpe' | 'notes';
 type RestAlertStatus =
   'checking' | 'available' | 'enabling' | 'enabled' | 'blocked' | 'unsupported';
 type BackgroundActivity = { id: number; label: string };
@@ -622,16 +639,18 @@ export function App() {
 function AppContentProviders({
   exercises,
   updatePartialSets,
+  updateExtraReps,
   settingsNavigation,
   children,
 }: {
   exercises: Exercise[];
   updatePartialSets: (id: string, enabled: boolean, weekStart: string) => Promise<Exercise>;
+  updateExtraReps: (id: string, enabled: boolean) => Promise<Exercise>;
   settingsNavigation: ContextType<typeof SettingsNavigationContext>;
   children: ReactNode;
 }) {
   return (
-    <ExerciseCreditsContext.Provider value={{ exercises, updatePartialSets }}>
+    <ExerciseCreditsContext.Provider value={{ exercises, updatePartialSets, updateExtraReps }}>
       <SettingsNavigationContext.Provider value={settingsNavigation}>
         {children}
       </SettingsNavigationContext.Provider>
@@ -2062,6 +2081,14 @@ function AppContent() {
     return updated;
   }
 
+  async function updateExerciseExtraReps(exerciseId: string, enabled: boolean) {
+    const updated = await api.updateExercise(exerciseId, { extra_reps_enabled: enabled });
+    setExercises((current) =>
+      current.map((exercise) => (exercise.id === updated.id ? updated : exercise)),
+    );
+    return updated;
+  }
+
   async function createExercise(input: ExerciseCreateInput): Promise<Exercise> {
     const exercise = await withBackgroundActivity('Creating exercise…', () =>
       api.createExercise(input),
@@ -2415,6 +2442,7 @@ function AppContent() {
     <AppContentProviders
       exercises={exercises}
       updatePartialSets={updateExercisePartialSets}
+      updateExtraReps={updateExerciseExtraReps}
       settingsNavigation={{ request: settingsJump, navigate: openSetting }}
     >
       <div
@@ -5808,6 +5836,15 @@ function MovementCard({
     cardio && (movement.exercise.equipment?.toLowerCase().includes('treadmill') ?? false);
   const weightUnit = useWeightUnit();
   const defaultRest = useDefaultRest();
+  const { show: showToast } = useToast();
+  const exerciseLibrary = useContext(ExerciseCreditsContext);
+  // The library's copy of the exercise, so turning partial and assisted reps on from this card's
+  // menu shows their fields at once.
+  const extraRepsTracked = tracksExtraReps(
+    exerciseLibrary?.exercises.find((item) => item.id === movement.exercise.id) ??
+      movement.exercise,
+  );
+  const updateExtraReps = exerciseLibrary?.updateExtraReps;
   const onlyWarmupsLogged = !cardio && loggedOnlyWarmups(movement.sets);
   const allWorkingSetsDone = workingSetsDone(movement.sets);
   // Finished exercises open folded, but ticking sets never folds a card: only the collapse
@@ -5922,6 +5959,20 @@ function MovementCard({
 
   function closeMovementMenu() {
     if (movementMenuRef.current) movementMenuRef.current.open = false;
+  }
+
+  async function toggleExtraReps() {
+    if (!updateExtraReps) return;
+    const next = !extraRepsTracked;
+    try {
+      await updateExtraReps(movement.exercise.id, next);
+      showToast(extraRepsNotice(next, movement.exercise.name));
+    } catch (caught) {
+      showToast({
+        message: caught instanceof Error ? caught.message : 'The exercise could not be changed.',
+        variant: 'error',
+      });
+    }
   }
 
   function clearSetDrag() {
@@ -6254,6 +6305,18 @@ function MovementCard({
             {bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)}
           </small>
         )}
+        {!cardio && hasExtraReps(item) && (
+          <button
+            type="button"
+            className="completed-set-extra-reps num"
+            aria-label={`Edit ${extraRepsLabel(item)} for set ${index + 1}`}
+            onClick={() =>
+              openSet(item.key, EXTRA_REP_KINDS.find(({ field }) => (item[field] ?? 0) > 0)?.field)
+            }
+          >
+            {extraRepsText(item)}
+          </button>
+        )}
         {item.notes && (
           <button
             type="button"
@@ -6363,6 +6426,28 @@ function MovementCard({
                 ? 'Enter a time, distance or another measurement to log this set.'
                 : 'Enter reps to log this set.'}
             </p>
+          )}
+          {!cardio && (extraRepsTracked || hasExtraReps(item)) && (
+            <div className="set-editor-metrics set-editor-extra-reps">
+              {EXTRA_REP_KINDS.map(({ field, label }) => (
+                <label key={field}>
+                  {label} reps
+                  <input
+                    data-set-field={field}
+                    inputMode="numeric"
+                    type="text"
+                    value={item[field] ?? ''}
+                    onFocus={(event) => {
+                      if (item[field] != null) selectInputValue(event.currentTarget);
+                    }}
+                    onChange={(event) =>
+                      onUpdateSet(item.key, { [field]: wholeNumberOrNull(event.target.value) })
+                    }
+                    aria-label={`${label} reps for set ${index + 1}`}
+                  />
+                </label>
+              ))}
+            </div>
           )}
           <div className="set-editor-tools">
             {!cardio && (
@@ -6646,6 +6731,22 @@ function MovementCard({
                 </span>
                 Muscle credits
               </button>
+              {!cardio && updateExtraReps && (
+                <button
+                  type="button"
+                  className={extraRepsTracked ? 'active' : ''}
+                  aria-pressed={extraRepsTracked}
+                  onClick={() => {
+                    closeMovementMenu();
+                    void toggleExtraReps();
+                  }}
+                >
+                  <span aria-hidden="true">
+                    <Icon name={extraRepsTracked ? 'check' : 'plus'} />
+                  </span>
+                  {EXTRA_REPS_SETTING}
+                </button>
+              )}
               {!cardio && !machineRowShown && (
                 <button
                   type="button"
@@ -7631,6 +7732,7 @@ interface ExerciseDetailHeader {
   onMerge?: (trigger: HTMLButtonElement) => void;
   onEdit?: (trigger: HTMLButtonElement) => void;
   onToggleHidden?: () => void;
+  onToggleExtraReps?: () => void;
 }
 
 export function ProgressScreen({
@@ -7766,6 +7868,21 @@ export function ProgressScreen({
   const toggleSelectedHidden = useCallback(() => {
     if (selectedExercise) void setSelectedHidden(selectedExercise, !selectedExercise.hidden, true);
   }, [selectedExercise, setSelectedHidden]);
+  const updateExtraReps = useContext(ExerciseCreditsContext)?.updateExtraReps;
+  const toggleSelectedExtraReps = useMemo(() => {
+    if (!selectedExercise || !updateExtraReps) return undefined;
+    const next = !tracksExtraReps(selectedExercise);
+    return () =>
+      void updateExtraReps(selectedExercise.id, next).then(
+        () => showToast(extraRepsNotice(next, selectedExercise.name)),
+        (caught: unknown) =>
+          showToast({
+            message:
+              caught instanceof Error ? caught.message : 'The exercise could not be changed.',
+            variant: 'error',
+          }),
+      );
+  }, [selectedExercise, updateExtraReps, showToast]);
 
   const backToExercises = useCallback(() => {
     setFullProgress(false);
@@ -7789,6 +7906,7 @@ export function ProgressScreen({
             onMerge: canMergeSelected ? openSelectedMerge : undefined,
             onEdit: canEditSelected && selectedExercise.is_custom ? openSelectedEdit : undefined,
             onToggleHidden: canEditSelected ? toggleSelectedHidden : undefined,
+            onToggleExtraReps: canEditSelected ? toggleSelectedExtraReps : undefined,
           }
         : null,
     );
@@ -7805,6 +7923,7 @@ export function ProgressScreen({
     openSelectedMerge,
     openSelectedEdit,
     toggleSelectedHidden,
+    toggleSelectedExtraReps,
   ]);
   useEffect(() => () => onDetailChange?.(null), [onDetailChange]);
 
@@ -8058,9 +8177,11 @@ export function ProgressScreen({
                     key={selectedExercise.id}
                     exerciseName={selectedExercise.name}
                     hidden={selectedExercise.hidden}
+                    extraReps={tracksExtraReps(selectedExercise)}
                     onEdit={selectedExercise.is_custom ? openSelectedEdit : undefined}
                     onMerge={canMergeSelected ? openSelectedMerge : undefined}
                     onToggleHidden={toggleSelectedHidden}
+                    onToggleExtraReps={toggleSelectedExtraReps}
                   />
                 )}
                 {!browseFirst && (
@@ -9371,9 +9492,11 @@ function HistoryScreen({
                 key={exerciseHeader.exercise.id}
                 exerciseName={exerciseHeader.exercise.name}
                 hidden={exerciseHeader.exercise.hidden}
+                extraReps={tracksExtraReps(exerciseHeader.exercise)}
                 onEdit={exerciseHeader.onEdit}
                 onMerge={exerciseHeader.onMerge}
                 onToggleHidden={exerciseHeader.onToggleHidden}
+                onToggleExtraReps={exerciseHeader.onToggleExtraReps}
               />
             </>
           }
@@ -10148,6 +10271,7 @@ function HistorySetFlow({
           <div className="history-set-pill" data-set-type={setKindOf(item)}>
             <b>Set {item.order_index + 1}</b>
             <span>{setResult(item, weightUnit)}</span>
+            {hasExtraReps(item) && <small>{extraRepsText(item)}</small>}
             {(item.bodyweight_kg ?? bodyweight) != null && (
               <small>
                 {bodyweightContext(item.weight_kg, item.bodyweight_kg ?? bodyweight, weightUnit)}

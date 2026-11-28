@@ -37,6 +37,7 @@ import { PromptHost, promptText, showMenu, type MenuOption } from '../../ui/prom
 import { useTheme } from '../../ui/theme';
 import { showToast, ToastHost } from '../../ui/Toast';
 import { DateField, TimeField } from '../body/DateField';
+import { extraRepsOption } from '../exercises/extraRepsSetting';
 import { useBodyMeasurements, useSavedWorkout } from '../training/trainingQueries';
 import { ExercisePicker } from './ExercisePicker';
 import {
@@ -274,6 +275,7 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
         ...(movement.exercise.kind === 'cardio'
           ? []
           : [{ label: 'Machines', onPress: () => setMachinesFor(movementKey) }]),
+        ...extraRepsOption(client, movement.exercise),
       ];
       if (index > 0)
         options.push({
@@ -292,7 +294,7 @@ function Editor({ workout, logger }: { workout: TrackedWorkout; logger: LoggerAp
       });
       showMenu(movement.exercise.name, options);
     },
-    [change],
+    [change, client],
   );
 
   const actions = useMemo<MovementActions>(

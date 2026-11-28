@@ -543,6 +543,8 @@ test('a session opens in full and can be repeated', async () => {
   await open(<SessionDetailScreen workoutId="w-upper" exerciseId="bench" />);
   expect(await screen.findByText('Bench Press')).toBeVisible();
   expect(screen.getByText('Upper body')).toBeVisible();
+  // A set's partial and assisted reps sit under its row; its Reps stay the full reps.
+  expect(screen.getByText('+3 partial · +1 assisted')).toBeVisible();
   await fireEvent.press(screen.getByRole('button', { name: 'Repeat Sample upper session' }));
   expect(mockWorkout.start).toHaveBeenCalledWith(
     expect.objectContaining({ kind: 'template', name: 'Sample upper session' }),

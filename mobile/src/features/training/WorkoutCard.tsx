@@ -1,6 +1,7 @@
 import * as Linking from 'expo-linking';
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { extraRepsText } from '../../../../frontend/src/extraReps';
 import { recordTypeLabel, setResult } from '../../../../frontend/src/historySetFormat';
 import {
   isAllTimeRecord,
@@ -360,6 +361,8 @@ export function SetTable({
           ? (machineCaptions.get(item.machine_photo_id ?? '') ?? 'Machine not assigned')
           : null;
         const setRecords = records[index];
+        // A set's partial and assisted reps sit under its row, with its machine and note.
+        const extras = [extraRepsText(item), machine, item.notes].filter(Boolean);
         return (
           <View key={item.id} style={styles.setRow}>
             <View style={styles.row}>
@@ -423,9 +426,9 @@ export function SetTable({
                 </View>
               )}
             </View>
-            {(machine || item.notes) && (
+            {extras.length > 0 && (
               <Text style={[type.caption, { color: colors.secondary, marginLeft: 36 }]}>
-                {[machine, item.notes].filter(Boolean).join(' · ')}
+                {extras.join(' · ')}
               </Text>
             )}
           </View>
