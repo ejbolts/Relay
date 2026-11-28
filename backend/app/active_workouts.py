@@ -345,6 +345,10 @@ def change_draft(
             return {**snapshot(db.get(ActiveWorkoutSync, user_id)), "conflict": True}
         db.commit()
     hub.active_workout_changed(user_id)
+    # Train together: keep the member's session current and tell their partners.
+    from .train_together import draft_changed
+
+    draft_changed(db, user_id, merged)
     return {"revision": values["revision"], "draft": merged, "conflict": False}
 
 

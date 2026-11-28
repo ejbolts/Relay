@@ -2588,9 +2588,16 @@ def workouts_between(
     return list(db.scalars(query))
 
 
+def with_trained_with(db: Session, user: User, workouts):
+    """Who each workout was trained with (train together), for one page in one query."""
+    from . import train_together  # train_together builds on this module
+
+    return train_together.attach_trained_with(db, user, workouts)
+
+
 @router.get("/workouts", response_model=list[TrainingWorkoutRead])
 def list_workouts(db: DbSession, user: CurrentUser) -> list[TrainingWorkout]:
-    return workouts_between(db, user.id)
+    return with_trained_with(db, user, workouts_between(db, user.id))
 
 
 @router.get("/training-time", response_model=TrainingTimeRead)
@@ -2610,7 +2617,7 @@ def get_workout_snapshot(
     """Workouts with the cache revision; ``start``/``end`` load long histories in windows."""
     return WorkoutSnapshotRead(
         revision=workout_cache_revision(db, user.id),
-        workouts=workouts_between(db, user.id, start, end),
+        workouts=with_trained_with(db, user, workouts_between(db, user.id, start, end)),
     )
 
 
@@ -2845,7 +2852,7 @@ def create_workout(
         raise
     saved = load_workout(db, user.id, workout.id)
     report_workout_revision(response, db, user_id)
-    return saved
+    return with_trained_with(db, user, saved)
 
 
 def insert_workout(
@@ -2887,6 +2894,10 @@ def insert_workout(
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
     presence_hub.active_workout_changed(user.id)
+    # Train together: remember who it was trained with, and leave the session as finished.
+    from . import train_together  # train_together builds on this module
+
+    train_together.workout_saved(db, user.id, client_session_id, workout.id)
     return workout
 
 
@@ -3201,7 +3212,7 @@ async def import_workout_csv(
 
 @router.get("/workouts/{workout_id}", response_model=TrainingWorkoutRead)
 def get_workout(workout_id: str, db: DbSession, user: CurrentUser) -> TrainingWorkout:
-    return load_workout(db, user.id, workout_id)
+    return with_trained_with(db, user, load_workout(db, user.id, workout_id))
 
 
 @router.put("/workouts/{workout_id}", response_model=TrainingWorkoutRead)
@@ -3229,7 +3240,7 @@ def update_workout(
     replace_workout(db, user, settings, workout, payload, client_version)
     saved = load_workout(db, user.id, workout.id)
     report_workout_revision(response, db, user.id)
-    return saved
+    return with_trained_with(db, user, saved)
 
 
 def replace_workout(
@@ -3260,6 +3271,11 @@ def replace_workout(
     db.commit()
     backfill_completed_video_links(db, workout.workout_date, user_id=user.id)
     presence_hub.active_workout_changed(user.id)
+    # Train together: a resumed draft saved from a session links the workout too.
+    from . import train_together  # train_together builds on this module
+
+    session = payload.active_workout_session_id
+    train_together.workout_saved(db, user.id, str(session) if session else None, workout.id)
 
 
 @router.delete("/workouts/{workout_id}", status_code=204)

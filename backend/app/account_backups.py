@@ -95,6 +95,10 @@ ACCOUNT_ROWS: dict[str, str | None] = {
     "comment_notifications": None,
     "youtube_connections": None,
     "youtube_oauth_states": None,
+    # Train together links live workouts with other accounts; a link is never restored.
+    "train_together_sessions": None,
+    "train_together_members": None,
+    "train_together_invites": None,
 }
 
 

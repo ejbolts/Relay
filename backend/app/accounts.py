@@ -365,12 +365,18 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
         db.scalars(select(PushSubscription.endpoint).where(PushSubscription.user_id == user_id))
     )
 
+    # Train together: leave a session first, so partners are told and it ends properly.
+    from .train_together import account_removed, account_rows
+
+    account_removed(db, user_id)
+
     workout_ids = select(TrainingWorkout.id).where(TrainingWorkout.user_id == user_id)
     movement_ids = select(WorkoutMovement.id).where(WorkoutMovement.workout_id.in_(workout_ids))
     exercise_ids = select(Exercise.id).where(Exercise.user_id == user_id)
     video_session_ids = select(WorkoutSession.id).where(WorkoutSession.user_id == user_id)
     # Explicit, ordered deletes keep this correct even where SQLite foreign keys are not enforced.
     statements = (
+        *account_rows(user_id),
         delete(PersonalRecord).where(PersonalRecord.user_id == user_id),
         delete(CardioSession).where(CardioSession.user_id == user_id),
         delete(movement_machine_photos).where(

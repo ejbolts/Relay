@@ -633,6 +633,13 @@ def shared_machine_photo(photo: MachinePhotoRead, user_id: str) -> MachinePhotoR
     return photo
 
 
+def with_trained_with(db: Session, viewer: User, workouts):
+    """Who each workout was trained with (train together), for one page in one query."""
+    from . import train_together  # train_together builds on this module
+
+    return train_together.attach_trained_with(db, viewer, workouts)
+
+
 def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> TrainingWorkoutRead:
     """A workout with only what its owner shares: notes, body weight and photos on request."""
     shared = TrainingWorkoutRead.model_validate(workout)
@@ -1056,6 +1063,7 @@ def list_shared_workouts(
         else []
     )
     bodyweights = BodyweightHistory(db, member.id) if sharing.share_body_weight else None
+    with_trained_with(db, user, workouts)
     return SharedWorkoutPage(
         total=total,
         workouts=[shared_workout(workout, sharing) for workout in workouts],
@@ -1273,6 +1281,9 @@ def remove_friend(user_id: str, user: CurrentUser, db: Db) -> None:
     db.execute(delete(Friendship).where(*friendship_key(user.id, user_id)))
     db.commit()
     hub.notifications_changed(user.id, user_id)
+    from . import train_together  # train_together builds on this module
+
+    train_together.friendship_ended(db, user.id, user_id)
 
 
 def friendship_key(user_id: str, other_id: str):
@@ -1389,6 +1400,7 @@ def friend_feed(
     sessions.sort(key=live_since)
     rows = sessions[:limit]
     reactions = reaction_summaries(db, user.id, [workout.id for workout, _, _ in rows])
+    with_trained_with(db, user, [workout for workout, _, _ in rows])
     return FriendFeedRead(
         friends=friends,
         with_sessions=len(sessions),
@@ -1450,6 +1462,7 @@ def workout_timeline(
         )
     }
     reactions = reaction_summaries(db, user.id, workout_ids)
+    with_trained_with(db, user, [workout for workout, _ in rows])
     records = (
         dict(
             db.execute(
@@ -1664,6 +1677,7 @@ def list_friends(user: CurrentUser, db: Db) -> FriendsRead:
         workout.user_id: (workout, sharing) for workout, _, sharing in latest_workouts(db, ids)
     }
     reactions = reaction_summaries(db, user.id, [workout.id for workout, _ in latest.values()])
+    with_trained_with(db, user, [workout for workout, _ in latest.values()])
     stats = workout_stats(db, ids)
     dates = training_dates(db, ids)
     sharings = {
@@ -1913,6 +1927,9 @@ def block_member(user_id: str, user: CurrentUser, db: Db) -> None:
     )
     db.commit()
     hub.notifications_changed(user.id, user_id)
+    from . import train_together  # train_together builds on this module
+
+    train_together.friendship_ended(db, user.id, user_id)
 
 
 @sharing_router.delete("/blocks/{user_id}", status_code=204)
