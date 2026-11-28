@@ -608,9 +608,18 @@ describe('useTrainTogether', () => {
       expect(renders).toBe(rendersAfterMount);
       expect(latest).toBe(controllerAfterMount);
 
-      // Focus/visibility refresh returning an empty session causes no re-render.
+      // Window focus alone must NOT fetch (visibilitychange already covers returning to the tab).
       await act(async () => {
         window.dispatchEvent(new Event('focus'));
+        await Promise.resolve();
+      });
+      expect(readSpy).toHaveBeenCalledTimes(1);
+      expect(renders).toBe(rendersAfterMount);
+      expect(latest).toBe(controllerAfterMount);
+
+      // Visibility return returning an empty session refreshes once with no extra re-render.
+      await act(async () => {
+        document.dispatchEvent(new Event('visibilitychange'));
         await Promise.resolve();
       });
       expect(readSpy).toHaveBeenCalledTimes(2);

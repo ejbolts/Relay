@@ -4272,7 +4272,10 @@ function WorkoutLogger({
     };
     const recordActivity = (event: Event) => {
       if (document.visibilityState !== 'visible' || window.location.hash !== '#log') return;
-      if (event.target instanceof Element && !event.target.closest('.logger-screen, dialog'))
+      if (
+        event.target instanceof Element &&
+        !event.target.closest('.logger-screen, .tt-partner-view, dialog')
+      )
         return;
       if (savingRef.current || !isCurrentDraft()) return;
       const now = Date.now();

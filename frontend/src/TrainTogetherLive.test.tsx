@@ -244,6 +244,62 @@ describe('TrainTogetherEntryButton and Live Deck', () => {
     expect(container.textContent).toContain('Training together · 4/4');
     expect(container.querySelectorAll('.tt-deck-mini-row')).toHaveLength(3);
   });
+
+  it('keeps the set label in a non-shrinking element while letting long exercise names ellipsis (re-check 6)', async () => {
+    const makeLongLiftPartner = (id: string, name: string, exerciseName: string) => {
+      const partner = makePartner(id, name, true);
+      partner.workout!.exercises[0].name = exerciseName;
+      partner.workout!.draft.movements = [partner.workout!.draft.movements[0]];
+      partner.workout!.draft.movements[0].sets[0].weight_kg = 62.5;
+      partner.workout!.draft.movements[0].sets[0].reps = 10;
+      return partner;
+    };
+
+    const alex = makeLongLiftPartner('u-alex', 'Alex Sample', 'Incline Dumbbell Press');
+    await act(async () =>
+      root.render(
+        <TrainTogetherDeck
+          session={makeSession([alex])}
+          partners={[alex]}
+          palettes={partnerPalettes('blue', 1, false)}
+          weightUnit="kg"
+          recentlyJoinedIds={new Set()}
+          onLogForPartner={vi.fn()}
+          onOpenSession={vi.fn()}
+        />,
+      ),
+    );
+    expect(container.querySelector('.tt-deck-ticker-ex')?.textContent).toBe(
+      'Incline Dumbbell Press',
+    );
+    expect(container.querySelector('.tt-deck-ticker-set')?.textContent).toBe(' · 62.5 kg × 10');
+
+    // Multi-partner compact rows also keep exercise name shrinkable and set label intact.
+    const priya = makeLongLiftPartner('u-priya', 'Priya Patel', 'Barbell Bench Press');
+    await act(async () =>
+      root.render(
+        <TrainTogetherDeck
+          session={makeSession([alex, priya])}
+          partners={[alex, priya]}
+          palettes={partnerPalettes('blue', 2, false)}
+          weightUnit="kg"
+          recentlyJoinedIds={new Set()}
+          onLogForPartner={vi.fn()}
+          onOpenSession={vi.fn()}
+        />,
+      ),
+    );
+    const miniRows = [...container.querySelectorAll('.tt-deck-mini-row')];
+    expect(miniRows).toHaveLength(2);
+    expect(miniRows[0].querySelector('.tt-deck-ticker-ex')?.textContent).toBe(
+      'Incline Dumbbell Press',
+    );
+    expect(miniRows[0].querySelector('.tt-deck-ticker-set')?.textContent).toBe(' · 62.5 kg × 10');
+    expect(miniRows[1].querySelector('.tt-deck-ticker-ex')?.textContent).toBe(
+      'Barbell Bench Press',
+    );
+    expect(miniRows[1].querySelector('.tt-deck-ticker-set')?.textContent).toBe(' · 62.5 kg × 10');
+  });
 });
 
 describe('TrainTogetherPaceStrip', () => {
