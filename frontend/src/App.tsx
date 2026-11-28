@@ -518,6 +518,7 @@ import { LoadingState } from './LoadingState';
 import { BodyCompositionScreen } from './BodyCompositionScreen';
 import { CardioScreen } from './CardioScreen';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
+import { crossesNewYear } from './chartYears';
 import { onWorkoutFocusRequested } from './workoutFocus';
 
 // Screens that live in their own files; re-exported for existing imports of './App'.
@@ -8256,8 +8257,9 @@ export function ProgressScreen({
                   <LandscapeChartFrame
                     title={`${progress.exercise.name} · ${metricInfo.series}${weekly ? ' (best per week)' : ''}`}
                     controls={null}
+                    yearLines={crossesNewYear(chartPoints.map((point) => point.date))}
                   >
-                    {(expanded, close) => (
+                    {(expanded, close, showYearLines) => (
                       <TrendChart
                         points={chartPoints}
                         label={`${progress.exercise.name} ${metricInfo.series}${weekly ? ', best per week' : ''}`}
@@ -8272,6 +8274,7 @@ export function ProgressScreen({
                         markRecords={metric !== 'volume_kg'}
                         formatValue={formatMetric}
                         pinchZoom={pinchZoom}
+                        yearLines={showYearLines}
                         onSelect={
                           browseFirst
                             ? undefined

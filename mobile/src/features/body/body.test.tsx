@@ -21,7 +21,8 @@ import { memoryKv } from '../../testing/memoryKvStore';
 import { ToastHost } from '../../ui/Toast';
 import { tipAnchorLayout } from '../guides/LoggerTips';
 import { resetTipsForTests } from '../guides/tips';
-import { bodyTrendPreference } from '../settings/devicePreferences';
+import { CHART_YEAR_LINES_KEY } from '../../../../frontend/src/chartYears';
+import { bodyTrendPreference, chartYearLines } from '../settings/devicePreferences';
 import { bodyCheckInStatus, setBodyCheckInOwner, syncBodyCheckIns } from './bodyCheckInQueue';
 import { BodyScreen, summaryFits } from './BodyScreen';
 import { clearMaintainGoalRequest, requestMaintainGoal } from './maintainGoalRequest';
@@ -692,6 +693,52 @@ test('touching the trend reads the day under the finger, in the card and full sc
   });
   await fireEvent.press(screen.getAllByRole('button', { name: `Close ${oldest} details` }).at(-1)!);
   expect(screen.queryAllByRole('button', { name: `Close ${oldest} details` })).toHaveLength(0);
+});
+
+test('full screen offers year lines once the trend crosses a new year, and a pill sums a year up', async () => {
+  // Fixed dates either side of 1 January 2025, so the test does not depend on today.
+  const dated = (id: string, date: string, weight: number) => ({
+    ...checkIn(id, 0, weight),
+    measurement_date: date,
+  });
+  responses['/api/body-measurements'] = [
+    dated('m1', '2025-06-01', 84.2),
+    dated('m2', '2025-02-01', 86),
+    dated('m3', '2024-10-01', 88),
+  ];
+  responses['/api/body-weight-goals'] = [];
+  try {
+    await renderBody();
+    await fireEvent.press(screen.getByRole('button', { name: 'All time' }));
+    await fireEvent.press(
+      screen.getByRole('button', { name: 'View Bodyweight trend full screen in landscape' }),
+    );
+    await screen.findByRole('button', { name: 'Exit full-screen Bodyweight trend' });
+    await fireEvent(screen.getByTestId('landscape-chart-area'), 'layout', {
+      nativeEvent: { layout: { width: 700, height: 300 } },
+    });
+    const toggle = () => screen.getByRole('button', { name: 'Year lines' });
+    expect(toggle()).not.toBeSelected();
+    expect(screen.queryByRole('button', { name: '2025' })).toBeNull();
+
+    await fireEvent.press(toggle());
+    expect(toggle()).toBeSelected();
+    expect(memoryKv.get(CHART_YEAR_LINES_KEY)).toBe('on');
+    const wide = screen.getAllByLabelText('Bodyweight, 7-day average over daily weigh-ins').at(-1)!;
+    await fireEvent(wide, 'layout', { nativeEvent: { layout: { width: 700, height: 300 } } });
+    expect(screen.getByRole('button', { name: '2024' })).toBeOnTheScreen();
+    const year = () => screen.getByRole('button', { name: '2025' });
+    await fireEvent.press(year());
+    expect(year()).toBeSelected();
+    expect(year()).toHaveAccessibilityValue({ text: '2025 · 86.0 → 84.2 kg · −1.8 kg' });
+
+    // Turning them off clears the pills and the picked year.
+    await fireEvent.press(toggle());
+    expect(screen.queryByRole('button', { name: '2025' })).toBeNull();
+    expect(memoryKv.get(CHART_YEAR_LINES_KEY)).toBe('off');
+  } finally {
+    chartYearLines.set(false);
+  }
 });
 
 test('in pounds, a weigh-in is saved in kilograms and a long maintenance range stays whole', async () => {

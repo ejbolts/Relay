@@ -15,6 +15,7 @@ import {
   chartLabelWidth,
   goalLabelPlacement,
 } from '../../../../frontend/src/chartLayout';
+import { crossesNewYear } from '../../../../frontend/src/chartYears';
 import { dateRangeForDates, TIME_RANGE_OPTIONS } from '../../../../frontend/src/dateRanges';
 import { niceTicks, parseLocalDate, shortDate } from '../../../../frontend/src/trainingSummary';
 import type { BodyMeasurement, BodyWeightGoal } from '../../../../frontend/src/types';
@@ -25,6 +26,13 @@ import { Segmented } from '../../ui/controls';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
 import { useTheme } from '../../ui/theme';
+import {
+  chartYearMarks,
+  usePickedYear,
+  YEAR_PILL_SPACE,
+  YearLinesSvg,
+  YearPills,
+} from './ChartYearMarks';
 import { LandscapeButton, LandscapeChartView } from './LandscapeChart';
 import { useRangePinch } from './rangePinch';
 
@@ -60,6 +68,7 @@ function chartModel(
   goal: Goal | null,
   width: number,
   height = HEIGHT,
+  yearLines = false,
 ) {
   if (!points.length || width <= 0) return null;
   const time = (date: string) => parseLocalDate(date).getTime();
@@ -75,11 +84,14 @@ function chartModel(
   const tMax = Math.max(...times);
   const span = Math.max(tMax - tMin, 1);
   const plotWidth = Math.max(width - PAD.left - PAD.right, 10);
-  const plotHeight = height - PAD.top - PAD.bottom;
   const xTime = (ms: number) =>
     times.length === 1 ? PAD.left + plotWidth / 2 : PAD.left + ((ms - tMin) / span) * plotWidth;
+  const years = chartYearMarks(yearLines, tMin, tMax, xTime);
+  // The year pills sit above the plot, so it starts lower while they show.
+  const top = years.length ? YEAR_PILL_SPACE : PAD.top;
+  const plotHeight = height - top - PAD.bottom;
   const x = (date: string) => xTime(time(date));
-  const y = (value: number) => PAD.top + (1 - (value - yMin) / (yMax - yMin || 1)) * plotHeight;
+  const y = (value: number) => top + (1 - (value - yMin) / (yMax - yMin || 1)) * plotHeight;
   // Shared with the web chart. A single short reading names its day; edge labels stay inside.
   const dateTicks = chartDateTicks(tMin, tMax, plotWidth, xTime);
   const dates = (
@@ -103,6 +115,8 @@ function chartModel(
     dots: dots.map((point) => ({ x: x(point.date), y: y(point.value) })),
     gridlines: ticks.map((value, index) => ({ y: y(value), value, baseline: index === 0 })),
     dates,
+    top,
+    years,
   };
 }
 
@@ -196,8 +210,17 @@ export function BodyTrendChart({
         onSelect={setSelected}
         pinch={pinch}
       />
-      <LandscapeChartView title={title} visible={landscape} onClose={() => setLandscape(false)}>
-        {(size) => (
+      <LandscapeChartView
+        title={title}
+        visible={landscape}
+        onClose={() => setLandscape(false)}
+        yearLines={crossesNewYear([
+          ...points.map((point) => point.date),
+          ...dots.map((point) => point.date),
+          ...(goal ? [goal.startDate, goal.endDate] : []),
+        ])}
+      >
+        {(size, showYearLines) => (
           <TrendPlot
             points={points}
             dots={dots}
@@ -208,6 +231,7 @@ export function BodyTrendChart({
             active={active}
             onSelect={setSelected}
             pinch={pinch}
+            yearLines={showYearLines}
           />
         )}
       </LandscapeChartView>
@@ -305,6 +329,7 @@ export function TrendPlot({
   lineColor,
   formatValue,
   avoidLineOverlap = false,
+  yearLines = false,
 }: {
   points: Point[];
   dots?: Point[];
@@ -325,11 +350,15 @@ export function TrendPlot({
   formatValue?: (value: number) => string;
   /** Opt in to flipping the goal label to the opposite side when the plotted line overlaps it. */
   avoidLineOverlap?: boolean;
+  /** A dotted line at each 1 January and a pill per year, as on the web's landscape chart. */
+  yearLines?: boolean;
 }) {
   const { colors, type, radius } = useTheme();
   const [width, setWidth] = useState(0);
   const [tipSize, setTipSize] = useState({ width: READOUT_WIDTH, height: 84 });
-  const model = chartModel(points, dots, goal, width, height);
+  const [pickedYear, setPickedYear] = usePickedYear(yearLines);
+  const model = chartModel(points, dots, goal, width, height, yearLines);
+  const pickedMark = model?.years.find((item) => item.year === pickedYear) ?? null;
   // Muted at 75 % keeps the daily dots about 3:1 on the card in light and dark.
   const dotColor = colors.muted;
   const select = (x: number) => {
@@ -418,6 +447,12 @@ export function TrendPlot({
               {date.label}
             </SvgText>
           ))}
+          <YearLinesSvg
+            years={model.years}
+            picked={pickedMark}
+            top={model.top}
+            baseline={model.baseline}
+          />
           {goal && goalCoords && (
             <>
               {goal.minValue != null && goal.maxValue != null ? (
@@ -516,7 +551,7 @@ export function TrendPlot({
               <Line
                 x1={activeCoord.x}
                 x2={activeCoord.x}
-                y1={PAD.top}
+                y1={model.top}
                 y2={model.baseline}
                 stroke={colors.secondary}
                 strokeWidth={1}
@@ -575,6 +610,18 @@ export function TrendPlot({
         onResponderGrant={(event) => select(event.nativeEvent.locationX)}
         onResponderMove={(event) => select(event.nativeEvent.locationX)}
       />
+      {model && model.years.length > 0 && (
+        <YearPills
+          years={model.years}
+          pickedYear={pickedYear}
+          onPick={setPickedYear}
+          points={points}
+          format={formatValue ?? ((value) => value.toFixed(1))}
+          unit={formatValue ? '' : showFat ? '%' : unit}
+          width={width}
+          summaryTop={Math.max(model.baseline - 40, model.top)}
+        />
+      )}
       {activePoint && activeCoord && (
         <View
           pointerEvents="box-none"
