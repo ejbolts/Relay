@@ -1251,6 +1251,32 @@ describe('TrainTogetherPartnerView', () => {
     expect(repsInput.value).toBe('12');
     expect(row.classList.contains('is-pending')).toBe(false);
     expect(row.classList.contains('is-done')).toBe(true);
+
+    // Case C: Conflict on another field leaves half-typed "82." in a focused Weight field alone
+    // when it already reads as the stored weight (82 kg).
+    const halfTypedBase = makePartnerDraft(true);
+    halfTypedBase.movements[0].sets[0].weight_kg = 82;
+    halfTypedBase.movements[0].sets[0].reps = 12;
+    await renderWith(halfTypedBase, halfTypedBase, { revision: 7 }, 1);
+    await act(async () => {
+      weightInput.focus();
+      setInputValue(weightInput, '82.');
+    });
+    expect(weightInput.value).toBe('82.');
+
+    // Another field (reps) conflicts and updates to 14, while stored weight stays 82 kg.
+    const otherFieldConflict = makePartnerDraft(true);
+    otherFieldConflict.movements[0].sets[0].weight_kg = 82;
+    otherFieldConflict.movements[0].sets[0].reps = 14;
+    await renderWith(
+      otherFieldConflict,
+      otherFieldConflict,
+      { revision: 8, status: 'conflict', notApplied: true },
+      2,
+    );
+    expect(document.activeElement).toBe(weightInput);
+    expect(weightInput.value).toBe('82.');
+    expect(repsInput.value).toBe('14');
   });
 });
 

@@ -629,4 +629,49 @@ describe('useTrainTogether', () => {
       vi.useRealTimers();
     }
   });
+
+  it('shows no code or Waiting countdown when leaving while an invite request is still pending', async () => {
+    let resolveInvite!: (value: { token: string; expires_at: string; session_id: string }) => void;
+    vi.spyOn(api.trainTogether, 'read').mockResolvedValueOnce({
+      session: makeSession(1, makeDraft()),
+      ended: null,
+    });
+    vi.spyOn(api.trainTogether, 'invite').mockImplementationOnce(
+      () => new Promise((resolve) => (resolveInvite = resolve)),
+    );
+    vi.spyOn(api.trainTogether, 'leave').mockResolvedValueOnce({
+      session: null,
+      ended: {
+        session_id: 'sess-1',
+        reason: 'left',
+        by_user_id: 'u-self',
+        by_name: 'Alex',
+      },
+    });
+
+    await act(async () => root.render(<Harness userId="u-self" />));
+
+    let pendingInvite!: Promise<unknown>;
+    await act(async () => {
+      pendingInvite = latest.createInvite();
+      await latest.leave();
+    });
+
+    expect(latest.session).toBeNull();
+    expect(latest.invite).toBeNull();
+    expect(latest.inviteSeconds).toBe(0);
+
+    await act(async () => {
+      resolveInvite({
+        token: 'StaleAfterLeaveToken1234',
+        expires_at: new Date(Date.now() + 300_000).toISOString(),
+        session_id: 'sess-1',
+      });
+      await pendingInvite;
+    });
+
+    expect(latest.session).toBeNull();
+    expect(latest.invite).toBeNull();
+    expect(latest.inviteSeconds).toBe(0);
+  });
 });

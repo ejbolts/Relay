@@ -576,6 +576,7 @@ export function useTrainTogether(
     const currentUser = activeUserRef.current;
     if (!currentUser || leavingRef.current) return;
     leavingRef.current = true;
+    inviteGenRef.current += 1;
     const gen = generationRef.current;
     setLeaving(true);
     try {
