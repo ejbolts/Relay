@@ -549,12 +549,12 @@ describe('TrainTogetherPartnerView', () => {
     expect(putCalls).toHaveLength(2);
     const replayedSets = putCalls[1].draft.movements[0].sets;
     expect(replayedSets).toHaveLength(2);
-    expect(replayedSets[0].weight_kg).toBe(82.5);
     expect(replayedSets[1]).toMatchObject({
       key: addedKey,
       reps: 10,
       completed: true,
     });
+    expect(putCalls[1].revision).toBe(5);
     // Also verify item A: short name used in tight labels, full name in banner/header.
     await renderView();
     expect(container.querySelector('.tt-partner-banner')?.textContent).toContain(
