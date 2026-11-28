@@ -33,6 +33,7 @@ import { trainingIcons } from './icons';
 import { MachinePhotoStrip, type MachineFilter } from './MachinePhotos';
 import { Badge } from './parts';
 import { haptics } from '../../ui/haptics';
+import { TrainedWithPill } from '../train/TrainedWithPill';
 
 /** "Sat 21 Nov · 1h 2min · 8 sets", with the year when it isn't this year's. */
 export function workoutMeta(workout: TrackedWorkout, showYear: boolean) {
@@ -105,6 +106,8 @@ export function WorkoutCard({
           <Text style={[type.footnote, { color: colors.secondary }]} numberOfLines={1}>
             {workoutMeta(workout, showYear)}
           </Text>
+          {/* Train together: who it was trained with. */}
+          <TrainedWithPill workout={workout} />
         </View>
         <View style={styles.metric}>
           <Text style={[type.callout, type.number, { color: colors.text, fontWeight: '700' }]}>

@@ -143,8 +143,19 @@ interface Host {
    * toast with the time it has left. Null if it shows none.
    */
   lend: () => Shown | null;
+  /** Ends a toast with an action as if it timed out (its deferred work runs, its Undo is gone). */
+  dismissAction: () => void;
 }
 const hosts: Host[] = [];
+
+/**
+ * Ends every toast that offers an action (an Undo) as if it had timed out: its deferred work
+ * happens and it can no longer be pressed. For a screen that covers the one the action belongs
+ * to, such as logging for a train-together partner over your own workout.
+ */
+export function dismissActionToasts() {
+  hosts.forEach((host) => host.dismissAction());
+}
 
 /** A toast is on screen somewhere, so the logger's tips wait for it, as the web's do. */
 export function toastShowing() {
@@ -284,6 +295,10 @@ export function ToastHost({ bottom = 24 }: { bottom?: number }) {
         setToast(longer);
       },
       showing: () => current.current !== null,
+      dismissAction: () => {
+        const showing = current.current;
+        if (showing?.action) endRef.current(showing.id, 'dismissed');
+      },
       lend: () => {
         const showing = current.current;
         if (!showing) return null;

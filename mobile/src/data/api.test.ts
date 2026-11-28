@@ -547,3 +547,30 @@ test("a refusal while the keystore can't be read is not stale either", async () 
   answer(reply(401, { error: { message: 'Sign in to continue.' } }));
   await expect(query).rejects.toMatchObject({ status: 401, staleSession: false });
 });
+
+test("reads the member a train-together refusal names, and leaves other errors' members out", async () => {
+  const api = signedIn();
+  fetchMock.mockResolvedValueOnce(
+    reply(403, {
+      error: {
+        code: 'train_not_friends',
+        message: 'Add Sam as a friend to train together.',
+        member: { user_id: 'sam-id', name: 'Sam' },
+      },
+    }),
+  );
+  await expect(
+    api.apiSend('/api/train-together/join', 'POST', { token: 't' }),
+  ).rejects.toMatchObject({
+    status: 403,
+    code: 'train_not_friends',
+    message: 'Add Sam as a friend to train together.',
+    member: { user_id: 'sam-id', name: 'Sam' },
+  });
+  fetchMock.mockResolvedValueOnce(
+    reply(403, { error: { code: 'other', message: 'No.', member: { user_id: 7 } } }),
+  );
+  const error = await api.apiSend('/api/anything', 'POST').catch((reason: unknown) => reason);
+  expect(error).toBeInstanceOf(api.ApiError);
+  expect((error as InstanceType<Api['ApiError']>).member).toBeUndefined();
+});

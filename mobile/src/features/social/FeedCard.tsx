@@ -26,6 +26,7 @@ import {
 } from './ReactionBar';
 import { dismissWorkoutFocus, useShownWorkoutFocus } from './workoutFocus';
 import { useWorkoutPhotoEditor, WorkoutPhotos } from './WorkoutPhotos';
+import { TrainedWithPill } from '../train/TrainedWithPill';
 
 /**
  * One workout in the feed, matching the web's compact card: accent title + author · day +
@@ -169,6 +170,8 @@ export function FeedCard({
           </ReactionActions>
         </View>
       </View>
+      {/* Train together: who it was trained with, on its own row. */}
+      <TrainedWithPill workout={workout} />
       {(stats.length > 0 || item.record_count > 0) && (
         <View accessibilityLabel="Summary" style={styles.stats}>
           {stats.length > 0 && (

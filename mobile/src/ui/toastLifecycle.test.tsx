@@ -3,7 +3,13 @@ import { AccessibilityInfo, AppState, Platform, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { nextSessionEpoch } from '../session/sessionEpoch';
 import { pendingActions } from './pendingActions';
-import { ToastHost, isToastAccountCurrent, showToast, toastAccount } from './Toast';
+import {
+  dismissActionToasts,
+  ToastHost,
+  isToastAccountCurrent,
+  showToast,
+  toastAccount,
+} from './Toast';
 
 jest.mock('expo-sqlite/kv-store', () => jest.requireActual('../testing/memoryKvStore'));
 
@@ -463,4 +469,20 @@ describe('a screen with its own host opening over a toast', () => {
     expect(removal.onDismiss).not.toHaveBeenCalled();
     expect(removal.run).not.toHaveBeenCalled();
   });
+});
+
+it('settles a pending Undo when another screen covers its own, so it can no longer be pressed', async () => {
+  await render(host());
+  const pending = { label: 'Undo', run: jest.fn(), onDismiss: jest.fn() };
+  await act(async () => showToast('Bench Press removed', pending));
+  expect(undo()).not.toBeNull();
+  // Train together: logging for a partner covers your own workout.
+  await act(async () => dismissActionToasts());
+  expect(undo()).toBeNull();
+  expect(pending.onDismiss).toHaveBeenCalledTimes(1);
+  expect(pending.run).not.toHaveBeenCalled();
+  // A toast without an action is left alone.
+  await act(async () => showToast('Workout saved'));
+  await act(async () => dismissActionToasts());
+  expect(screen.getByText('Workout saved')).toBeOnTheScreen();
 });

@@ -69,6 +69,8 @@ import { CardioSetImport } from './CardioSetImport';
 import { lastUsedMachines, useMachinePhotos } from './loggerQueries';
 import type { SetMove } from './loggerState';
 import { formatPlain, NumberField, parseDecimal, parseWhole } from './NumberField';
+// Train together (stream M): partners' latest sets on this lift.
+import { PartnerPace } from '../train/TrainDeck';
 import { restMenuItems } from './restChoices';
 import { SetDragGesture, useSetDrag } from './SetDrag';
 import { SetInsertRow, SetRestRow } from './SetRestRow';
@@ -116,6 +118,7 @@ export const MovementCard = memo(function MovementCard({
   machineTip = false,
   supersetUpNext = false,
   actions,
+  trainPace = false,
 }: {
   /** Its place in the workout, on the picture's badge. */
   number: number;
@@ -141,6 +144,8 @@ export const MovementCard = memo(function MovementCard({
   /** Next to do in its superset's round in progress: opens if folded and says "Up next". */
   supersetUpNext?: boolean;
   actions: MovementActions;
+  /** Train together: show partners' latest sets on this lift above the set columns. */
+  trainPace?: boolean;
 }) {
   const { colors, type, radius, space } = useTheme();
   const cardio = movement.exercise.kind === 'cardio';
@@ -404,6 +409,8 @@ export const MovementCard = memo(function MovementCard({
           </Pressable>
         </LoggerTipSlot>
       )}
+
+      {expanded && trainPace && <PartnerPace exerciseId={exerciseId} unit={weightUnit} />}
 
       {expanded && (
         <>

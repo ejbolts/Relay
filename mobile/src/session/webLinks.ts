@@ -3,6 +3,7 @@ import {
   friendInviteIdFromHash,
   registrationInviteFromHash,
 } from '../../../frontend/src/friendInviteLink';
+import { trainInviteTokenFromHash } from '../../../frontend/src/trainTogether';
 
 /**
  * Where a link to the web app opens in this app. The web is one page at the server's root, so its
@@ -17,6 +18,8 @@ export interface WebLink {
   friend?: string;
   /** The registration code a friend link carries for a closed server. */
   registrationCode?: string | null;
+  /** A train-together code (`/#train=<token>`), joined once signed in. */
+  train?: string;
 }
 
 const WEB_LINK =
@@ -70,6 +73,9 @@ export function webLinkRoute(url: string): WebLink | null {
       registrationCode: registrationInviteFromHash(hash),
     };
   }
+  // Train together: the code is joined by the signed-in app wherever it is; Home underneath.
+  const train = trainInviteTokenFromHash(hash);
+  if (train) return { route: '/', train };
   if (!web && !hash) return null;
   const tab = appTabFromHash(hash);
   // An alert for an account's password request (`/?admin-account=<id>#admin`).

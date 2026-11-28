@@ -28,9 +28,19 @@ export class ApiError extends Error {
      * is saved is not stale: that session has ended.
      */
     readonly staleSession = false,
+    /** Train together's `train_not_friends`: the member to add as a friend first. */
+    readonly member?: { user_id: string; name: string },
   ) {
     super(message);
   }
+}
+
+/** The `member` an error body names (train together's `train_not_friends`), when well formed. */
+function errorMember(value: unknown): { user_id: string; name: string } | undefined {
+  const member = value as { user_id?: unknown; name?: unknown } | null | undefined;
+  return member && typeof member.user_id === 'string' && typeof member.name === 'string'
+    ? { user_id: member.user_id, name: member.name }
+    : undefined;
 }
 
 export function serverOrigin() {
@@ -117,6 +127,7 @@ export async function request<T>(
       body?.error?.message ?? 'Relay could not complete this request.',
       typeof body?.error?.code === 'string' ? body.error.code : undefined,
       stale,
+      errorMember(body?.error?.member),
     );
   }
   return response.status === 204 ? (undefined as T) : response.json();
