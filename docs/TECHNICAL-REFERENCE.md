@@ -593,6 +593,45 @@ management suites) create their fixture accounts through real registration and l
 Use that marker for tests whose purpose includes those authentication flows; explicit
 calls to registration/login and password hashing always use the real implementation.
 
+## Training together
+
+A train-together **session** links two to four friends' live workouts so either phone can log
+for either person (`backend/app/train_together.py`, routes under `/api/train-together`). A
+member is in at most one session; it ends when fewer than two members remain, after 12 hours,
+or, while only its creator is in it, when the creator's last code expires. Finishing or
+discarding your workout, unfriending or blocking a partner, and deleting your account all leave
+the session. Expired sessions and codes are ended lazily, when next read or written.
+
+**Invites.** `POST /api/train-together/invite` returns a 128-bit random token, stored only as a
+hash, valid for five minutes and usable once; a new one cancels the creator's unused code. The
+QR code and share link are `<origin>/#train=<token>`. `POST /api/train-together/join` is the
+consent: the joiner becomes a member at once, provided they have an accepted friendship with
+every current member and no block either way. Profile visibility does not matter for joining.
+An unknown, used or expired code says only that it has expired.
+
+**Partner writes.** Each member keeps their own live draft (`active_workout_sync`). A partner's
+edit, `PUT /api/train-together/members/{user_id}/workout` with `{revision, base, draft}`, runs
+the same `change_draft` three-way merge on the owner's row that another of the owner's devices
+would. The owner's apps, of any version, receive it through their ordinary draft sync, two
+people editing at once merge like two devices, and nothing new is stored inside the draft. A
+partner may change only `movements` and the activity times (`updatedAt`, `lastActiveAt`,
+`inactiveFinishAt`), and may add only the owner's own exercises and machine photos. The server
+refuses a change without a `base` or `draft`, with `replace` or `autoSave`, to any other field,
+or for another workout session (`422 train_change_not_allowed`). Every read and write checks
+again that both accounts are active members of the same session and still friends.
+
+**Saved workouts.** Saving a workout from a session's draft (by the app or by auto-save) links it
+through the member row, never the workout's own fields, so the full-replace workout save is
+unchanged. `TrainingWorkoutRead` carries `trained_with` (the viewer and the members they may
+see) and `trained_with_count` (everyone who was in the session at the same time).
+
+**Socket.** `{"type": "train_together"}`, with no contents, goes to every window of every member
+(and anyone just removed) after a join, a leave, the session ending, and any member's draft
+changing. Clients refetch `GET /api/train-together`. Older apps ignore the unknown type.
+
+The shared rules, wording and the partner request loop are in `frontend/src/trainTogether.ts`,
+which the web and the native app both import.
+
 ## App versions and API compatibility
 
 Installed apps can keep an old bundle open for days, so the API must keep working with

@@ -1050,6 +1050,7 @@ ACCOUNT_TABLES = {
     "active_workout_sync",
     "workout_photos",
     "expo_push_tokens",
+    "train_together_members",
 }
 
 
