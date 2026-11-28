@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
-import { friendInviteIdFromScan } from './friendInvite';
+import { friendInviteIdFromScan, openFriendInvite } from './friendInvite';
 import { Icon } from './Icon';
+import { openTrainInvite, trainInviteTokenFromScan } from './trainTogetherInvite';
 
 /*
  * Scans a friend's QR code with the camera without leaving Relay. An installed web app on
@@ -11,7 +12,7 @@ import { Icon } from './Icon';
  */
 
 type CameraState = 'starting' | 'scanning' | 'denied' | 'unavailable' | 'error';
-type Notice = 'not-friend-code' | 'own-code' | null;
+type Notice = 'not-friend-code' | 'not-relay-code' | 'own-code' | null;
 
 const SCAN_INTERVAL_MS = 120;
 const MAX_FRAME_SIZE = 640;
@@ -31,10 +32,16 @@ function cameraStateFor(reason: unknown): CameraState {
 
 export function FriendQrScanner({
   userId,
+  mode = 'friend',
+  paused = false,
   onScanned,
+  onScannedTrain,
 }: {
   userId: string;
-  onScanned: (accountId: string) => void;
+  mode?: 'friend' | 'train';
+  paused?: boolean;
+  onScanned?: (accountId: string) => void;
+  onScannedTrain?: (token: string) => void;
 }) {
   const video = useRef<HTMLVideoElement>(null);
   const [camera, setCamera] = useState<CameraState>('starting');
@@ -42,6 +49,15 @@ export function FriendQrScanner({
   const [attempt, setAttempt] = useState(0);
   const onScannedRef = useRef(onScanned);
   onScannedRef.current = onScanned;
+  const onScannedTrainRef = useRef(onScannedTrain);
+  onScannedTrainRef.current = onScannedTrain;
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
+  const lastTrainTokenRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (!paused) lastTrainTokenRef.current = null;
+  }, [paused]);
 
   useEffect(() => {
     let stopped = false;
@@ -95,14 +111,35 @@ export function FriendQrScanner({
           const code = decoder.default(image.data, width, height, {
             inversionAttempts: 'dontInvert',
           });
-          if (!code) return;
+          if (pausedRef.current) return;
+          if (!code) {
+            lastTrainTokenRef.current = null;
+            return;
+          }
+          const trainToken = trainInviteTokenFromScan(code.data);
+          if (trainToken) {
+            if (mode === 'train') {
+              if (lastTrainTokenRef.current === trainToken) return;
+              lastTrainTokenRef.current = trainToken;
+              setNotice(null);
+              if (onScannedTrainRef.current) onScannedTrainRef.current(trainToken);
+              else openTrainInvite(trainToken);
+            } else {
+              stopped = true;
+              cancelAnimationFrame(frame);
+              if (onScannedTrainRef.current) onScannedTrainRef.current(trainToken);
+              else openTrainInvite(trainToken);
+            }
+            return;
+          }
           const id = friendInviteIdFromScan(code.data);
-          if (!id) setNotice('not-friend-code');
+          if (!id) setNotice(mode === 'train' ? 'not-relay-code' : 'not-friend-code');
           else if (id === userId) setNotice('own-code');
           else {
             stopped = true;
             cancelAnimationFrame(frame);
-            onScannedRef.current(id);
+            if (onScannedRef.current) onScannedRef.current(id);
+            else openFriendInvite(id);
           }
         };
         frame = requestAnimationFrame(scan);
@@ -117,7 +154,7 @@ export function FriendQrScanner({
       cancelAnimationFrame(frame);
       stream?.getTracks().forEach((track) => track.stop());
     };
-  }, [userId, attempt]);
+  }, [userId, mode, attempt]);
 
   const failed = camera === 'denied' || camera === 'unavailable' || camera === 'error';
   return (
@@ -144,9 +181,11 @@ export function FriendQrScanner({
       <p className="friend-scan-notice" role="status">
         {notice === 'not-friend-code'
           ? 'That isn’t a Relay friend code.'
-          : notice === 'own-code'
-            ? 'That’s your own code.'
-            : ''}
+          : notice === 'not-relay-code'
+            ? 'That isn’t a Relay code.'
+            : notice === 'own-code'
+              ? 'That’s your own code.'
+              : ''}
       </p>
     </div>
   );
