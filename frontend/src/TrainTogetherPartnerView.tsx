@@ -17,12 +17,12 @@ import {
   type TrainExercise,
   type TrainMember,
 } from './trainTogether';
+import { PARTNER_SET_MAX, partnerRepsInput, partnerWeightInput } from './trainTogetherInput';
 import { partnerSetLabel, partnerWorkoutName } from './trainTogetherView';
 import { TrainTogetherAvatar } from './TrainTogetherAvatar';
 import { partnerCssVars, type PartnerPalette } from './trainTogetherTheme';
 import {
   formatWeightNumber,
-  weightInputKg,
   weightInputValue,
   weightUnitName,
   type WeightUnit,
@@ -30,56 +30,11 @@ import {
 import type { ActiveWorkoutDraft, StoredDraftMovement, StoredDraftSet } from './workoutDraft';
 import { activeElapsedSeconds, draftPause } from './workoutPause';
 
-const MAX_PARTNER_WEIGHT_KG = 10_000;
-const MAX_PARTNER_REPS = 10_000;
-
-type NumericParseResult =
-  | { kind: 'valid'; value: number | null }
-  | { kind: 'incomplete' }
-  | { kind: 'invalid'; message: string };
-
-function parsePartnerWeightInput(
-  raw: string,
-  unit: WeightUnit,
-  originalKg: number | null,
-): NumericParseResult {
-  const trimmed = raw.trim();
-  if (trimmed === '') return { kind: 'valid', value: null };
-  if (/^\d*[.,]$/.test(trimmed)) return { kind: 'incomplete' };
-  if (!/^(?:\d+(?:[.,]\d+)?|[.,]\d+)$/.test(trimmed)) {
-    return {
-      kind: 'invalid',
-      message: `Enter a weight between 0 and ${formatWeightNumber(MAX_PARTNER_WEIGHT_KG, unit, 0)} ${unit}.`,
-    };
-  }
-  const kg = weightInputKg(trimmed, unit, originalKg);
-  if (kg === null || !Number.isFinite(kg) || kg < 0 || kg > MAX_PARTNER_WEIGHT_KG) {
-    return {
-      kind: 'invalid',
-      message: `Weight must be between 0 and ${formatWeightNumber(MAX_PARTNER_WEIGHT_KG, unit, 0)} ${unit}.`,
-    };
-  }
-  return { kind: 'valid', value: kg };
+function weightRangeMessage(unit: WeightUnit): string {
+  return `Weight must be between 0 and ${formatWeightNumber(PARTNER_SET_MAX, unit, 0)} ${unit}.`;
 }
 
-function parsePartnerRepsInput(raw: string): NumericParseResult {
-  const trimmed = raw.trim();
-  if (trimmed === '') return { kind: 'valid', value: null };
-  if (!/^\d+$/.test(trimmed)) {
-    return {
-      kind: 'invalid',
-      message: `Reps must be a whole number between 0 and ${MAX_PARTNER_REPS.toLocaleString('en-US')}.`,
-    };
-  }
-  const parsed = Number(trimmed);
-  if (!Number.isSafeInteger(parsed) || parsed < 0 || parsed > MAX_PARTNER_REPS) {
-    return {
-      kind: 'invalid',
-      message: `Reps must be a whole number between 0 and ${MAX_PARTNER_REPS.toLocaleString('en-US')}.`,
-    };
-  }
-  return { kind: 'valid', value: parsed };
-}
+const REPS_RANGE_MESSAGE = `Reps must be a whole number between 0 and ${PARTNER_SET_MAX.toLocaleString('en-US')}.`;
 
 function formatElapsed(seconds: number): string {
   const total = Math.max(0, Math.floor(seconds));
@@ -193,29 +148,29 @@ function PartnerSetRow({
           onFocus={() => setWeightFocused(true)}
           onBlur={() => {
             setWeightFocused(false);
-            const checked = parsePartnerWeightInput(weightText, weightUnit, set.weight_kg);
-            if (checked.kind === 'valid') {
+            const checked = partnerWeightInput(weightText, weightUnit, set.weight_kg);
+            if (checked.kind === 'empty') {
+              setWeightError(null);
+              setWeightText('');
+            } else if (checked.kind === 'value') {
               setWeightError(null);
               setWeightText(weightInputValue(checked.value, weightUnit));
-            } else if (checked.kind === 'incomplete') {
-              setWeightError(
-                `Enter a weight between 0 and ${formatWeightNumber(MAX_PARTNER_WEIGHT_KG, weightUnit, 0)} ${weightUnit}.`,
-              );
             } else {
-              setWeightError(checked.message);
+              setWeightError(weightRangeMessage(weightUnit));
             }
           }}
           onChange={(event) => {
             const next = event.target.value;
             setWeightText(next);
-            const checked = parsePartnerWeightInput(next, weightUnit, set.weight_kg);
-            if (checked.kind === 'valid') {
+            const checked = partnerWeightInput(next, weightUnit, set.weight_kg);
+            if (checked.kind === 'empty') {
+              setWeightError(null);
+              if (set.weight_kg !== null) onUpdate({ weight_kg: null });
+            } else if (checked.kind === 'value') {
               setWeightError(null);
               if (checked.value !== set.weight_kg) onUpdate({ weight_kg: checked.value });
-            } else if (checked.kind === 'incomplete') {
-              setWeightError(null);
             } else {
-              setWeightError(checked.message);
+              setWeightError(weightRangeMessage(weightUnit));
             }
           }}
         />
@@ -231,23 +186,29 @@ function PartnerSetRow({
           onFocus={() => setRepsFocused(true)}
           onBlur={() => {
             setRepsFocused(false);
-            const checked = parsePartnerRepsInput(repsText);
-            if (checked.kind === 'valid') {
+            const checked = partnerRepsInput(repsText);
+            if (checked.kind === 'empty') {
               setRepsError(null);
-              setRepsText(checked.value === null ? '' : String(checked.value));
-            } else if (checked.kind === 'invalid') {
-              setRepsError(checked.message);
+              setRepsText('');
+            } else if (checked.kind === 'value') {
+              setRepsError(null);
+              setRepsText(String(checked.value));
+            } else {
+              setRepsError(REPS_RANGE_MESSAGE);
             }
           }}
           onChange={(event) => {
             const next = event.target.value;
             setRepsText(next);
-            const checked = parsePartnerRepsInput(next);
-            if (checked.kind === 'valid') {
+            const checked = partnerRepsInput(next);
+            if (checked.kind === 'empty') {
+              setRepsError(null);
+              if (set.reps !== null) onUpdate({ reps: null });
+            } else if (checked.kind === 'value') {
               setRepsError(null);
               if (checked.value !== set.reps) onUpdate({ reps: checked.value });
-            } else if (checked.kind === 'invalid') {
-              setRepsError(checked.message);
+            } else {
+              setRepsError(REPS_RANGE_MESSAGE);
             }
           }}
         />
