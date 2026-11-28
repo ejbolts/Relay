@@ -36,7 +36,7 @@ import {
 } from 'react';
 import type { ContextType, PointerEvent as ReactPointerEvent, ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
-import { api, revisionAfterSave, revisionAtSignIn, type SavedStartupData } from './api';
+import { ApiError, api, revisionAfterSave, revisionAtSignIn, type SavedStartupData } from './api';
 import { SetDragHandle } from './SetDragHandle';
 import { hasUnassignedMachineSets, movementWithMachines } from './setMachines';
 import { MachinePhotoMergePicker } from './MachinePhotoMergePicker';
@@ -520,6 +520,35 @@ import { CardioScreen } from './CardioScreen';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
 import { crossesNewYear } from './chartYears';
 import { onWorkoutFocusRequested } from './workoutFocus';
+import {
+  friendRequestSentNotice,
+  leaveFailedNotice,
+  partners as sessionPartners,
+  TRAIN_ERRORS,
+  type TrainMember,
+  type TrainTogetherRead,
+} from './trainTogether';
+import { partnerStartTemplate, unmatchedExercisesNotice } from './trainTogetherView';
+import {
+  captureTrainInvite,
+  claimTrainInviteToken,
+  pendingTrainInvite,
+  releaseTrainInviteToken,
+  takePendingTrainInvite,
+  TRAIN_INVITE_EVENT,
+} from './trainTogetherInvite';
+import type { PartnerPalette } from './trainTogetherTheme';
+import {
+  usePartnerPalettes,
+  useTrainTogether,
+  type TrainTogetherController,
+} from './useTrainTogether';
+import { TrainTogetherDeck, TrainTogetherEntryButton } from './TrainTogetherDeck';
+import { TrainTogetherPaceStrip } from './TrainTogetherPaceStrip';
+import { TrainTogetherPartnerView } from './TrainTogetherPartnerView';
+import { TrainTogetherSheet } from './TrainTogetherSheet';
+import { TrainTogetherStartSheet } from './TrainTogetherStartSheet';
+import { TrainedWithPill } from './TrainedWithPill';
 
 // Screens that live in their own files; re-exported for existing imports of './App'.
 export { BodyCompositionScreen, CardioScreen };
@@ -647,7 +676,7 @@ function AppContent() {
   const [settingsGroup, setSettingsGroup] = useState<SettingsGroupId | null>(() =>
     new URLSearchParams(window.location.search).has('youtube') ? 'data' : null,
   );
-  const { user, signingIn = false } = useUserSession();
+  const { user, signingIn = false, confirmed: sessionConfirmed = true } = useUserSession();
   usePresenceConnection(user?.id ?? null);
   // The workout just finished, shown on Home until it is dismissed or the next one starts.
   const [finishSummary, setFinishSummary] = useState<FinishSummary | null>(null);
@@ -910,7 +939,7 @@ function AppContent() {
     openingRevision !== null || startupRefreshed,
     exerciseCatalogue.loaded,
   );
-  const { show: showToast, active: toastActive } = useToast();
+  const { show: showToast, dismiss: dismissToast, active: toastActive } = useToast();
   const [backgroundActivities, setBackgroundActivities] = useState<BackgroundActivity[]>([]);
   const [editingWorkoutSaving, setWorkoutSaving] = useState(false);
   const finishedQueue = useFinishedWorkoutQueue(user?.id ?? null, (saved, resumedId, queued) =>
@@ -1003,6 +1032,83 @@ function AppContent() {
   // Cancel this browser's legacy elapsed-time reminder; the server tracks shared activity.
   useActiveWorkoutReminder(null);
   const workoutSync = useActiveWorkoutSync(user?.id ?? null);
+  const showTrainErrorToast = useCallback(
+    (message: string) => showToast({ message, variant: 'error' }),
+    [showToast],
+  );
+  const trainTogether = useTrainTogether(user?.id ?? null, showToast, {
+    confirmed: sessionConfirmed,
+    onErrorNotice: showTrainErrorToast,
+    onPartnerRetired: (partnerId) =>
+      setActivePartnerId((current) => (current === partnerId ? null : current)),
+  });
+  const trainPalettes = usePartnerPalettes(Math.max(trainTogether.partners.length, 1));
+  const [trainSheetOpen, setTrainSheetOpen] = useState(false);
+  const [trainStartPartnerId, setTrainStartPartnerId] = useState<string | null>(null);
+  const [activePartnerId, setActivePartnerId] = useState<string | null>(null);
+  const [trainInviteTick, setTrainInviteTick] = useState(0);
+  const trainMountedRef = useRef(true);
+  const trainUserIdRef = useRef<string | null>(user?.id ?? null);
+  trainUserIdRef.current = user?.id ?? null;
+  const activeWorkoutStartedAtRef = useRef<number | null>(activeWorkoutStartedAt);
+  activeWorkoutStartedAtRef.current = activeWorkoutStartedAt;
+  const leavingTrainSessionRef = useRef(false);
+  const lastPartnerFocusIdRef = useRef<string | null>(null);
+  const prevActivePartnerIdRef = useRef<string | null>(null);
+  const trainActionToastOpenRef = useRef(false);
+  const completeTrainJoin = (joined: TrainTogetherRead) => {
+    const joinedPartners = sessionPartners(joined.session);
+    const currentDraft = readActiveWorkoutDraft();
+    const hasLiveWorkout =
+      activeWorkoutStartedAtRef.current !== null ||
+      Boolean(currentDraft && !currentDraft.pendingSave);
+    if (hasLiveWorkout) {
+      setEditingWorkout(null);
+      resumeLiveWorkout();
+    } else if (joinedPartners.length > 0) {
+      const withWorkout = joinedPartners.find((p) => p.workout !== null) ?? joinedPartners[0];
+      setTrainStartPartnerId(withWorkout.user_id);
+    }
+  };
+  const openTrainSheet = useCallback(() => setTrainSheetOpen(true), []);
+  const leaveTrainSession = useCallback(async (): Promise<boolean> => {
+    if (leavingTrainSessionRef.current) return false;
+    leavingTrainSessionRef.current = true;
+    try {
+      await trainTogether.leave();
+      setActivePartnerId(null);
+      return true;
+    } catch {
+      if (trainMountedRef.current) {
+        showToast({
+          message: leaveFailedNotice,
+          variant: 'error',
+        });
+      }
+      return false;
+    } finally {
+      leavingTrainSessionRef.current = false;
+    }
+  }, [showToast, trainTogether]);
+  const handleLeaveTrainSession = useCallback(() => {
+    void leaveTrainSession();
+  }, [leaveTrainSession]);
+  useEffect(() => {
+    trainMountedRef.current = true;
+    return () => {
+      trainMountedRef.current = false;
+      if (trainActionToastOpenRef.current) {
+        trainActionToastOpenRef.current = false;
+        dismissToast();
+      }
+    };
+  }, [dismissToast]);
+  useEffect(() => {
+    if (trainActionToastOpenRef.current) {
+      trainActionToastOpenRef.current = false;
+      dismissToast();
+    }
+  }, [user?.id, dismissToast]);
   const [syncConflictDismissed, setSyncConflictDismissed] = useState(false);
   useEffect(() => {
     const remoteWorkout = () => {
@@ -1142,6 +1248,132 @@ function AppContent() {
       window.removeEventListener(FRIEND_INVITE_EVENT, onScanned);
     };
   }, []);
+  useEffect(() => {
+    const onTrainHash = () => {
+      const token = captureTrainInvite();
+      if (token) setTrainInviteTick((n) => n + 1);
+    };
+    const onTrainScanned = () => {
+      if (pendingTrainInvite()) setTrainInviteTick((n) => n + 1);
+    };
+    window.addEventListener('hashchange', onTrainHash);
+    window.addEventListener(TRAIN_INVITE_EVENT, onTrainScanned);
+    return () => {
+      window.removeEventListener('hashchange', onTrainHash);
+      window.removeEventListener(TRAIN_INVITE_EVENT, onTrainScanned);
+    };
+  }, []);
+  useEffect(() => {
+    const prev = prevActivePartnerIdRef.current;
+    prevActivePartnerIdRef.current = activePartnerId;
+    if (activePartnerId) {
+      lastPartnerFocusIdRef.current = activePartnerId;
+      return;
+    }
+    if (!prev) return;
+    const targetId = lastPartnerFocusIdRef.current;
+    window.requestAnimationFrame(() => {
+      const partnerBtn = targetId
+        ? ([...document.querySelectorAll<HTMLButtonElement>('[data-tt-log-for]')].find(
+            (button) => button.dataset.ttLogFor === targetId,
+          ) ?? null)
+        : null;
+      const fallback = document.querySelector<HTMLButtonElement>(
+        '.live-workout-header .live-workout-options, .live-workout-header .workout-sheet-grab',
+      );
+      (partnerBtn ?? fallback)?.focus({ preventScroll: true });
+    });
+  }, [activePartnerId]);
+  useEffect(() => {
+    if (!activePartnerId) return;
+    const stillActive = trainTogether.partners.some(
+      (partner) => partner.user_id === activePartnerId && partner.workout !== null,
+    );
+    if (!stillActive) setActivePartnerId(null);
+  }, [activePartnerId, trainTogether.partners]);
+  useEffect(() => {
+    if (!user || !sessionConfirmed || !pendingTrainInvite()) return;
+    const ownerUserId = user.id;
+    const accountScope = captureAccountCacheScope();
+    let cancelled = false;
+    void Promise.resolve().then(() => {
+      if (cancelled || !trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
+      const token = takePendingTrainInvite();
+      if (!token || !claimTrainInviteToken(token)) return;
+      void trainTogether
+        .join(token)
+        .then((joined) => {
+          if (!joined || !trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
+          completeTrainJoin(joined);
+        })
+        .catch((reason: unknown) => {
+          if (!trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
+          if (
+            reason instanceof ApiError &&
+            reason.code === TRAIN_ERRORS.notFriends &&
+            reason.member
+          ) {
+            const target = reason.member;
+            trainActionToastOpenRef.current = true;
+            showToast({
+              message: reason.message,
+              variant: 'error',
+              duration: 'important',
+              onDismiss: () => {
+                trainActionToastOpenRef.current = false;
+              },
+              onTimeout: () => {
+                trainActionToastOpenRef.current = false;
+              },
+              action: {
+                label: 'Add friend',
+                run: async () => {
+                  if (
+                    !trainMountedRef.current ||
+                    trainUserIdRef.current !== ownerUserId ||
+                    !accountScope.isCurrent()
+                  ) {
+                    trainActionToastOpenRef.current = false;
+                    dismissToast();
+                    return;
+                  }
+                  try {
+                    const res = await api.sharing.addFriend(target.user_id);
+                    if (!trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
+                    trainActionToastOpenRef.current = false;
+                    showToast(
+                      res.status === 'friends'
+                        ? `Added ${target.name} as a friend`
+                        : friendRequestSentNotice(target.name),
+                    );
+                  } catch (err) {
+                    if (!trainMountedRef.current || trainUserIdRef.current !== ownerUserId) return;
+                    trainActionToastOpenRef.current = false;
+                    showToast({
+                      message:
+                        err instanceof Error ? err.message : 'Could not send friend request.',
+                      variant: 'error',
+                    });
+                  }
+                },
+              },
+            });
+            return;
+          }
+          showToast({
+            message: reason instanceof Error ? reason.message : 'Could not join this session.',
+            variant: 'error',
+          });
+        })
+        .finally(() => {
+          releaseTrainInviteToken(token);
+        });
+    });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, sessionConfirmed, trainInviteTick]);
   // A notification opens the reacted or commented workout in Social's feed.
   useEffect(() => onWorkoutFocusRequested(() => setTab('social')), [setTab]);
   // A person named in a notification opens their shared profile.
@@ -1713,8 +1945,10 @@ function AppContent() {
       finishedQueue.queue(payload);
       rememberFinish(buildFinishSummary(payload, exercises, workouts, Date.now(), resumedId));
       setActiveWorkoutStartedAt(null);
+      setActivePartnerId(null);
       setResumingWorkoutId(null);
       setTab('dashboard', { replace: true });
+      void trainTogether.refresh({ silent: true });
       return;
     }
     setWorkoutSaving(true);
@@ -2822,117 +3056,189 @@ function AppContent() {
               <LiveWorkoutSheet
                 active={tab === 'log'}
                 enabled={!editingWorkout}
-                onMinimise={() => setTab('dashboard')}
+                onMinimise={() => {
+                  setActivePartnerId(null);
+                  setTab('dashboard');
+                }}
               >
-                {workoutCatalogueReady ? (
-                  <WorkoutBrowser
-                    key={
-                      editingWorkout
-                        ? `edit-${editingWorkout.id}`
-                        : liveLoggerSession.current
-                          ? loggerSessionKey(liveLoggerSession.current)
-                          : `active-${workoutStartDate}`
-                    }
-                    workouts={workouts}
-                    initialWorkout={editingWorkout}
-                    resumedWorkoutId={resumingWorkoutId}
-                    hasOlder={olderHistoryAvailable}
-                    resumeRequest={editingWorkout ? undefined : workoutResumeRequest}
-                  >
-                    {(navigation, viewedWorkout) => (
-                      <WorkoutLogger
-                        key={viewedWorkout?.id ?? 'original'}
-                        exercises={exercises}
-                        restoredDraftMovements={restoredDraftMovements}
-                        recommendation={dashboard?.recommendation ?? null}
-                        template={workoutTemplate}
-                        startCategory={workoutStartCategory}
-                        startType={workoutStartType}
-                        initialDate={workoutStartDate}
-                        initialWorkout={viewedWorkout ?? editingWorkout}
-                        readOnly={Boolean(viewedWorkout)}
-                        navigation={navigation}
-                        resumingWorkout={viewedWorkout ? null : resumingWorkout}
-                        currentBodyweight={
-                          viewedWorkout
-                            ? savedWorkoutBodyweight(viewedWorkout)
-                            : savedWorkoutBodyweight(editingWorkout ?? resumingWorkout)
-                        }
-                        measurements={measurements}
-                        historicalWorkouts={workouts}
-                        historyBaselines={historyBaselines}
-                        restTimerEnabled={restTimerEnabled}
-                        showRestTimes={showRestTimes}
-                        weeklySets={
-                          viewedWorkout || editingWorkout ? undefined : muscleSets.weeklySets
-                        }
-                        categoryColors={workoutTypeColors}
-                        onExerciseHistory={(exerciseId) =>
-                          openHistorySection('progress', exerciseId)
-                        }
-                        onExerciseFavorite={updateExerciseFavorite}
-                        onCreateExercise={createExercise}
-                        onSave={saveWorkout}
-                        onShow={resumeLiveWorkout}
-                        activeStartedAt={activeWorkoutStartedAt}
-                        onRestTimerChange={
-                          editingWorkout || viewedWorkout ? undefined : setRestEndsAt
-                        }
-                        onRestDoneChange={
-                          editingWorkout || viewedWorkout ? undefined : setRestDoneAt
-                        }
-                        restGoRequest={restGoRequest}
-                        screenVisible={tab === 'log'}
-                        onLiveSummaryChange={setLiveWorkoutSummary}
-                        onClose={navigateBack}
-                        workoutEditGuard={
-                          editingWorkout && !viewedWorkout ? workoutEditGuardRef : undefined
-                        }
-                        onDelete={() => {
-                          if (workoutSaveBlocked) return;
-                          if (editingWorkout) {
-                            deleteWorkout(editingWorkout);
-                            leaveWorkoutEditor();
-                          } else {
-                            clearActiveWorkoutDraft();
-                            setActiveWorkoutStartedAt(null);
-                            setResumingWorkoutId(null);
-                            setTab('dashboard');
+                {(() => {
+                  const activePartnerIndex =
+                    !editingWorkout && activePartnerId
+                      ? trainTogether.partners.findIndex(
+                          (partner) =>
+                            partner.user_id === activePartnerId && partner.workout !== null,
+                        )
+                      : -1;
+                  const activePartner =
+                    activePartnerIndex >= 0 ? trainTogether.partners[activePartnerIndex] : null;
+                  return (
+                    <>
+                      {activePartner && (
+                        <TrainTogetherPartnerView
+                          partner={activePartner}
+                          palette={trainPalettes[activePartnerIndex] ?? trainPalettes[0]}
+                          syncState={trainTogether.partnerSyncStates[activePartner.user_id]}
+                          acknowledgedDraft={
+                            trainTogether.partnerAcknowledgedDrafts[activePartner.user_id]
                           }
-                          setEditingWorkout(null);
-                        }}
-                      />
-                    )}
-                  </WorkoutBrowser>
-                ) : (
-                  <section className="logger-screen content-page" aria-live="polite">
-                    <OverlayScreenHeader
-                      title={activeDraft ? 'Workout recovery' : 'Workout unavailable'}
-                      subtitle={
-                        activeDraft
-                          ? 'Your workout is saved on this device'
-                          : 'Load your exercise library to start'
-                      }
-                      onBack={navigateBack}
-                    />
-                    <p>
-                      {exerciseCatalogue.error
-                        ? 'Your exercises could not be loaded.'
-                        : 'Some exercises in your saved workout are not available yet.'}{' '}
-                      {activeDraft
-                        ? 'Your saved workout is safe on this device. Reload the exercises to resume it.'
-                        : 'Reload the exercises to start your workout.'}
-                    </p>
-                    {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
-                    <button
-                      type="button"
-                      className="pulse-button secondary block"
-                      onClick={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
-                    >
-                      Retry loading exercises
-                    </button>
-                  </section>
-                )}
+                          conflictCount={
+                            trainTogether.partnerConflictCounts[activePartner.user_id] ?? 0
+                          }
+                          extraExercises={
+                            trainTogether.partnerExercisesByUser[activePartner.user_id]
+                          }
+                          viewerAddedMovementKeys={
+                            trainTogether.viewerAddedMovements[activePartner.user_id]
+                          }
+                          weightUnit={weightUnit}
+                          onEdit={(change, added) =>
+                            trainTogether.editPartnerWorkout(activePartner.user_id, change, added)
+                          }
+                          onRetry={() => trainTogether.retryPartnerSync(activePartner.user_id)}
+                          onRegisterExercises={(list) =>
+                            trainTogether.registerPartnerExercises(activePartner.user_id, list)
+                          }
+                          onBackToMine={() => setActivePartnerId(null)}
+                        />
+                      )}
+                      <div hidden={activePartner !== null}>
+                        {workoutCatalogueReady ? (
+                          <WorkoutBrowser
+                            key={
+                              editingWorkout
+                                ? `edit-${editingWorkout.id}`
+                                : liveLoggerSession.current
+                                  ? loggerSessionKey(liveLoggerSession.current)
+                                  : `active-${workoutStartDate}`
+                            }
+                            workouts={workouts}
+                            initialWorkout={editingWorkout}
+                            resumedWorkoutId={resumingWorkoutId}
+                            hasOlder={olderHistoryAvailable}
+                            resumeRequest={editingWorkout ? undefined : workoutResumeRequest}
+                          >
+                            {(navigation, viewedWorkout) => (
+                              <WorkoutLogger
+                                key={viewedWorkout?.id ?? 'original'}
+                                exercises={exercises}
+                                restoredDraftMovements={restoredDraftMovements}
+                                recommendation={dashboard?.recommendation ?? null}
+                                template={workoutTemplate}
+                                startCategory={workoutStartCategory}
+                                startType={workoutStartType}
+                                initialDate={workoutStartDate}
+                                initialWorkout={viewedWorkout ?? editingWorkout}
+                                readOnly={Boolean(viewedWorkout)}
+                                navigation={navigation}
+                                resumingWorkout={viewedWorkout ? null : resumingWorkout}
+                                currentBodyweight={
+                                  viewedWorkout
+                                    ? savedWorkoutBodyweight(viewedWorkout)
+                                    : savedWorkoutBodyweight(editingWorkout ?? resumingWorkout)
+                                }
+                                measurements={measurements}
+                                historicalWorkouts={workouts}
+                                historyBaselines={historyBaselines}
+                                restTimerEnabled={restTimerEnabled}
+                                showRestTimes={showRestTimes}
+                                weeklySets={
+                                  viewedWorkout || editingWorkout
+                                    ? undefined
+                                    : muscleSets.weeklySets
+                                }
+                                categoryColors={workoutTypeColors}
+                                onExerciseHistory={(exerciseId) =>
+                                  openHistorySection('progress', exerciseId)
+                                }
+                                onExerciseFavorite={updateExerciseFavorite}
+                                onCreateExercise={createExercise}
+                                onSave={saveWorkout}
+                                onShow={resumeLiveWorkout}
+                                activeStartedAt={activeWorkoutStartedAt}
+                                onRestTimerChange={
+                                  editingWorkout || viewedWorkout ? undefined : setRestEndsAt
+                                }
+                                onRestDoneChange={
+                                  editingWorkout || viewedWorkout ? undefined : setRestDoneAt
+                                }
+                                restGoRequest={restGoRequest}
+                                screenVisible={tab === 'log'}
+                                inForeground={activePartner === null}
+                                onLiveSummaryChange={setLiveWorkoutSummary}
+                                onClose={navigateBack}
+                                workoutEditGuard={
+                                  editingWorkout && !viewedWorkout ? workoutEditGuardRef : undefined
+                                }
+                                trainTogether={
+                                  !editingWorkout && !viewedWorkout ? trainTogether : undefined
+                                }
+                                trainPalettes={
+                                  !editingWorkout && !viewedWorkout ? trainPalettes : undefined
+                                }
+                                onOpenTrainSheet={
+                                  !editingWorkout && !viewedWorkout ? openTrainSheet : undefined
+                                }
+                                onLogForPartner={
+                                  !editingWorkout && !viewedWorkout ? setActivePartnerId : undefined
+                                }
+                                onLeaveTrainSession={
+                                  !editingWorkout && !viewedWorkout
+                                    ? handleLeaveTrainSession
+                                    : undefined
+                                }
+                                onDelete={() => {
+                                  if (workoutSaveBlocked) return;
+                                  if (editingWorkout) {
+                                    deleteWorkout(editingWorkout);
+                                    leaveWorkoutEditor();
+                                  } else {
+                                    clearActiveWorkoutDraft();
+                                    setActiveWorkoutStartedAt(null);
+                                    setActivePartnerId(null);
+                                    setResumingWorkoutId(null);
+                                    setTab('dashboard');
+                                    void trainTogether.refresh({ silent: true });
+                                  }
+                                  setEditingWorkout(null);
+                                }}
+                              />
+                            )}
+                          </WorkoutBrowser>
+                        ) : (
+                          <section className="logger-screen content-page" aria-live="polite">
+                            <OverlayScreenHeader
+                              title={activeDraft ? 'Workout recovery' : 'Workout unavailable'}
+                              subtitle={
+                                activeDraft
+                                  ? 'Your workout is saved on this device'
+                                  : 'Load your exercise library to start'
+                              }
+                              onBack={navigateBack}
+                            />
+                            <p>
+                              {exerciseCatalogue.error
+                                ? 'Your exercises could not be loaded.'
+                                : 'Some exercises in your saved workout are not available yet.'}{' '}
+                              {activeDraft
+                                ? 'Your saved workout is safe on this device. Reload the exercises to resume it.'
+                                : 'Reload the exercises to start your workout.'}
+                            </p>
+                            {exerciseCatalogue.error && <p>{exerciseCatalogue.error}</p>}
+                            <button
+                              type="button"
+                              className="pulse-button secondary block"
+                              onClick={() =>
+                                void refreshData({ activityLabel: 'Reloading exercises…' })
+                              }
+                            >
+                              Retry loading exercises
+                            </button>
+                          </section>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
               </LiveWorkoutSheet>
             </CachedTabPanel>
           )}
@@ -3162,7 +3468,72 @@ function AppContent() {
             }}
           />
         )}
-        {workoutSync.conflict && !syncConflictDismissed && (
+        {trainSheetOpen && user && (
+          <TrainTogetherSheet
+            user={user}
+            session={trainTogether.session}
+            partners={trainTogether.partners}
+            palettes={trainPalettes}
+            invite={trainTogether.invite}
+            inviteSeconds={trainTogether.inviteSeconds}
+            creatingInvite={trainTogether.creatingInvite}
+            joining={trainTogether.joining}
+            leaving={trainTogether.leaving}
+            onCreateInvite={trainTogether.createInvite}
+            onJoin={async (token) => {
+              const joined = await trainTogether.join(token);
+              if (!joined || !trainMountedRef.current) return;
+              completeTrainJoin(joined);
+            }}
+            onLeave={leaveTrainSession}
+            onClose={() => setTrainSheetOpen(false)}
+          />
+        )}
+        {trainStartPartnerId &&
+          (() => {
+            const index = trainTogether.partners.findIndex(
+              (partner) => partner.user_id === trainStartPartnerId,
+            );
+            const partner: TrainMember | null = index >= 0 ? trainTogether.partners[index] : null;
+            if (!partner) return null;
+            return (
+              <TrainTogetherStartSheet
+                partner={partner}
+                palette={trainPalettes[index]}
+                catalogueLoaded={exerciseCatalogue.loaded}
+                catalogueError={exerciseCatalogue.error}
+                onRetryCatalogue={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
+                onStartWithPartner={() => {
+                  if (!exerciseCatalogue.loaded) return;
+                  setTrainStartPartnerId(null);
+                  const date = localDate();
+                  if (!partner.workout) {
+                    startWorkout(date);
+                    return;
+                  }
+                  const { template, unmatched } = partnerStartTemplate(
+                    partner.workout,
+                    exercises,
+                    date,
+                  );
+                  startWorkout(
+                    date,
+                    false,
+                    template.exercises.length > 0 ? template : null,
+                    template.category,
+                  );
+                  const notice = unmatchedExercisesNotice(unmatched.length);
+                  if (notice) showToast(notice);
+                }}
+                onStartOwn={() => {
+                  setTrainStartPartnerId(null);
+                  startWorkout();
+                }}
+                onClose={() => setTrainStartPartnerId(null)}
+              />
+            );
+          })()}
+        {activePartnerId === null && workoutSync.conflict && !syncConflictDismissed && (
           <ActiveWorkoutSyncDialog
             conflict={workoutSync.conflict}
             exercises={exercises}
@@ -3172,7 +3543,7 @@ function AppContent() {
         )}
         {/* Failed syncs retry in the background; only a conflict needs the user. This floats
             over the screen, so it never pushes the workout down. */}
-        {workoutSync.conflict && syncConflictDismissed && (
+        {activePartnerId === null && workoutSync.conflict && syncConflictDismissed && (
           <button
             type="button"
             className="workout-sync-reopen primary-action"
@@ -3488,7 +3859,13 @@ function WorkoutLogger({
   onRestDoneChange,
   restGoRequest = 0,
   screenVisible = true,
+  inForeground = true,
   onLiveSummaryChange,
+  trainTogether,
+  trainPalettes = [],
+  onOpenTrainSheet,
+  onLogForPartner,
+  onLeaveTrainSession,
 }: {
   exercises: Exercise[];
   restoredDraftMovements: DraftMovement[];
@@ -3531,7 +3908,14 @@ function WorkoutLogger({
   restGoRequest?: number;
   /** False while the workout is minimised behind another tab. */
   screenVisible?: boolean;
+  /** False while another person's workout is in the foreground (partner logging mode). */
+  inForeground?: boolean;
   onLiveSummaryChange: (summary: LiveWorkoutSummary) => void;
+  trainTogether?: TrainTogetherController;
+  trainPalettes?: PartnerPalette[];
+  onOpenTrainSheet?: () => void;
+  onLogForPartner?: (partnerId: string) => void;
+  onLeaveTrainSession?: () => void;
 }) {
   const { config: trainingBlocks } = useTrainingBlocks();
   const weightUnit = useWeightUnit();
@@ -3895,7 +4279,10 @@ function WorkoutLogger({
     };
     const recordActivity = (event: Event) => {
       if (document.visibilityState !== 'visible' || window.location.hash !== '#log') return;
-      if (event.target instanceof Element && !event.target.closest('.logger-screen, dialog'))
+      if (
+        event.target instanceof Element &&
+        !event.target.closest('.logger-screen, .tt-partner-view, dialog')
+      )
         return;
       if (savingRef.current || !isCurrentDraft()) return;
       const now = Date.now();
@@ -4878,8 +5265,9 @@ function WorkoutLogger({
       : dockSpacing === 'has-rest-notch'
         ? '4rem'
         : '1rem';
+  const visibleInForeground = screenVisible && inForeground;
   useToastPlacement(
-    screenVisible ? 'bottom' : 'top',
+    visibleInForeground ? 'bottom' : 'top',
     `calc(${toastBottom} + env(safe-area-inset-bottom))`,
   );
   // The workout's toasts belong to its screen; leaving it ends them, as their countdown would.
@@ -4971,6 +5359,32 @@ function WorkoutLogger({
           discardLabel={resumedWorkoutId ? 'Discard session' : 'Discard workout'}
           saving={saving}
           onFinish={openFinishConfirmation}
+          trainTogetherActive={Boolean(trainTogether && trainTogether.partners.length > 0)}
+          onTrainTogether={
+            trainTogether && trainTogether.partners.length === 0 ? onOpenTrainSheet : undefined
+          }
+          onLeaveTrainTogether={
+            trainTogether && trainTogether.partners.length > 0
+              ? (onLeaveTrainSession ?? (() => void trainTogether.leave()))
+              : undefined
+          }
+          deck={
+            trainTogether &&
+            trainTogether.session &&
+            trainTogether.partners.length > 0 &&
+            onOpenTrainSheet &&
+            onLogForPartner ? (
+              <TrainTogetherDeck
+                session={trainTogether.session}
+                partners={trainTogether.partners}
+                palettes={trainPalettes}
+                weightUnit={weightUnit}
+                recentlyJoinedIds={trainTogether.recentlyJoinedIds}
+                onLogForPartner={onLogForPartner}
+                onOpenSession={onOpenTrainSheet}
+              />
+            ) : undefined
+          }
         />
       ) : (
         <OverlayScreenHeader
@@ -5077,186 +5491,209 @@ function WorkoutLogger({
           </section>
         )}
 
-      <details
-        ref={detailsRef}
-        className="workout-details-disclosure"
-        open={detailsOpen}
-        onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
+      <div
+        className={
+          !initialWorkout &&
+          trainTogether &&
+          trainTogether.partners.length === 0 &&
+          onOpenTrainSheet
+            ? 'tt-utility-row'
+            : undefined
+        }
       >
-        <summary>
-          Workout details <Icon name="chevron-down" />
-        </summary>
-        <section
-          className="workout-details workout-combined-summary panel"
-          aria-label="Workout summary and notes"
+        <details
+          ref={detailsRef}
+          className="workout-details-disclosure"
+          open={detailsOpen}
+          onToggle={(event) => setDetailsOpen(event.currentTarget.open)}
         >
-          <div className="workout-summary-fields">
-            <div className="details-row">
-              <label>
-                Date
-                <input
-                  type="date"
-                  value={workoutDate}
-                  disabled={readOnly}
-                  onChange={(event) => setWorkoutDate(event.target.value)}
+          <summary>
+            Workout details <Icon name="chevron-down" />
+          </summary>
+          <section
+            className="workout-details workout-combined-summary panel"
+            aria-label="Workout summary and notes"
+          >
+            <div className="workout-summary-fields">
+              <div className="details-row">
+                <label>
+                  Date
+                  <input
+                    type="date"
+                    value={workoutDate}
+                    disabled={readOnly}
+                    onChange={(event) => setWorkoutDate(event.target.value)}
+                  />
+                </label>
+                <label>
+                  Workout type
+                  <select
+                    value={customTypeId ?? category}
+                    onChange={(event) => chooseWorkoutType(event.target.value)}
+                    disabled={readOnly || workoutTypes.loading}
+                  >
+                    {!typeOptions.some((type) => type.id === (customTypeId ?? category)) && (
+                      <option value={customTypeId ?? category} disabled>
+                        Choose a workout type
+                      </option>
+                    )}
+                    {typeOptions.map((type) => (
+                      <option key={type.id} value={type.id}>
+                        {type.name}
+                        {type.archived ? ' (removed)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {initialWorkout && !readOnly && (
+                  <fieldset
+                    className={`workout-duration-editor${initialWorkout ? '' : ' live-workout-duration-editor'}`}
+                    aria-label={initialWorkout ? undefined : 'Workout duration'}
+                  >
+                    {initialWorkout && <legend>Workout timing</legend>}
+                    {initialWorkout && !readOnly && (
+                      <>
+                        <label>
+                          Start time
+                          <input
+                            type="time"
+                            value={startTime}
+                            onChange={(event) => updateWorkoutTimes(event.target.value, endTime)}
+                            aria-label="Workout start time"
+                          />
+                        </label>
+                        <label>
+                          End time
+                          <input
+                            type="time"
+                            value={endTime}
+                            onChange={(event) => updateWorkoutTimes(startTime, event.target.value)}
+                            aria-label="Workout end time"
+                          />
+                        </label>
+                      </>
+                    )}
+                    <label>
+                      Duration hours
+                      <input
+                        type="number"
+                        min="0"
+                        max="24"
+                        inputMode="numeric"
+                        disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
+                        value={initialWorkout ? editedDurationHours || '' : overrideDurationHours}
+                        placeholder="0"
+                        onChange={(event) => {
+                          if (!initialWorkout) {
+                            updateDurationOverride(
+                              event.target.value,
+                              String(overrideDurationRemainder),
+                            );
+                            return;
+                          }
+                          const hours = Number.isNaN(event.target.valueAsNumber)
+                            ? 0
+                            : event.target.valueAsNumber;
+                          setEditedDurationMinutes(
+                            Math.min(
+                              1440,
+                              Math.max(0, Math.floor(hours)) * 60 + editedDurationRemainder,
+                            ),
+                          );
+                        }}
+                        aria-label="Workout duration hours"
+                      />
+                    </label>
+                    <label>
+                      Duration minutes
+                      <input
+                        type="number"
+                        min="0"
+                        max="59"
+                        inputMode="numeric"
+                        disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
+                        value={
+                          initialWorkout ? editedDurationRemainder || '' : overrideDurationRemainder
+                        }
+                        placeholder="0"
+                        onChange={(event) => {
+                          if (!initialWorkout) {
+                            updateDurationOverride(
+                              String(overrideDurationHours),
+                              event.target.value,
+                            );
+                            return;
+                          }
+                          const minutes = Number.isNaN(event.target.valueAsNumber)
+                            ? 0
+                            : event.target.valueAsNumber;
+                          setEditedDurationMinutes(
+                            Math.min(
+                              1440,
+                              editedDurationHours * 60 +
+                                Math.min(59, Math.max(0, Math.floor(minutes))),
+                            ),
+                          );
+                        }}
+                        aria-label="Workout duration minutes"
+                      />
+                    </label>
+                    {(!initialWorkout || hasCompleteTimeRange) && (
+                      <small className="workout-timing-help">
+                        {initialWorkout
+                          ? `${formatWorkoutTimeRange(startTime, endTime)} · duration calculated automatically`
+                          : resumedWorkoutId
+                            ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
+                            : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
+                      </small>
+                    )}
+                  </fieldset>
+                )}
+              </div>
+              <div className="workout-summary-metrics" aria-label="Workout totals">
+                <span>
+                  <small>Time</small>
+                  <strong>{formatDuration(displayedDurationSeconds)}</strong>
+                </span>
+                {workoutBodyweight !== null && (
+                  <span>
+                    <small>BW {weightUnit}</small>
+                    <strong>{formatWeightNumber(workoutBodyweight, weightUnit)}</strong>
+                  </span>
+                )}
+                <span>
+                  <small>Sets</small>
+                  <strong>{completedSets.length}</strong>
+                </span>
+                <span>
+                  <small>Reps</small>
+                  <strong>{completedReps}</strong>
+                </span>
+              </div>
+              <label className="workout-notes">
+                Workout notes
+                <textarea
+                  readOnly={readOnly}
+                  value={notes}
+                  onChange={(event) => setNotes(event.target.value)}
+                  placeholder="Workout notes…"
+                  rows={3}
                 />
               </label>
-              <label>
-                Workout type
-                <select
-                  value={customTypeId ?? category}
-                  onChange={(event) => chooseWorkoutType(event.target.value)}
-                  disabled={readOnly || workoutTypes.loading}
-                >
-                  {!typeOptions.some((type) => type.id === (customTypeId ?? category)) && (
-                    <option value={customTypeId ?? category} disabled>
-                      Choose a workout type
-                    </option>
-                  )}
-                  {typeOptions.map((type) => (
-                    <option key={type.id} value={type.id}>
-                      {type.name}
-                      {type.archived ? ' (removed)' : ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              {initialWorkout && !readOnly && (
-                <fieldset
-                  className={`workout-duration-editor${initialWorkout ? '' : ' live-workout-duration-editor'}`}
-                  aria-label={initialWorkout ? undefined : 'Workout duration'}
-                >
-                  {initialWorkout && <legend>Workout timing</legend>}
-                  {initialWorkout && !readOnly && (
-                    <>
-                      <label>
-                        Start time
-                        <input
-                          type="time"
-                          value={startTime}
-                          onChange={(event) => updateWorkoutTimes(event.target.value, endTime)}
-                          aria-label="Workout start time"
-                        />
-                      </label>
-                      <label>
-                        End time
-                        <input
-                          type="time"
-                          value={endTime}
-                          onChange={(event) => updateWorkoutTimes(startTime, event.target.value)}
-                          aria-label="Workout end time"
-                        />
-                      </label>
-                    </>
-                  )}
-                  <label>
-                    Duration hours
-                    <input
-                      type="number"
-                      min="0"
-                      max="24"
-                      inputMode="numeric"
-                      disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
-                      value={initialWorkout ? editedDurationHours || '' : overrideDurationHours}
-                      placeholder="0"
-                      onChange={(event) => {
-                        if (!initialWorkout) {
-                          updateDurationOverride(
-                            event.target.value,
-                            String(overrideDurationRemainder),
-                          );
-                          return;
-                        }
-                        const hours = Number.isNaN(event.target.valueAsNumber)
-                          ? 0
-                          : event.target.valueAsNumber;
-                        setEditedDurationMinutes(
-                          Math.min(
-                            1440,
-                            Math.max(0, Math.floor(hours)) * 60 + editedDurationRemainder,
-                          ),
-                        );
-                      }}
-                      aria-label="Workout duration hours"
-                    />
-                  </label>
-                  <label>
-                    Duration minutes
-                    <input
-                      type="number"
-                      min="0"
-                      max="59"
-                      inputMode="numeric"
-                      disabled={Boolean(initialWorkout && hasCompleteTimeRange)}
-                      value={
-                        initialWorkout ? editedDurationRemainder || '' : overrideDurationRemainder
-                      }
-                      placeholder="0"
-                      onChange={(event) => {
-                        if (!initialWorkout) {
-                          updateDurationOverride(String(overrideDurationHours), event.target.value);
-                          return;
-                        }
-                        const minutes = Number.isNaN(event.target.valueAsNumber)
-                          ? 0
-                          : event.target.valueAsNumber;
-                        setEditedDurationMinutes(
-                          Math.min(
-                            1440,
-                            editedDurationHours * 60 +
-                              Math.min(59, Math.max(0, Math.floor(minutes))),
-                          ),
-                        );
-                      }}
-                      aria-label="Workout duration minutes"
-                    />
-                  </label>
-                  {(!initialWorkout || hasCompleteTimeRange) && (
-                    <small className="workout-timing-help">
-                      {initialWorkout
-                        ? `${formatWorkoutTimeRange(startTime, endTime)} · duration calculated automatically`
-                        : resumedWorkoutId
-                          ? `${previousDurationMinutes} min already logged. The live timer started when you resumed; the gap is excluded. Change these fields only to correct the total duration.`
-                          : 'Leave both blank to use the live timer. Change them only if the timer is wrong.'}
-                    </small>
-                  )}
-                </fieldset>
-              )}
             </div>
-            <div className="workout-summary-metrics" aria-label="Workout totals">
-              <span>
-                <small>Time</small>
-                <strong>{formatDuration(displayedDurationSeconds)}</strong>
-              </span>
-              {workoutBodyweight !== null && (
-                <span>
-                  <small>BW {weightUnit}</small>
-                  <strong>{formatWeightNumber(workoutBodyweight, weightUnit)}</strong>
-                </span>
-              )}
-              <span>
-                <small>Sets</small>
-                <strong>{completedSets.length}</strong>
-              </span>
-              <span>
-                <small>Reps</small>
-                <strong>{completedReps}</strong>
-              </span>
-            </div>
-            <label className="workout-notes">
-              Workout notes
-              <textarea
-                readOnly={readOnly}
-                value={notes}
-                onChange={(event) => setNotes(event.target.value)}
-                placeholder="Workout notes…"
-                rows={3}
-              />
-            </label>
-          </div>
-          <WorkoutNavigationArrows navigation={navigation} />
-        </section>
-      </details>
+            <WorkoutNavigationArrows navigation={navigation} />
+          </section>
+        </details>
+        {!initialWorkout &&
+          trainTogether &&
+          trainTogether.partners.length === 0 &&
+          onOpenTrainSheet && (
+            <TrainTogetherEntryButton
+              waitingSeconds={trainTogether.inviteSeconds}
+              onClick={onOpenTrainSheet}
+            />
+          )}
+      </div>
 
       {error && <DismissibleInlineError message={error} onDismiss={() => setError(null)} />}
 
@@ -5280,6 +5717,16 @@ function WorkoutLogger({
               prBadges={prBadges.get(movement.key) ?? new Map()}
               supersetLabel={supersetLabel(movement.supersetKey)}
               supersetUpNext={!initialWorkout && isSupersetUpNext(movements, movement.key)}
+              paceStrip={
+                !initialWorkout && trainTogether && trainTogether.partners.length > 0 ? (
+                  <TrainTogetherPaceStrip
+                    partners={trainTogether.partners}
+                    palettes={trainPalettes}
+                    myExerciseId={movement.exercise.id}
+                    weightUnit={weightUnit}
+                  />
+                ) : undefined
+              }
               history={recentExerciseHistory(
                 historicalWorkouts.filter((workout) => workout.workout_date <= workoutDate),
                 movement.exercise.id,
@@ -5352,7 +5799,7 @@ function WorkoutLogger({
         </div>
       )}
 
-      {screenVisible && prToastEntries.length > 0 && (
+      {visibleInForeground && prToastEntries.length > 0 && (
         <Toast
           id={prToastId}
           variant="celebrate"
@@ -5362,7 +5809,7 @@ function WorkoutLogger({
           onDismiss={closePrToast}
         />
       )}
-      {screenVisible && loggerNotice && (
+      {visibleInForeground && loggerNotice && (
         <Toast
           id={loggerNotice.id}
           variant="warning"
@@ -5371,7 +5818,7 @@ function WorkoutLogger({
           onDismiss={() => setLoggerNotice(null)}
         />
       )}
-      {screenVisible && swapUndo && (
+      {visibleInForeground && swapUndo && (
         <Toast
           id={swapUndo.id}
           message={`Swapped to ${swapUndo.exerciseName}`}
@@ -5381,7 +5828,7 @@ function WorkoutLogger({
           onDismiss={() => setSwapUndo(null)}
         />
       )}
-      {screenVisible && undoDeletion && (
+      {visibleInForeground && undoDeletion && (
         <Toast
           id={`${undoDeletion.kind}:${undoDeletion.set.key}`}
           message={undoDeletion.kind === 'rest' ? 'Rest time removed' : 'Set deleted'}
@@ -5406,7 +5853,7 @@ function WorkoutLogger({
         />
       )}
       {/* Minimised, the tab bar's Start button rings instead. */}
-      {showRestDone && screenVisible && (
+      {showRestDone && visibleInForeground && (
         <RestDoneBell endedAt={restDone.endedAt} next={restNextSet} onGo={goToRestNextSet} />
       )}
       {weeklySetsUpdate && (
@@ -5441,7 +5888,7 @@ function WorkoutLogger({
         </div>
       )}
 
-      {inactivePromptOpen && !initialWorkout && !deleteConfirmationOpen && (
+      {inForeground && inactivePromptOpen && !initialWorkout && !deleteConfirmationOpen && (
         <InactiveWorkoutDialog
           name={liveIdentity.name}
           startedAt={startedAt}
@@ -5466,9 +5913,9 @@ function WorkoutLogger({
         />
       )}
 
-      {discardChangesDialog}
+      {inForeground && discardChangesDialog}
 
-      {deleteConfirmationOpen && (
+      {inForeground && deleteConfirmationOpen && (
         <WorkoutCloseDialog
           editing={Boolean(initialWorkout)}
           resuming={Boolean(resumedWorkoutId)}
@@ -5483,7 +5930,7 @@ function WorkoutLogger({
         />
       )}
 
-      {machineAssignmentError && (
+      {inForeground && machineAssignmentError && (
         <PopupDialog
           title="Assign sets to machines"
           className="machine-assignment-dialog"
@@ -5514,7 +5961,7 @@ function WorkoutLogger({
         </PopupDialog>
       )}
 
-      {warmupReviewOpen && warmupOnlyMovements.length > 0 && (
+      {inForeground && warmupReviewOpen && warmupOnlyMovements.length > 0 && (
         <WarmupOnlyFinishDialog
           movements={warmupOnlyMovements}
           weightUnit={weightUnit}
@@ -5527,7 +5974,7 @@ function WorkoutLogger({
         />
       )}
 
-      {timeEditorOpen && (
+      {inForeground && timeEditorOpen && (
         <WorkoutTimeEditor
           elapsedSeconds={workoutTimeSoFarSeconds(elapsed, previousDurationMinutes)}
           savedMinutes={previousDurationMinutes}
@@ -5547,7 +5994,7 @@ function WorkoutLogger({
           }}
         />
       )}
-      {finishConfirmationOpen && (
+      {inForeground && finishConfirmationOpen && (
         <PopupDialog
           title={finishBlocker ? "Can't finish yet" : 'Finish workout?'}
           size="compact"
@@ -5591,7 +6038,7 @@ function WorkoutLogger({
         </PopupDialog>
       )}
 
-      {nameEditorOpen && (
+      {inForeground && nameEditorOpen && (
         <WorkoutNameDialog
           value={nameDraft}
           fallbackName={`${selectedType.name} workout`}
@@ -5604,7 +6051,7 @@ function WorkoutLogger({
         />
       )}
 
-      {swapSheetMovement && (
+      {inForeground && swapSheetMovement && (
         <ExerciseSwapSheet
           key={swapSheetMovement.key}
           exercise={swapSheetMovement.exercise}
@@ -5627,7 +6074,7 @@ function WorkoutLogger({
         />
       )}
 
-      {pickerOpen && (
+      {inForeground && pickerOpen && (
         <ExercisePicker
           key={switchingMovementKey ? `switch-${switchingMovementKey}` : 'add-exercises'}
           exercises={exercises}
@@ -5650,7 +6097,7 @@ function WorkoutLogger({
         />
       )}
 
-      {supersetPickerKey && (
+      {inForeground && supersetPickerKey && (
         <SupersetPicker
           key={supersetPickerKey}
           movementKey={supersetPickerKey}
@@ -5768,6 +6215,7 @@ function MovementCard({
   onDeleteSet,
   onRemoveRestTime,
   onSuperset,
+  paceStrip,
 }: {
   skipHighRepWarning: boolean;
   onSkipHighRepWarning: () => void;
@@ -5804,6 +6252,7 @@ function MovementCard({
   onDeleteSet: (index: number) => void;
   onRemoveRestTime: (item: DraftSet) => void;
   onSuperset: (button: HTMLButtonElement) => void;
+  paceStrip?: ReactNode;
 }) {
   const tips = useTips();
   const { learn: learnTip } = tips;
@@ -6735,6 +7184,7 @@ function MovementCard({
           </details>
         </div>
       </header>
+      {expanded && paceStrip}
       {onNotesChange && (movement.notes.trim() || history[0]?.movementNotes) && (
         // This workout's note, or last time's (faint) until one is written.
         <button
@@ -9884,6 +10334,7 @@ function HistoryWorkoutCard({
   discussion?: ReactNode;
 }) {
   const weightUnit = useWeightUnit();
+  const viewerId = useUserSession().user?.id ?? null;
   const [shareOpen, setShareOpen] = useState(false);
   const [photos, setPhotos] = useWorkoutPhotos(workout);
   // Resume continues today's session; an older workout is changed with Edit.
@@ -10049,6 +10500,11 @@ function HistoryWorkoutCard({
               {workout.is_sample && <em className="sample-tag">Sample</em>}
             </strong>
             <small>{meta.join(' · ')}</small>
+            <TrainedWithPill
+              trainedWith={workout.trained_with}
+              trainedWithCount={workout.trained_with_count}
+              viewerId={viewerId}
+            />
           </span>
           <span className="history-card-metric num">
             {totalVolume > 0
@@ -10070,6 +10526,13 @@ function HistoryWorkoutCard({
       {discussion && !detailsOnly && <div className="history-card-social">{discussion}</div>}
       {open && (
         <div className={`history-detail${shared ? ' shared-session' : ''}`}>
+          {detailsOnly && (
+            <TrainedWithPill
+              trainedWith={workout.trained_with}
+              trainedWithCount={workout.trained_with_count}
+              viewerId={viewerId}
+            />
+          )}
           {onPhotosChange && !detailsOnly ? (
             <WorkoutPhotoEditor
               workoutId={workout.id}

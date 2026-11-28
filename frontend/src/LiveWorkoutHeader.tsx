@@ -1,4 +1,12 @@
-import { useEffect, useId, useRef, useState, type RefObject } from 'react';
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+} from 'react';
 import { Icon, type IconName } from './Icon';
 import { RestTimeSelect } from './RestTimeSelect';
 import { WorkoutHeaderMeta } from './WorkoutRestTimer';
@@ -37,6 +45,10 @@ export function LiveWorkoutHeader({
   discardLabel = 'Discard workout',
   onFinish,
   saving = false,
+  trainTogetherActive = false,
+  onTrainTogether,
+  onLeaveTrainTogether,
+  deck,
 }: {
   name: string;
   /** The workout's day when it is not today, such as a resumed session from last night. */
@@ -63,6 +75,14 @@ export function LiveWorkoutHeader({
   discardLabel?: string;
   onFinish: () => void;
   saving?: boolean;
+  /** Removes the bottom border while the Train together link hairline and Live Deck sit below. */
+  trainTogetherActive?: boolean;
+  /** Opens the Train together sheet from the options menu before a session starts. */
+  onTrainTogether?: () => void;
+  /** Leaves the active Train together session from the options menu, without confirmation. */
+  onLeaveTrainTogether?: () => void;
+  /** Linked-session strip anchored directly beneath the header toolbar. */
+  deck?: ReactNode;
 }) {
   // Closed, the everyday actions, or the workout types opened from them.
   const [view, setView] = useState<MenuView | null>(null);
@@ -71,8 +91,32 @@ export function LiveWorkoutHeader({
   const sheet = useLiveWorkoutSheet();
   const minimise = sheet?.minimise ?? onMinimise;
   const root = useRef<HTMLElement>(null);
+  const deckRef = useRef<HTMLDivElement>(null);
   const menu = useRef<HTMLDivElement>(null);
   const menuId = useId();
+
+  useLayoutEffect(() => {
+    const host =
+      root.current?.closest<HTMLElement>('.live-workout-sheet') ?? root.current?.parentElement;
+    const deckEl = deckRef.current;
+    if (!host || !deckEl) {
+      host?.style.removeProperty('--train-deck-height');
+      return;
+    }
+    const update = () => {
+      host.style.setProperty('--train-deck-height', `${deckEl.offsetHeight}px`);
+    };
+    update();
+    if (typeof ResizeObserver === 'undefined') {
+      return () => host.style.removeProperty('--train-deck-height');
+    }
+    const observer = new ResizeObserver(update);
+    observer.observe(deckEl);
+    return () => {
+      observer.disconnect();
+      host.style.removeProperty('--train-deck-height');
+    };
+  }, [deck]);
 
   useEffect(() => {
     if (!view) return;
@@ -134,13 +178,25 @@ export function LiveWorkoutHeader({
       icon: paused ? 'play' : 'pause',
       run: onTogglePause,
     },
+    ...(onLeaveTrainTogether
+      ? [
+          {
+            label: 'Leave session',
+            icon: 'people' as const,
+            run: onLeaveTrainTogether,
+            danger: true,
+          },
+        ]
+      : onTrainTogether
+        ? [{ label: 'Train together', icon: 'people' as const, run: onTrainTogether }]
+        : []),
     { label: discardLabel, icon: 'trash', run: onDiscard, danger: true },
   ];
 
   return (
     <header
       ref={root}
-      className="overlay-screen-header live-workout-header"
+      className={`overlay-screen-header live-workout-header${trainTogetherActive ? ' has-train-deck' : ''}`}
       onKeyDown={(event) => {
         if (event.key === 'Escape' && open) {
           event.preventDefault();
@@ -230,6 +286,11 @@ export function LiveWorkoutHeader({
           Finish<span className="sr-only"> workout</span>
         </button>
       </div>
+      {deck && (
+        <div ref={deckRef} className="tt-header-deck">
+          {deck}
+        </div>
+      )}
       {open && (
         <div
           ref={menu}
