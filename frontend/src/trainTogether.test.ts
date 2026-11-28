@@ -29,7 +29,7 @@ import {
   type TrainSession,
   type TrainTogetherRead,
 } from './trainTogether';
-import type { ActiveWorkoutDraft, StoredDraftSet } from './workoutDraft';
+import { isActiveWorkoutDraft, type ActiveWorkoutDraft, type StoredDraftSet } from './workoutDraft';
 
 const NOW = Date.parse('2026-11-28T09:00:00Z');
 const TOKEN = 'AbCdEfGhIjKlMnOpQrStUv';
@@ -52,7 +52,7 @@ function set(key: string, fields: Partial<StoredDraftSet> = {}): StoredDraftSet 
 function draft(fields: Partial<ActiveWorkoutDraft> = {}): ActiveWorkoutDraft {
   return {
     version: 1,
-    clientSessionId: 'session-1',
+    clientSessionId: '7c9e6679-7425-40de-944b-e07fc1f90ae7',
     startedAt: NOW - 30 * 60_000,
     updatedAt: NOW - 5 * 60_000,
     lastActiveAt: NOW - 5 * 60_000,
@@ -303,6 +303,31 @@ describe('editing a partner’s draft', () => {
     expect(added.updatedAt).toBe(later);
   });
 
+  it('does not add an exercise the workout already has', () => {
+    const value = draft();
+    expect(addPartnerMovement(value, 'their-bench', { movementKey: 'm9', setKey: 's9' }, NOW)).toBe(
+      value,
+    );
+  });
+
+  it('only ever produces drafts the owner’s app can read back', () => {
+    const empty = draft({ movements: [] });
+    const noSets = draft();
+    noSets.movements = [{ ...noSets.movements[0], sets: [] }];
+    const keys = { movementKey: 'm9', setKey: 's9' };
+    const produced = [
+      updatePartnerSet(draft(), 'm1', 's1', { reps: 10 }, NOW),
+      addPartnerSet(draft(), 'm1', 's9', NOW),
+      addPartnerSet(noSets, 'm1', 's9', NOW),
+      removePartnerSet(draft(), 'm1', 's1', NOW),
+      removePartnerMovement(draft(), 'm2', NOW),
+      addPartnerMovement(empty, 'their-row', keys, NOW),
+      addPartnerMovement(noSets, 'their-row', keys, NOW),
+      addPartnerMovement(draft(), 'their-row', keys, NOW),
+    ];
+    for (const value of produced) expect(isActiveWorkoutDraft(value)).toBe(true);
+  });
+
   it('returns the same draft when there is nothing to change', () => {
     const value = draft();
     expect(updatePartnerSet(value, 'missing', 's1', { reps: 1 }, later)).toBe(value);
@@ -327,7 +352,7 @@ describe('PartnerWorkoutSync', () => {
   const answer = (revision: number, value: ActiveWorkoutDraft, conflict = false) =>
     ({ revision, draft: value, conflict, exercises }) satisfies TrainPartnerWriteResult;
 
-  it('sends one request at a time and queues edits against exactly what was sent', async () => {
+  it('sends one request at a time and replays later edits on the server’s answer', async () => {
     const first = deferred<TrainPartnerWriteResult>();
     const second = deferred<TrainPartnerWriteResult>();
     const put = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
@@ -346,14 +371,15 @@ describe('PartnerWorkoutSync', () => {
     await vi.waitFor(() => expect(put).toHaveBeenCalledTimes(2));
     const queued = put.mock.calls[1][0];
     expect(queued.revision).toBe(4);
-    expect(queued.base).toBe(sent);
+    expect(queued.base).toEqual({ ...sent, notes: 'merged elsewhere' });
+    expect(queued.draft.notes).toBe('merged elsewhere');
     expect(queued.draft.movements[0].sets.map((item: StoredDraftSet) => item.key)).toEqual([
       's1',
       's2',
       's9',
     ]);
 
-    const merged = { ...queued.draft, notes: 'merged elsewhere' };
+    const merged = queued.draft;
     second.resolve(answer(5, merged));
     await done;
     await vi.waitFor(() => expect(sync.current.status).toBe('synced'));
@@ -404,11 +430,87 @@ describe('PartnerWorkoutSync', () => {
     sync.refresh({ revision: 5, draft: draft({ notes: 'even newer' }) });
     expect(sync.current.draft).toBe(kept);
     // The partner started another workout: the unsent edit belonged to the one that ended.
-    const other = draft({ clientSessionId: 'session-2' });
+    const other = draft({ clientSessionId: '0b9d1a3e-5a43-4c3f-9e2b-6f1d2c3b4a59' });
     sync.refresh({ revision: 6, draft: other });
     expect(sync.current).toMatchObject({ revision: 6, draft: other, status: 'synced' });
     expect(sync.unsent).toBe(false);
   });
+
+  it('replays edits made after a refused request on the server’s copy, and sends them', async () => {
+    const first = deferred<TrainPartnerWriteResult>();
+    const put = vi.fn().mockReturnValueOnce(first.promise);
+    const changed = vi.fn();
+    const sync = new PartnerWorkoutSync({ put, changed }, { revision: 3, draft: draft() });
+    void sync.edit((value) => updatePartnerSet(value, 'm1', 's1', { reps: 9 }, NOW));
+    // Logged while the first request is still on its way.
+    const done = sync.edit((value) => addPartnerSet(value, 'm1', 's9', NOW));
+    const remote = draft();
+    remote.movements[0].sets[0] = set('s1', { reps: 12 });
+    put.mockImplementationOnce(async (change: { draft: ActiveWorkoutDraft }) =>
+      answer(8, change.draft),
+    );
+    first.resolve(answer(7, remote, true));
+    await done;
+    await vi.waitFor(() => expect(put).toHaveBeenCalledTimes(2));
+    const replayed = put.mock.calls[1][0];
+    expect(replayed.revision).toBe(7);
+    expect(replayed.base).toBe(remote);
+    // The refused reps stay as the server has them; the later set is still sent.
+    expect(
+      replayed.draft.movements[0].sets.map((item: StoredDraftSet) => [item.key, item.reps]),
+    ).toEqual([
+      ['s1', 12],
+      ['s2', 8],
+      ['s9', 8],
+    ]);
+    expect(
+      changed.mock.calls.some(([state]) => state.status === 'conflict' && state.notApplied),
+    ).toBe(true);
+    await vi.waitFor(() => expect(sync.current.status).toBe('synced'));
+    expect(sync.current).toMatchObject({ revision: 8, notApplied: true });
+    expect(sync.unsent).toBe(false);
+  });
+
+  it('applies the newest copy read during a request once the queue settles', async () => {
+    const first = deferred<TrainPartnerWriteResult>();
+    const put = vi.fn().mockReturnValueOnce(first.promise);
+    const sync = new PartnerWorkoutSync({ put, changed: vi.fn() }, { revision: 3, draft: draft() });
+    const done = sync.edit((value) => updatePartnerSet(value, 'm1', 's1', { reps: 9 }, NOW));
+    const sent = sync.current.draft!;
+    const newer = { ...sent, notes: 'owner edited after' };
+    sync.refresh({ revision: 5, draft: newer });
+    sync.refresh({ revision: 4, draft: draft() }); // older than the one already kept
+    expect(sync.current.draft).toBe(sent);
+    first.resolve(answer(4, sent));
+    await done;
+    expect(sync.current).toMatchObject({ revision: 5, draft: newer, status: 'synced' });
+    expect(put).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(['answer', 'failure'])(
+    'ignores the %s of a request for a workout the partner has since replaced',
+    async (outcome) => {
+      const first = deferred<TrainPartnerWriteResult>();
+      const put = vi.fn().mockReturnValueOnce(first.promise);
+      const sync = new PartnerWorkoutSync(
+        { put, changed: vi.fn() },
+        { revision: 3, draft: draft() },
+      );
+      const done = sync.edit((value) => removePartnerSet(value, 'm1', 's1', NOW));
+      const other = draft({ clientSessionId: '0b9d1a3e-5a43-4c3f-9e2b-6f1d2c3b4a59' });
+      sync.refresh({ revision: 4, draft: other });
+      if (outcome === 'answer') first.resolve(answer(4, draft({ notes: 'old workout' })));
+      else first.reject(new Error('offline'));
+      await done;
+      expect(sync.current).toMatchObject({
+        revision: 4,
+        draft: other,
+        status: 'synced',
+        error: null,
+      });
+      expect(put).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('does nothing after stop', async () => {
     const put = vi.fn();
