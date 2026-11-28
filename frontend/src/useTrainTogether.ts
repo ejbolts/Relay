@@ -6,10 +6,13 @@ import { partnerPalettes, type PartnerPalette } from './trainTogetherTheme';
 import {
   inviteSecondsLeft,
   memberName,
+  partnerAccessEnded,
+  partnerAccessEndedNotice,
+  partnerChangeRefusedNotice,
   partnerConflictNotice,
   partners as sessionPartners,
   PartnerWorkoutSync,
-  TRAIN_ERRORS,
+  partnerWriteRefused,
   trainTogetherNotice,
   type PartnerSyncState,
   type TrainExercise,
@@ -24,20 +27,12 @@ import type { ActiveWorkoutDraft } from './workoutDraft';
 const POLL_FALLBACK_MS = 20_000;
 
 /**
- * Server refusals for partner workout edits: the Train together refusal codes, or any other 4xx
- * status except 408 (timeout) and 429 (rate limit). Everything else (no response, 408, 429, and
- * every 5xx) is treated as a transient failure ("Offline · Unsent change" with Retry).
+ * Whether the server refused a partner workout edit (thin wrapper over the shared rule).
+ * Transient failures (no response, 408, 429, and every 5xx) return false so they stay retryable.
  */
 export function isPartnerWriteRefusal(error: unknown): boolean {
   if (!(error instanceof ApiError)) return false;
-  if (
-    error.code === TRAIN_ERRORS.notPartner ||
-    error.code === TRAIN_ERRORS.noWorkout ||
-    error.code === TRAIN_ERRORS.changeNotAllowed
-  ) {
-    return true;
-  }
-  return error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429;
+  return partnerWriteRefused(error.status || undefined, error.code);
 }
 
 export interface TrainTogetherController {
@@ -98,7 +93,11 @@ function pruneRecord<T>(
 export function useTrainTogether(
   userId: string | null,
   onNotice?: (message: string) => void,
-  options?: { confirmed?: boolean; onPartnerRetired?: (partnerId: string) => void },
+  options?: {
+    confirmed?: boolean;
+    onErrorNotice?: (message: string) => void;
+    onPartnerRetired?: (partnerId: string) => void;
+  },
 ): TrainTogetherController {
   const confirmed = options?.confirmed ?? true;
   const [read, setRead] = useState<TrainTogetherRead | null>(null);
@@ -131,6 +130,8 @@ export function useTrainTogether(
   const previousReadRef = useRef<TrainTogetherRead | null>(null);
   const onNoticeRef = useRef(onNotice);
   onNoticeRef.current = onNotice;
+  const onErrorNoticeRef = useRef(options?.onErrorNotice);
+  onErrorNoticeRef.current = options?.onErrorNotice;
   const onPartnerRetiredRef = useRef(options?.onPartnerRetired);
   onPartnerRetiredRef.current = options?.onPartnerRetired;
   const refreshRef = useRef<
@@ -235,12 +236,8 @@ export function useTrainTogether(
               put: (change) => api.trainTogether.changePartnerWorkout(partnerId, change),
               changed: (state) => {
                 if (generationRef.current !== expectedGen) return;
-                if (
-                  state.status === 'failed' &&
-                  state.error instanceof ApiError &&
-                  (state.error.code === TRAIN_ERRORS.notPartner ||
-                    state.error.code === TRAIN_ERRORS.noWorkout)
-                ) {
+                if (state.status === 'failed' && isPartnerWriteRefusal(state.error)) {
+                  const apiError = state.error as ApiError;
                   const activeSync = syncsRef.current.get(partnerId);
                   activeSync?.stop();
                   syncsRef.current.delete(partnerId);
@@ -250,38 +247,44 @@ export function useTrainTogether(
                     delete next[partnerId];
                     return next;
                   });
-                  setPartnerAcknowledgedDrafts((prev) => {
-                    if (!(partnerId in prev)) return prev;
-                    const next = { ...prev };
-                    delete next[partnerId];
-                    return next;
-                  });
-                  setPartnerConflictCounts((prev) => {
-                    if (!(partnerId in prev)) return prev;
-                    const next = { ...prev };
-                    delete next[partnerId];
-                    return next;
-                  });
-                  setPartnerExercisesByUser((prev) => {
-                    if (!(partnerId in prev)) return prev;
-                    const next = { ...prev };
-                    delete next[partnerId];
-                    return next;
-                  });
-                  setViewerAddedMovements((prev) => {
-                    if (!(partnerId in prev)) return prev;
-                    const next = { ...prev };
-                    delete next[partnerId];
-                    return next;
-                  });
-                  const name = partnerNamesRef.current.get(partnerId) ?? 'Your partner';
-                  onNoticeRef.current?.(
-                    state.error.message ||
-                      (state.error.code === TRAIN_ERRORS.noWorkout
-                        ? `${name} has no workout open.`
-                        : `${name} is no longer in this session.`),
-                  );
-                  onPartnerRetiredRef.current?.(partnerId);
+                  const notifyError = onErrorNoticeRef.current ?? onNoticeRef.current;
+                  if (partnerAccessEnded(apiError.code)) {
+                    setPartnerAcknowledgedDrafts((prev) => {
+                      if (!(partnerId in prev)) return prev;
+                      const next = { ...prev };
+                      delete next[partnerId];
+                      return next;
+                    });
+                    setPartnerConflictCounts((prev) => {
+                      if (!(partnerId in prev)) return prev;
+                      const next = { ...prev };
+                      delete next[partnerId];
+                      return next;
+                    });
+                    setPartnerExercisesByUser((prev) => {
+                      if (!(partnerId in prev)) return prev;
+                      const next = { ...prev };
+                      delete next[partnerId];
+                      return next;
+                    });
+                    setViewerAddedMovements((prev) => {
+                      if (!(partnerId in prev)) return prev;
+                      const next = { ...prev };
+                      delete next[partnerId];
+                      return next;
+                    });
+                    const name = partnerNamesRef.current.get(partnerId) ?? 'Your partner';
+                    notifyError?.(partnerAccessEndedNotice(name));
+                    onPartnerRetiredRef.current?.(partnerId);
+                  } else {
+                    // Refused change: discard it, stay in the partner's logger, reset focused
+                    // fields back to the server's copy, and reload so a fresh queue starts clean.
+                    setPartnerConflictCounts((prev) => ({
+                      ...prev,
+                      [partnerId]: (prev[partnerId] ?? 0) + 1,
+                    }));
+                    notifyError?.(partnerChangeRefusedNotice(apiError.message));
+                  }
                   void refreshRef.current?.({ silent: true });
                   return;
                 }

@@ -7,7 +7,9 @@ import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { useToast } from './Toast';
 import {
+  friendRequestSentNotice,
   inviteCountdownLabel,
+  leaveFailedNotice,
   memberName,
   TRAIN_ERRORS,
   TRAIN_INVITE_SECONDS,
@@ -167,7 +169,7 @@ export function TrainTogetherSheet({
       toast.show(
         result.status === 'friends'
           ? `Added ${member.name} as a friend`
-          : `Friend request sent to ${member.name}`,
+          : friendRequestSentNotice(member.name),
       );
     } catch (reason) {
       toast.show({
@@ -183,9 +185,9 @@ export function TrainTogetherSheet({
     try {
       const ok = await onLeave();
       if (ok !== false) onClose();
-    } catch (reason) {
+    } catch {
       toast.show({
-        message: reason instanceof Error ? reason.message : 'Could not leave the session.',
+        message: leaveFailedNotice,
         variant: 'error',
       });
     }

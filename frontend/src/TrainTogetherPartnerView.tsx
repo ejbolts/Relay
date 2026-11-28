@@ -451,7 +451,7 @@ export function TrainTogetherPartnerView({
 
   const name = memberName(partner);
   const shortName = memberShortName(partner);
-  const draft = syncState?.draft ?? partner.workout?.draft ?? null;
+  const draft = syncState?.draft ?? acknowledgedDraft ?? partner.workout?.draft ?? null;
   const pause = draftPause(draft);
   const paused = Boolean(draft && pause.pausedAt !== null);
   const now = useNow(Boolean(draft) && !paused, 1000);
@@ -490,13 +490,7 @@ export function TrainTogetherPartnerView({
     0,
   );
   const workoutTitle = draft ? partnerWorkoutName({ draft }) : 'workout';
-  const isRefusal = syncState?.status === 'failed' && isPartnerWriteRefusal(syncState.error);
-  const showOfflineBar = syncState?.status === 'failed' && !isRefusal;
-  const refusalMessage = isRefusal
-    ? syncState.error instanceof Error
-      ? syncState.error.message
-      : 'That change could not be saved.'
-    : null;
+  const showOfflineBar = syncState?.status === 'failed' && !isPartnerWriteRefusal(syncState.error);
   const conflictResetKey: number | string =
     conflictCount !== undefined
       ? conflictCount
@@ -551,13 +545,6 @@ export function TrainTogetherPartnerView({
             >
               {retrying ? 'Retrying…' : 'Retry'}
             </button>
-          </div>
-        )}
-        {refusalMessage && (
-          <div className="tt-partner-offline-bar" role="alert">
-            <span className="tt-partner-offline-copy">
-              <span>{refusalMessage}</span>
-            </span>
           </div>
         )}
 

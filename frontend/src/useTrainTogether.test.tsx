@@ -512,27 +512,119 @@ describe('useTrainTogether', () => {
     expect(notices).toEqual(['Sam joined']);
   });
 
-  it('retires partner editor, refreshes session and notifies on train_not_partner refusal (finding 12)', async () => {
+  it('retires partner editor, refreshes session and shows partnerAccessEndedNotice as error toast for train_not_partner and train_no_workout (case 2)', async () => {
+    for (const [code, serverMessage] of [
+      [TRAIN_ERRORS.notPartner, 'You are not in a session with Sam.'],
+      [TRAIN_ERRORS.noWorkout, 'Sam has no active workout.'],
+    ] as const) {
+      notices.length = 0;
+      const errorNotices: string[] = [];
+      const retired = vi.fn();
+      const readSpy = vi
+        .spyOn(api.trainTogether, 'read')
+        .mockResolvedValueOnce({ session: makeSession(1, makeDraft()), ended: null })
+        .mockResolvedValueOnce({ session: null, ended: null });
+      vi.spyOn(api.trainTogether, 'changePartnerWorkout').mockRejectedValueOnce(
+        new ApiError(serverMessage, code, 404),
+      );
+
+      function AccessEndedHarness() {
+        latest = useTrainTogether('u-self', (msg) => notices.push(msg), {
+          onErrorNotice: (msg) => errorNotices.push(msg),
+          onPartnerRetired: retired,
+        });
+        return null;
+      }
+
+      await act(async () => root.render(<AccessEndedHarness />));
+      expect(latest.partnerSyncStates['u-sam']).toBeDefined();
+
+      await act(async () => {
+        await latest.editPartnerWorkout('u-sam', (draft) =>
+          updatePartnerSet(draft, 'mov-1', 'set-1', { reps: 10 }, 1000),
+        );
+      });
+
+      expect(latest.partnerSyncStates['u-sam']).toBeUndefined();
+      expect(retired).toHaveBeenCalledWith('u-sam');
+      expect(readSpy).toHaveBeenCalledTimes(2);
+      expect(errorNotices).toEqual(['Sam’s workout is no longer open to you.']);
+      expect(notices).toEqual([]);
+      await act(async () => root.render(<></>));
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('discards a refused change, reloads a fresh queue, stays in partner logger, and notifies via error toast (case 3)', async () => {
+    const serverDraft = makeDraft();
+    const errorNotices: string[] = [];
+    const retired = vi.fn();
     const readSpy = vi
       .spyOn(api.trainTogether, 'read')
-      .mockResolvedValueOnce({ session: makeSession(1, makeDraft()), ended: null })
-      .mockResolvedValueOnce({ session: null, ended: null });
-    vi.spyOn(api.trainTogether, 'changePartnerWorkout').mockRejectedValueOnce(
-      new ApiError('Sam is no longer in this session.', TRAIN_ERRORS.notPartner, 404),
-    );
+      .mockResolvedValueOnce({ session: makeSession(1, serverDraft), ended: null })
+      .mockResolvedValueOnce({ session: makeSession(2, serverDraft), ended: null })
+      .mockResolvedValueOnce({ session: makeSession(3, serverDraft), ended: null });
+    const putSpy = vi
+      .spyOn(api.trainTogether, 'changePartnerWorkout')
+      .mockRejectedValueOnce(
+        new ApiError('Machine photos cannot be added.', TRAIN_ERRORS.changeNotAllowed, 400),
+      )
+      .mockRejectedValueOnce(new ApiError('', 'validation_error', 422))
+      .mockImplementationOnce(async (_partnerId, change) => ({
+        revision: 4,
+        draft: change.draft,
+        conflict: false,
+        exercises: [],
+      }));
 
-    await act(async () => root.render(<Harness userId="u-self" />));
-    expect(latest.partnerSyncStates['u-sam']).toBeDefined();
+    function RefusedHarness() {
+      latest = useTrainTogether('u-self', (msg) => notices.push(msg), {
+        onErrorNotice: (msg) => errorNotices.push(msg),
+        onPartnerRetired: retired,
+      });
+      return null;
+    }
 
+    await act(async () => root.render(<RefusedHarness />));
+
+    // Refused edit with server message: discarded, stays in logger, fresh queue starts at rev 2.
     await act(async () => {
       await latest.editPartnerWorkout('u-sam', (draft) =>
-        updatePartnerSet(draft, 'mov-1', 'set-1', { reps: 10 }, 1000),
+        updatePartnerSet(draft, 'mov-1', 'set-1', { reps: 10, completed: true }, 1000),
       );
+      await Promise.resolve();
     });
 
-    expect(latest.partnerSyncStates['u-sam']).toBeUndefined();
+    expect(retired).not.toHaveBeenCalled();
     expect(readSpy).toHaveBeenCalledTimes(2);
-    expect(notices).toEqual(['Sam is no longer in this session.']);
+    expect(errorNotices).toEqual(['Machine photos cannot be added.']);
+    expect(latest.partnerSyncStates['u-sam']?.status).toBe('synced');
+    expect(latest.partnerSyncStates['u-sam']?.revision).toBe(2);
+    expect(latest.partnerSyncStates['u-sam']?.draft?.movements[0].sets[0].reps).toBe(8);
+    expect(latest.partnerSyncStates['u-sam']?.draft?.movements[0].sets[0].completed).toBe(false);
+
+    // Refused 422 with empty message uses fallback sentence.
+    await act(async () => {
+      await latest.editPartnerWorkout('u-sam', (draft) =>
+        updatePartnerSet(draft, 'mov-1', 'set-1', { reps: 11 }, 2000),
+      );
+      await Promise.resolve();
+    });
+    expect(errorNotices).toEqual([
+      'Machine photos cannot be added.',
+      'That change could not be saved.',
+    ]);
+    expect(latest.partnerSyncStates['u-sam']?.revision).toBe(3);
+
+    // Subsequent valid edit succeeds on the freshly recreated queue.
+    await act(async () => {
+      await latest.editPartnerWorkout('u-sam', (draft) =>
+        updatePartnerSet(draft, 'mov-1', 'set-1', { reps: 9 }, 3000),
+      );
+    });
+    expect(putSpy).toHaveBeenCalledTimes(3);
+    expect(latest.partnerSyncStates['u-sam']?.status).toBe('synced');
+    expect(latest.partnerSyncStates['u-sam']?.draft?.movements[0].sets[0].reps).toBe(9);
   });
 
   it('keeps partner editor open and retains unsent edit on a 500 error so Retry can resend it', async () => {
