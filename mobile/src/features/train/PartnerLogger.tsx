@@ -84,6 +84,7 @@ export function PartnerLogger({
   const sync = useTrainState((state) => state.partnerSync[partnerId] ?? null);
   const acked = useTrainState((state) => state.partnerAcked[partnerId] ?? null);
   const added = useTrainState((state) => state.added[partnerId]);
+  const conflicts = useTrainState((state) => state.partnerConflicts[partnerId] ?? 0);
   const tones = usePartnerColours();
   const library = usePartnerLibrary(partnerId);
   const [picking, setPicking] = useState(false);
@@ -206,6 +207,7 @@ export function PartnerLogger({
               tone={tone}
               unit={weightUnit}
               removable={!!added?.includes(movement.key)}
+              conflicts={conflicts}
               edit={edit}
             />
           </View>
@@ -304,6 +306,7 @@ function PartnerCard({
   tone,
   unit,
   removable,
+  conflicts,
   edit,
 }: {
   number: number;
@@ -315,6 +318,8 @@ function PartnerCard({
   tone: PartnerColours;
   unit: WeightUnit;
   removable: boolean;
+  /** Edits that came back not applied so far: the fields then show the server's values. */
+  conflicts: number;
   edit: (change: (current: ActiveWorkoutDraft) => ActiveWorkoutDraft, addedKey?: string) => void;
 }) {
   const { colors, type, radius } = useTheme();
@@ -425,6 +430,7 @@ function PartnerCard({
               saved={acked?.sets.find((set) => set.key === item.key) ?? null}
               tone={tone}
               unit={unit}
+              conflicts={conflicts}
               edit={edit}
             />
           ))}
@@ -459,6 +465,7 @@ function PartnerSetRow({
   saved,
   tone,
   unit,
+  conflicts,
   edit,
 }: {
   movementKey: string;
@@ -468,6 +475,7 @@ function PartnerSetRow({
   saved: StoredDraftSet | null;
   tone: PartnerColours;
   unit: WeightUnit;
+  conflicts: number;
   edit: (change: (current: ActiveWorkoutDraft) => ActiveWorkoutDraft) => void;
 }) {
   const { colors, radius } = useTheme();
@@ -513,6 +521,7 @@ function PartnerSetRow({
           onChange={(weight_kg) => patch({ weight_kg })}
           label={`Set ${label} weight`}
           accent={tone.accent}
+          resync={conflicts}
           done={item.completed}
         />
       </View>
@@ -524,6 +533,7 @@ function PartnerSetRow({
           onChange={(reps) => patch({ reps })}
           label={`Set ${label} reps`}
           accent={tone.accent}
+          resync={conflicts}
           keyboardType="number-pad"
           done={item.completed}
         />

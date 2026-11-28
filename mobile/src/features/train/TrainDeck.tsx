@@ -30,7 +30,7 @@ import { useNow } from '../../ui/useNow';
 import { useReduceMotion } from '../settings/devicePreferences';
 import { trainIcons, usePartnerColours, type PartnerColours } from './partnerColours';
 import { PartnerAvatar } from './PartnerAvatar';
-import { trainActions, useTrainState } from './trainStore';
+import { setTrainState, trainActions, useTrainState } from './trainStore';
 
 /**
  * The partners, each with the copy of their workout the server last acknowledged: an edit from
@@ -53,7 +53,10 @@ function useFocusReturn(partnerId: string) {
   const focusReturn = useTrainState((state) => state.focusReturn);
   useEffect(() => {
     if (focusReturn !== partnerId) return;
-    if (ref.current) AccessibilityInfo.sendAccessibilityEvent(ref.current, 'focus');
+    if (!ref.current) return;
+    AccessibilityInfo.sendAccessibilityEvent(ref.current, 'focus');
+    // Once: a later mount of the deck leaves focus where it is.
+    setTrainState({ focusReturn: null });
   }, [focusReturn, partnerId]);
   return ref;
 }
@@ -127,11 +130,19 @@ function GroupRow({
  * code is live, "Waiting · 4:32". Either opens the sheet on your code.
  */
 export function TrainEntry() {
-  const { colors, type, radius } = useTheme();
   const invite = useTrainState((state) => state.invite);
+  // Only a live code ticks: nobody else's logger re-renders each second for this.
+  return invite ? <WaitingEntry expiresAt={invite.expires_at} /> : <EntryPill seconds={0} />;
+}
+
+function WaitingEntry({ expiresAt }: { expiresAt: string }) {
   const now = useNow(1000);
-  const seconds = // A phone clock a little behind the server's never shows more than five minutes.
-    invite ? Math.min(TRAIN_INVITE_SECONDS, inviteSecondsLeft(invite.expires_at, now)) : 0;
+  // A phone clock a little behind the server's never shows more than five minutes.
+  return <EntryPill seconds={Math.min(TRAIN_INVITE_SECONDS, inviteSecondsLeft(expiresAt, now))} />;
+}
+
+function EntryPill({ seconds }: { seconds: number }) {
+  const { colors, type, radius } = useTheme();
   const waiting = seconds > 0;
   const label = waiting ? `Waiting · ${inviteCountdownLabel(seconds)}` : TRAIN_TOGETHER_LABEL;
   return (

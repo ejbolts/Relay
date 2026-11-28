@@ -16,6 +16,7 @@ import { useWorkout } from '../workout/WorkoutProvider';
 import { usePartnerColours } from './partnerColours';
 import { PartnerAvatar } from './PartnerAvatar';
 import { trainActions, useTrainState } from './trainStore';
+import { useLater } from './useLater';
 
 /** Long enough for the sheet to close before the logger opens over the app. */
 const AFTER_CLOSE_MS = 350;
@@ -26,6 +27,7 @@ const AFTER_CLOSE_MS = 350;
  */
 export function TrainStartSheet() {
   const { colors, type, radius } = useTheme();
+  const later = useLater();
   const workout = useWorkout();
   const exercises = useExercises().data;
   const partnerId = useTrainState((state) => state.startWith);
@@ -47,7 +49,7 @@ export function TrainStartSheet() {
     if (!theirs) return;
     const { template, unmatched } = partnerStartTemplate(theirs, exercises ?? [], localDate());
     close();
-    setTimeout(() => {
+    later(() => {
       workout.start({ kind: 'template', template, name: template.sourceWorkout.name });
       const notice = unmatchedExercisesNotice(unmatched.length);
       if (notice) showToast(notice);
@@ -56,7 +58,7 @@ export function TrainStartSheet() {
 
   function startOwn() {
     close();
-    setTimeout(() => workout.openStartMenu(), AFTER_CLOSE_MS);
+    later(() => workout.openStartMenu(), AFTER_CLOSE_MS);
   }
 
   return (

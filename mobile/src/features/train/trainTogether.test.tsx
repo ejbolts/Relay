@@ -5,6 +5,7 @@ import { AccessibilityInfo, Share } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   partnerConflictNotice,
+  updatePartnerSet,
   type TrainExercise,
   type TrainMember,
   type TrainTogetherRead,
@@ -13,14 +14,19 @@ import type { TrackedWorkout } from '../../../../frontend/src/types';
 import type { ActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
 import { ApiError } from '../../data/api';
 import { showMenu } from '../../ui/prompts';
-import { showToast } from '../../ui/Toast';
+import { dismissActionToasts, showToast } from '../../ui/Toast';
 import { QrScanner } from '../social/FriendQrSheet';
 import { socialApi } from '../social/socialApi';
 import { WorkoutCard } from '../training/WorkoutCard';
 import { PartnerLogger } from './PartnerLogger';
 import { PartnerPace, TrainDeck, TrainEntry } from './TrainDeck';
 import { TrainedWithPill } from './TrainedWithPill';
-import { requestTrainJoin, takePendingTrainInvite } from './trainLinks';
+import {
+  clearPendingTrainInvite,
+  pendingTrainInvite,
+  requestTrainJoin,
+  takePendingTrainInvite,
+} from './trainLinks';
 import { TrainSheet } from './TrainSheet';
 import { TrainStartSheet } from './TrainStartSheet';
 import {
@@ -83,7 +89,11 @@ jest.mock('../workout/WorkoutProvider', () => ({
   useOptionalWorkout: () => mockWorkout,
   useWorkout: () => mockWorkout,
 }));
-jest.mock('../../ui/Toast', () => ({ showToast: jest.fn() }));
+jest.mock('../../ui/Toast', () => ({
+  showToast: jest.fn(),
+  dismissActionToasts: jest.fn(),
+  toastAccountFor: (id: string) => `account:${id}`,
+}));
 jest.mock('../../ui/haptics', () => ({
   haptics: {
     selection: jest.fn(),
@@ -278,7 +288,9 @@ describe('the session host', () => {
     // The socket says something changed: the host reads again.
     api.read.mockResolvedValueOnce(withPartners(sam(draft(), at(30))));
     await act(async () => mockSocket.listener?.());
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('Sam joined'));
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('Sam joined', undefined, { account: 'account:me' }),
+    );
     expect(getTrainState().partnerSync.sam?.draft?.clientSessionId).toBe('sam-session');
 
     // Sam finishes: the session ends with their reason, said once.
@@ -287,7 +299,11 @@ describe('the session host', () => {
       ended: { session_id: 'session-1', reason: 'finished', by_user_id: 'sam', by_name: 'Sam' },
     });
     await act(async () => mockSocket.listener?.());
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('Sam finished their workout'));
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('Sam finished their workout', undefined, {
+        account: 'account:me',
+      }),
+    );
     expect(getTrainState().partnerSync).toEqual({});
     expect(toast).toHaveBeenCalledTimes(2);
     await view.unmount();
@@ -322,7 +338,9 @@ describe('the session host', () => {
       { wrapper: Providers },
     );
     await waitFor(() => expect(api.join).toHaveBeenCalledWith('abcdefghijklmnop1234'));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('Training with Sam'));
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('Training with Sam', undefined, { account: 'account:me' }),
+    );
     // No workout open: the start sheet offers Sam's exercises.
     expect(getTrainState().startWith).toBe('sam');
     expect(await screen.findByText('Train with Sam')).toBeOnTheScreen();
@@ -367,12 +385,16 @@ describe('the session host', () => {
       expect(toast).toHaveBeenCalledWith(
         'Add Sam as a friend to train together.',
         expect.objectContaining({ label: 'Add friend' }),
-        { variant: 'error' },
+        { variant: 'error', account: 'account:me' },
       ),
     );
     await act(async () => toast.mock.calls[0][1]!.run());
     expect(socialApi.addFriend).toHaveBeenCalledWith('sam');
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('Friend request sent to Sam'));
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('Friend request sent to Sam', undefined, {
+        account: 'account:me',
+      }),
+    );
     await view.unmount();
   });
 
@@ -393,6 +415,7 @@ describe('the session host', () => {
     await waitFor(() =>
       expect(toast).toHaveBeenCalledWith(partnerConflictNotice('Sam'), undefined, {
         variant: 'warning',
+        account: 'account:me',
       }),
     );
     const [partnerId, change] = api.changePartnerWorkout.mock.calls[0];
@@ -849,7 +872,9 @@ describe('the session, after the web review', () => {
     });
     api.read.mockResolvedValueOnce(withPartners(sam(draft(), at(30))));
     await act(async () => trainActions().newInvite());
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('Sam joined'));
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('Sam joined', undefined, { account: 'account:me' }),
+    );
     await view.unmount();
   });
 
@@ -896,7 +921,7 @@ describe('the session, after the web review', () => {
     expect(toast).toHaveBeenCalledWith(
       "Couldn't leave the session. Could not reach Relay.",
       undefined,
-      { variant: 'error' },
+      { variant: 'error', account: 'account:me' },
     );
     await view.unmount();
   });
@@ -929,8 +954,9 @@ describe('the session, after the web review', () => {
       trainActions().editPartner('sam', (current) => ({ ...current, notes: 'x' })),
     );
     await waitFor(() =>
-      expect(toast).toHaveBeenCalledWith("Sam's workout is no longer open to you.", undefined, {
+      expect(toast).toHaveBeenCalledWith('Sam’s workout is no longer open to you.', undefined, {
         variant: 'error',
+        account: 'account:me',
       }),
     );
     expect(getTrainState().loggingFor).toBeNull();
@@ -1193,4 +1219,172 @@ it('shows a real saved-workout card with one visible and one hidden partner', as
   );
   expect(screen.getByText('with Sam & 1 other')).toBeOnTheScreen();
   await view.unmount();
+});
+
+describe('after the second review', () => {
+  const statusOf = () => getTrainState().partnerSync.sam?.status;
+
+  async function hostWithSam() {
+    api.read.mockResolvedValue(withPartners(sam()));
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().partnerSync.sam).toBeDefined());
+    return view;
+  }
+
+  it('settles your own Undo before showing a partner’s logger', async () => {
+    const view = await hostWithSam();
+    await act(async () => trainActions().logFor('sam'));
+    expect(dismissActionToasts).toHaveBeenCalledTimes(1);
+    await act(async () => trainActions().logFor(null, 'sam'));
+    expect(dismissActionToasts).toHaveBeenCalledTimes(1);
+    await view.unmount();
+  });
+
+  it('keeps edits replayed after a conflict pending until the server has them', async () => {
+    const view = await hostWithSam();
+    const first = deferred<WriteResult>();
+    api.changePartnerWorkout
+      .mockReturnValueOnce(first.promise)
+      .mockRejectedValueOnce(new Error('Could not reach Relay.'));
+    const now = Date.now();
+    await act(async () => {
+      trainActions().editPartner('sam', (current) =>
+        updatePartnerSet(current, 'm1', 's2', { weight_kg: 85 }, now),
+      );
+      trainActions().editPartner('sam', (current) =>
+        updatePartnerSet(current, 'm1', 's2', { completed: true }, now),
+      );
+    });
+    await act(async () =>
+      first.resolve({ revision: 8, draft: draft(), conflict: true, exercises: [bench, fly] }),
+    );
+    await waitFor(() => expect(statusOf()).toBe('failed'));
+    // The tick was replayed on the server's copy but never sent: still pending, not counted.
+    expect(getTrainState().partnerSync.sam?.draft?.movements[0].sets[1].completed).toBe(true);
+    expect(getTrainState().partnerAcked.sam?.movements[0].sets[1].completed).toBe(false);
+    await view.unmount();
+  });
+
+  it.each([
+    [new ApiError(500, 'Relay could not complete this request.'), 'offline'],
+    [new ApiError(429, 'Too many requests.'), 'offline'],
+    [new ApiError(408, 'Timed out.'), 'offline'],
+    [new Error('Could not reach Relay.'), 'offline'],
+    [new ApiError(403, 'No.'), 'refused'],
+    [new ApiError(422, 'Not allowed.', 'train_change_not_allowed'), 'refused'],
+  ])('treats %p as %s', async (error, expected) => {
+    const view = await hostWithSam();
+    await act(async () => trainActions().logFor('sam'));
+    api.changePartnerWorkout.mockRejectedValueOnce(error);
+    await act(async () =>
+      trainActions().editPartner('sam', (current) => ({ ...current, notes: 'x' })),
+    );
+    if (expected === 'offline') {
+      // Kept for Retry, with the logger still open.
+      await waitFor(() => expect(statusOf()).toBe('failed'));
+      expect(getTrainState().loggingFor).toBe('sam');
+      expect(getTrainState().partnerSync.sam?.draft?.notes).toBe('x');
+    } else {
+      await waitFor(() => expect(getTrainState().loggingFor).toBeNull());
+    }
+    await view.unmount();
+  });
+
+  it('binds every notice to the account', async () => {
+    api.read.mockResolvedValueOnce(withPartners());
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().read).toBeTruthy());
+    api.read.mockResolvedValueOnce(withPartners(sam(draft(), at(30))));
+    await act(async () => mockSocket.listener?.());
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('Sam joined', undefined, { account: 'account:me' }),
+    );
+    await view.unmount();
+  });
+
+  it('shows the server’s value in a focused field once an edit comes back not applied', async () => {
+    const actions = fakeActions();
+    setTrainActions(actions);
+    const current = draft();
+    setTrainState({
+      userId: 'me',
+      read: withPartners(sam(current)),
+      loggingFor: 'sam',
+      partnerSync: {
+        sam: {
+          revision: 3,
+          draft: current,
+          status: 'synced',
+          notApplied: false,
+          error: null,
+          exercises: null,
+        },
+      },
+      partnerAcked: { sam: current },
+    });
+    const view = await render(<PartnerLogger partnerId="sam" weightUnit="kg" />, {
+      wrapper: Providers,
+    });
+    const weight = screen.getByLabelText('Set 2 weight');
+    await fireEvent(weight, 'focus');
+    // Typed but not in the stored draft yet (the fake action keeps it): looks pending.
+    await fireEvent.changeText(weight, '85');
+    expect(screen.getByLabelText('Set 2 weight').props.accessibilityHint).toBe('Not saved yet');
+    // The server's copy won: the field shows its value even while focused.
+    await act(async () => setTrainState({ partnerConflicts: { sam: 1 } }));
+    expect(screen.getByLabelText('Set 2 weight').props.value).toBe('82.5');
+    await view.unmount();
+  });
+
+  it('clears the focus return once focus has moved', async () => {
+    const focus = jest
+      .spyOn(AccessibilityInfo, 'sendAccessibilityEvent')
+      .mockImplementation(() => undefined);
+    setTrainState({ userId: 'me', read: withPartners(sam()), focusReturn: 'sam' });
+    const view = await render(<TrainDeck unit="kg" />, { wrapper: Providers });
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(getTrainState().focusReturn).toBeNull();
+    await view.unmount();
+    focus.mockRestore();
+  });
+
+  it("keeps one account's late read out of the next, under one shared query client", async () => {
+    const shared = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const SharedProviders = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={shared}>{children}</QueryClientProvider>
+    );
+    const late = deferred<TrainTogetherRead>();
+    api.read.mockReturnValueOnce(late.promise);
+    const first = await render(<TrainTogetherHost userId="me" />, { wrapper: SharedProviders });
+    await first.unmount();
+    api.read.mockResolvedValue(alone);
+    const second = await render(<TrainTogetherHost userId="other" />, {
+      wrapper: SharedProviders,
+    });
+    await waitFor(() => expect(getTrainState().read).toEqual(alone));
+    // The first account's answer arrives after the switch, into the same client.
+    await act(async () => late.resolve(withPartners(sam())));
+    await act(async () => mockSocket.listener?.());
+    await act(async () => new Promise((done) => setTimeout(done, 20)));
+    expect(getTrainState().read).toEqual(alone);
+    expect(getTrainState().partnerSync).toEqual({});
+    await second.unmount();
+  });
+});
+
+describe('a kept link code', () => {
+  it('is deleted once older than five minutes, and when cleared', async () => {
+    const { memoryKv } = jest.requireActual<typeof import('../../testing/memoryKvStore')>(
+      '../../testing/memoryKvStore',
+    );
+    requestTrainJoin('abcdefghijklmnop1234', Date.now() - 6 * 60_000);
+    expect(pendingTrainInvite()).toBeNull();
+    expect(memoryKv.has('relay.pendingTrainInvite')).toBe(false);
+    requestTrainJoin('abcdefghijklmnop1234');
+    expect(memoryKv.has('relay.pendingTrainInvite')).toBe(true);
+    clearPendingTrainInvite();
+    expect(memoryKv.has('relay.pendingTrainInvite')).toBe(false);
+  });
 });

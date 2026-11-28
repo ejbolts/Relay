@@ -215,8 +215,12 @@ test('train together: the prompt waits while you log for a partner, and asks onc
   await fireEvent.press(screen.getByRole('button', { name: 'Complete set 1' }));
   now = nine + 4 * 60 * 60_000;
   await act(async () => setTrainState({ loggingFor: 'partner' }));
-  // The engine checks again on its timer and on return to the app: held back meanwhile.
-  await act(async () => jest.advanceTimersByTime?.(30_000));
+  // Your own logger stays mounted (hidden) under the partner's: a change in it makes the engine
+  // check, as its timer would. Held back while you log for the partner.
+  await fireEvent.changeText(
+    screen.getByLabelText(/^Repetitions for set 2/, { includeHiddenElements: true }),
+    '7',
+  );
   expect(alerts.filter((alert) => alert.title === 'Unfinished workout')).toHaveLength(0);
   await act(async () => setTrainState({ loggingFor: null }));
   expect(alerts.filter((alert) => alert.title === 'Unfinished workout')).toHaveLength(1);

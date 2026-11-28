@@ -15,13 +15,18 @@ import {
 import { ApiError } from '../../data/api';
 import { onTrainTogether } from '../../data/livePresence';
 import { haptics } from '../../ui/haptics';
-import { showToast } from '../../ui/Toast';
+import { dismissActionToasts, showToast, toastAccountFor } from '../../ui/Toast';
 import { socialApi } from '../social/socialApi';
 import { socialKeys } from '../social/socialQueries';
 import { sessionBound } from '../workout/sessionBound';
 import { useOptionalWorkout } from '../workout/WorkoutProvider';
 import { isConnectionFailure } from './trainErrors';
-import { takePendingTrainInvite, usePendingTrainInvite } from './trainLinks';
+import {
+  clearPendingTrainInvite,
+  takePendingTrainInvite,
+  usePendingTrainInvite,
+} from './trainLinks';
+import { registerBeforeSignOut } from '../../session/sessionEpoch';
 import {
   getTrainState,
   setTrainActions,
@@ -101,6 +106,10 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
     const readKey = trainSessionKey(userId);
     // False once this account's host has gone: late answers then do nothing.
     let alive = true;
+    // Every toast belongs to this account: one from a late answer never shows to the next.
+    const account = toastAccountFor(userId);
+    // A link code kept on the phone goes with the session that signs out.
+    const stopSignOut = registerBeforeSignOut(() => clearPendingTrainInvite());
     let leaving = false;
     let inviting = false;
     /** Tokens already sent to join, so the same code is never submitted twice. */
@@ -142,7 +151,10 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
           changed: (next) => {
             const was = status;
             status = next.status;
-            const acknowledged = next.status === 'synced' || next.status === 'conflict';
+            // Acknowledged only when the server has everything: after a conflict, edits replayed
+            // on its copy but not yet sent are still pending.
+            const acknowledged =
+              next.status === 'synced' || (next.status === 'conflict' && !sync.unsent);
             setTrainState((current) => ({
               ...current,
               partnerSync: { ...current.partnerSync, [partnerId]: next },
@@ -151,9 +163,17 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
               }),
             }));
             if (next.status === 'conflict' && was !== 'conflict') {
+              setTrainState((current) => ({
+                ...current,
+                partnerConflicts: {
+                  ...current.partnerConflicts,
+                  [partnerId]: (current.partnerConflicts[partnerId] ?? 0) + 1,
+                },
+              }));
               haptics.warning();
               showToast(partnerConflictNotice(partnerNamed(partnerId)), undefined, {
                 variant: 'warning',
+                account,
               });
             }
             // A refusal is not "offline": it can never be sent. Close their logger, read the
@@ -164,10 +184,10 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
                 error.code === TRAIN_ERRORS.notPartner || error.code === TRAIN_ERRORS.noWorkout;
               showToast(
                 gone
-                  ? `${partnerNamed(partnerId)}'s workout is no longer open to you.`
+                  ? `${partnerNamed(partnerId)}’s workout is no longer open to you.`
                   : error.message,
                 undefined,
-                { variant: 'error' },
+                { variant: 'error', account },
               );
               stopSync(partnerId);
               void latest.current.client.invalidateQueries({ queryKey: readKey });
@@ -234,7 +254,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
             showToast(
               reason.message,
               member ? { label: 'Add friend', run: () => actions.addFriend(member) } : undefined,
-              { variant: 'error' },
+              { variant: 'error', account },
             );
           }
           return reason;
@@ -272,6 +292,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
             if (alive)
               showToast(`Couldn't leave the session. ${failure(error).message}`, undefined, {
                 variant: 'error',
+                account,
               });
           })
           .finally(() => {
@@ -307,6 +328,8 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
       logFor(partnerId, returnTo) {
         if (partnerId && !loops.has(partnerId)) return;
         haptics.selection();
+        // Your own workout's Undo can't be pressed over a partner's logger: settle it first.
+        if (partnerId) dismissActionToasts();
         setTrainState({
           loggingFor: partnerId,
           focusReturn: partnerId ? null : (returnTo ?? null),
@@ -333,11 +356,11 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
           .then(() => {
             if (!alive) return;
             haptics.success();
-            showToast(`Friend request sent to ${member.name}`);
+            showToast(`Friend request sent to ${member.name}`, undefined, { account });
             void latest.current.client.invalidateQueries({ queryKey: socialKeys.friends });
           })
           .catch((error: unknown) => {
-            if (alive) showToast(failure(error).message, undefined, { variant: 'error' });
+            if (alive) showToast(failure(error).message, undefined, { variant: 'error', account });
           });
       },
       closeStartWith() {
@@ -356,6 +379,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
     });
     return () => {
       alive = false;
+      stopSignOut();
       stopListening();
       stopNet();
       loops.forEach((loop) => loop.sync.stop());
@@ -386,7 +410,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
     // Your own finishing, discarding or leaving says nothing.
     if (!read.session && read.ended?.by_user_id === userId) return;
     const notice = trainTogetherNotice(before, read);
-    if (notice) showToast(notice);
+    if (notice) showToast(notice, undefined, { account: toastAccountFor(userId) });
   }, [read, userId]);
 
   // A code from a link or another scanner, once signed in.

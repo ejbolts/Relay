@@ -37,6 +37,8 @@ export interface TrainState {
   partnerSync: Record<string, PartnerSyncState>;
   /** Each partner's draft as the server last acknowledged it, so nothing unsent looks saved. */
   partnerAcked: Record<string, ActiveWorkoutDraft | null>;
+  /** How many times each partner's edits came back not applied: fields show the server's value. */
+  partnerConflicts: Record<string, number>;
   /** Movements this phone added to each partner's workout in this session (removable). */
   added: Record<string, readonly string[]>;
   /** A partner to offer "Start with {name}'s exercises" for, after joining with no workout. */
@@ -71,6 +73,7 @@ export const EMPTY_TRAIN_STATE: TrainState = {
   focusReturn: null,
   partnerSync: {},
   partnerAcked: {},
+  partnerConflicts: {},
   added: {},
   startWith: null,
 };

@@ -108,7 +108,7 @@ import { useLogger, useWorkout, type LoggerApi } from './WorkoutProvider';
 // Train together (stream M): the deck, entry, pace strip, sheet and logging for a partner.
 import { partners as trainPartners } from '../../../../frontend/src/trainTogether';
 import { PartnerLogger } from '../train/PartnerLogger';
-import { PartnerPace, TrainDeck, TrainEntry } from '../train/TrainDeck';
+import { TrainDeck, TrainEntry } from '../train/TrainDeck';
 import { TrainSheet } from '../train/TrainSheet';
 import { trainActions, useTrainState } from '../train/trainStore';
 
@@ -131,30 +131,43 @@ export function WorkoutSheet() {
   // shelf), so toasts sit above it as on the web, never on top of the shelf.
   const [dockHeight, setDockHeight] = useState(0);
   const loggingFor = useTrainState((train) => train.loggingFor);
+  // Train together: logging for a partner, your own logger stays mounted but hidden, so coming
+  // back keeps its scroll position, folded cards and open state.
+  const partnerMode = !!logger?.state && !!loggingFor;
   let content = <NoWorkout onClose={() => router.back()} />;
-  if (logger?.state && loggingFor)
-    content = <PartnerLogger partnerId={loggingFor} weightUnit={logger.weightUnit} />;
-  else if (logger?.state)
+  if (logger?.state)
     content = (
-      <LoggerTipsProvider>
-        <LiveLogger logger={logger} state={logger.state} onDockHeight={setDockHeight} />
-      </LoggerTipsProvider>
+      <>
+        <View style={partnerMode ? styles.hidden : styles.page}>
+          <LoggerTipsProvider>
+            <LiveLogger logger={logger} state={logger.state} onDockHeight={setDockHeight} />
+          </LoggerTipsProvider>
+        </View>
+        {partnerMode && <PartnerLogger partnerId={loggingFor!} weightUnit={logger.weightUnit} />}
+      </>
     );
   else if (logger?.finished)
     content = <FinishedView logger={logger} onDone={() => router.back()} />;
   return (
     <View style={[styles.page, { backgroundColor: colors.page }]}>
       {content}
-      <SyncConflictButton bottom={logger?.rest.timer || logger?.rest.done ? 112 : 32} />
-      <SyncConflictSheet />
+      {/* Train together: your own workout's sync choice never shows over a partner's logger. */}
+      {!partnerMode && (
+        <>
+          <SyncConflictButton bottom={logger?.rest.timer || logger?.rest.done ? 112 : 32} />
+          <SyncConflictSheet />
+        </>
+      )}
       <TrainSheet />
       <ToastHost
         bottom={
-          logger?.state && dockHeight > 0
-            ? DOCK_BOTTOM + dockHeight + TOAST_GAP
-            : logger?.rest.timer || logger?.rest.done
-              ? 104
-              : 24
+          partnerMode
+            ? 24
+            : logger?.state && dockHeight > 0
+              ? DOCK_BOTTOM + dockHeight + TOAST_GAP
+              : logger?.rest.timer || logger?.rest.done
+                ? 104
+                : 24
         }
       />
       <PromptHost />
@@ -990,11 +1003,7 @@ function LiveLogger({
               machineTip={machineTipEligible(movement.exercise, logger.history)}
               supersetUpNext={isSupersetUpNext(state.movements, movement.key)}
               actions={actions}
-              partnerPace={
-                trainInSession ? (
-                  <PartnerPace exerciseId={movement.exercise.id} unit={logger.weightUnit} />
-                ) : undefined
-              }
+              trainPace={trainInSession}
             />
           </View>
         ))}
@@ -1281,6 +1290,8 @@ function WorkoutDetails({
 }
 
 const styles = StyleSheet.create({
+  // Train together: your own logger, kept mounted while a partner's shows.
+  hidden: { display: 'none' },
   // Train together: Workout details beside the entry, wrapping under it at large text sizes.
   detailsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 8 },
   detailsCell: { flexGrow: 1, flexBasis: 180 },

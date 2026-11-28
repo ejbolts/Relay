@@ -17,6 +17,7 @@ export function PartnerNumberField({
   accent,
   done,
   keyboardType = 'decimal-pad',
+  resync = 0,
 }: {
   value: number | null;
   format: (value: number | null) => string;
@@ -27,18 +28,30 @@ export function PartnerNumberField({
   accent: string;
   done?: boolean;
   keyboardType?: KeyboardTypeOptions;
+  /** Moves on when an edit came back not applied: the field then shows the server's value. */
+  resync?: number;
 }) {
   const { colors, radius, type } = useTheme();
   const [text, setText] = useState(() => format(value));
   const [focused, setFocused] = useState(false);
   const [invalid, setInvalid] = useState(false);
   const shown = useRef(value);
+  const synced = useRef(resync);
   useEffect(() => {
-    if (focused || value === shown.current) return;
+    // Not applied: the server's value replaces the text, even while typing.
+    const notApplied = resync !== synced.current;
+    synced.current = resync;
+    if (!notApplied && (focused || value === shown.current)) return;
     shown.current = value;
     setText(format(value));
     setInvalid(false);
-  }, [value, focused, format]);
+  }, [value, focused, format, resync]);
+  // A focused field whose text isn't the stored value yet looks pending, not saved.
+  const typed = read(text);
+  const pending =
+    focused &&
+    !invalid &&
+    (typed.kind === 'empty' ? null : typed.kind === 'value' ? typed.value : value) !== value;
   return (
     <TextInput
       value={text}
@@ -54,7 +67,9 @@ export function PartnerNumberField({
       onFocus={() => setFocused(true)}
       onBlur={() => setFocused(false)}
       accessibilityLabel={label}
-      accessibilityHint={invalid ? 'Not a valid number; not sent' : undefined}
+      accessibilityHint={
+        invalid ? 'Not a valid number; not sent' : pending ? 'Not saved yet' : undefined
+      }
       accessibilityState={{ disabled: false }}
       keyboardType={keyboardType}
       selectTextOnFocus
@@ -65,6 +80,7 @@ export function PartnerNumberField({
           color: colors.text,
           borderRadius: radius.md,
           backgroundColor: done && !focused && !invalid ? 'transparent' : colors.surface2,
+          borderStyle: pending ? 'dashed' : 'solid',
           borderColor: invalid
             ? colors.danger
             : focused

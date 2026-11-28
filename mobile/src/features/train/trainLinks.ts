@@ -31,6 +31,11 @@ function valid(value: unknown): PendingTrainInvite | null {
 
 const current = () => {
   if (pending === undefined) pending = valid(readJson<PendingTrainInvite>(KEY));
+  // A code past its five minutes can't be used: it isn't kept.
+  if (pending && Date.now() - pending.at > MAX_AGE_MS) {
+    pending = null;
+    writeJson(KEY, null);
+  }
   return pending;
 };
 
@@ -44,6 +49,16 @@ function save(next: PendingTrainInvite | null) {
 export function requestTrainJoin(token: string, now = Date.now()) {
   if (!valid({ token, at: now })) return;
   save({ token, at: now });
+}
+
+/** The kept code, if it is still within its five minutes. */
+export function pendingTrainInvite(): PendingTrainInvite | null {
+  return current();
+}
+
+/** Forgets a kept code, as signing out does. */
+export function clearPendingTrainInvite() {
+  if (current()) save(null);
 }
 
 /** Takes the kept code to join, or null; a code older than five minutes is dropped. */
