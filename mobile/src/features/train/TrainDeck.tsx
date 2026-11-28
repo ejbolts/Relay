@@ -7,6 +7,7 @@ import {
   memberName,
   partners,
   partnerSummary,
+  TRAIN_INVITE_SECONDS,
   TRAIN_MAX_MEMBERS,
   TRAIN_TOGETHER_LABEL,
   type TrainMember,
@@ -42,7 +43,8 @@ export function TrainEntry() {
   const { colors, type, radius } = useTheme();
   const invite = useTrainState((state) => state.invite);
   const now = useNow(1000);
-  const seconds = invite ? inviteSecondsLeft(invite.expires_at, now) : 0;
+  const seconds = // A phone clock a little behind the server's never shows more than five minutes.
+    invite ? Math.min(TRAIN_INVITE_SECONDS, inviteSecondsLeft(invite.expires_at, now)) : 0;
   const waiting = seconds > 0;
   const label = waiting ? `Waiting · ${inviteCountdownLabel(seconds)}` : TRAIN_TOGETHER_LABEL;
   return (
@@ -455,6 +457,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     flexShrink: 1,
     flexBasis: 160,
+    // Wraps the Log button under the ticker before it truncates the name (narrow or large text).
+    minWidth: 160,
     minHeight: 44,
   },
   stack: { flex: 1, minWidth: 0, gap: 1 },

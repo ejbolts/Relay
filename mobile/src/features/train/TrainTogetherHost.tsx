@@ -298,10 +298,14 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
   // Each new read: follow it, retry unsent partner edits, and say what changed.
   useEffect(() => {
     if (!read) return;
-    // A code is single use: once someone new joins, the sheet makes another.
-    const had = new Set(partners(getTrainState().read?.session).map((member) => member.user_id));
+    // A code is single use. Once someone new joins, the sheet closes on your code, so the logger
+    // shows who joined; reopening it makes another code.
+    const state = getTrainState();
+    const had = new Set(partners(state.read?.session).map((member) => member.user_id));
     const joined = partners(read.session).some((member) => !had.has(member.user_id));
-    setTrainState(joined ? { read, invite: null } : { read });
+    setTrainState(
+      joined ? { read, invite: null, sheet: { ...state.sheet, open: false } } : { read },
+    );
     followRef.current?.(read);
     syncs.current.forEach((loop) => {
       if (loop.sync.current.status === 'failed') void loop.sync.retry();

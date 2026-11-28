@@ -29,6 +29,7 @@ import {
   setTrainState,
   trainActions,
   type TrainActions,
+  type TrainJoinFailure,
 } from './trainStore';
 import { TrainTogetherHost } from './TrainTogetherHost';
 import { trainTogetherApi } from './trainTogetherApi';
@@ -240,7 +241,9 @@ function Providers({ children }: { children: ReactNode }) {
 
 function fakeActions(): jest.Mocked<TrainActions> {
   return {
-    join: jest.fn(async () => null),
+    join: jest.fn(
+      async (_token: string, _from: 'scan' | 'link') => null as TrainJoinFailure | null,
+    ),
     leave: jest.fn(),
     newInvite: jest.fn(async () => undefined),
     openSheet: jest.fn(),
@@ -427,7 +430,9 @@ describe('the Train together sheet', () => {
         session_id: 's',
       },
     });
-    const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' });
+    const share = jest
+      .spyOn(Share, 'share')
+      .mockResolvedValue({ action: 'sharedAction', activityType: undefined });
     const view = await render(<TrainSheet />, { wrapper: Providers });
     expect(screen.getByLabelText('QR code to train together')).toBeOnTheScreen();
     expect(screen.getByText(/^4:3\d$/)).toBeOnTheScreen();

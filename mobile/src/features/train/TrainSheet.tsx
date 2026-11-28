@@ -59,7 +59,8 @@ function MyCode() {
   const inviteError = useTrainState((state) => state.inviteError);
   const session = useTrainState((state) => state.read?.session ?? null);
   const tones = usePartnerColours();
-  const seconds = invite ? inviteSecondsLeft(invite.expires_at, now) : 0;
+  const seconds = // A phone clock a little behind the server's never shows more than five minutes.
+    invite ? Math.min(TRAIN_INVITE_SECONDS, inviteSecondsLeft(invite.expires_at, now)) : 0;
   const live = !!invite && seconds > 0;
   // A new code when there is none, or this one expired or was used, while the sheet is open.
   const asked = useRef<string | null>(null);

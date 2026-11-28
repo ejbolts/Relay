@@ -463,7 +463,7 @@ function PartnerSetRow({
       style={[
         styles.row,
         { borderRadius: radius.md },
-        item.completed && { backgroundColor: colors.goodSoft },
+        item.completed && !pending && { backgroundColor: colors.goodSoft },
         !item.completed && warmup && { backgroundColor: `${colors.rpe['8.5']}26` },
       ]}
     >
