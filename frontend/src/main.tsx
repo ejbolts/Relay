@@ -8,6 +8,7 @@ import { AuthGate } from './AuthGate';
 import { ToastProvider } from './Toast';
 import { registerAppUpdates } from './appUpdates';
 import { captureFriendInvite } from './friendInvite';
+import { captureTrainInvite } from './trainTogetherInvite';
 import { captureInstallPrompt } from './installPrompt';
 import { preventIosInputZoom } from './iosInputZoom';
 import { applyReduceMotion, reduceMotionPreference } from './motion';
@@ -26,8 +27,9 @@ import {
   lightStylePreference,
 } from './colourThemes';
 
-// Before the app reads its screen from the address, keep any friend invite through sign-in.
+// Before the app reads its screen from the address, keep any friend or train-together invite through sign-in.
 captureFriendInvite();
+captureTrainInvite();
 // The signed-in app downloads from now, behind whichever screen shows first. The offline
 // worker starts once it has, so the two never share the connection.
 registerAppUpdates(preloadApp());
