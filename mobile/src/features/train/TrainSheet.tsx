@@ -197,8 +197,11 @@ function Scan() {
   const user = useUser();
   const router = useRouter();
   const [failure, setFailure] = useState<TrainJoinFailure | null>(null);
+  // The scanner ignores a code it has handed over; Scan again starts it afresh.
+  const [attempt, setAttempt] = useState(0);
   return (
     <QrScanner
+      key={attempt}
       userId={user.id}
       onScanned={(id) => {
         // A friend's code: their invite, as Social's scanner opens it, below the logger.
@@ -219,13 +222,23 @@ function Scan() {
             >
               {failure.message}
             </Text>
-            {failure.member && (
+            <View style={styles.failureActions}>
+              {failure.member && (
+                <Button
+                  label="Add friend"
+                  variant="secondary"
+                  onPress={() => trainActions().addFriend(failure.member!)}
+                />
+              )}
               <Button
-                label="Add friend"
+                label="Scan again"
                 variant="secondary"
-                onPress={() => trainActions().addFriend(failure.member!)}
+                onPress={() => {
+                  setFailure(null);
+                  setAttempt((value) => value + 1);
+                }}
               />
-            )}
+            </View>
           </View>
         )
       }
@@ -263,4 +276,5 @@ const styles = StyleSheet.create({
   problem: { alignItems: 'center', gap: 14, paddingVertical: 24 },
   partner: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 44 },
   failure: { alignItems: 'center', gap: 10 },
+  failureActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 },
 });

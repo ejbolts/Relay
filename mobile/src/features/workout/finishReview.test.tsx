@@ -14,6 +14,7 @@ import { showMenu } from '../../ui/prompts';
 import { StartSheet } from './StartSheet';
 import { pushDay, types } from './testFixtures';
 import { useWorkout, WorkoutProvider } from './WorkoutProvider';
+import { EMPTY_TRAIN_STATE, setTrainState } from '../train/trainStore';
 import { WorkoutSheet } from './WorkoutSheet';
 
 const mockRouter = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
@@ -207,6 +208,19 @@ test('a workout left running asks to be saved at its last activity, resumed or d
   expect(await screen.findByText('Workout complete')).toBeVisible();
   await waitFor(() => expect(saved).toHaveLength(1));
   expect(saved[0].duration_minutes).toBe(Math.round((lastActivity - nine) / 60_000));
+});
+
+test('train together: the prompt waits while you log for a partner, and asks once you return', async () => {
+  await openLogger();
+  await fireEvent.press(screen.getByRole('button', { name: 'Complete set 1' }));
+  now = nine + 4 * 60 * 60_000;
+  await act(async () => setTrainState({ loggingFor: 'partner' }));
+  // The engine checks again on its timer and on return to the app: held back meanwhile.
+  await act(async () => jest.advanceTimersByTime?.(30_000));
+  expect(alerts.filter((alert) => alert.title === 'Unfinished workout')).toHaveLength(0);
+  await act(async () => setTrainState({ loggingFor: null }));
+  expect(alerts.filter((alert) => alert.title === 'Unfinished workout')).toHaveLength(1);
+  setTrainState(EMPTY_TRAIN_STATE);
 });
 
 test('discarding from the prompt asks first; keeping the workout asks again', async () => {

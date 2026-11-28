@@ -72,6 +72,7 @@ import { DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
 import { ApiError, apiGet, apiSend, currentUser } from '../../data/api';
 import { deviceStorage, newId, readJson, writeJson } from '../../data/deviceStorage';
 import { connectLivePresence } from '../../data/livePresence';
+import { getTrainState, subscribeTrainState } from '../train/trainStore';
 import {
   queryKeys,
   refreshTraining,
@@ -1078,6 +1079,8 @@ const WorkoutEngine = memo(function WorkoutEngine({
   const checkInactive = useCallback(() => {
     const current = loggerRef.current;
     if (!current || promptOpen.current || !isInactive(current, Date.now())) return;
+    // Train together: never over a partner's logger; asked again on return to your own.
+    if (getTrainState().loggingFor) return;
     promptOpen.current = true;
     const close = () => {
       promptOpen.current = false;
@@ -1158,6 +1161,14 @@ const WorkoutEngine = memo(function WorkoutEngine({
   useLayoutEffect(() => {
     askAgain.current = checkInactive;
   }, [checkInactive]);
+  // Train together: back from logging for a partner, ask what was held back.
+  useEffect(
+    () =>
+      subscribeTrainState(() => {
+        if (!getTrainState().loggingFor) askAgain.current();
+      }),
+    [],
+  );
   useEffect(() => {
     if (!logger) return;
     checkInactive();

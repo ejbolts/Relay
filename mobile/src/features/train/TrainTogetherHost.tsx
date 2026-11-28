@@ -20,6 +20,7 @@ import { socialApi } from '../social/socialApi';
 import { socialKeys } from '../social/socialQueries';
 import { sessionBound } from '../workout/sessionBound';
 import { useOptionalWorkout } from '../workout/WorkoutProvider';
+import { isConnectionFailure } from './trainErrors';
 import { takePendingTrainInvite, usePendingTrainInvite } from './trainLinks';
 import {
   getTrainState,
@@ -37,11 +38,6 @@ const SESSION_POLL_MS = 20_000;
 const NOBODY: TrainTogetherRead = { session: null, ended: null };
 
 export const trainSessionKey = (userId: string) => [...trainTogetherKeys.session, userId] as const;
-
-/** No answer, or a proxy's, rather than a refusal from Relay itself. */
-export function isConnectionFailure(error: unknown) {
-  return !(error instanceof ApiError) || [502, 503, 504].includes(error.status);
-}
 
 /** A read that belongs to `userId`: no session, or one where `userId` is the caller. */
 export function readIsFor(read: TrainTogetherRead, userId: string) {
@@ -308,10 +304,13 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
       closeSheet() {
         setTrainState({ sheet: { ...getTrainState().sheet, open: false } });
       },
-      logFor(partnerId) {
+      logFor(partnerId, returnTo) {
         if (partnerId && !loops.has(partnerId)) return;
         haptics.selection();
-        setTrainState({ loggingFor: partnerId });
+        setTrainState({
+          loggingFor: partnerId,
+          focusReturn: partnerId ? null : (returnTo ?? null),
+        });
       },
       editPartner(partnerId, edit, added) {
         const loop = loops.get(partnerId);

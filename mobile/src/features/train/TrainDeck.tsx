@@ -1,10 +1,19 @@
-import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState, type ComponentRef } from 'react';
+import {
+  AccessibilityInfo,
+  Animated,
+  Easing,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import {
   inviteCountdownLabel,
   inviteSecondsLeft,
   memberName,
+  memberShortName,
   partners,
   partnerSummary,
   TRAIN_INVITE_SECONDS,
@@ -23,16 +32,94 @@ import { trainIcons, usePartnerColours, type PartnerColours } from './partnerCol
 import { PartnerAvatar } from './PartnerAvatar';
 import { trainActions, useTrainState } from './trainStore';
 
-/** The partners whose workouts this phone shows, with what it has of each (unsent edits too). */
+/**
+ * The partners, each with the copy of their workout the server last acknowledged: an edit from
+ * this phone shows in the deck and pace strip only once it is saved.
+ */
 export function useTrainPartners(): TrainMember[] {
   const session = useTrainState((state) => state.read?.session ?? null);
-  const synced = useTrainState((state) => state.partnerSync);
+  const acked = useTrainState((state) => state.partnerAcked);
   return partners(session).map((member) => {
-    const local = synced[member.user_id];
-    return member.workout && local?.draft
-      ? { ...member, workout: { ...member.workout, revision: local.revision, draft: local.draft } }
+    const saved = acked[member.user_id];
+    return member.workout && saved
+      ? { ...member, workout: { ...member.workout, draft: saved } }
       : member;
   });
+}
+
+/** Returning from a partner's logger puts focus back on that partner's Log button. */
+function useFocusReturn(partnerId: string) {
+  const ref = useRef<ComponentRef<typeof Pressable>>(null);
+  const focusReturn = useTrainState((state) => state.focusReturn);
+  useEffect(() => {
+    if (focusReturn !== partnerId) return;
+    if (ref.current) AccessibilityInfo.sendAccessibilityEvent(ref.current, 'focus');
+  }, [focusReturn, partnerId]);
+  return ref;
+}
+
+function LogForButton({ member, tone }: { member: TrainMember; tone: PartnerColours }) {
+  const ref = useFocusReturn(member.user_id);
+  const short = memberShortName(member);
+  return (
+    <Pressable
+      ref={ref}
+      accessibilityRole="button"
+      accessibilityLabel={`Log for ${short}`}
+      onPress={() => trainActions().logFor(member.user_id)}
+      style={({ pressed }) => [
+        styles.logFor,
+        { backgroundColor: tone.soft, borderColor: tone.line, borderRadius: 11 },
+        pressed && styles.pressed,
+      ]}
+    >
+      <Text style={[styles.logForText, { color: tone.text }]} numberOfLines={1}>
+        Log for {short}
+      </Text>
+      <Icon name="chevronRight" size={14} color={tone.text} />
+    </Pressable>
+  );
+}
+
+function GroupRow({
+  member,
+  tone,
+  unit,
+  fresh,
+}: {
+  member: TrainMember;
+  tone: PartnerColours;
+  unit: WeightUnit;
+  fresh: boolean;
+}) {
+  const { colors, radius } = useTheme();
+  const ref = useFocusReturn(member.user_id);
+  const name = memberName(member);
+  return (
+    <Pressable
+      ref={ref}
+      accessibilityRole="button"
+      accessibilityLabel={
+        member.workout ? `Log for ${memberShortName(member)}` : `${name}, no workout open`
+      }
+      disabled={!member.workout}
+      onPress={() => trainActions().logFor(member.user_id)}
+      style={({ pressed }) => [
+        styles.row,
+        { backgroundColor: colors.surface2, borderColor: colors.line, borderRadius: radius.md },
+        pressed && styles.pressed,
+      ]}
+    >
+      <View>
+        {fresh && <JoinPulse size={32} colour={tone.accent} />}
+        <PartnerAvatar member={member} size={32} ring={tone.accent} live={!!member.workout} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Ticker member={member} unit={unit} tone={tone} prefix={name} />
+      </View>
+      {member.workout && <Text style={[styles.logForText, { color: tone.text }]}>Log ›</Text>}
+    </Pressable>
+  );
 }
 
 /**
@@ -206,7 +293,7 @@ function Ticker({
  * doing, and the switch to log for them.
  */
 export function TrainDeck({ unit }: { unit: WeightUnit }) {
-  const { colors, type, radius } = useTheme();
+  const { colors, type } = useTheme();
   const reduced = useReduceMotion();
   const list = useTrainPartners();
   const tones = usePartnerColours();
@@ -302,23 +389,7 @@ export function TrainDeck({ unit }: { unit: WeightUnit }) {
                   </View>
                 </View>
                 <View style={styles.actions}>
-                  {member.workout && (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`Log for ${name}`}
-                      onPress={() => trainActions().logFor(member.user_id)}
-                      style={({ pressed }) => [
-                        styles.logFor,
-                        { backgroundColor: tone.soft, borderColor: tone.line, borderRadius: 11 },
-                        pressed && styles.pressed,
-                      ]}
-                    >
-                      <Text style={[styles.logForText, { color: tone.text }]} numberOfLines={1}>
-                        Log for {name}
-                      </Text>
-                      <Icon name="chevronRight" size={14} color={tone.text} />
-                    </Pressable>
-                  )}
+                  {member.workout && <LogForButton member={member} tone={tone} />}
                   {sessionButton}
                 </View>
               </View>
@@ -333,54 +404,23 @@ export function TrainDeck({ unit }: { unit: WeightUnit }) {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Session"
-                hitSlop={12}
                 onPress={() => trainActions().openSheet('code')}
+                style={styles.sessionLink}
               >
                 <Text style={[type.footnote, { color: colors.accentText, fontWeight: '600' }]}>
                   Session
                 </Text>
               </Pressable>
             </View>
-            {list.map((member) => {
-              const tone = toneOf(member);
-              const name = memberName(member);
-              return (
-                <Pressable
-                  key={member.user_id}
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    member.workout ? `Log for ${name}` : `${name}, no workout open`
-                  }
-                  disabled={!member.workout}
-                  onPress={() => trainActions().logFor(member.user_id)}
-                  style={({ pressed }) => [
-                    styles.row,
-                    {
-                      backgroundColor: colors.surface2,
-                      borderColor: colors.line,
-                      borderRadius: radius.md,
-                    },
-                    pressed && styles.pressed,
-                  ]}
-                >
-                  <View>
-                    {fresh(member) && <JoinPulse size={32} colour={tone.accent} />}
-                    <PartnerAvatar
-                      member={member}
-                      size={32}
-                      ring={tone.accent}
-                      live={!!member.workout}
-                    />
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Ticker member={member} unit={unit} tone={tone} prefix={name} />
-                  </View>
-                  {member.workout && (
-                    <Text style={[styles.logForText, { color: tone.text }]}>Log ›</Text>
-                  )}
-                </Pressable>
-              );
-            })}
+            {list.map((member) => (
+              <GroupRow
+                key={member.user_id}
+                member={member}
+                tone={toneOf(member)}
+                unit={unit}
+                fresh={fresh(member)}
+              />
+            ))}
           </View>
         )}
       </View>
@@ -407,7 +447,7 @@ export function PartnerPace({ exerciseId, unit }: { exerciseId: string; unit: We
     <View style={{ gap: 6 }}>
       {strips.map(({ member, pace }) => {
         const tone = tones[member.user_id];
-        const name = memberName(member);
+        const name = memberShortName(member);
         return (
           <View
             key={member.user_id}
@@ -486,6 +526,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  sessionLink: { minHeight: 44, minWidth: 44, justifyContent: 'center', alignItems: 'flex-end' },
   groupHead: {
     flexDirection: 'row',
     alignItems: 'center',

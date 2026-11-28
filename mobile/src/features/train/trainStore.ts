@@ -31,6 +31,8 @@ export interface TrainState {
   sheet: { open: boolean; tab: TrainSheetTab };
   /** The partner whose workout the logger is showing, or null for your own. */
   loggingFor: string | null;
+  /** The partner whose Log button takes focus when you return to your own workout. */
+  focusReturn: string | null;
   /** Each partner's draft as this phone shows it, with its sending state. */
   partnerSync: Record<string, PartnerSyncState>;
   /** Each partner's draft as the server last acknowledged it, so nothing unsent looks saved. */
@@ -47,7 +49,8 @@ export interface TrainActions {
   newInvite: () => Promise<void>;
   openSheet: (tab?: TrainSheetTab) => void;
   closeSheet: () => void;
-  logFor: (userId: string | null) => void;
+  /** Shows a partner's logger, or your own (null) with focus back on `returnTo`'s button. */
+  logFor: (userId: string | null, returnTo?: string) => void;
   editPartner: (
     userId: string,
     edit: (draft: ActiveWorkoutDraft) => ActiveWorkoutDraft,
@@ -65,6 +68,7 @@ export const EMPTY_TRAIN_STATE: TrainState = {
   inviteError: null,
   sheet: { open: false, tab: 'code' },
   loggingFor: null,
+  focusReturn: null,
   partnerSync: {},
   partnerAcked: {},
   added: {},
@@ -114,6 +118,11 @@ const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => void listeners.delete(listener);
 };
+
+/** Hears every change of the train-together state (for code outside React). */
+export function subscribeTrainState(listener: () => void): () => void {
+  return subscribe(listener);
+}
 
 /** The train-together state, or the part of it `select` picks (return a stable value). */
 export function useTrainState(): TrainState;

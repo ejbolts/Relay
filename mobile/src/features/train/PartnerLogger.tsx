@@ -1,26 +1,32 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useRef, useState, type ComponentRef } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import {
+  AccessibilityInfo,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   addPartnerMovement,
   addPartnerSet,
   loggingForLabel,
   memberName,
+  memberShortName,
   partners,
   partnerSummary,
   removePartnerMovement,
   removePartnerSet,
   updatePartnerSet,
   type TrainExercise,
-  type TrainMember,
 } from '../../../../frontend/src/trainTogether';
 import { partnerSetLabel, partnerWorkoutName } from '../../../../frontend/src/trainTogetherView';
-import {
-  weightInputKg,
-  weightInputValue,
-  type WeightUnit,
-} from '../../../../frontend/src/weightUnits';
+import { partnerRepsInput, partnerWeightInput } from '../../../../frontend/src/trainTogetherInput';
+import { draftPause } from '../../../../frontend/src/workoutPause';
+import { weightInputValue, type WeightUnit } from '../../../../frontend/src/weightUnits';
 import type {
   ActiveWorkoutDraft,
   StoredDraftMovement,
@@ -35,12 +41,17 @@ import { showMenu } from '../../ui/prompts';
 import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 import { sessionBound } from '../workout/sessionBound';
-import { formatPlain, NumberField, parseWhole } from '../workout/NumberField';
+import { formatPlain } from '../workout/NumberField';
+import { PartnerNumberField } from './PartnerNumberField';
+import { isConnectionFailure } from './trainErrors';
 import { useElapsed } from '../workout/useElapsed';
 import { trainIcons, usePartnerColours, type PartnerColours } from './partnerColours';
 import { PartnerAvatar } from './PartnerAvatar';
 import { trainActions, useTrainState } from './trainStore';
 import { trainTogetherApi, trainTogetherKeys } from './trainTogetherApi';
+
+/** The time an edit is made, taken in its press handler (never inside the updater). */
+const editTime = () => Date.now();
 
 const MORE_VERTICAL = { sf: 'ellipsis', md: 'more-vert' } as const;
 
@@ -87,6 +98,13 @@ export function PartnerLogger({
     return byId;
   }, [library.data, member?.workout?.exercises, sync?.exercises]);
   const top = Platform.OS === 'ios' ? 0 : insets.top;
+  // Entering a partner's logger announces whose it is.
+  const banner = useRef<ComponentRef<typeof Text>>(null);
+  const present = !!member && !!draft;
+  useEffect(() => {
+    if (present && banner.current)
+      AccessibilityInfo.sendAccessibilityEvent(banner.current, 'focus');
+  }, [present]);
   if (!member || !draft) return null;
   const tone = tones[partnerId] ?? {
     accent: colors.accent,
@@ -96,9 +114,11 @@ export function PartnerLogger({
     line: colors.lineStrong,
   };
   const name = memberName(member);
+  const short = memberShortName(member);
   const edit = (change: (current: ActiveWorkoutDraft) => ActiveWorkoutDraft, addedKey?: string) =>
     trainActions().editPartner(partnerId, change, addedKey);
-  const failed = sync?.status === 'failed';
+  // Only a connection failure is "offline"; a refusal closes this logger (TrainTogetherHost).
+  const failed = sync?.status === 'failed' && isConnectionFailure(sync.error);
 
   function addExercise(exercise: TrainExercise) {
     setPicking(false);
@@ -110,12 +130,10 @@ export function PartnerLogger({
       return;
     }
     haptics.tap();
-    const movementKey = newId();
-    edit(
-      (current) =>
-        addPartnerMovement(current, exercise.id, { movementKey, setKey: newId() }, Date.now()),
-      movementKey,
-    );
+    // Keys and time are made once, here: the queue may run the updater again after a conflict.
+    const keys = { movementKey: newId(), setKey: newId() };
+    const now = editTime();
+    edit((current) => addPartnerMovement(current, exercise.id, keys, now), keys.movementKey);
   }
 
   return (
@@ -123,6 +141,7 @@ export function PartnerLogger({
       <View style={[styles.banner, { backgroundColor: tone.accent, paddingTop: top + 6 }]}>
         <PartnerAvatar member={member} size={32} ring="#ffffff" />
         <Text
+          ref={banner}
           accessibilityRole="header"
           style={[styles.bannerTitle, { color: colors.onAccent }]}
           numberOfLines={1}
@@ -132,7 +151,7 @@ export function PartnerLogger({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Back to mine"
-          onPress={() => trainActions().logFor(null)}
+          onPress={() => trainActions().logFor(null, partnerId)}
           style={({ pressed }) => [styles.back, pressed && styles.pressed]}
         >
           <Icon name="chevronLeft" size={14} color={colors.onAccent} />
@@ -160,7 +179,7 @@ export function PartnerLogger({
           </Pressable>
         </View>
       )}
-      <PartnerHeader member={member} draft={draft} tone={tone} name={name} />
+      <PartnerHeader draft={draft} acked={acked} tone={tone} name={name} />
       <ScrollView
         ref={scrollRef}
         style={{ flex: 1 }}
@@ -183,7 +202,7 @@ export function PartnerLogger({
               movement={movement}
               acked={acked?.movements.find((item) => item.key === movement.key) ?? null}
               exercise={exercises.get(movement.exerciseId) ?? null}
-              name={name}
+              name={short}
               tone={tone}
               unit={weightUnit}
               removable={!!added?.includes(movement.key)}
@@ -193,7 +212,7 @@ export function PartnerLogger({
         ))}
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Add exercise for ${name}`}
+          accessibilityLabel={`Add exercise for ${short}`}
           onPress={() => {
             haptics.tap();
             setPicking(true);
@@ -204,7 +223,7 @@ export function PartnerLogger({
             pressed && styles.pressed,
           ]}
         >
-          <Text style={[type.button, { color: tone.text }]}>+ Add exercise for {name}</Text>
+          <Text style={[type.button, { color: tone.text }]}>+ Add exercise for {short}</Text>
         </Pressable>
       </ScrollView>
       {/* The frame says whose workout this is, all round the screen. */}
@@ -214,7 +233,7 @@ export function PartnerLogger({
       />
       <PartnerPicker
         visible={picking}
-        name={name}
+        name={short}
         loading={library.isPending}
         failed={library.isError}
         exercises={library.data ?? []}
@@ -227,28 +246,27 @@ export function PartnerLogger({
 }
 
 function PartnerHeader({
-  member,
   draft,
+  acked,
   tone,
   name,
 }: {
-  member: TrainMember;
   draft: ActiveWorkoutDraft;
+  /** The copy the server acknowledged: its sets are the ones counted as done. */
+  acked: ActiveWorkoutDraft | null;
   tone: PartnerColours;
   name: string;
 }) {
   const { colors, type } = useTheme();
+  // The owner's clock rules: pauses, corrections and a resumed workout's saved minutes.
   const elapsed = useElapsed(
     draft.startedAt,
-    {
-      pausedMs: draft.pausedMs ?? 0,
-      pausedAt: draft.pausedAt ?? null,
-      adjustedMs: draft.adjustedMs ?? 0,
-    },
+    draftPause(draft),
     draft.previousDurationMinutes ?? 0,
   );
-  const workout = member.workout ? { ...member.workout, draft } : null;
-  const sets = workout ? partnerSummary(workout, 0).totalSetsDone : 0;
+  const sets = acked
+    ? partnerSummary({ revision: 0, draft: acked, exercises: [] }, 0).totalSetsDone
+    : 0;
   return (
     <View style={[styles.header, { backgroundColor: tone.tint, borderColor: tone.line }]}>
       <Text style={[styles.title, { color: colors.text }]} numberOfLines={1}>
@@ -302,7 +320,8 @@ function PartnerCard({
   const { colors, type, radius } = useTheme();
   const title = exercise?.name ?? 'Exercise';
   const cardio = exercise?.kind === 'cardio';
-  const done = movement.sets.filter((item) => item.completed).length;
+  // Pending is not saved: "n done" counts what the server acknowledged.
+  const done = acked?.sets.filter((item) => item.completed).length ?? 0;
   let working = 0;
   const labels = movement.sets.map((item) => (isWarmup(item) ? 'W' : String(++working)));
 
@@ -314,16 +333,20 @@ function PartnerCard({
         : movement.sets.map((item, index) => ({
             label: `Remove set ${labels[index]}`,
             destructive: true,
-            onPress: () =>
-              edit((current) => removePartnerSet(current, movement.key, item.key, Date.now())),
+            onPress: () => {
+              const now = Date.now();
+              edit((current) => removePartnerSet(current, movement.key, item.key, now));
+            },
           }))),
       ...(removable
         ? [
             {
               label: 'Remove exercise',
               destructive: true,
-              onPress: () =>
-                edit((current) => removePartnerMovement(current, movement.key, Date.now())),
+              onPress: () => {
+                const now = Date.now();
+                edit((current) => removePartnerMovement(current, movement.key, now));
+              },
             },
           ]
         : []),
@@ -399,7 +422,7 @@ function PartnerCard({
               movementKey={movement.key}
               item={item}
               label={labels[index]}
-              saved={acked?.sets.find((set) => set.key === item.key)?.completed === true}
+              saved={acked?.sets.find((set) => set.key === item.key) ?? null}
               tone={tone}
               unit={unit}
               edit={edit}
@@ -410,8 +433,10 @@ function PartnerCard({
             accessibilityLabel={`Add set to ${title}`}
             onPress={() => {
               haptics.tap();
+              // Made once, here: the queue may run the updater again after a conflict.
               const key = newId();
-              edit((current) => addPartnerSet(current, movement.key, key, Date.now()));
+              const now = Date.now();
+              edit((current) => addPartnerSet(current, movement.key, key, now));
             }}
             style={({ pressed }) => [
               styles.addSet,
@@ -439,18 +464,26 @@ function PartnerSetRow({
   movementKey: string;
   item: StoredDraftSet;
   label: string;
-  /** The server has this set as done. */
-  saved: boolean;
+  /** The same set as the server acknowledged it, or null when it hasn't yet. */
+  saved: StoredDraftSet | null;
   tone: PartnerColours;
   unit: WeightUnit;
   edit: (change: (current: ActiveWorkoutDraft) => ActiveWorkoutDraft) => void;
 }) {
   const { colors, radius } = useTheme();
   const warmup = label === 'W';
-  const pending = item.completed && !saved;
+  // Anything not yet acknowledged looks pending, a set already done included.
+  const pending =
+    !saved ||
+    saved.completed !== item.completed ||
+    saved.weight_kg !== item.weight_kg ||
+    saved.reps !== item.reps;
   const weightFormat = useMemo(() => (kg: number | null) => weightInputValue(kg, unit), [unit]);
-  const patch = (update: Partial<StoredDraftSet>) =>
-    edit((current) => updatePartnerSet(current, movementKey, item.key, update, Date.now()));
+  const patch = (update: Partial<StoredDraftSet>) => {
+    // The time is taken once, here: the queue may run the updater again after a conflict.
+    const now = Date.now();
+    edit((current) => updatePartnerSet(current, movementKey, item.key, update, now));
+  };
   const describe =
     item.weight_kg !== null || item.reps !== null
       ? partnerSetLabel(
@@ -473,22 +506,24 @@ function PartnerSetRow({
         {label}
       </Text>
       <View style={styles.valueCol}>
-        <NumberField
+        <PartnerNumberField
           value={item.weight_kg}
           format={weightFormat}
-          parse={(text) => weightInputKg(text, unit, item.weight_kg)}
+          read={(text) => partnerWeightInput(text, unit, item.weight_kg)}
           onChange={(weight_kg) => patch({ weight_kg })}
           label={`Set ${label} weight`}
+          accent={tone.accent}
           done={item.completed}
         />
       </View>
       <View style={styles.valueCol}>
-        <NumberField
+        <PartnerNumberField
           value={item.reps}
           format={formatPlain}
-          parse={parseWhole}
+          read={partnerRepsInput}
           onChange={(reps) => patch({ reps })}
           label={`Set ${label} reps`}
+          accent={tone.accent}
           keyboardType="number-pad"
           done={item.completed}
         />

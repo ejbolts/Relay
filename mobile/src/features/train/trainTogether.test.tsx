@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useState, type ReactNode } from 'react';
-import { Share } from 'react-native';
+import { AccessibilityInfo, Share } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   partnerConflictNotice,
@@ -16,6 +16,7 @@ import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
 import { QrScanner } from '../social/FriendQrSheet';
 import { socialApi } from '../social/socialApi';
+import { WorkoutCard } from '../training/WorkoutCard';
 import { PartnerLogger } from './PartnerLogger';
 import { PartnerPace, TrainDeck, TrainEntry } from './TrainDeck';
 import { TrainedWithPill } from './TrainedWithPill';
@@ -258,6 +259,8 @@ function fakeActions(): jest.Mocked<TrainActions> {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Answers queued by one test never reach the next.
+  Object.values(api).forEach((request) => request.mockReset());
   mockWorkout.live = null;
   mockPath.value = '/';
   mockExercises.data = [];
@@ -607,7 +610,7 @@ describe('logging for a partner', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Add set to Bench Press' }));
     expect(applied(actions, current).movements[0].sets).toHaveLength(3);
     await fireEvent.press(screen.getByRole('button', { name: 'Back to mine' }));
-    expect(actions.logFor).toHaveBeenCalledWith(null);
+    expect(actions.logFor).toHaveBeenCalledWith(null, 'sam');
     await view.unmount();
   });
 
@@ -750,5 +753,442 @@ it('leaves the session from the sheet, with no confirmation', async () => {
   await fireEvent.press(screen.getByRole('button', { name: 'Leave session' }));
   expect(actions.leave).toHaveBeenCalledTimes(1);
   expect(actions.closeSheet).toHaveBeenCalledTimes(1);
+  await view.unmount();
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((done, fail) => {
+    resolve = done;
+    reject = fail;
+  });
+  return { promise, resolve, reject };
+}
+
+type WriteResult = Awaited<ReturnType<typeof api.changePartnerWorkout>>;
+
+describe('the session, after the web review', () => {
+  it('keeps a join when an older read that says "no session" arrives after it', async () => {
+    const late = deferred<TrainTogetherRead>();
+    api.read.mockReturnValueOnce(late.promise);
+    api.join.mockResolvedValueOnce(withPartners(sam()));
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await act(async () => void (await trainActions().join('abcdefghijklmnop1234', 'scan')));
+    await waitFor(() => expect(getTrainState().read?.session?.id).toBe('session-1'));
+    await act(async () => late.resolve(alone));
+    await act(async () => new Promise((done) => setTimeout(done, 50)));
+    expect(getTrainState().read?.session?.id).toBe('session-1');
+    expect(getTrainState().partnerSync.sam).toBeDefined();
+    await view.unmount();
+  });
+
+  it('never applies a read whose caller is another account', async () => {
+    const theirs = withPartners(sam());
+    theirs.session!.members[0] = { ...me, user_id: 'someone-else' };
+    api.read.mockResolvedValueOnce(theirs);
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(api.read).toHaveBeenCalled());
+    await act(async () => undefined);
+    expect(getTrainState().read).toBeNull();
+    await view.unmount();
+  });
+
+  it.each(['scan', 'link'] as const)(
+    'a %s join answered after a sign-out does nothing for the next account',
+    async (from) => {
+      api.read.mockResolvedValue(alone);
+      const refused = deferred<TrainTogetherRead>();
+      const accepted = deferred<TrainTogetherRead>();
+      api.join.mockReturnValueOnce(refused.promise).mockReturnValueOnce(accepted.promise);
+      const first = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+      const actions = trainActions();
+      let refusal: unknown = 'unset';
+      void actions.join('abcdefghijklmnop1234', from).then((result) => (refusal = result));
+      void actions.join('zyxwvutsrqponmlk9876', from);
+      await first.unmount();
+      const next = await render(<TrainTogetherHost userId="other" />, { wrapper: Providers });
+      await act(async () =>
+        refused.reject(
+          new ApiError(403, 'Add Sam as a friend to train together.', 'train_not_friends', false, {
+            user_id: 'sam',
+            name: 'Sam',
+          }),
+        ),
+      );
+      await act(async () => accepted.resolve(withPartners(sam())));
+      // No refusal beside the scanner, no toast, no Add friend, no logger, no start sheet.
+      expect(refusal).toBeNull();
+      expect(toast).not.toHaveBeenCalled();
+      expect(mockWorkout.open).not.toHaveBeenCalled();
+      expect(getTrainState().startWith).toBeNull();
+      expect(getTrainState().userId).toBe('other');
+      await next.unmount();
+    },
+  );
+
+  it('an Add friend pressed after the account changed does nothing', async () => {
+    api.read.mockResolvedValue(alone);
+    const first = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    const stale = trainActions();
+    await first.unmount();
+    const next = await render(<TrainTogetherHost userId="other" />, { wrapper: Providers });
+    stale.addFriend({ user_id: 'sam', name: 'Sam' });
+    expect(socialApi.addFriend).not.toHaveBeenCalled();
+    await next.unmount();
+  });
+
+  it('announces a partner who joins, seen by the read after making a code', async () => {
+    api.read.mockResolvedValueOnce(alone);
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().read).toEqual(alone));
+    api.invite.mockResolvedValueOnce({
+      token: 'abcdefghijklmnop1234',
+      expires_at: new Date(Date.now() + 300_000).toISOString(),
+      session_id: 'session-1',
+    });
+    api.read.mockResolvedValueOnce(withPartners(sam(draft(), at(30))));
+    await act(async () => trainActions().newInvite());
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Sam joined'));
+    await view.unmount();
+  });
+
+  it('makes one code at a time, never retries by itself, and drops a code from another session', async () => {
+    api.read.mockResolvedValue(withPartners());
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().read?.session?.id).toBe('session-1'));
+    const made = deferred<{ token: string; expires_at: string; session_id: string }>();
+    api.invite.mockReturnValueOnce(made.promise);
+    void trainActions().newInvite();
+    void trainActions().newInvite();
+    await act(async () => made.reject(new ApiError(409, 'This session is full.', 'train_full')));
+    expect(api.invite).toHaveBeenCalledTimes(1);
+    expect(getTrainState().inviteError).toBe('This session is full.');
+    // A held code for another session goes when the session changes.
+    await act(async () =>
+      setTrainState({
+        invite: {
+          token: 't',
+          expires_at: new Date(Date.now() + 1000).toISOString(),
+          session_id: 'old',
+        },
+      }),
+    );
+    api.read.mockResolvedValueOnce(withPartners(sam()));
+    await act(async () => mockSocket.listener?.());
+    await waitFor(() => expect(getTrainState().invite).toBeNull());
+    await view.unmount();
+  });
+
+  it('submits a link code once, and leaves once however often Leave is pressed', async () => {
+    api.read.mockResolvedValue(withPartners(sam()));
+    api.join.mockResolvedValue(withPartners(sam()));
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await act(async () => requestTrainJoin('abcdefghijklmnop1234'));
+    await act(async () => requestTrainJoin('abcdefghijklmnop1234'));
+    expect(api.join).toHaveBeenCalledTimes(1);
+    const leaving = deferred<TrainTogetherRead>();
+    api.leave.mockReturnValueOnce(leaving.promise);
+    trainActions().leave();
+    trainActions().leave();
+    await act(async () => leaving.reject(new Error('Could not reach Relay.')));
+    expect(api.leave).toHaveBeenCalledTimes(1);
+    expect(toast).toHaveBeenCalledWith(
+      "Couldn't leave the session. Could not reach Relay.",
+      undefined,
+      { variant: 'error' },
+    );
+    await view.unmount();
+  });
+
+  it("drops a partner's queue when their workout closes, and starts from the next real one", async () => {
+    api.read.mockResolvedValueOnce(withPartners(sam()));
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().partnerSync.sam?.revision).toBe(3));
+    api.read.mockResolvedValueOnce(withPartners(sam(null)));
+    await act(async () => mockSocket.listener?.());
+    await waitFor(() => expect(getTrainState().partnerSync.sam).toBeUndefined());
+    expect(getTrainState().partnerAcked.sam).toBeUndefined();
+    const fresh = sam(draft({ clientSessionId: 'sam-again' }));
+    fresh.workout!.revision = 11;
+    api.read.mockResolvedValueOnce(withPartners(fresh));
+    await act(async () => mockSocket.listener?.());
+    await waitFor(() => expect(getTrainState().partnerSync.sam?.revision).toBe(11));
+    await view.unmount();
+  });
+
+  it("closes a partner's logger and says why when the server refuses, rather than offline", async () => {
+    api.read.mockResolvedValue(withPartners(sam()));
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().partnerSync.sam).toBeDefined());
+    await act(async () => trainActions().logFor('sam'));
+    api.changePartnerWorkout.mockRejectedValueOnce(
+      new ApiError(404, 'Not a partner.', 'train_not_partner'),
+    );
+    await act(async () =>
+      trainActions().editPartner('sam', (current) => ({ ...current, notes: 'x' })),
+    );
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith("Sam's workout is no longer open to you.", undefined, {
+        variant: 'error',
+      }),
+    );
+    expect(getTrainState().loggingFor).toBeNull();
+    await view.unmount();
+  });
+});
+
+describe('logging for a partner, after the web review', () => {
+  async function partnerMode() {
+    api.read.mockResolvedValue(withPartners(sam()));
+    api.partnerExercises.mockResolvedValue([
+      bench,
+      fly,
+      { ...bench, id: 'sam-row', name: 'Row', same_as_exercise_id: null },
+    ]);
+    const view = await render(
+      <>
+        <TrainTogetherHost userId="me" />
+        <PartnerLogger partnerId="sam" weightUnit="kg" />
+      </>,
+      { wrapper: Providers },
+    );
+    await waitFor(() => expect(getTrainState().partnerSync.sam).toBeDefined());
+    await act(async () => trainActions().logFor('sam'));
+    return view;
+  }
+  const echo = () =>
+    api.changePartnerWorkout.mockImplementation(async (_id, change) => ({
+      revision: 9,
+      draft: change.draft,
+      conflict: false,
+      exercises: [bench, fly],
+    }));
+
+  it('keeps a new set, its reps and its tick under one key when an earlier edit conflicts', async () => {
+    const view = await partnerMode();
+    const first = deferred<WriteResult>();
+    api.changePartnerWorkout.mockReturnValueOnce(first.promise);
+    // An edit in flight, then the new set, its reps and its tick while it runs.
+    await fireEvent.changeText(screen.getByLabelText('Set 2 weight'), '85');
+    await fireEvent.press(screen.getByRole('button', { name: 'Add set to Bench Press' }));
+    await fireEvent.changeText(screen.getByLabelText('Set 3 reps'), '6');
+    await fireEvent.press(screen.getByRole('checkbox', { name: /^Set 3,/ }));
+    echo();
+    // The server's copy changed meanwhile: the weight is not applied, the later edits replay.
+    await act(async () =>
+      first.resolve({
+        revision: 8,
+        draft: draft({ notes: 'theirs' }),
+        conflict: true,
+        exercises: [bench, fly],
+      }),
+    );
+    await waitFor(() => expect(getTrainState().partnerSync.sam?.status).toBe('synced'));
+    const sent = api.changePartnerWorkout.mock.calls.at(-1)![1].draft;
+    const added = sent.movements[0].sets[2];
+    expect(sent.notes).toBe('theirs');
+    expect(sent.movements[0].sets[1].weight_kg).toBe(82.5);
+    expect(added).toMatchObject({ reps: 6, completed: true });
+    expect(sent.movements[0].sets.filter((item) => item.key === added.key)).toHaveLength(1);
+    await view.unmount();
+  });
+
+  it('keeps an added exercise and its reps under one key when an earlier edit conflicts', async () => {
+    const view = await partnerMode();
+    const first = deferred<WriteResult>();
+    api.changePartnerWorkout.mockReturnValueOnce(first.promise);
+    await fireEvent.changeText(screen.getByLabelText('Set 2 weight'), '85');
+    await fireEvent.press(screen.getByRole('button', { name: 'Add exercise for Sam' }));
+    await fireEvent.press(await screen.findByRole('button', { name: 'Row' }));
+    const rowReps = await waitFor(() => {
+      const fields = screen.getAllByLabelText('Set 1 reps');
+      expect(fields).toHaveLength(3);
+      return fields[2];
+    });
+    await fireEvent.changeText(rowReps, '12');
+    echo();
+    await act(async () =>
+      first.resolve({
+        revision: 8,
+        draft: draft({ notes: 'theirs' }),
+        conflict: true,
+        exercises: [bench, fly],
+      }),
+    );
+    await waitFor(() => expect(getTrainState().partnerSync.sam?.status).toBe('synced'));
+    const sent = api.changePartnerWorkout.mock.calls.at(-1)![1].draft;
+    const rows = sent.movements.filter((movement) => movement.exerciseId === 'sam-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0].sets).toEqual([expect.objectContaining({ reps: 12 })]);
+    expect(getTrainState().added.sam).toEqual([rows[0].key]);
+    await view.unmount();
+  });
+
+  it('counts only acknowledged sets as done, and marks any unacknowledged change pending', async () => {
+    const acked = draft();
+    const local = draft();
+    local.movements[0].sets[0].weight_kg = 82.5;
+    local.movements[0].sets[1].completed = true;
+    setTrainActions(fakeActions());
+    setTrainState({
+      userId: 'me',
+      read: withPartners(sam(acked)),
+      loggingFor: 'sam',
+      partnerSync: {
+        sam: {
+          revision: 3,
+          draft: local,
+          status: 'syncing',
+          notApplied: false,
+          error: null,
+          exercises: null,
+        },
+      },
+      partnerAcked: { sam: acked },
+    });
+    const view = await render(<PartnerLogger partnerId="sam" weightUnit="kg" />, {
+      wrapper: Providers,
+    });
+    expect(screen.getByText('Sam’s sets · 1 done')).toBeOnTheScreen();
+    // Set 1 was done already; its new weight isn't saved yet, so it looks pending too.
+    expect(
+      screen.getAllByRole('checkbox', { name: /^Set 1,/ })[0].props.accessibilityState.busy,
+    ).toBe(true);
+    expect(screen.queryByText('Offline · Unsent change')).toBeNull();
+    await view.unmount();
+  });
+
+  it('keeps invalid numbers on screen without sending them, clears on empty, reads pounds', async () => {
+    const actions = fakeActions();
+    setTrainActions(actions);
+    const current = draft();
+    setTrainState({
+      userId: 'me',
+      read: withPartners(sam(current)),
+      loggingFor: 'sam',
+      partnerSync: {
+        sam: {
+          revision: 3,
+          draft: current,
+          status: 'synced',
+          notApplied: false,
+          error: null,
+          exercises: null,
+        },
+      },
+      partnerAcked: { sam: current },
+    });
+    const view = await render(<PartnerLogger partnerId="sam" weightUnit="lb" />, {
+      wrapper: Providers,
+    });
+    const reps = screen.getByLabelText('Set 2 reps');
+    await fireEvent.changeText(reps, '6.5');
+    await fireEvent.changeText(reps, '-1');
+    await fireEvent.changeText(reps, '99999');
+    expect(actions.editPartner).not.toHaveBeenCalled();
+    expect(screen.getByLabelText('Set 2 reps').props.value).toBe('99999');
+    await fireEvent.changeText(reps, '');
+    expect(actions.editPartner.mock.calls.at(-1)![1](current).movements[0].sets[1].reps).toBeNull();
+    await fireEvent.changeText(screen.getByLabelText('Set 2 weight'), '200');
+    const update = actions.editPartner.mock.calls.at(-1)![1];
+    expect(update(current).movements[0].sets[1].weight_kg).toBeCloseTo(90.718, 2);
+    // Every updater is safe to run twice: the same result each time.
+    expect(update(current)).toEqual(update(current));
+    await view.unmount();
+  });
+
+  it('follows the owner’s pause rules for the clock', async () => {
+    setTrainActions(fakeActions());
+    const paused = draft({ pausedAt: Date.now() - 60_000, pausedMs: 0 });
+    setTrainState({
+      userId: 'me',
+      read: withPartners(sam(paused)),
+      loggingFor: 'sam',
+      partnerAcked: { sam: paused },
+    });
+    const view = await render(<PartnerLogger partnerId="sam" weightUnit="kg" />, {
+      wrapper: Providers,
+    });
+    // Started 20 minutes ago, paused a minute ago: 19 minutes, and not "Live".
+    expect(screen.getByText(/^19:\d\d$/)).toBeOnTheScreen();
+    await view.unmount();
+  });
+
+  it('moves focus to the banner on entering, and uses first names in tight places', async () => {
+    const focus = jest
+      .spyOn(AccessibilityInfo, 'sendAccessibilityEvent')
+      .mockImplementation(() => undefined);
+    setTrainActions(fakeActions());
+    const long = { ...sam(), display_name: 'Sam Rivera' };
+    setTrainState({
+      userId: 'me',
+      read: withPartners(long),
+      loggingFor: 'sam',
+      partnerAcked: { sam: draft() },
+    });
+    const view = await render(<PartnerLogger partnerId="sam" weightUnit="kg" />, {
+      wrapper: Providers,
+    });
+    expect(screen.getByText('Logging for Sam Rivera')).toBeOnTheScreen();
+    expect(screen.getByRole('button', { name: 'Add exercise for Sam' })).toBeOnTheScreen();
+    expect(screen.getAllByText('Sam’s sets · 1 done').length).toBeGreaterThan(0);
+    expect(focus).toHaveBeenCalled();
+    await view.unmount();
+    const deck = await render(<TrainDeck unit="kg" />, { wrapper: Providers });
+    expect(screen.getByRole('button', { name: 'Log for Sam' })).toBeOnTheScreen();
+    expect(screen.getByText('Sam Rivera')).toBeOnTheScreen();
+    await deck.unmount();
+    focus.mockRestore();
+  });
+});
+
+describe('the scanner, after the web review', () => {
+  it('does not resubmit a refused code until Scan again', async () => {
+    const actions = fakeActions();
+    actions.join.mockResolvedValue({ message: 'This code has expired. Ask for a new one.' });
+    setTrainActions(actions);
+    setTrainState({ userId: 'me', read: alone, sheet: { open: true, tab: 'scan' } });
+    const view = await render(<TrainSheet />, { wrapper: Providers });
+    const code = { data: 'https://gym.example.com/#train=abcdefghijklmnop1234' };
+    await act(async () => mockCamera.scan?.(code));
+    await act(async () => mockCamera.scan?.(code));
+    expect(actions.join).toHaveBeenCalledTimes(1);
+    await fireEvent.press(await screen.findByRole('button', { name: 'Scan again' }));
+    await act(async () => mockCamera.scan?.(code));
+    expect(actions.join).toHaveBeenCalledTimes(2);
+    await view.unmount();
+  });
+});
+
+it('shows a real saved-workout card with one visible and one hidden partner', async () => {
+  const workout = {
+    id: 'w1',
+    name: 'Push day',
+    workout_date: '2026-11-28',
+    category: 'push',
+    notes: null,
+    duration_minutes: 52,
+    start_time: null,
+    end_time: null,
+    is_sample: false,
+    created_at: '2026-11-28T09:00:00Z',
+    updated_at: '2026-11-28T10:00:00Z',
+    movements: [],
+    trained_with: [{ user_id: 'sam', display_name: 'Sam', username: 'sam', photo_url: null }],
+    trained_with_count: 2,
+  } as TrackedWorkout;
+  const view = await render(
+    <WorkoutCard
+      workout={workout}
+      color="#f00"
+      records={0}
+      open={false}
+      onToggle={() => undefined}
+      showYear={false}
+    />,
+    { wrapper: Providers },
+  );
+  expect(screen.getByText('with Sam & 1 other')).toBeOnTheScreen();
   await view.unmount();
 });
