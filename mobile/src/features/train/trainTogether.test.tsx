@@ -985,9 +985,11 @@ describe('logging for a partner, after the web review', () => {
       }),
     );
     await waitFor(() => expect(getTrainState().partnerSync.sam?.status).toBe('synced'));
-    const sent = api.changePartnerWorkout.mock.calls.at(-1)![1].draft;
+    const followUp = api.changePartnerWorkout.mock.calls.at(-1)![1];
+    const sent = followUp.draft;
     const added = sent.movements[0].sets[2];
-    expect(sent.notes).toBe('theirs');
+    // Sent against the copy the edits were made on, at the server's revision, so it merges.
+    expect(followUp.revision).toBe(8);
     expect(sent.movements[0].sets[1].weight_kg).toBe(82.5);
     expect(added).toMatchObject({ reps: 6, completed: true });
     expect(sent.movements[0].sets.filter((item) => item.key === added.key)).toHaveLength(1);
