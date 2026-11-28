@@ -15,6 +15,7 @@ import { AppTourHost } from '../features/guides/AppTourHost';
 import { TipSyncHost } from '../features/guides/TipSyncHost';
 import { RemotePushSync } from '../features/push/RemotePushSync';
 import { OfflineNotice } from '../features/shell/OfflineNotice';
+import { TrainTogetherHost } from '../features/train/TrainTogetherHost';
 import { colourMode, useReduceMotion } from '../features/settings/devicePreferences';
 import { VideoUploadSessionSync } from '../features/videos';
 import { WorkoutProvider } from '../features/workout/WorkoutProvider';
@@ -76,6 +77,10 @@ function Navigation() {
         <VideoUploadSessionSync />
         {/* Remote push (C5): registers this phone for Phone alerts and opens tapped alerts. */}
         {signedIn && !mustChangePassword && <RemotePushSync userId={status.user.id} />}
+        {/* Train together: the session, its notices, joining codes and partners' workouts. */}
+        {signedIn && !mustChangePassword && (
+          <TrainTogetherHost key={status.user.id} userId={status.user.id} />
+        )}
         <Stack
           screenOptions={{
             headerShown: false,

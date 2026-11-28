@@ -1,6 +1,6 @@
 import { onlineManager } from '@tanstack/react-query';
 import { AppState, type AppStateStatus } from 'react-native';
-import { connectLivePresence, onAdminActivity } from './livePresence';
+import { connectLivePresence, onAdminActivity, onTrainTogether } from './livePresence';
 import { sessionToken } from './session';
 
 jest.mock('./api', () => ({
@@ -163,4 +163,22 @@ test('subscribes to admin activity only while the console listens, and relays it
 
   stop();
   expect(sent().at(-1)).toEqual({ type: 'admin_activity', enabled: false });
+});
+
+test('tells train-together listeners about its message and every reconnect, until they leave', async () => {
+  const heard = jest.fn();
+  const stopListening = onTrainTogether(heard);
+  live = connectLivePresence(listeners());
+  await Promise.resolve();
+  const [socket] = Socket.instances;
+  socket.open();
+  // Opening the socket is a reason to read the session again: messages sent while down are lost.
+  expect(heard).toHaveBeenCalledTimes(1);
+  socket.onmessage?.({ data: '{"type":"train_together"}' });
+  expect(heard).toHaveBeenCalledTimes(2);
+  socket.onmessage?.({ data: '{"type":"active_workout"}' });
+  expect(heard).toHaveBeenCalledTimes(2);
+  stopListening();
+  socket.onmessage?.({ data: '{"type":"train_together"}' });
+  expect(heard).toHaveBeenCalledTimes(2);
 });

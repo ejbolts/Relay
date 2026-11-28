@@ -1,4 +1,5 @@
 import { isYouTubeReturn } from '../features/videos/youtubeReturn';
+import { requestTrainJoin } from '../features/train/trainLinks';
 import { captureWorkoutLink } from '../features/workout/workoutLink';
 import { captureFriendInvite } from '../session/friendInvite';
 import { webLinkRoute } from '../session/webLinks';
@@ -18,5 +19,7 @@ export function redirectSystemPath({ path, initial }: { path: string; initial: b
   captureFriendInvite(route, link?.registrationCode ?? null);
   // A tap on the rest timer's Live Activity before the logger's route can open.
   captureWorkoutLink(route);
+  // A train-together code, kept through Sign in and joined by the signed-in app.
+  if (link?.train) requestTrainJoin(link.train);
   return route;
 }
