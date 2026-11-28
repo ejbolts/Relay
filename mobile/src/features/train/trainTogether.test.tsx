@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useState, type ReactNode } from 'react';
-import { AccessibilityInfo, Share } from 'react-native';
+import { AccessibilityInfo, Keyboard, Share } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import {
   partnerConflictNotice,
@@ -266,6 +266,7 @@ function fakeActions(): jest.Mocked<TrainActions> {
     retryPartner: jest.fn(),
     addFriend: jest.fn(),
     closeStartWith: jest.fn(),
+    openProfile: jest.fn(),
   };
 }
 
@@ -1457,6 +1458,158 @@ describe("the coordinator's additions", () => {
     expect(name.props.numberOfLines).toBe(1);
     expect(set.props.numberOfLines).toBeUndefined();
     expect(screen.getByLabelText('Incline Dumbbell Press · 80 kg × 8')).toBeOnTheScreen();
+    await view.unmount();
+  });
+});
+
+describe('after the re-check', () => {
+  it("opens a friend's invite after scanning their code in the Train together sheet", async () => {
+    api.read.mockResolvedValue(alone);
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await act(async () => setTrainState({ sheet: { open: true, tab: 'scan' } }));
+    const sheet = await render(<TrainSheet />, { wrapper: Providers });
+    await act(async () =>
+      mockCamera.scan?.({
+        data: 'https://gym.example.com/#friend=d7131000-7937-40be-b8ee-8b02800f5a36',
+      }),
+    );
+    // The sheet (and the logger) close first; the host opens the profile once they have.
+    expect(mockRouter.back).toHaveBeenCalled();
+    await sheet.unmount();
+    await waitFor(() =>
+      expect(mockRouter.navigate).toHaveBeenCalledWith(
+        expect.objectContaining({ params: expect.objectContaining({ invite: '1' }) }),
+      ),
+    );
+    await view.unmount();
+  });
+
+  it('shows no code for a session you left while it was being made', async () => {
+    api.read.mockResolvedValue(withPartners(sam()));
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().read?.session?.id).toBe('session-1'));
+    const made = deferred<{ token: string; expires_at: string; session_id: string }>();
+    api.invite.mockReturnValueOnce(made.promise);
+    void trainActions().newInvite();
+    api.leave.mockResolvedValueOnce(alone);
+    api.read.mockResolvedValue(alone);
+    await act(async () => trainActions().leave());
+    await waitFor(() => expect(getTrainState().read?.session).toBeNull());
+    await act(async () =>
+      made.resolve({
+        token: 'abcdefghijklmnop1234',
+        expires_at: new Date(Date.now() + 300_000).toISOString(),
+        session_id: 'session-1',
+      }),
+    );
+    expect(getTrainState().invite).toBeNull();
+    await view.unmount();
+  });
+
+  it('records your own activity from partner edits at most once a minute', async () => {
+    api.read.mockResolvedValue(withPartners(sam()));
+    mockLogger.state = {};
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().partnerSync.sam).toBeDefined());
+    api.changePartnerWorkout.mockResolvedValue({
+      revision: 4,
+      draft: draft(),
+      conflict: false,
+      exercises: [bench],
+    });
+    await act(async () =>
+      trainActions().editPartner('sam', (current) => ({ ...current, notes: 'x' })),
+    );
+    const update = mockLogger.change.mock.calls[0][0];
+    const recent = {
+      startedAt: Date.now() - 600_000,
+      lastActiveAt: Date.now() - 10_000,
+      inactiveFinishAt: Date.now() + 60_000,
+      movements: [],
+    };
+    // Activity ten seconds ago: nothing to rewrite or send.
+    expect(update(recent)).toBe(recent);
+    const older = { ...recent, lastActiveAt: Date.now() - 120_000 };
+    expect(update(older).lastActiveAt).toBeGreaterThan(older.lastActiveAt);
+    await view.unmount();
+  });
+
+  it('dismisses the keyboard when entering and leaving a partner’s logger', async () => {
+    const dismiss = jest.spyOn(Keyboard, 'dismiss').mockImplementation(() => undefined);
+    api.read.mockResolvedValue(withPartners(sam()));
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().partnerSync.sam).toBeDefined());
+    await act(async () => trainActions().logFor('sam'));
+    await act(async () => trainActions().logFor(null, 'sam'));
+    expect(dismiss).toHaveBeenCalledTimes(2);
+    dismiss.mockRestore();
+    await view.unmount();
+  });
+
+  it('leaves half-typed text in a focused field alone when a conflict lands elsewhere', async () => {
+    const actions = fakeActions();
+    setTrainActions(actions);
+    const current = draft();
+    current.movements[0].sets[1].weight_kg = 82;
+    setTrainState({
+      userId: 'me',
+      read: withPartners(sam(current)),
+      loggingFor: 'sam',
+      partnerSync: {
+        sam: {
+          revision: 3,
+          draft: current,
+          status: 'synced',
+          notApplied: false,
+          error: null,
+          exercises: null,
+        },
+      },
+      partnerAcked: { sam: current },
+    });
+    const view = await render(<PartnerLogger partnerId="sam" weightUnit="kg" />, {
+      wrapper: Providers,
+    });
+    const weight = screen.getByLabelText('Set 2 weight');
+    await fireEvent(weight, 'focus');
+    await fireEvent.changeText(weight, '82.');
+    await act(async () => setTrainState({ partnerConflicts: { sam: 1 } }));
+    expect(screen.getByLabelText('Set 2 weight').props.value).toBe('82.');
+    await view.unmount();
+  });
+
+  it("ignores a read under the second account's own query that is the first account's", async () => {
+    const shared = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+    });
+    const SharedProviders = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={shared}>{children}</QueryClientProvider>
+    );
+    api.read.mockResolvedValueOnce(alone);
+    const first = await render(<TrainTogetherHost userId="me" />, { wrapper: SharedProviders });
+    await first.unmount();
+    // The next account's own read answers with a session whose caller is still "me".
+    api.read.mockResolvedValue(withPartners(sam()));
+    const second = await render(<TrainTogetherHost userId="other" />, {
+      wrapper: SharedProviders,
+    });
+    await waitFor(() => expect(api.read).toHaveBeenCalledTimes(2));
+    await act(async () => new Promise((done) => setTimeout(done, 20)));
+    expect(getTrainState().read).toBeNull();
+    expect(getTrainState().partnerSync).toEqual({});
+    await second.unmount();
+  });
+
+  it('keeps "Starting" whole before a partner’s first set, letting the name give way', async () => {
+    const fresh = draft();
+    fresh.movements[0].sets.forEach((item) => (item.completed = false));
+    fresh.movements[1].sets.forEach((item) => (item.completed = false));
+    const exercises = [{ ...bench, name: 'Barbell Bench Press' }, fly];
+    const member = { ...sam(fresh), workout: { revision: 3, draft: fresh, exercises } };
+    setTrainState({ userId: 'me', read: withPartners(member) });
+    const view = await render(<TrainDeck unit="kg" />, { wrapper: Providers });
+    expect(screen.getByText('Barbell Bench Press').props.numberOfLines).toBe(1);
+    expect(screen.getByText(' · Starting').props.numberOfLines).toBeUndefined();
     await view.unmount();
   });
 });

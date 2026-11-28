@@ -267,10 +267,18 @@ function Ticker({
   const now = useNow(30_000);
   const summary = member.workout ? partnerSummary(member.workout, now) : null;
   const total = summary?.totalSetsDone ?? 0;
-  // The exercise name gives way (ellipsis) before the set, which always shows in full.
-  const set =
-    summary?.movementKey && summary.lastSet ? partnerSetLabel(summary.lastSet, unit) : null;
-  const lift = set ? summary!.name : partnerTicker(member.workout, unit, now);
+  // The exercise name gives way (ellipsis) before the set, or "Starting" before the first one,
+  // which always show in full.
+  const ticker = partnerTicker(member.workout, unit, now);
+  const named = summary?.movementKey ? `${summary.name} · ` : null;
+  const set = !summary?.movementKey
+    ? null
+    : summary.lastSet
+      ? partnerSetLabel(summary.lastSet, unit)
+      : named && ticker.startsWith(named)
+        ? ticker.slice(named.length)
+        : null;
+  const lift = set ? summary!.name : ticker;
   const [flash] = useState(() => new Animated.Value(0));
   const seen = useRef(total);
   useEffect(() => {

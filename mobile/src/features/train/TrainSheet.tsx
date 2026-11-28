@@ -20,12 +20,10 @@ import { useTheme } from '../../ui/theme';
 import { useNow } from '../../ui/useNow';
 import { Avatar } from '../social/Avatar';
 import { QrScanner } from '../social/FriendQrSheet';
-import { socialRoutes } from '../social/navigation';
 import { QrCode } from '../social/QrCode';
 import { trainIcons, usePartnerColours } from './partnerColours';
 import { PartnerAvatar } from './PartnerAvatar';
 import { trainActions, useTrainState, type TrainJoinFailure } from './trainStore';
-import { useLater } from './useLater';
 
 /** This server's address, which every train-together link starts with, as on the web. */
 function serverOrigin() {
@@ -194,7 +192,6 @@ function MyCode() {
 }
 
 function Scan() {
-  const later = useLater();
   const { colors, type } = useTheme();
   const user = useUser();
   const router = useRouter();
@@ -209,7 +206,7 @@ function Scan() {
         // A friend's code: their invite, as Social's scanner opens it, below the logger.
         trainActions().closeSheet();
         router.back();
-        later(() => router.navigate(socialRoutes.profile(id, true)), 350);
+        trainActions().openProfile(id);
       }}
       onTrainInvite={async (token) => {
         setFailure(null);

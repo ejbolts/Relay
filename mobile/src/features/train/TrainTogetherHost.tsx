@@ -1,6 +1,7 @@
 import { onlineManager, useQuery, useQueryClient } from '@tanstack/react-query';
-import { usePathname } from 'expo-router';
-import { useEffect, useRef } from 'react';
+import { usePathname, useRouter } from 'expo-router';
+import { useEffect, useRef, type RefObject } from 'react';
+import { Keyboard } from 'react-native';
 import {
   memberName,
   partnerConflictNotice,
@@ -17,6 +18,7 @@ import { onTrainTogether } from '../../data/livePresence';
 import { haptics } from '../../ui/haptics';
 import { dismissActionToasts, showToast, toastAccountFor } from '../../ui/Toast';
 import { socialApi } from '../social/socialApi';
+import { socialRoutes } from '../social/navigation';
 import { socialKeys } from '../social/socialQueries';
 import { sessionBound } from '../workout/sessionBound';
 import { withActivity } from '../workout/loggerState';
@@ -38,6 +40,11 @@ import {
 } from './trainStore';
 import { trainTogetherApi, trainTogetherKeys } from './trainTogetherApi';
 import { TrainStartSheet } from './TrainStartSheet';
+
+/** How long a closing sheet takes before the next screen opens. */
+const AFTER_CLOSE_MS = 350;
+/** Partner edits record activity on your own workout at most this often. */
+const OWN_ACTIVITY_EVERY_MS = 60_000;
 
 /** How often a session is read again while the socket may have missed something. */
 const SESSION_POLL_MS = 20_000;
@@ -73,9 +80,11 @@ interface PartnerSync {
  */
 export function TrainTogetherHost({ userId }: { userId: string }) {
   const client = useQueryClient();
-  const workout = useOptionalWorkout();
-  const logger = useLogger();
   const pathname = usePathname();
+  const router = useRouter();
+  // The workout engine, read through a ref a small child keeps current, so the host doesn't
+  // re-render on every change to your own logger.
+  const engine = useRef<Engine>({ workout: null, logger: null });
   const key = trainSessionKey(userId);
   // Moves on whenever a join, leave or new code answers: a read started before then is older
   // than that answer and is dropped when it arrives.
@@ -96,9 +105,9 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
   const syncs = useRef(new Map<string, PartnerSync>());
   const followRef = useRef<((next: TrainTogetherRead) => void) | null>(null);
   // The latest values for the actions, which are made once.
-  const latest = useRef({ workout, pathname, client, logger });
+  const latest = useRef({ pathname, client, router });
   useEffect(() => {
-    latest.current = { workout, pathname, client, logger };
+    latest.current = { pathname, client, router };
   });
 
   // Set up the store and actions for this account; empty them when it goes.
@@ -116,6 +125,8 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
     let inviting = false;
     /** Tokens already sent to join, so the same code is never submitted twice. */
     const submitted = new Set<string>();
+    /** Navigation after a sheet has closed, cancelled if this account's host goes first. */
+    const timers = new Set<ReturnType<typeof setTimeout>>();
 
     function stopSync(partnerId: string) {
       loops.get(partnerId)?.sync.stop();
@@ -268,9 +279,10 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
         if (!alive) return null;
         haptics.success();
         setTrainState({ sheet: { ...getTrainState().sheet, open: false } });
-        const { workout: engine, pathname: path } = latest.current;
-        if (engine?.live) {
-          if (path !== '/workout') engine.open();
+        const { pathname: path } = latest.current;
+        const own = engine.current.workout;
+        if (own?.live) {
+          if (path !== '/workout') own.open();
         } else {
           const first = partners(result.session)[0];
           if (first) setTrainState({ startWith: first.user_id });
@@ -313,6 +325,8 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
           // starter's expired code ends their session, so the next code comes with a new one.
           const now = getTrainState().read?.session?.id ?? null;
           if (now && now !== session && now !== invite.session_id) return;
+          // You left (or were removed from) the session this code is for while it was made.
+          if (invite.session_id === session && now !== session) return;
           generation.current += 1;
           setTrainState({ invite, inviteError: null });
           await latest.current.client.cancelQueries({ queryKey: readKey }, { revert: false });
@@ -332,6 +346,8 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
       logFor(partnerId, returnTo) {
         if (partnerId && !loops.has(partnerId)) return;
         haptics.selection();
+        // Typing must never carry on into the logger that is now hidden.
+        Keyboard.dismiss();
         // Your own workout's Undo can't be pressed over a partner's logger: settle it first.
         if (partnerId) dismissActionToasts();
         setTrainState({
@@ -344,10 +360,14 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
         if (!loop) return;
         // Logging a partner's set is activity on your own workout too, as your own taps are, so
         // your own workout doesn't time out while you're busy with theirs.
-        const own = latest.current.logger;
+        // At most once a minute, so typing for a partner doesn't rewrite and send your own draft
+        // on every keystroke (the inactivity window is far longer).
+        const own = engine.current.logger;
         if (own?.state) {
           const now = Date.now();
-          own.change((state) => withActivity(state, now));
+          own.change((state) =>
+            now - state.lastActiveAt < OWN_ACTIVITY_EVERY_MS ? state : withActivity(state, now),
+          );
         }
         if (added)
           setTrainState((current) => ({
@@ -374,6 +394,14 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
             if (alive) showToast(failure(error).message, undefined, { variant: 'error', account });
           });
       },
+      openProfile(id) {
+        // Here, not in the sheet: the sheet and the logger close before this runs.
+        const timer = setTimeout(() => {
+          timers.delete(timer);
+          if (alive) latest.current.router.navigate(socialRoutes.profile(id, true));
+        }, AFTER_CLOSE_MS);
+        timers.add(timer);
+      },
       closeStartWith() {
         setTrainState({ startWith: null });
       },
@@ -390,6 +418,8 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
     });
     return () => {
       alive = false;
+      timers.forEach(clearTimeout);
+      timers.clear();
       stopSignOut();
       stopListening();
       stopNet();
@@ -433,5 +463,25 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
     if (token) void trainActions().join(token, 'link');
   }, [pending]);
 
-  return <TrainStartSheet />;
+  return (
+    <>
+      <EngineBridge targetRef={engine} />
+      <TrainStartSheet />
+    </>
+  );
+}
+
+interface Engine {
+  workout: ReturnType<typeof useOptionalWorkout>;
+  logger: ReturnType<typeof useLogger>;
+}
+
+/** Keeps the host's view of the workout engine current without re-rendering the host. */
+function EngineBridge({ targetRef }: { targetRef: RefObject<Engine> }) {
+  const workout = useOptionalWorkout();
+  const logger = useLogger();
+  useEffect(() => {
+    targetRef.current = { workout, logger };
+  });
+  return null;
 }

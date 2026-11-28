@@ -61,6 +61,8 @@ export interface TrainActions {
   retryPartner: (userId: string) => void;
   addFriend: (member: { user_id: string; name: string }) => void;
   closeStartWith: () => void;
+  /** Opens a friend's invite once the sheet and logger have closed (a scanned friend code). */
+  openProfile: (userId: string) => void;
 }
 
 export const EMPTY_TRAIN_STATE: TrainState = {
@@ -110,6 +112,7 @@ const NO_ACTIONS: TrainActions = {
   retryPartner: () => undefined,
   addFriend: () => undefined,
   closeStartWith: () => undefined,
+  openProfile: () => undefined,
 };
 
 /** What screens do to train together; does nothing while signed out. */
