@@ -1228,3 +1228,49 @@ def test_created_by_is_only_named_while_the_creator_is_a_partner(
     assert session["created_by"] is None
     assert account(client) not in fourth_client.get(BASE).text
     assert read(other_client)["session"]["created_by"] is None
+
+
+def test_a_code_stops_working_when_its_maker_leaves(
+    client, other_client, third_client, fourth_client
+):
+    friends(client, other_client, third_client, fourth_client)
+    link(client, other_client)
+    link(client, third_client)
+    token = invite(other_client)
+    other_client.post(f"{BASE}/leave")
+    with SessionLocal() as db:
+        # Leaving cancels the code the leaver had shown.
+        assert db.get(TrainTogetherInvite, hash_token(token)) is None
+    refused = join(fourth_client, token)
+    assert refused.status_code == 404 and error(refused)["code"] == "train_invite_expired"
+    assert len(read(client)["session"]["members"]) == 2
+
+
+def test_join_refuses_a_code_whose_maker_is_no_longer_in_the_session(
+    client, other_client, third_client, fourth_client
+):
+    friends(client, other_client, third_client, fourth_client)
+    session = link(client, other_client)["session"]["id"]
+    link(client, third_client)
+    other_client.post(f"{BASE}/leave")
+    # A code left behind by any other route (for example, an older server) is refused too.
+    with SessionLocal() as db:
+        db.add(
+            TrainTogetherInvite(
+                token_hash=hash_token("left-behind-code-abc"),
+                session_id=session,
+                created_by=account(other_client),
+                expires_at=utc_now() + timedelta(minutes=5),
+            )
+        )
+        db.commit()
+    refused = join(fourth_client, "left-behind-code-abc")
+    assert refused.status_code == 404 and error(refused)["code"] == "train_invite_expired"
+    assert len(read(client)["session"]["members"]) == 2
+
+
+def test_a_lone_starters_code_still_works(client, other_client):
+    friends(client, other_client)
+    token = invite(client)
+    assert len(read(client)["session"]["members"]) == 1
+    assert join(other_client, token).status_code == 200

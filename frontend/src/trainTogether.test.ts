@@ -9,7 +9,13 @@ import {
   loggingForLabel,
   memberShortName,
   nameList,
+  partnerAccessEnded,
+  partnerAccessEndedNotice,
+  partnerChangeRefusedNotice,
   partnerConflictNotice,
+  partnerWriteRefused,
+  leaveFailedNotice,
+  friendRequestSentNotice,
   partners,
   partnerSetOnSameLift,
   partnerSummary,
@@ -623,6 +629,38 @@ describe('wording', () => {
     expect(trainedWithLabel([sam], 3, 'me')).toBe('with Sam & 2 others');
     expect(trainedWithLabel([], 1, 'me')).toBe('with 1 other');
     expect(trainedWithLabel([], 2, 'me')).toBe('with 2 others');
+  });
+
+  it('tells a refused partner edit from one worth retrying', () => {
+    for (const code of ['train_not_partner', 'train_no_workout', 'train_change_not_allowed'])
+      expect(partnerWriteRefused(undefined, code)).toBe(true);
+    expect(partnerWriteRefused(404, 'train_not_partner')).toBe(true);
+    for (const status of [400, 403, 404, 409, 422, 499])
+      expect(partnerWriteRefused(status, undefined)).toBe(true);
+    for (const status of [undefined, 0, 200, 399, 408, 429, 500, 502, 503, 504])
+      expect(partnerWriteRefused(status, undefined)).toBe(false);
+    expect(partnerWriteRefused(503, 'something_else')).toBe(false);
+    expect(partnerWriteRefused(undefined, 'draft_rate_limited')).toBe(false);
+  });
+
+  it('knows when a partner’s workout is no longer open', () => {
+    expect(partnerAccessEnded('train_not_partner')).toBe(true);
+    expect(partnerAccessEnded('train_no_workout')).toBe(true);
+    expect(partnerAccessEnded('train_change_not_allowed')).toBe(false);
+    expect(partnerAccessEnded(undefined)).toBe(false);
+  });
+
+  it('shares the refusal, leave and friend request texts', () => {
+    expect(partnerAccessEndedNotice('Alex Morgan')).toBe(
+      'Alex Morgan\u2019s workout is no longer open to you.',
+    );
+    expect(partnerChangeRefusedNotice('Only their sets and exercises can be changed.')).toBe(
+      'Only their sets and exercises can be changed.',
+    );
+    expect(partnerChangeRefusedNotice(undefined)).toBe('That change could not be saved.');
+    expect(partnerChangeRefusedNotice('  ')).toBe('That change could not be saved.');
+    expect(leaveFailedNotice).toBe('Couldn\u2019t leave the session. Try again.');
+    expect(friendRequestSentNotice('Sam')).toBe('Friend request sent to Sam');
   });
 
   it('shares the logging and conflict texts', () => {
