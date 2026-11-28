@@ -105,6 +105,12 @@ import { restMenuItems } from './restChoices';
 import { useElapsed } from './useElapsed';
 import { WorkoutTimeSheet } from './WorkoutTimeSheet';
 import { useLogger, useWorkout, type LoggerApi } from './WorkoutProvider';
+// Train together (stream M): the deck, entry, pace strip, sheet and logging for a partner.
+import { partners as trainPartners } from '../../../../frontend/src/trainTogether';
+import { PartnerLogger } from '../train/PartnerLogger';
+import { PartnerPace, TrainDeck, TrainEntry } from '../train/TrainDeck';
+import { TrainSheet } from '../train/TrainSheet';
+import { trainActions, useTrainState } from '../train/trainStore';
 
 /**
  * The logger: a page sheet over the app. Dragging it down (or Minimise) only minimises the
@@ -124,8 +130,11 @@ export function WorkoutSheet() {
   // The height of the live logger's bottom dock (the rest pill or notch and the weekly sets
   // shelf), so toasts sit above it as on the web, never on top of the shelf.
   const [dockHeight, setDockHeight] = useState(0);
+  const loggingFor = useTrainState((train) => train.loggingFor);
   let content = <NoWorkout onClose={() => router.back()} />;
-  if (logger?.state)
+  if (logger?.state && loggingFor)
+    content = <PartnerLogger partnerId={loggingFor} weightUnit={logger.weightUnit} />;
+  else if (logger?.state)
     content = (
       <LoggerTipsProvider>
         <LiveLogger logger={logger} state={logger.state} onDockHeight={setDockHeight} />
@@ -138,6 +147,7 @@ export function WorkoutSheet() {
       {content}
       <SyncConflictButton bottom={logger?.rest.timer || logger?.rest.done ? 112 : 32} />
       <SyncConflictSheet />
+      <TrainSheet />
       <ToastHost
         bottom={
           logger?.state && dockHeight > 0
@@ -225,6 +235,7 @@ function LiveLogger({
   const { discard, syncConflict, syncConflictOpen: conflictSheetOpen } = useWorkout();
   const syncConflictOpen = !!syncConflict && conflictSheetOpen;
   const insets = useSafeAreaInsets();
+  const trainInSession = useTrainState((train) => trainPartners(train.read?.session).length > 0);
   const { colors, type, space, radius } = useTheme();
   // The exercise picker adds exercises, or picks a replacement for the exercise being swapped.
   const [picker, setPicker] = useState<{ swapping: string | null } | null>(null);
@@ -711,6 +722,7 @@ function LiveLogger({
   }
 
   function openMenu() {
+    const inTrainSession = trainInSession;
     showMenu(identity.name, [
       { label: 'Rename workout', onPress: rename },
       { label: 'Adjust workout time', onPress: openTimeEditor },
@@ -719,6 +731,10 @@ function LiveLogger({
         label: paused ? 'Resume workout' : 'Pause workout',
         onPress: logger.togglePause,
       },
+      // Train together: Leave session while in one, otherwise its sheet.
+      inTrainSession
+        ? { label: 'Leave session', onPress: () => trainActions().leave() }
+        : { label: 'Train together', onPress: () => trainActions().openSheet('code') },
       { label: 'Discard workout', destructive: true, onPress: confirmDiscard },
     ]);
   }
@@ -916,6 +932,7 @@ function LiveLogger({
           </Pressable>
         </View>
       </View>
+      <TrainDeck unit={logger.weightUnit} />
       <ScrollView
         ref={scrollRef}
         onLayout={(event) => {
@@ -935,12 +952,17 @@ function LiveLogger({
         keyboardDismissMode="interactive"
         automaticallyAdjustKeyboardInsets
       >
-        <WorkoutDetails
-          typeName={selectedType(state, types).name}
-          onChooseType={chooseType}
-          notes={state.notes}
-          onChangeNotes={(notes) => change((latest) => ({ ...latest, notes }))}
-        />
+        <View style={styles.detailsRow}>
+          <View style={styles.detailsCell}>
+            <WorkoutDetails
+              typeName={selectedType(state, types).name}
+              onChooseType={chooseType}
+              notes={state.notes}
+              onChangeNotes={(notes) => change((latest) => ({ ...latest, notes }))}
+            />
+          </View>
+          {!trainInSession && <TrainEntry />}
+        </View>
         {state.movements.map((movement, index) => (
           <View
             key={movement.key}
@@ -968,6 +990,11 @@ function LiveLogger({
               machineTip={machineTipEligible(movement.exercise, logger.history)}
               supersetUpNext={isSupersetUpNext(state.movements, movement.key)}
               actions={actions}
+              partnerPace={
+                trainInSession ? (
+                  <PartnerPace exerciseId={movement.exercise.id} unit={logger.weightUnit} />
+                ) : undefined
+              }
             />
           </View>
         ))}
@@ -1254,6 +1281,9 @@ function WorkoutDetails({
 }
 
 const styles = StyleSheet.create({
+  // Train together: Workout details beside the entry, wrapping under it at large text sizes.
+  detailsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', gap: 8 },
+  detailsCell: { flexGrow: 1, flexBasis: 180 },
   page: { flex: 1 },
   center: {
     flex: 1,

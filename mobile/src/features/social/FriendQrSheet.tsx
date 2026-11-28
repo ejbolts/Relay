@@ -1,14 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
 import { CameraView, useCameraPermissions, type BarcodeScanningResult } from 'expo-camera';
 import * as Linking from 'expo-linking';
-import { useRef, useState } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Platform, Share, StyleSheet, Text, View } from 'react-native';
 import {
   friendInviteIdFromScan,
   friendInviteLink,
 } from '../../../../frontend/src/friendInviteLink';
+import { trainInviteTokenFromScan } from '../../../../frontend/src/trainTogether';
 import { ApiError, apiOrigin } from '../../data/api';
 import { useUser } from '../../session/SessionProvider';
+import { requestTrainJoin } from '../train/trainLinks';
 import { Button } from '../../ui/components';
 import { Segmented } from '../../ui/controls';
 import { haptics } from '../../ui/haptics';
@@ -90,6 +92,11 @@ export function FriendQrSheet({
               onClose();
               onScanned(id);
             }}
+            // A train-together code joins, as its link would.
+            onTrainInvite={(token) => {
+              onClose();
+              requestTrainJoin(token);
+            }}
           />
         )
       ) : shareable === 'private' ? (
@@ -160,8 +167,22 @@ export function FriendQrSheet({
 
 type Notice = 'not-friend-code' | 'own-code' | null;
 
-/** Scans a friend's code with the camera without leaving Relay. */
-function QrScanner({ userId, onScanned }: { userId: string; onScanned: (id: string) => void }) {
+/**
+ * Scans a friend's code with the camera without leaving Relay. With `onTrainInvite`, a
+ * train-together code goes there too; scanning resumes when its promise settles.
+ */
+export function QrScanner({
+  userId,
+  onScanned,
+  onTrainInvite,
+  footer,
+}: {
+  userId: string;
+  onScanned: (id: string) => void;
+  onTrainInvite?: (token: string) => void | Promise<void>;
+  /** Shown under the camera, such as why a code could not be used. */
+  footer?: ReactNode;
+}) {
   const { colors, type, radius } = useTheme();
   const [permission, requestPermission] = useCameraPermissions();
   const [notice, setNotice] = useState<Notice>(null);
@@ -170,6 +191,18 @@ function QrScanner({ userId, onScanned }: { userId: string; onScanned: (id: stri
 
   function scanned({ data }: BarcodeScanningResult) {
     if (done.current) return;
+    const train = onTrainInvite ? trainInviteTokenFromScan(data) : null;
+    if (train) {
+      // The same code again is ignored until another is scanned, so a refusal isn't retried.
+      if (lastNotice.current === data) return;
+      lastNotice.current = data;
+      done.current = true;
+      setNotice(null);
+      void Promise.resolve(onTrainInvite?.(train)).finally(() => {
+        done.current = false;
+      });
+      return;
+    }
     const id = friendInviteIdFromScan(data);
     const next: Notice = !id ? 'not-friend-code' : id === userId ? 'own-code' : null;
     if (id && !next) {
@@ -228,6 +261,7 @@ function QrScanner({ userId, onScanned }: { userId: string; onScanned: (id: stri
             ? 'That’s your own code.'
             : ''}
       </Text>
+      {footer}
     </View>
   );
 }

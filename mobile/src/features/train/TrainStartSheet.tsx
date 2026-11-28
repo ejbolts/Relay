@@ -5,7 +5,7 @@ import {
   partnerStartTemplate,
   partnerWorkoutName,
   unmatchedExercisesNotice,
-} from '../../../../frontend/src/trainTogetherStart';
+} from '../../../../frontend/src/trainTogetherView';
 import { localDate } from '../../../../frontend/src/utils';
 import { useExercises } from '../../data/queries';
 import { Button } from '../../ui/components';

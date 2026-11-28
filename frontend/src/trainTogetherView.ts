@@ -1,10 +1,17 @@
 import type { SessionTemplate } from './trainingSummary';
-import { exercisesToCopy, type TrainPartnerWorkout } from './trainTogether';
+import {
+  exercisesToCopy,
+  partnerSetOnSameLift,
+  partnerSummary,
+  type PartnerLastSet,
+  type TrainPartnerWorkout,
+} from './trainTogether';
 import type { Exercise } from './types';
+import { formatWeight, type WeightUnit } from './weightUnits';
 import { workoutNameForCategory } from './workoutCategory';
 
-// Train together, beside trainTogether.ts: naming a partner's live workout and starting your own
-// from it. Plain TypeScript with no packages or browser APIs, so the web and the app share it.
+// Train together, beside trainTogether.ts: the words the live deck and pace strip show for a
+// partner's workout, and starting your own from it. Plain TypeScript with no packages or browser APIs, so the web and the app share it.
 
 /** A partner's live workout's name: theirs, or the automatic one for its category ("Push day"). */
 export function partnerWorkoutName(workout: Pick<TrainPartnerWorkout, 'draft'>): string {
@@ -82,4 +89,59 @@ export function unmatchedExercisesNotice(count: number): string | null {
   return count === 1
     ? "1 exercise isn't in your library"
     : `${count} exercises aren't in your library`;
+}
+
+/** A partner's set in the viewer's unit: "80 kg × 8", "8 reps", "80 kg", "30 min · 4.8 km". */
+export function partnerSetLabel(set: PartnerLastSet, unit: WeightUnit): string {
+  if (set.duration_seconds || set.distance_km) {
+    return [
+      set.duration_seconds ? `${Math.round(set.duration_seconds / 60)} min` : null,
+      set.distance_km ? `${Number(set.distance_km.toFixed(2))} km` : null,
+    ]
+      .filter(Boolean)
+      .join(' · ');
+  }
+  const weight =
+    set.weight_kg !== null && set.weight_kg > 0 ? formatWeight(set.weight_kg, unit) : null;
+  if (weight && set.reps !== null) return `${weight} × ${set.reps}`;
+  if (weight) return weight;
+  if (set.reps !== null) return `${set.reps} ${set.reps === 1 ? 'rep' : 'reps'}`;
+  return 'Set done';
+}
+
+/** The deck's live line for a partner: "Bench Press · 80 kg × 8", or "Bench Press · Starting". */
+export function partnerTicker(
+  workout: TrainPartnerWorkout | null,
+  unit: WeightUnit,
+  now: number,
+): string {
+  if (!workout) return 'No workout open';
+  const summary = partnerSummary(workout, now);
+  if (!summary.movementKey) return 'Starting';
+  return `${summary.name} · ${summary.lastSet ? partnerSetLabel(summary.lastSet, unit) : 'Starting'}`;
+}
+
+/** The pace strip on your exercise card: the partner's latest set on this lift and its number. */
+export function partnerPace(
+  workout: TrainPartnerWorkout,
+  myExerciseId: string,
+  unit: WeightUnit,
+): { label: string; setNumber: number } | null {
+  const same = partnerSetOnSameLift(workout, myExerciseId);
+  if (!same) return null;
+  const movement = workout.draft.movements.find((item) => item.key === same.movementKey);
+  const done = movement?.sets.filter((item) => item.completed) ?? [];
+  const index = done.findIndex((item) => item.key === same.set.key);
+  return {
+    label: partnerSetLabel(
+      {
+        weight_kg: same.set.weight_kg ?? null,
+        reps: same.set.reps ?? null,
+        duration_seconds: same.set.duration_seconds ?? null,
+        distance_km: same.set.distance_km ?? null,
+      },
+      unit,
+    ),
+    setNumber: index < 0 ? done.length : index + 1,
+  };
 }

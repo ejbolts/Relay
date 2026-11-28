@@ -89,9 +89,12 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
         if (!(partnerId in current.partnerSync) && current.loggingFor !== partnerId) return current;
         const partnerSync = { ...current.partnerSync };
         delete partnerSync[partnerId];
+        const partnerAcked = { ...current.partnerAcked };
+        delete partnerAcked[partnerId];
         return {
           ...current,
           partnerSync,
+          partnerAcked,
           loggingFor: current.loggingFor === partnerId ? null : current.loggingFor,
         };
       });
@@ -115,9 +118,13 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
           changed: (next) => {
             const was = status;
             status = next.status;
+            const acknowledged = next.status === 'synced' || next.status === 'conflict';
             setTrainState((current) => ({
               ...current,
               partnerSync: { ...current.partnerSync, [partnerId]: next },
+              ...(acknowledged && {
+                partnerAcked: { ...current.partnerAcked, [partnerId]: next.draft },
+              }),
             }));
             if (next.status === 'conflict' && was !== 'conflict') {
               haptics.warning();
@@ -143,6 +150,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
       setTrainState((current) => ({
         ...current,
         partnerSync: { ...current.partnerSync, [partnerId]: sync.current },
+        partnerAcked: { ...current.partnerAcked, [partnerId]: remote.draft },
       }));
     }
 
@@ -286,7 +294,10 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
   // Each new read: follow it, retry unsent partner edits, and say what changed.
   useEffect(() => {
     if (!read) return;
-    setTrainState({ read });
+    // A code is single use: once someone new joins, the sheet makes another.
+    const had = new Set(partners(getTrainState().read?.session).map((member) => member.user_id));
+    const joined = partners(read.session).some((member) => !had.has(member.user_id));
+    setTrainState(joined ? { read, invite: null } : { read });
     followRef.current?.(read);
     syncs.current.forEach((loop) => {
       if (loop.sync.current.status === 'failed') void loop.sync.retry();

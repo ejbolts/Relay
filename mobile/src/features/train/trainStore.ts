@@ -33,6 +33,8 @@ export interface TrainState {
   loggingFor: string | null;
   /** Each partner's draft as this phone shows it, with its sending state. */
   partnerSync: Record<string, PartnerSyncState>;
+  /** Each partner's draft as the server last acknowledged it, so nothing unsent looks saved. */
+  partnerAcked: Record<string, ActiveWorkoutDraft | null>;
   /** Movements this phone added to each partner's workout in this session (removable). */
   added: Record<string, readonly string[]>;
   /** A partner to offer "Start with {name}'s exercises" for, after joining with no workout. */
@@ -64,6 +66,7 @@ export const EMPTY_TRAIN_STATE: TrainState = {
   sheet: { open: false, tab: 'code' },
   loggingFor: null,
   partnerSync: {},
+  partnerAcked: {},
   added: {},
   startWith: null,
 };

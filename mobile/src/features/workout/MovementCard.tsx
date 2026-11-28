@@ -1,4 +1,13 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentRef,
+  type ReactNode,
+} from 'react';
 import {
   Alert,
   Animated,
@@ -116,6 +125,7 @@ export const MovementCard = memo(function MovementCard({
   machineTip = false,
   supersetUpNext = false,
   actions,
+  partnerPace,
 }: {
   /** Its place in the workout, on the picture's badge. */
   number: number;
@@ -141,6 +151,8 @@ export const MovementCard = memo(function MovementCard({
   /** Next to do in its superset's round in progress: opens if folded and says "Up next". */
   supersetUpNext?: boolean;
   actions: MovementActions;
+  /** Train together: partners' latest sets on this lift, above the set columns. */
+  partnerPace?: ReactNode;
 }) {
   const { colors, type, radius, space } = useTheme();
   const cardio = movement.exercise.kind === 'cardio';
@@ -404,6 +416,8 @@ export const MovementCard = memo(function MovementCard({
           </Pressable>
         </LoggerTipSlot>
       )}
+
+      {expanded && partnerPace}
 
       {expanded && (
         <>
