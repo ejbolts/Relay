@@ -922,11 +922,10 @@ describe('the session, after the web review', () => {
     trainActions().leave();
     await act(async () => leaving.reject(new Error('Could not reach Relay.')));
     expect(api.leave).toHaveBeenCalledTimes(1);
-    expect(toast).toHaveBeenCalledWith(
-      "Couldn't leave the session. Could not reach Relay.",
-      undefined,
-      { variant: 'error', account: 'account:me' },
-    );
+    expect(toast).toHaveBeenCalledWith('Couldn’t leave the session. Try again.', undefined, {
+      variant: 'error',
+      account: 'account:me',
+    });
     await view.unmount();
   });
 
@@ -1274,8 +1273,10 @@ describe('after the second review', () => {
     [new ApiError(429, 'Too many requests.'), 'offline'],
     [new ApiError(408, 'Timed out.'), 'offline'],
     [new Error('Could not reach Relay.'), 'offline'],
-    [new ApiError(403, 'No.'), 'refused'],
-    [new ApiError(422, 'Not allowed.', 'train_change_not_allowed'), 'refused'],
+    [new ApiError(403, 'No.'), 'change refused'],
+    [new ApiError(422, 'Not allowed.', 'train_change_not_allowed'), 'change refused'],
+    [new ApiError(404, 'Not a partner.', 'train_not_partner'), 'access ended'],
+    [new ApiError(409, 'No workout.', 'train_no_workout'), 'access ended'],
   ])('treats %p as %s', async (error, expected) => {
     const view = await hostWithSam();
     await act(async () => trainActions().logFor('sam'));
@@ -1288,9 +1289,44 @@ describe('after the second review', () => {
       await waitFor(() => expect(statusOf()).toBe('failed'));
       expect(getTrainState().loggingFor).toBe('sam');
       expect(getTrainState().partnerSync.sam?.draft?.notes).toBe('x');
-    } else {
+    } else if (expected === 'access ended') {
+      // Back to your own workout, with the shared sentence.
       await waitFor(() => expect(getTrainState().loggingFor).toBeNull());
+      expect(toast).toHaveBeenCalledWith('Sam’s workout is no longer open to you.', undefined, {
+        variant: 'error',
+        account: 'account:me',
+      });
+    } else {
+      // The edit is dropped, a fresh queue starts from the server's copy, and you stay in
+      // their logger with the server's message: nothing unsent is left behind.
+      await waitFor(() =>
+        expect(toast).toHaveBeenCalledWith(error.message, undefined, {
+          variant: 'error',
+          account: 'account:me',
+        }),
+      );
+      expect(getTrainState().loggingFor).toBe('sam');
+      expect(statusOf()).toBe('synced');
+      expect(getTrainState().partnerSync.sam?.draft?.notes).toBe('');
+      expect(getTrainState().partnerAcked.sam?.notes).toBe('');
     }
+    await view.unmount();
+  });
+
+  it('words a refused change with no message from the shared fallback', async () => {
+    const view = await hostWithSam();
+    await act(async () => trainActions().logFor('sam'));
+    api.changePartnerWorkout.mockRejectedValueOnce(new ApiError(400, ''));
+    await act(async () =>
+      trainActions().editPartner('sam', (current) => ({ ...current, notes: 'x' })),
+    );
+    await waitFor(() =>
+      expect(toast).toHaveBeenCalledWith('That change could not be saved.', undefined, {
+        variant: 'error',
+        account: 'account:me',
+      }),
+    );
+    expect(getTrainState().loggingFor).toBe('sam');
     await view.unmount();
   });
 

@@ -4,10 +4,13 @@ import { useEffect, useRef, type RefObject } from 'react';
 import { Keyboard } from 'react-native';
 import {
   memberName,
+  friendRequestSentNotice,
+  leaveFailedNotice,
+  partnerAccessEndedNotice,
+  partnerChangeRefusedNotice,
   partnerConflictNotice,
   partners,
   PartnerWorkoutSync,
-  TRAIN_ERRORS,
   trainTogetherNotice,
   type PartnerSyncState,
   type TrainMember,
@@ -23,7 +26,7 @@ import { socialKeys } from '../social/socialQueries';
 import { sessionBound } from '../workout/sessionBound';
 import { withActivity } from '../workout/loggerState';
 import { useLogger, useOptionalWorkout } from '../workout/WorkoutProvider';
-import { isConnectionFailure } from './trainErrors';
+import { isAccessEnded, isRefusal } from './trainErrors';
 import {
   clearPendingTrainInvite,
   takePendingTrainInvite,
@@ -128,7 +131,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
     /** Navigation after a sheet has closed, cancelled if this account's host goes first. */
     const timers = new Set<ReturnType<typeof setTimeout>>();
 
-    function stopSync(partnerId: string) {
+    function stopSync(partnerId: string, { keepLogger = false } = {}) {
       loops.get(partnerId)?.sync.stop();
       loops.delete(partnerId);
       setTrainState((current) => {
@@ -141,7 +144,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
           ...current,
           partnerSync,
           partnerAcked,
-          loggingFor: current.loggingFor === partnerId ? null : current.loggingFor,
+          loggingFor: current.loggingFor === partnerId && !keepLogger ? null : current.loggingFor,
         };
       });
     }
@@ -189,20 +192,28 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
                 account,
               });
             }
-            // A refusal is not "offline": it can never be sent. Close their logger, read the
-            // session again and say why; the next real copy starts a new loop.
-            if (next.status === 'failed' && !isConnectionFailure(next.error)) {
-              const error = next.error as ApiError;
-              const gone =
-                error.code === TRAIN_ERRORS.notPartner || error.code === TRAIN_ERRORS.noWorkout;
-              showToast(
-                gone
-                  ? `${partnerNamed(partnerId)}’s workout is no longer open to you.`
-                  : error.message,
-                undefined,
-                { variant: 'error', account },
-              );
-              stopSync(partnerId);
+            // A refusal is not "offline": it can never be sent (the shared rule).
+            if (next.status === 'failed' && isRefusal(next.error)) {
+              if (isAccessEnded(next.error)) {
+                // Their workout is no longer yours to change: back to your own.
+                showToast(partnerAccessEndedNotice(partnerNamed(partnerId)), undefined, {
+                  variant: 'error',
+                  account,
+                });
+                stopSync(partnerId);
+              } else {
+                // This change will never be accepted: drop it and start again from the
+                // server's copy, staying in their logger.
+                showToast(partnerChangeRefusedNotice((next.error as ApiError).message), undefined, {
+                  variant: 'error',
+                  account,
+                });
+                stopSync(partnerId, { keepLogger: true });
+                const member = partners(getTrainState().read?.session).find(
+                  (item) => item.user_id === partnerId,
+                );
+                if (member?.workout) startSync(member);
+              }
               void latest.current.client.invalidateQueries({ queryKey: readKey });
             }
           },
@@ -304,7 +315,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
           })
           .catch((error: unknown) => {
             if (alive)
-              showToast(`Couldn't leave the session. ${failure(error).message}`, undefined, {
+              showToast(leaveFailedNotice, undefined, {
                 variant: 'error',
                 account,
               });
@@ -387,7 +398,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
           .then(() => {
             if (!alive) return;
             haptics.success();
-            showToast(`Friend request sent to ${member.name}`, undefined, { account });
+            showToast(friendRequestSentNotice(member.name), undefined, { account });
             void latest.current.client.invalidateQueries({ queryKey: socialKeys.friends });
           })
           .catch((error: unknown) => {
