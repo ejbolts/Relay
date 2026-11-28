@@ -21,7 +21,11 @@ import {
   TRAIN_TOGETHER_LABEL,
   type TrainMember,
 } from '../../../../frontend/src/trainTogether';
-import { partnerPace, partnerTicker } from '../../../../frontend/src/trainTogetherView';
+import {
+  partnerPace,
+  partnerSetLabel,
+  partnerTicker,
+} from '../../../../frontend/src/trainTogetherView';
 import type { WeightUnit } from '../../../../frontend/src/weightUnits';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
@@ -260,8 +264,12 @@ function Ticker({
   const { colors, type } = useTheme();
   const reduced = useReduceMotion();
   const now = useNow(30_000);
-  const text = partnerTicker(member.workout, unit, now);
-  const total = member.workout ? partnerSummary(member.workout, now).totalSetsDone : 0;
+  const summary = member.workout ? partnerSummary(member.workout, now) : null;
+  const total = summary?.totalSetsDone ?? 0;
+  // The exercise name gives way (ellipsis) before the set, which always shows in full.
+  const set =
+    summary?.movementKey && summary.lastSet ? partnerSetLabel(summary.lastSet, unit) : null;
+  const lift = set ? summary!.name : partnerTicker(member.workout, unit, now);
   const [flash] = useState(() => new Animated.Value(0));
   const seen = useRef(total);
   useEffect(() => {
@@ -279,14 +287,18 @@ function Ticker({
       useNativeDriver: false,
     }).start();
   }, [total, flash, reduced]);
+  const ink = [
+    type.footnote,
+    styles.tickerText,
+    { color: member.workout ? colors.secondary : colors.muted },
+  ];
   return (
-    <Animated.Text
-      numberOfLines={1}
+    <Animated.View
+      accessible
+      accessibilityLabel={[prefix, lift, set].filter(Boolean).join(' · ')}
       style={[
-        type.footnote,
         styles.ticker,
         {
-          color: member.workout ? colors.secondary : colors.muted,
           backgroundColor: flash.interpolate({
             inputRange: [0, 1],
             outputRange: ['transparent', tone.soft],
@@ -294,8 +306,11 @@ function Ticker({
         },
       ]}
     >
-      {prefix ? `${prefix} · ${text}` : text}
-    </Animated.Text>
+      <Text numberOfLines={1} style={[ink, styles.tickerName]}>
+        {prefix ? `${prefix} · ${lift}` : lift}
+      </Text>
+      {set && <Text style={[ink, styles.tickerSet]}>{` · ${set}`}</Text>}
+    </Animated.View>
   );
 }
 
@@ -517,7 +532,10 @@ const styles = StyleSheet.create({
   name: { fontSize: 13.5, fontWeight: '700', flexShrink: 1 },
   count: { borderRadius: 999, paddingHorizontal: 6, paddingVertical: 1 },
   countText: { fontSize: 11, fontWeight: '600' },
-  ticker: { fontSize: 12.5, fontWeight: '600', borderRadius: 4 },
+  ticker: { flexDirection: 'row', alignItems: 'center', borderRadius: 4, minWidth: 0 },
+  tickerText: { fontSize: 12.5, fontWeight: '600' },
+  tickerName: { flexShrink: 1 },
+  tickerSet: { flexShrink: 0 },
   actions: { flexDirection: 'row', alignItems: 'center', gap: 8, marginLeft: 'auto' },
   logFor: {
     minHeight: 44,

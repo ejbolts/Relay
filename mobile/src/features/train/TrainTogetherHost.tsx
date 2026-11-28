@@ -19,7 +19,8 @@ import { dismissActionToasts, showToast, toastAccountFor } from '../../ui/Toast'
 import { socialApi } from '../social/socialApi';
 import { socialKeys } from '../social/socialQueries';
 import { sessionBound } from '../workout/sessionBound';
-import { useOptionalWorkout } from '../workout/WorkoutProvider';
+import { withActivity } from '../workout/loggerState';
+import { useLogger, useOptionalWorkout } from '../workout/WorkoutProvider';
 import { isConnectionFailure } from './trainErrors';
 import {
   clearPendingTrainInvite,
@@ -73,6 +74,7 @@ interface PartnerSync {
 export function TrainTogetherHost({ userId }: { userId: string }) {
   const client = useQueryClient();
   const workout = useOptionalWorkout();
+  const logger = useLogger();
   const pathname = usePathname();
   const key = trainSessionKey(userId);
   // Moves on whenever a join, leave or new code answers: a read started before then is older
@@ -94,9 +96,9 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
   const syncs = useRef(new Map<string, PartnerSync>());
   const followRef = useRef<((next: TrainTogetherRead) => void) | null>(null);
   // The latest values for the actions, which are made once.
-  const latest = useRef({ workout, pathname, client });
+  const latest = useRef({ workout, pathname, client, logger });
   useEffect(() => {
-    latest.current = { workout, pathname, client };
+    latest.current = { workout, pathname, client, logger };
   });
 
   // Set up the store and actions for this account; empty them when it goes.
@@ -307,8 +309,10 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
         try {
           const invite = await sessionBound().read(() => trainTogetherApi.invite());
           if (!alive) return;
-          // The session changed while the code was being made: it belongs to the old one.
-          if (session && (getTrainState().read?.session?.id ?? null) !== session) return;
+          // Kept unless you joined someone else's session while the code was being made. A lone
+          // starter's expired code ends their session, so the next code comes with a new one.
+          const now = getTrainState().read?.session?.id ?? null;
+          if (now && now !== session && now !== invite.session_id) return;
           generation.current += 1;
           setTrainState({ invite, inviteError: null });
           await latest.current.client.cancelQueries({ queryKey: readKey }, { revert: false });
@@ -338,6 +342,13 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
       editPartner(partnerId, edit, added) {
         const loop = loops.get(partnerId);
         if (!loop) return;
+        // Logging a partner's set is activity on your own workout too, as your own taps are, so
+        // your own workout doesn't time out while you're busy with theirs.
+        const own = latest.current.logger;
+        if (own?.state) {
+          const now = Date.now();
+          own.change((state) => withActivity(state, now));
+        }
         if (added)
           setTrainState((current) => ({
             ...current,

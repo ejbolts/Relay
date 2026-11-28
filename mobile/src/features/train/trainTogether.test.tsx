@@ -85,9 +85,11 @@ const mockWorkout = {
   start: jest.fn(),
   openStartMenu: jest.fn(),
 };
+const mockLogger = { state: null as null | object, change: jest.fn() };
 jest.mock('../workout/WorkoutProvider', () => ({
   useOptionalWorkout: () => mockWorkout,
   useWorkout: () => mockWorkout,
+  useLogger: () => mockLogger,
 }));
 jest.mock('../../ui/Toast', () => ({
   showToast: jest.fn(),
@@ -272,6 +274,7 @@ beforeEach(() => {
   // Answers queued by one test never reach the next.
   Object.values(api).forEach((request) => request.mockReset());
   mockWorkout.live = null;
+  mockLogger.state = null;
   mockPath.value = '/';
   mockExercises.data = [];
   takePendingTrainInvite();
@@ -557,7 +560,7 @@ describe('the live deck', () => {
     setTrainActions(actions);
     setTrainState({ userId: 'me', read: withPartners(sam()) });
     const view = await render(<TrainDeck unit="kg" />, { wrapper: Providers });
-    expect(screen.getByText('Bench Press · 80 kg × 8')).toBeOnTheScreen();
+    expect(screen.getByLabelText('Bench Press · 80 kg × 8')).toBeOnTheScreen();
     expect(screen.getByText('1 set')).toBeOnTheScreen();
     await fireEvent.press(screen.getByRole('button', { name: 'Log for Sam' }));
     expect(actions.logFor).toHaveBeenCalledWith('sam');
@@ -1386,5 +1389,74 @@ describe('a kept link code', () => {
     expect(memoryKv.has('relay.pendingTrainInvite')).toBe(true);
     clearPendingTrainInvite();
     expect(memoryKv.has('relay.pendingTrainInvite')).toBe(false);
+  });
+});
+
+describe("the coordinator's additions", () => {
+  it('counts logging for a partner as activity on your own workout', async () => {
+    api.read.mockResolvedValue(withPartners(sam()));
+    mockLogger.state = { lastActiveAt: 0 };
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().partnerSync.sam).toBeDefined());
+    api.changePartnerWorkout.mockResolvedValue({
+      revision: 4,
+      draft: draft({ notes: 'x' }),
+      conflict: false,
+      exercises: [bench],
+    });
+    await act(async () =>
+      trainActions().editPartner('sam', (current) => ({ ...current, notes: 'x' })),
+    );
+    expect(mockLogger.change).toHaveBeenCalledTimes(1);
+    // The update it gives your own workout is the one your own taps use: activity now.
+    const own = {
+      startedAt: Date.now() - 10 * 60_000,
+      lastActiveAt: Date.now() - 10 * 60_000,
+      inactiveFinishAt: Date.now() + 60_000,
+      movements: [],
+    };
+    const moved = mockLogger.change.mock.calls[0][0](own);
+    expect(moved.lastActiveAt).toBeGreaterThan(own.lastActiveAt);
+    expect(moved.inactiveFinishAt).toBeGreaterThan(own.inactiveFinishAt);
+    await view.unmount();
+  });
+
+  it("shows a lone starter's next code at once, though it comes with a new session", async () => {
+    const lone = withPartners();
+    api.read.mockResolvedValueOnce(lone);
+    const view = await render(<TrainTogetherHost userId="me" />, { wrapper: Providers });
+    await waitFor(() => expect(getTrainState().read?.session?.id).toBe('session-1'));
+    // The old code expired, which ended the session: the server now says there is none.
+    const made = deferred<{ token: string; expires_at: string; session_id: string }>();
+    api.invite.mockReturnValueOnce(made.promise);
+    api.read.mockResolvedValueOnce(alone);
+    void trainActions().newInvite();
+    await act(async () => mockSocket.listener?.());
+    await waitFor(() => expect(getTrainState().read?.session).toBeNull());
+    const next = {
+      token: 'zyxwvutsrqponmlk9876',
+      expires_at: new Date(Date.now() + 300_000).toISOString(),
+      session_id: 'session-2',
+    };
+    api.read.mockResolvedValue({ ...lone, session: { ...lone.session!, id: 'session-2' } });
+    await act(async () => made.resolve(next));
+    expect(getTrainState().invite).toEqual(next);
+    await waitFor(() => expect(getTrainState().read?.session?.id).toBe('session-2'));
+    expect(getTrainState().invite).toEqual(next);
+    await view.unmount();
+  });
+
+  it('keeps the set whole in the live line, letting a long exercise name give way', async () => {
+    const long = draft();
+    const exercises = [{ ...bench, name: 'Incline Dumbbell Press' }, fly];
+    const member = { ...sam(long), workout: { revision: 3, draft: long, exercises } };
+    setTrainState({ userId: 'me', read: withPartners(member) });
+    const view = await render(<TrainDeck unit="kg" />, { wrapper: Providers });
+    const name = screen.getByText('Incline Dumbbell Press');
+    const set = screen.getByText(' · 80 kg × 8');
+    expect(name.props.numberOfLines).toBe(1);
+    expect(set.props.numberOfLines).toBeUndefined();
+    expect(screen.getByLabelText('Incline Dumbbell Press · 80 kg × 8')).toBeOnTheScreen();
+    await view.unmount();
   });
 });
