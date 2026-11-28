@@ -567,8 +567,15 @@ def test_unfriending_or_blocking_mid_session_removes_access_at_once(client, othe
     refused = partner_put(other_client, client, revision=1, base=value, draft=with_set(value))
     assert refused.status_code == 404
     assert read(other_client)["session"] is None
-    assert read(other_client)["ended"]["reason"] == "unfriended"
-    assert read(other_client)["ended"]["by_user_id"] == account(client)
+    # Blocks and unfriending stay silent: to the other person it reads as an ordinary leave.
+    assert read(other_client)["ended"] == {
+        "session_id": read(client)["ended"]["session_id"],
+        "reason": "left",
+        "by_user_id": account(client),
+        "by_name": "Owner",
+    }
+    # Only the person who acted sees why.
+    assert read(client)["ended"]["reason"] == "unfriended"
 
 
 def test_a_stale_session_without_a_friendship_cannot_be_used(client, other_client):
@@ -1180,3 +1187,44 @@ def test_migration_adds_and_removes_only_its_tables():
         } <= indexes
         migration.downgrade()
         assert set(inspect(connection).get_table_names()) == {"users", "training_workouts"}
+
+
+def test_a_settings_save_without_any_shared_session_leaves_the_cache_alone(client):
+    before = client.get("/api/workouts/revision").json()["revision"]
+    share(client, "followers")
+    share(client, "public")
+    assert client.get("/api/workouts/revision").json()["revision"] == before
+    with SessionLocal() as db:
+        assert db.scalar(select(TrainTogetherMember)) is None
+
+
+def test_a_partners_change_refreshes_an_account_with_no_revision_yet(client, other_client):
+    friends(client, other_client)
+    link(client, other_client)
+    with SessionLocal() as db:
+        db.execute(text("DELETE FROM user_settings WHERE key = 'workout_cache_revision'"))
+        db.commit()
+    assert other_client.post(f"/api/sharing/blocks/{account(client)}").status_code == 204
+    revisions = {
+        test_client.get("/api/workouts/revision").json()["revision"]
+        for test_client in (client, other_client)
+    }
+    assert "0" not in revisions
+
+
+def test_created_by_is_only_named_while_the_creator_is_a_partner(
+    client, other_client, third_client, fourth_client
+):
+    friends(other_client, third_client, fourth_client)
+    befriend(client, other_client)
+    befriend(client, third_client)
+    link(client, other_client)
+    link(client, third_client)
+    assert read(other_client)["session"]["created_by"] == account(client)
+    client.post(f"{BASE}/leave")
+    # The creator has gone, and the newcomer was never their friend.
+    assert client.post(f"/api/sharing/blocks/{account(fourth_client)}").status_code == 204
+    session = link(other_client, fourth_client)["session"]
+    assert session["created_by"] is None
+    assert account(client) not in fourth_client.get(BASE).text
+    assert read(other_client)["session"]["created_by"] is None

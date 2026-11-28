@@ -632,7 +632,13 @@ the workout twice answers `conflict: true` with the stored copy. Every read and 
 again that both accounts are active members of the same session and still friends, including
 after the write and before the answer: if access ended meanwhile, the answer is `404` with no
 draft. A session read that finds a member the caller is no longer friends with ends the
-caller's attendance (`unfriended`) instead of showing them.
+caller's attendance (`unfriended`) instead of showing them, and names the creator
+(`created_by`) only while they are a partner in the session.
+
+**Why a session ended.** For ten minutes after an attendance ends, the read's `ended` says why
+(`left`, `finished`, `discarded`, `expired` or `unfriended`) and whose action it was. Blocks and
+unfriending stay silent: only the person who acted sees `unfriended`; to everyone else the same
+ending reads as `left`, by the person who left, exactly as if they had pressed Leave.
 
 **Auto-save after a partner's edit.** The server saves only the finished workout the owner's
 app prepared for exactly the stored revision (`autoSave`), and never builds one itself. A
@@ -648,7 +654,8 @@ carries `trained_with` (the viewer and the members they may see) and `trained_wi
 (everyone whose attendance overlapped), on every path that returns a workout. Because the list
 depends on what the viewer may see, blocking, unblocking, removing a friend, changing profile
 visibility, and disabling or deleting an account refresh the workout cache revision of everyone
-who has shared a session with that account. Restoring an account archive clears links to
+who has shared a session with that account, in one statement; an account that has never been
+in a session refreshes nobody. Restoring an account archive clears links to
 workouts the archive does not have, rather than removing the attendance.
 
 **Hooks and the socket.** The draft, save, friendship and account hooks change the session in
