@@ -187,11 +187,23 @@ def _open_row(db: Session, user_id: str) -> TrainTogetherMember | None:
     )
 
 
+def _cancel_invites(db: Session, session_id: str, created_by: str | None = None) -> None:
+    """Unused codes for the session (or only those one member made) stop working."""
+    conditions = [
+        TrainTogetherInvite.session_id == session_id,
+        TrainTogetherInvite.used_at.is_(None),
+    ]
+    if created_by is not None:
+        conditions.append(TrainTogetherInvite.created_by == created_by)
+    db.execute(delete(TrainTogetherInvite).where(*conditions))
+
+
 def _end(
     db: Session, session: TrainTogetherSession, reason: Reason, by: str | None, at: datetime
 ) -> set[str]:
     """End the session at ``at``; everyone still in it leaves with the session's reason."""
     session.ended_at, session.ended_reason, session.ended_by = at, reason, by
+    _cancel_invites(db, session.id)
     affected = set()
     for member in _active_members(db, session.id):
         member.left_at, member.left_reason = at, reason
@@ -204,6 +216,8 @@ def _leave(db: Session, member: TrainTogetherMember, reason: Reason, now: dateti
     session = db.get(TrainTogetherSession, member.session_id)
     remaining = [other for other in _active_members(db, member.session_id) if other.id != member.id]
     member.left_at, member.left_reason = now, reason
+    # A code shown just before leaving must not let anyone into a session its maker has left.
+    _cancel_invites(db, member.session_id, member.user_id)
     affected = {member.user_id, *(other.user_id for other in remaining)}
     if session is not None and session.ended_at is None and len(remaining) < 2:
         _end(db, session, reason, member.user_id, now)
@@ -840,6 +854,10 @@ def join(payload: TrainJoin, user: CurrentUser, db: Db) -> TrainTogetherRead:
             400, "train_own_invite", "That's your own code. Ask your friend to scan it."
         )
     members = _active_members(db, session.id)
+    if not any(member.user_id == invite.created_by for member in members):
+        # Its maker is no longer in the session (a lone starter with a live code still is).
+        db.rollback()
+        raise expired
     if any(member.user_id == user.id for member in members):
         db.rollback()  # already here: the code stays unused
         return read_session(db, user)
