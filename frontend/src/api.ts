@@ -1,5 +1,12 @@
 import type { AppNotices } from './appNotices';
 import type { BodySizeLog } from './bodySizes';
+import type {
+  TrainExercise,
+  TrainInvite,
+  TrainPartnerChange,
+  TrainPartnerWriteResult,
+  TrainTogetherRead,
+} from './trainTogether';
 import type { ActiveWorkoutDraft } from './workoutDraft';
 import type { NotificationReadReference } from './types';
 import type {
@@ -567,6 +574,32 @@ export const api = {
         body: JSON.stringify(change),
       },
     ),
+  // Train together; see trainTogether.ts.
+  trainTogether: {
+    read: () => request<TrainTogetherRead>('/api/train-together'),
+    invite: () => request<TrainInvite>('/api/train-together/invite', { method: 'POST' }),
+    join: (token: string) =>
+      request<TrainTogetherRead>('/api/train-together/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }),
+    leave: () => request<TrainTogetherRead>('/api/train-together/leave', { method: 'POST' }),
+    partnerExercises: (userId: string) =>
+      request<TrainExercise[]>(
+        `/api/train-together/members/${encodeURIComponent(userId)}/exercises`,
+      ),
+    changePartnerWorkout: (userId: string, change: TrainPartnerChange) =>
+      request<TrainPartnerWriteResult>(
+        `/api/train-together/members/${encodeURIComponent(userId)}/workout`,
+        {
+          method: 'PUT',
+          signal: AbortSignal.timeout(10_000),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(change),
+        },
+      ),
+  },
   youtube: {
     connection: () => request<YouTubeConnection>('/api/youtube/connection'),
     connect: () => request<{ url: string }>('/api/youtube/connect', { method: 'POST' }),
