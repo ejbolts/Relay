@@ -3,13 +3,13 @@
  * reads its screen hash, survives signing in, and is dropped once older than 5 minutes.
  */
 
-import {
-  TRAIN_INVITE_HASH,
-  TRAIN_INVITE_SECONDS,
-  trainInviteTokenFromHash,
-} from './trainTogether';
+import { TRAIN_INVITE_HASH, TRAIN_INVITE_SECONDS, trainInviteTokenFromHash } from './trainTogether';
 
-export { trainInviteLink, trainInviteTokenFromHash, trainInviteTokenFromScan } from './trainTogether';
+export {
+  trainInviteLink,
+  trainInviteTokenFromHash,
+  trainInviteTokenFromScan,
+} from './trainTogether';
 
 /** Dispatched on `window` when the presence socket signals a train-together change or reconnects. */
 export const TRAIN_TOGETHER_CHANGED = 'relay:train-together-changed';
@@ -42,10 +42,7 @@ function validToken(token: unknown): token is string {
   return typeof token === 'string' && TRAIN_INVITE_HASH.test(`#train=${token}`);
 }
 
-function writeStoredInvite(
-  entry: StoredTrainInvite,
-  storage?: Pick<Storage, 'setItem'>,
-): void {
+function writeStoredInvite(entry: StoredTrainInvite, storage?: Pick<Storage, 'setItem'>): void {
   memoryInvite = entry;
   try {
     (storage ?? window.sessionStorage).setItem(STORAGE_KEY, JSON.stringify(entry));

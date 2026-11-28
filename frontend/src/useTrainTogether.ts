@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
+import { COLOUR_THEMES, type ColourThemeId } from './appearanceChoices';
+import { colourThemePreference } from './colourThemes';
+import { partnerPalettes, type PartnerPalette } from './trainTogetherTheme';
 import {
   inviteSecondsLeft,
   memberName,
@@ -109,7 +112,11 @@ export function useTrainTogether(
       const nextMap = new Map(existing);
       for (const item of list) {
         const prev = nextMap.get(item.id);
-        if (!prev || prev.name !== item.name || prev.same_as_exercise_id !== item.same_as_exercise_id) {
+        if (
+          !prev ||
+          prev.name !== item.name ||
+          prev.same_as_exercise_id !== item.same_as_exercise_id
+        ) {
           nextMap.set(item.id, item);
           changed = true;
         }
@@ -451,4 +458,32 @@ export function useTrainTogether(
     retryPartnerSync,
     registerPartnerExercises: mergePartnerExercises,
   };
+}
+
+function readThemeState(): { themeId: ColourThemeId; lightMode: boolean } {
+  if (typeof document === 'undefined') return { themeId: 'blue', lightMode: false };
+  const rawTheme = document.documentElement.dataset.colourTheme;
+  const themeId =
+    COLOUR_THEMES.find((entry) => entry.id === rawTheme)?.id ?? colourThemePreference();
+  return { themeId, lightMode: document.documentElement.dataset.colourMode === 'light' };
+}
+
+/** Reactively derives partner colour palettes from the active Relay theme and light/dark mode. */
+export function usePartnerPalettes(count: number): PartnerPalette[] {
+  const [themeState, setThemeState] = useState(readThemeState);
+
+  useEffect(() => {
+    if (typeof MutationObserver === 'undefined') return;
+    const observer = new MutationObserver(() => setThemeState(readThemeState()));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-colour-theme', 'data-colour-mode'],
+    });
+    return () => observer.disconnect();
+  }, []);
+
+  return useMemo(
+    () => partnerPalettes(themeState.themeId, count, themeState.lightMode),
+    [themeState.themeId, themeState.lightMode, count],
+  );
 }
