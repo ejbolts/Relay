@@ -17,6 +17,7 @@ import { TrainTogetherDeck, TrainTogetherEntryButton } from './TrainTogetherDeck
 import { TrainTogetherPaceStrip } from './TrainTogetherPaceStrip';
 import { TrainTogetherPartnerView } from './TrainTogetherPartnerView';
 import { partnerPalettes } from './trainTogetherTheme';
+import { isPartnerWriteRefusal, useTrainTogether } from './useTrainTogether';
 import type { ActiveWorkoutDraft } from './workoutDraft';
 
 function makePartnerDraft(done = true): ActiveWorkoutDraft {
@@ -907,6 +908,293 @@ describe('TrainTogetherPartnerView', () => {
     } finally {
       delete document.documentElement.dataset.reduceMotion;
     }
+  });
+
+  it('keeps a new set pending and uncounted when the follow-up after a conflict fails', async () => {
+    const baseDraft = makePartnerDraft(false);
+    const serverConflictDraft: ActiveWorkoutDraft = {
+      ...makePartnerDraft(false),
+      updatedAt: baseDraft.updatedAt + 2000,
+    };
+    serverConflictDraft.movements[0].sets[0] = {
+      ...serverConflictDraft.movements[0].sets[0],
+      reps: 12,
+    };
+    const sam = makePartner('u-sam', 'Sam Rivera', true);
+    sam.workout = {
+      revision: 4,
+      draft: baseDraft,
+      exercises: sam.workout!.exercises,
+    };
+    const session: TrainSession = {
+      id: 'sess-ack',
+      created_by: 'u-self',
+      started_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+      max_members: 4,
+      members: [
+        {
+          user_id: 'u-self',
+          username: 'self',
+          display_name: 'You',
+          photo_url: null,
+          joined_at: new Date().toISOString(),
+          is_self: true,
+          workout: null,
+        },
+        sam,
+      ],
+    };
+    vi.spyOn(api.trainTogether, 'read').mockResolvedValue({ session, ended: null });
+
+    let resolveFirstPut!: (result: TrainPartnerWriteResult) => void;
+    let putCount = 0;
+    vi.spyOn(api.trainTogether, 'changePartnerWorkout').mockImplementation((_partnerId, change) => {
+      putCount += 1;
+      if (putCount === 1) {
+        return new Promise<TrainPartnerWriteResult>((resolve) => {
+          resolveFirstPut = resolve;
+        });
+      }
+      if (putCount === 2) {
+        return Promise.reject(new ApiError('Server busy.', 'server_error', 500));
+      }
+      return Promise.resolve({
+        revision: 6,
+        draft: change.draft,
+        conflict: false,
+        exercises: [],
+      });
+    });
+
+    function Harness() {
+      const tt = useTrainTogether('u-self');
+      const partner = tt.partners[0];
+      if (!partner) return null;
+      return (
+        <TrainTogetherPartnerView
+          partner={partner}
+          palette={partnerPalettes('blue', 1, false)[0]}
+          syncState={tt.partnerSyncStates[partner.user_id]}
+          acknowledgedDraft={tt.partnerAcknowledgedDrafts[partner.user_id]}
+          conflictCount={tt.partnerConflictCounts[partner.user_id] ?? 0}
+          extraExercises={tt.partnerExercisesByUser[partner.user_id]}
+          viewerAddedMovementKeys={tt.viewerAddedMovements[partner.user_id]}
+          weightUnit="kg"
+          onEdit={(change, added) => tt.editPartnerWorkout(partner.user_id, change, added)}
+          onRetry={() => tt.retryPartnerSync(partner.user_id)}
+          onRegisterExercises={(list) => tt.registerPartnerExercises(partner.user_id, list)}
+          onBackToMine={vi.fn()}
+        />
+      );
+    }
+
+    const setInputValue = (input: HTMLInputElement, value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    await act(async () => root.render(<Harness />));
+
+    // Edit set 1 reps -> starts PUT #1 (held in flight).
+    const firstReps = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Bench Press set 1 reps"]',
+    )!;
+    await act(async () => setInputValue(firstReps, '9'));
+    expect(putCount).toBe(1);
+
+    // While PUT #1 is in flight, add set 2 and mark it complete.
+    const addSetBtn = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === '+ Add set',
+    )!;
+    await act(async () => addSetBtn.click());
+    const secondTick = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Saving Bench Press set 2"], button[aria-label="Complete Bench Press set 2"]',
+    )!;
+    await act(async () => secondTick.click());
+
+    // PUT #1 conflicts -> PUT #2 replays set 2 and fails with 500.
+    await act(async () => {
+      resolveFirstPut({
+        revision: 5,
+        draft: serverConflictDraft,
+        conflict: true,
+        exercises: [],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    expect(putCount).toBe(2);
+    const rows = container.querySelectorAll<HTMLElement>('.tt-partner-set-row');
+    expect(rows).toHaveLength(2);
+    // The new set must still look pending and must NOT be counted as done.
+    expect(rows[1].classList.contains('is-pending')).toBe(true);
+    expect(rows[1].classList.contains('is-done')).toBe(false);
+    expect(container.textContent).toContain('Sam’s sets · 0 done');
+    // 500 keeps the edit with Offline · Unsent change + Retry.
+    expect(container.textContent).toContain('Offline · Unsent change');
+
+    // Retrying succeeds and moves set 2 from pending to saved/counted.
+    const retryBtn = container.querySelector<HTMLButtonElement>('.tt-partner-retry-btn')!;
+    await act(async () => {
+      retryBtn.click();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    expect(putCount).toBe(3);
+    const rowsAfter = container.querySelectorAll<HTMLElement>('.tt-partner-set-row');
+    expect(rowsAfter[1].classList.contains('is-pending')).toBe(false);
+    expect(rowsAfter[1].classList.contains('is-done')).toBe(true);
+    expect(container.textContent).toContain('Sam’s sets · 1 done');
+  });
+
+  it('classifies partner write failures using the shared refusal rule (4xx except 408/429 vs transient)', async () => {
+    // Direct rule checks.
+    expect(isPartnerWriteRefusal(new ApiError('Not partner', TRAIN_ERRORS.notPartner, 403))).toBe(
+      true,
+    );
+    expect(isPartnerWriteRefusal(new ApiError('No workout', TRAIN_ERRORS.noWorkout, 404))).toBe(
+      true,
+    );
+    expect(
+      isPartnerWriteRefusal(new ApiError('Disallowed', TRAIN_ERRORS.changeNotAllowed, 400)),
+    ).toBe(true);
+    expect(isPartnerWriteRefusal(new ApiError('Bad payload', 'validation_error', 422))).toBe(true);
+    expect(isPartnerWriteRefusal(new ApiError('Forbidden', 'forbidden', 403))).toBe(true);
+
+    expect(isPartnerWriteRefusal(new ApiError('Timeout', 'timeout', 408))).toBe(false);
+    expect(isPartnerWriteRefusal(new ApiError('Rate limited', 'rate_limited', 429))).toBe(false);
+    expect(isPartnerWriteRefusal(new ApiError('Server error', 'server_error', 500))).toBe(false);
+    expect(isPartnerWriteRefusal(new ApiError('Bad gateway', 'bad_gateway', 502))).toBe(false);
+    expect(isPartnerWriteRefusal(new ApiError('Unavailable', 'unavailable', 503))).toBe(false);
+    expect(isPartnerWriteRefusal(new TypeError('Failed to fetch'))).toBe(false);
+
+    // UI verification: 500, 408 and 429 show Offline · Unsent change + Retry; 422 shows inline refusal.
+    const sam = makePartner('u-sam', 'Sam', true);
+    const baseDraft = makePartnerDraft(false);
+    for (const err of [
+      new ApiError('Busy server', 'server_error', 500),
+      new ApiError('Timed out', 'timeout', 408),
+      new ApiError('Slow down', 'rate_limited', 429),
+      new TypeError('Failed to fetch'),
+    ]) {
+      await act(async () =>
+        root.render(
+          <TrainTogetherPartnerView
+            partner={sam}
+            palette={partnerPalettes('blue', 1, false)[0]}
+            syncState={{
+              revision: 4,
+              draft: baseDraft,
+              status: 'failed',
+              notApplied: false,
+              error: err,
+              exercises: null,
+            }}
+            acknowledgedDraft={baseDraft}
+            weightUnit="kg"
+            onEdit={vi.fn().mockResolvedValue(undefined)}
+            onRetry={vi.fn().mockResolvedValue(undefined)}
+            onRegisterExercises={vi.fn()}
+            onBackToMine={vi.fn()}
+          />,
+        ),
+      );
+      expect(container.textContent).toContain('Offline · Unsent change');
+      expect(container.querySelector('.tt-partner-retry-btn')).not.toBeNull();
+    }
+  });
+
+  it('updates a focused field to the server value on conflict, and marks differing focused text pending otherwise', async () => {
+    const sam = makePartner('u-sam', 'Sam', true);
+    const initialDraft = makePartnerDraft(true);
+    const onEdit = vi.fn().mockResolvedValue(undefined);
+    const setInputValue = (input: HTMLInputElement, value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    const renderWith = async (
+      draft: ActiveWorkoutDraft,
+      acknowledgedDraft: ActiveWorkoutDraft,
+      syncOverrides: Partial<PartnerSyncState> = {},
+      conflictCount = 0,
+    ) => {
+      await act(async () =>
+        root.render(
+          <TrainTogetherPartnerView
+            partner={sam}
+            palette={partnerPalettes('blue', 1, false)[0]}
+            syncState={{
+              revision: 4,
+              draft,
+              status: 'synced',
+              notApplied: false,
+              error: null,
+              exercises: null,
+              ...syncOverrides,
+            }}
+            acknowledgedDraft={acknowledgedDraft}
+            conflictCount={conflictCount}
+            weightUnit="kg"
+            onEdit={onEdit}
+            onRetry={vi.fn().mockResolvedValue(undefined)}
+            onRegisterExercises={vi.fn()}
+            onBackToMine={vi.fn()}
+          />,
+        ),
+      );
+    };
+
+    await renderWith(initialDraft, initialDraft);
+    const weightInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Bench Press set 1 weight in kilograms"]',
+    )!;
+    const repsInput = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Bench Press set 1 reps"]',
+    )!;
+    const row = container.querySelector<HTMLElement>('.tt-partner-set-row[data-set-key="s1"]')!;
+    expect(row.classList.contains('is-done')).toBe(true);
+
+    // Case A: Non-conflict remote update arrives while Weight is focused -> keeps focused text, looks pending.
+    await act(async () => {
+      weightInput.focus();
+    });
+    const remoteUpdated = makePartnerDraft(true);
+    remoteUpdated.movements[0].sets[0].weight_kg = 85;
+    await renderWith(remoteUpdated, remoteUpdated, { revision: 5 });
+    expect(weightInput.value).toBe('80');
+    expect(row.classList.contains('is-pending')).toBe(true);
+    expect(row.classList.contains('is-done')).toBe(false);
+
+    // Blurring adopts the stored value and restores saved appearance.
+    await act(async () => {
+      weightInput.blur();
+    });
+    expect(weightInput.value).toBe('85');
+    expect(row.classList.contains('is-pending')).toBe(false);
+    expect(row.classList.contains('is-done')).toBe(true);
+
+    // Case B: Conflict while Reps is focused -> overwrites focused input with server's value immediately.
+    await act(async () => {
+      repsInput.focus();
+      setInputValue(repsInput, '10');
+    });
+    expect(repsInput.value).toBe('10');
+    const serverConflictDraft = makePartnerDraft(true);
+    serverConflictDraft.movements[0].sets[0].weight_kg = 85;
+    serverConflictDraft.movements[0].sets[0].reps = 12;
+    await renderWith(
+      serverConflictDraft,
+      serverConflictDraft,
+      { revision: 6, status: 'conflict', notApplied: true },
+      1,
+    );
+    expect(document.activeElement).toBe(repsInput);
+    expect(repsInput.value).toBe('12');
+    expect(row.classList.contains('is-pending')).toBe(false);
+    expect(row.classList.contains('is-done')).toBe(true);
   });
 });
 

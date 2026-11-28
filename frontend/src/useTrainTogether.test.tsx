@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import {
+  addPartnerSet,
   TRAIN_ERRORS,
   updatePartnerSet,
   type TrainSession,
@@ -532,5 +533,91 @@ describe('useTrainTogether', () => {
     expect(latest.partnerSyncStates['u-sam']).toBeUndefined();
     expect(readSpy).toHaveBeenCalledTimes(2);
     expect(notices).toEqual(['Sam is no longer in this session.']);
+  });
+
+  it('keeps partner editor open and retains unsent edit on a 500 error so Retry can resend it', async () => {
+    const initialDraft = makeDraft();
+    vi.spyOn(api.trainTogether, 'read').mockResolvedValue({
+      session: makeSession(1, initialDraft),
+      ended: null,
+    });
+    const retired = vi.fn();
+    const putSpy = vi
+      .spyOn(api.trainTogether, 'changePartnerWorkout')
+      .mockRejectedValueOnce(new ApiError('Server busy.', 'server_error', 500))
+      .mockImplementationOnce(async (_partnerId, change) => ({
+        revision: 2,
+        draft: change.draft,
+        conflict: false,
+        exercises: [],
+      }));
+
+    function RetiredHarness() {
+      latest = useTrainTogether('u-self', (msg) => notices.push(msg), {
+        onPartnerRetired: retired,
+      });
+      return null;
+    }
+
+    await act(async () => root.render(<RetiredHarness />));
+    await act(async () => {
+      await latest.editPartnerWorkout('u-sam', (draft) =>
+        addPartnerSet(draft, 'mov-1', 'set-2', 2000),
+      );
+    });
+
+    expect(retired).not.toHaveBeenCalled();
+    expect(latest.partnerSyncStates['u-sam']?.status).toBe('failed');
+    expect(latest.partnerSyncStates['u-sam']?.draft?.movements[0].sets).toHaveLength(2);
+    expect(latest.partnerAcknowledgedDrafts['u-sam']?.movements[0].sets).toHaveLength(1);
+
+    await act(async () => {
+      await latest.retryPartnerSync('u-sam');
+    });
+    expect(putSpy).toHaveBeenCalledTimes(2);
+    expect(latest.partnerSyncStates['u-sam']?.status).toBe('synced');
+    expect(latest.partnerAcknowledgedDrafts['u-sam']?.movements[0].sets).toHaveLength(2);
+  });
+
+  it('runs no timers and causes no extra renders when no session or invite is live', async () => {
+    vi.useFakeTimers();
+    try {
+      const readSpy = vi
+        .spyOn(api.trainTogether, 'read')
+        .mockResolvedValue({ session: null, ended: null });
+      let renders = 0;
+      const seenControllers: TrainTogetherController[] = [];
+
+      function CountingHarness() {
+        renders += 1;
+        latest = useTrainTogether('u-self', (msg) => notices.push(msg));
+        seenControllers.push(latest);
+        return null;
+      }
+
+      await act(async () => root.render(<CountingHarness />));
+      expect(readSpy).toHaveBeenCalledTimes(1);
+      const rendersAfterMount = renders;
+      const controllerAfterMount = latest;
+
+      // Advance 5 minutes: no polling timer or countdown timer should fire.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5 * 60_000);
+      });
+      expect(readSpy).toHaveBeenCalledTimes(1);
+      expect(renders).toBe(rendersAfterMount);
+      expect(latest).toBe(controllerAfterMount);
+
+      // Focus/visibility refresh returning an empty session causes no re-render.
+      await act(async () => {
+        window.dispatchEvent(new Event('focus'));
+        await Promise.resolve();
+      });
+      expect(readSpy).toHaveBeenCalledTimes(2);
+      expect(renders).toBe(rendersAfterMount);
+      expect(latest).toBe(controllerAfterMount);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

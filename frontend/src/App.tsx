@@ -1063,7 +1063,8 @@ function AppContent() {
       setTrainStartPartnerId(withWorkout.user_id);
     }
   };
-  const leaveTrainSession = async (): Promise<boolean> => {
+  const openTrainSheet = useCallback(() => setTrainSheetOpen(true), []);
+  const leaveTrainSession = useCallback(async (): Promise<boolean> => {
     if (leavingTrainSessionRef.current) return false;
     leavingTrainSessionRef.current = true;
     try {
@@ -1081,7 +1082,10 @@ function AppContent() {
     } finally {
       leavingTrainSessionRef.current = false;
     }
-  };
+  }, [showToast, trainTogether]);
+  const handleLeaveTrainSession = useCallback(() => {
+    void leaveTrainSession();
+  }, [leaveTrainSession]);
   useEffect(() => {
     trainMountedRef.current = true;
     return () => {
@@ -3070,6 +3074,9 @@ function AppContent() {
                           acknowledgedDraft={
                             trainTogether.partnerAcknowledgedDrafts[activePartner.user_id]
                           }
+                          conflictCount={
+                            trainTogether.partnerConflictCounts[activePartner.user_id] ?? 0
+                          }
                           extraExercises={
                             trainTogether.partnerExercisesByUser[activePartner.user_id]
                           }
@@ -3162,16 +3169,14 @@ function AppContent() {
                                   !editingWorkout && !viewedWorkout ? trainPalettes : undefined
                                 }
                                 onOpenTrainSheet={
-                                  !editingWorkout && !viewedWorkout
-                                    ? () => setTrainSheetOpen(true)
-                                    : undefined
+                                  !editingWorkout && !viewedWorkout ? openTrainSheet : undefined
                                 }
                                 onLogForPartner={
                                   !editingWorkout && !viewedWorkout ? setActivePartnerId : undefined
                                 }
                                 onLeaveTrainSession={
                                   !editingWorkout && !viewedWorkout
-                                    ? () => void leaveTrainSession()
+                                    ? handleLeaveTrainSession
                                     : undefined
                                 }
                                 onDelete={() => {

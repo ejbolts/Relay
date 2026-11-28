@@ -23,6 +23,23 @@ import type { ActiveWorkoutDraft } from './workoutDraft';
 
 const POLL_FALLBACK_MS = 20_000;
 
+/**
+ * Server refusals for partner workout edits: the Train together refusal codes, or any other 4xx
+ * status except 408 (timeout) and 429 (rate limit). Everything else (no response, 408, 429, and
+ * every 5xx) is treated as a transient failure ("Offline · Unsent change" with Retry).
+ */
+export function isPartnerWriteRefusal(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false;
+  if (
+    error.code === TRAIN_ERRORS.notPartner ||
+    error.code === TRAIN_ERRORS.noWorkout ||
+    error.code === TRAIN_ERRORS.changeNotAllowed
+  ) {
+    return true;
+  }
+  return error.status >= 400 && error.status < 500 && error.status !== 408 && error.status !== 429;
+}
+
 export interface TrainTogetherController {
   read: TrainTogetherRead | null;
   session: TrainSession | null;
@@ -39,6 +56,8 @@ export interface TrainTogetherController {
   partnerSyncStates: Readonly<Record<string, PartnerSyncState>>;
   /** Last server-acknowledged draft per partner (so unsent ticks render pending, not saved). */
   partnerAcknowledgedDrafts: Readonly<Record<string, ActiveWorkoutDraft | null>>;
+  /** Monotonic conflict count per partner, incremented each time a partner write is not applied. */
+  partnerConflictCounts: Readonly<Record<string, number>>;
   /** Extra exercise definitions loaded via partner picker or write responses, keyed by partner id. */
   partnerExercisesByUser: Readonly<Record<string, ReadonlyMap<string, TrainExercise>>>;
   /** Movement keys added by the current viewer in partner mode (so only those show Remove). */
@@ -85,7 +104,6 @@ export function useTrainTogether(
   const [read, setRead] = useState<TrainTogetherRead | null>(null);
   const [invite, setInvite] = useState<TrainInvite | null>(null);
   const [now, setNow] = useState(() => Date.now());
-  const [loading, setLoading] = useState(false);
   const [creatingInvite, setCreatingInvite] = useState(false);
   const [joining, setJoining] = useState(false);
   const [leaving, setLeaving] = useState(false);
@@ -94,6 +112,7 @@ export function useTrainTogether(
   const [partnerAcknowledgedDrafts, setPartnerAcknowledgedDrafts] = useState<
     Record<string, ActiveWorkoutDraft | null>
   >({});
+  const [partnerConflictCounts, setPartnerConflictCounts] = useState<Record<string, number>>({});
   const [partnerExercisesByUser, setPartnerExercisesByUser] = useState<
     Record<string, ReadonlyMap<string, TrainExercise>>
   >({});
@@ -107,7 +126,6 @@ export function useTrainTogether(
   const generationRef = useRef(0);
   const readSeqRef = useRef(0);
   const appliedSeqRef = useRef(0);
-  const inFlightReadsRef = useRef(0);
   const inviteGenRef = useRef(0);
   const sessionIdRef = useRef<string | null>(null);
   const previousReadRef = useRef<TrainTogetherRead | null>(null);
@@ -127,10 +145,11 @@ export function useTrainTogether(
     for (const sync of syncsRef.current.values()) sync.stop();
     syncsRef.current.clear();
     partnerNamesRef.current.clear();
-    setPartnerSyncStates({});
-    setPartnerAcknowledgedDrafts({});
-    setPartnerExercisesByUser({});
-    setViewerAddedMovements({});
+    setPartnerSyncStates((current) => (Object.keys(current).length ? {} : current));
+    setPartnerAcknowledgedDrafts((current) => (Object.keys(current).length ? {} : current));
+    setPartnerConflictCounts((current) => (Object.keys(current).length ? {} : current));
+    setPartnerExercisesByUser((current) => (Object.keys(current).length ? {} : current));
+    setViewerAddedMovements((current) => (Object.keys(current).length ? {} : current));
   }, []);
 
   const mergePartnerExercises = useCallback((partnerId: string, list: TrainExercise[]) => {
@@ -174,6 +193,7 @@ export function useTrainTogether(
 
       setPartnerSyncStates((current) => pruneRecord(current, activeWorkoutIds));
       setPartnerAcknowledgedDrafts((current) => pruneRecord(current, activeWorkoutIds));
+      setPartnerConflictCounts((current) => pruneRecord(current, activeWorkoutIds));
       setPartnerExercisesByUser((current) => pruneRecord(current, activeWorkoutIds));
       setViewerAddedMovements((current) => pruneRecord(current, activeWorkoutIds));
 
@@ -199,7 +219,10 @@ export function useTrainTogether(
             });
           }
           existing.refresh({ revision: workout.revision, draft: workout.draft });
-          if (!existing.unsent) {
+          if (
+            (existing.current.status === 'synced' || existing.current.status === 'conflict') &&
+            !existing.unsent
+          ) {
             setPartnerAcknowledgedDrafts((prev) =>
               prev[partnerId] === existing.current.draft
                 ? prev
@@ -228,6 +251,12 @@ export function useTrainTogether(
                     return next;
                   });
                   setPartnerAcknowledgedDrafts((prev) => {
+                    if (!(partnerId in prev)) return prev;
+                    const next = { ...prev };
+                    delete next[partnerId];
+                    return next;
+                  });
+                  setPartnerConflictCounts((prev) => {
                     if (!(partnerId in prev)) return prev;
                     const next = { ...prev };
                     delete next[partnerId];
@@ -264,6 +293,10 @@ export function useTrainTogether(
                   mergePartnerExercises(partnerId, state.exercises);
                 }
                 if (state.status === 'conflict' && state.notApplied) {
+                  setPartnerConflictCounts((prev) => ({
+                    ...prev,
+                    [partnerId]: (prev[partnerId] ?? 0) + 1,
+                  }));
                   const name = partnerNamesRef.current.get(partnerId) ?? 'Your partner';
                   onNoticeRef.current?.(partnerConflictNotice(name));
                 }
@@ -302,6 +335,13 @@ export function useTrainTogether(
       const prevSessionId = sessionIdRef.current;
       const nextSessionId = next.session?.id ?? null;
       sessionIdRef.current = nextSessionId;
+      // Avoid churning React state when there is no session before or after this read.
+      if (previous?.session == null && next.session === null) {
+        if (nextSessionId !== prevSessionId) inviteGenRef.current += 1;
+        setInvite((current) => (current ? null : current));
+        if (syncsRef.current.size > 0) reconcilePartnerSyncs(null, expectedGen);
+        return true;
+      }
       setRead(next);
 
       const prevPartners = new Set(sessionPartners(previous?.session).map((m) => m.user_id));
@@ -354,8 +394,6 @@ export function useTrainTogether(
       if (!currentUser || !confirmedRef.current) return null;
       const gen = generationRef.current;
       const seq = ++readSeqRef.current;
-      inFlightReadsRef.current += 1;
-      setLoading(true);
       try {
         const next = await api.trainTogether.read();
         if (generationRef.current !== gen || activeUserRef.current !== currentUser) return null;
@@ -365,11 +403,6 @@ export function useTrainTogether(
         return applied ? next : null;
       } catch {
         return null;
-      } finally {
-        if (generationRef.current === gen) {
-          inFlightReadsRef.current = Math.max(0, inFlightReadsRef.current - 1);
-          if (inFlightReadsRef.current === 0) setLoading(false);
-        }
       }
     },
     [applyRead],
@@ -386,14 +419,12 @@ export function useTrainTogether(
       generationRef.current += 1;
       readSeqRef.current = 0;
       appliedSeqRef.current = 0;
-      inFlightReadsRef.current = 0;
       inviteGenRef.current += 1;
       sessionIdRef.current = null;
       previousReadRef.current = null;
       setRead(null);
       setInvite(null);
-      setLoading(false);
-      setRecentlyJoinedIds(new Set());
+      setRecentlyJoinedIds((current) => (current.size ? new Set() : current));
       stopAllSyncs();
       if (joinPulseTimerRef.current !== null) {
         window.clearTimeout(joinPulseTimerRef.current);
@@ -403,7 +434,6 @@ export function useTrainTogether(
     return () => {
       generationRef.current += 1;
       activeUserRef.current = null;
-      inFlightReadsRef.current = 0;
       inviteGenRef.current += 1;
       sessionIdRef.current = null;
       for (const sync of syncs.values()) sync.stop();
@@ -592,30 +622,57 @@ export function useTrainTogether(
   const session = read?.session ?? null;
   const currentPartners = useMemo(() => sessionPartners(session), [session]);
 
-  return {
-    read,
-    session,
-    partners: currentPartners,
-    invite,
-    inviteSeconds,
-    loading,
-    creatingInvite,
-    joining,
-    leaving,
-    recentlyJoinedIds,
-    partnerSyncStates,
-    partnerAcknowledgedDrafts,
-    partnerExercisesByUser,
-    viewerAddedMovements,
-    refresh,
-    createInvite,
-    join,
-    leave,
-    clearInvite,
-    editPartnerWorkout,
-    retryPartnerSync,
-    registerPartnerExercises: mergePartnerExercises,
-  };
+  return useMemo(
+    () => ({
+      read,
+      session,
+      partners: currentPartners,
+      invite,
+      inviteSeconds,
+      loading: false,
+      creatingInvite,
+      joining,
+      leaving,
+      recentlyJoinedIds,
+      partnerSyncStates,
+      partnerAcknowledgedDrafts,
+      partnerConflictCounts,
+      partnerExercisesByUser,
+      viewerAddedMovements,
+      refresh,
+      createInvite,
+      join,
+      leave,
+      clearInvite,
+      editPartnerWorkout,
+      retryPartnerSync,
+      registerPartnerExercises: mergePartnerExercises,
+    }),
+    [
+      read,
+      session,
+      currentPartners,
+      invite,
+      inviteSeconds,
+      creatingInvite,
+      joining,
+      leaving,
+      recentlyJoinedIds,
+      partnerSyncStates,
+      partnerAcknowledgedDrafts,
+      partnerConflictCounts,
+      partnerExercisesByUser,
+      viewerAddedMovements,
+      refresh,
+      createInvite,
+      join,
+      leave,
+      clearInvite,
+      editPartnerWorkout,
+      retryPartnerSync,
+      mergePartnerExercises,
+    ],
+  );
 }
 
 function readThemeState(): { themeId: ColourThemeId; lightMode: boolean } {

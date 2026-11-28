@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { api, isConnectionFailure } from './api';
+import { api } from './api';
 import { Icon } from './Icon';
 import { motionReduced } from './motion';
 import { PopupDialog } from './PopupDialog';
@@ -21,6 +21,7 @@ import { PARTNER_SET_MAX, partnerRepsInput, partnerWeightInput } from './trainTo
 import { partnerSetLabel, partnerWorkoutName } from './trainTogetherView';
 import { TrainTogetherAvatar } from './TrainTogetherAvatar';
 import { partnerCssVars, type PartnerPalette } from './trainTogetherTheme';
+import { isPartnerWriteRefusal } from './useTrainTogether';
 import {
   formatWeightNumber,
   weightInputValue,
@@ -80,6 +81,7 @@ function PartnerSetRow({
   exerciseName,
   weightUnit,
   pendingSync,
+  conflictResetKey,
   onUpdate,
   onRemove,
 }: {
@@ -89,6 +91,7 @@ function PartnerSetRow({
   exerciseName: string;
   weightUnit: WeightUnit;
   pendingSync: boolean;
+  conflictResetKey: number | string;
   onUpdate: (patch: Partial<Omit<StoredDraftSet, 'key'>>) => void;
   onRemove: () => void;
 }) {
@@ -99,6 +102,18 @@ function PartnerSetRow({
   const [weightError, setWeightError] = useState<string | null>(null);
   const [repsError, setRepsError] = useState<string | null>(null);
   const errorId = useId();
+  const lastConflictKeyRef = useRef(conflictResetKey);
+
+  // When an edit is reported not applied (conflict), adopt the server's values even if focused.
+  useEffect(() => {
+    if (conflictResetKey === lastConflictKeyRef.current) return;
+    lastConflictKeyRef.current = conflictResetKey;
+    if (!conflictResetKey) return;
+    setWeightText(weightInputValue(set.weight_kg, weightUnit));
+    setWeightError(null);
+    setRepsText(set.reps === null ? '' : String(set.reps));
+    setRepsError(null);
+  }, [conflictResetKey, set.weight_kg, set.reps, weightUnit]);
 
   // Keep input text in sync with remote updates when not focused and not holding invalid local input.
   useEffect(() => {
@@ -115,12 +130,18 @@ function PartnerSetRow({
     }
   }, [set.reps, repsFocused]);
 
+  const storedWeightText = weightInputValue(set.weight_kg, weightUnit);
+  const storedRepsText = set.reps === null ? '' : String(set.reps);
+  const focusedTextDiffers =
+    (weightFocused && weightText !== storedWeightText) ||
+    (repsFocused && repsText !== storedRepsText);
+  const rowPending = pendingSync || focusedTextDiffers;
   const localDone = set.completed === true;
-  const isSavedDone = localDone && !pendingSync;
+  const isSavedDone = localDone && !rowPending;
 
   const rowClass = [
     'tt-partner-set-row',
-    pendingSync ? 'is-pending' : isSavedDone ? 'is-done' : '',
+    rowPending ? 'is-pending' : isSavedDone ? 'is-done' : '',
     warmup ? 'is-warmup' : '',
   ]
     .filter(Boolean)
@@ -220,15 +241,15 @@ function PartnerSetRow({
         </span>
         <button
           type="button"
-          className={`tt-partner-tick${pendingSync ? ' is-pending' : isSavedDone ? ' is-done' : ''}`}
+          className={`tt-partner-tick${rowPending ? ' is-pending' : isSavedDone ? ' is-done' : ''}`}
           aria-label={
-            pendingSync
+            rowPending
               ? `Saving ${exerciseName} set ${label}`
               : isSavedDone
                 ? `Mark ${exerciseName} set ${label} incomplete`
                 : `Complete ${exerciseName} set ${label}`
           }
-          aria-pressed={pendingSync ? 'mixed' : isSavedDone ? true : false}
+          aria-pressed={rowPending ? 'mixed' : isSavedDone ? true : false}
           onClick={() => onUpdate({ completed: !localDone })}
         >
           <Icon name="check" />
@@ -368,6 +389,7 @@ export function TrainTogetherPartnerView({
   palette,
   syncState,
   acknowledgedDraft,
+  conflictCount,
   extraExercises,
   viewerAddedMovementKeys,
   weightUnit,
@@ -380,6 +402,7 @@ export function TrainTogetherPartnerView({
   palette: PartnerPalette;
   syncState?: PartnerSyncState;
   acknowledgedDraft?: ActiveWorkoutDraft | null;
+  conflictCount?: number;
   extraExercises?: ReadonlyMap<string, TrainExercise>;
   viewerAddedMovementKeys?: ReadonlySet<string>;
   weightUnit: WeightUnit;
@@ -436,13 +459,19 @@ export function TrainTogetherPartnerView({
     0,
   );
   const workoutTitle = draft ? partnerWorkoutName({ draft }) : 'workout';
-  const showOfflineBar = syncState?.status === 'failed' && isConnectionFailure(syncState.error);
-  const refusalMessage =
-    syncState?.status === 'failed' && !showOfflineBar
-      ? syncState.error instanceof Error
-        ? syncState.error.message
-        : 'That change could not be saved.'
-      : null;
+  const isRefusal = syncState?.status === 'failed' && isPartnerWriteRefusal(syncState.error);
+  const showOfflineBar = syncState?.status === 'failed' && !isRefusal;
+  const refusalMessage = isRefusal
+    ? syncState.error instanceof Error
+      ? syncState.error.message
+      : 'That change could not be saved.'
+    : null;
+  const conflictResetKey: number | string =
+    conflictCount !== undefined
+      ? conflictCount
+      : syncState?.notApplied
+        ? `${syncState.revision}:${syncState.status}`
+        : '';
 
   const existingExerciseIds = useMemo(
     () => new Set((draft?.movements ?? []).map((m) => m.exerciseId)),
@@ -626,6 +655,7 @@ export function TrainTogetherPartnerView({
                                 exerciseName={exerciseName}
                                 weightUnit={weightUnit}
                                 pendingSync={pendingSync}
+                                conflictResetKey={conflictResetKey}
                                 onUpdate={(patch) => {
                                   const at = Date.now();
                                   void onEdit((current) =>
