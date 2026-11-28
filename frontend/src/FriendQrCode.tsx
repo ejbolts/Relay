@@ -3,6 +3,7 @@ import { encode } from 'uqr';
 import { api } from './api';
 import { friendInviteUrl, openFriendInvite } from './friendInvite';
 import { FriendQrScanner } from './FriendQrScanner';
+import { openTrainInvite } from './trainTogetherInvite';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
@@ -122,6 +123,10 @@ export function FriendInviteDialog({
           onScanned={(accountId) => {
             onClose();
             openFriendInvite(accountId);
+          }}
+          onScannedTrain={(token) => {
+            onClose();
+            openTrainInvite(token);
           }}
         />
       ) : shareable === 'private' ? (

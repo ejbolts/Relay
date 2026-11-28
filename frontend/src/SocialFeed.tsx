@@ -30,6 +30,7 @@ import { WorkoutPhotoEditor, WorkoutPhotos } from './WorkoutPhotos';
 import { WorkoutComments } from './WorkoutComments';
 import { WorkoutReactionControl } from './WorkoutReactionControl';
 import { WorkoutReactionPeople } from './WorkoutReactionPeople';
+import { TrainedWithPill } from './TrainedWithPill';
 import { clearWorkoutFocus, useWorkoutFocus, type WorkoutFocus } from './workoutFocus';
 import { FOCUS_HIGHLIGHT_MS, workoutFocusStep } from './workoutFocusRequest';
 import './socialFeed.css';
@@ -57,6 +58,7 @@ function FeedStats({ workout, records }: { workout: TrackedWorkout; records: num
 function FeedCard({
   item,
   today,
+  viewerId,
   picking,
   focus,
   onPickingChange,
@@ -68,6 +70,7 @@ function FeedCard({
 }: {
   item: TimelineItem;
   today: string;
+  viewerId: string | null;
   picking: boolean;
   /** A notification's request to reveal this card and open its reactions or comments. */
   focus: WorkoutFocus | null;
@@ -172,6 +175,12 @@ function FeedCard({
             </button>
           </div>
         </header>
+        <TrainedWithPill
+          className="is-feed"
+          trainedWith={workout.trained_with}
+          trainedWithCount={workout.trained_with_count}
+          viewerId={viewerId}
+        />
         {member.is_you ? (
           <>
             <WorkoutPhotoEditor
@@ -340,6 +349,7 @@ export function SocialFeed({
                 key={workout.id}
                 item={item}
                 today={today}
+                viewerId={viewerId}
                 picking={picking === workout.id}
                 focus={focus?.workoutId === workout.id ? focus : null}
                 onPickingChange={(open) =>

@@ -24,6 +24,7 @@ import {
 import { holdChangesUntilSessionConfirmed, type SessionHold } from './sessionGate';
 import { rememberAccountDeleted, signInNoticeText, takeAccountDeleted } from './signInNotice';
 import { TodaySkeleton } from './TodaySkeleton';
+import { installTrainInviteHashCapture } from './trainTogetherInvite';
 import type { AuthConfig, User } from './types';
 import { UserContext, type UserSession } from './userContext';
 import { useSessionConnection } from './useSessionConnection';
@@ -151,6 +152,8 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const cleanup = useRef(Promise.resolve());
   const generation = useRef(0);
   useSessionConnection(state.status === 'authenticated' ? state.user.id : null);
+  // Keep #train= link capture alive while signed out on the sign-in screen.
+  useEffect(() => installTrainInviteHashCapture(), []);
 
   /** Stops holding changes: they go ahead, or are refused because the session is not this account's. */
   const settleHold = useCallback((outcome: 'confirm' | 'end') => {
@@ -282,6 +285,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
         restartApp();
       },
       signingIn: signInExiting,
+      confirmed: state.status === 'authenticated' && !state.unconfirmed,
     }),
     [signInExiting, state],
   );

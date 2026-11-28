@@ -137,11 +137,17 @@ import {
   type BodyMeasurementTransport,
 } from './bodyMeasurementStore';
 
+export interface ApiErrorMember {
+  user_id: string;
+  name: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
     public readonly code = 'request_failed',
     public readonly status = 0,
+    public readonly member?: ApiErrorMember,
   ) {
     super(message);
   }
@@ -284,7 +290,7 @@ async function request<T>(
   if (!serverDown) reportServerReached();
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
-      error?: { code?: string; message?: string };
+      error?: { code?: string; message?: string; member?: unknown };
     } | null;
     checkAccount();
     if (isClientOutdated(response.status, body?.error?.code)) reportClientOutdated();
@@ -295,10 +301,22 @@ async function request<T>(
     ) {
       emitAuthExpired();
     }
+    const rawMember = body?.error?.member;
+    const member =
+      rawMember &&
+      typeof rawMember === 'object' &&
+      typeof (rawMember as { user_id?: unknown }).user_id === 'string' &&
+      typeof (rawMember as { name?: unknown }).name === 'string'
+        ? {
+            user_id: (rawMember as { user_id: string }).user_id,
+            name: (rawMember as { name: string }).name,
+          }
+        : undefined;
     throw new ApiError(
       body?.error?.message ?? `Request failed (${response.status})`,
       body?.error?.code,
       response.status,
+      member,
     );
   }
   const value = response.status === 204 ? (undefined as T) : ((await response.json()) as T);
