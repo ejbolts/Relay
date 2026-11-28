@@ -9,7 +9,7 @@ import {
   type TrainMember,
   type TrainSession,
 } from './trainTogether';
-import { partnerTicker } from './trainTogetherView';
+import { partnerSetLabel, partnerTicker } from './trainTogetherView';
 import { TrainTogetherAvatar } from './TrainTogetherAvatar';
 import { partnerCssVars, type PartnerPalette } from './trainTogetherTheme';
 import type { WeightUnit } from './weightUnits';
@@ -19,14 +19,36 @@ function partnerTickerInfo(
   partner: TrainMember,
   now: number,
   weightUnit: WeightUnit,
-): { text: string; totalSetsDone: number; setSignature: string } {
+): {
+  text: string;
+  exerciseName: string | null;
+  setTail: string | null;
+  totalSetsDone: number;
+  setSignature: string;
+} {
   const text = partnerTicker(partner.workout, weightUnit, now);
   if (!partner.workout) {
-    return { text, totalSetsDone: 0, setSignature: '' };
+    return { text, exerciseName: null, setTail: null, totalSetsDone: 0, setSignature: '' };
   }
   const summary = partnerSummary(partner.workout, now);
   const sig = `${summary.totalSetsDone}:${summary.movementKey ?? ''}:${text}`;
-  return { text, totalSetsDone: summary.totalSetsDone, setSignature: sig };
+  if (!summary.movementKey) {
+    return {
+      text,
+      exerciseName: null,
+      setTail: null,
+      totalSetsDone: summary.totalSetsDone,
+      setSignature: sig,
+    };
+  }
+  const setTail = summary.lastSet ? partnerSetLabel(summary.lastSet, weightUnit) : 'Starting';
+  return {
+    text,
+    exerciseName: summary.name,
+    setTail,
+    totalSetsDone: summary.totalSetsDone,
+    setSignature: sig,
+  };
 }
 
 /**
@@ -147,7 +169,16 @@ export function TrainTogetherDeck({
       <div className="tt-live-deck">
         {entries.length === 1 ? (
           (() => {
-            const { partner, palette, name, shortName, text, totalSetsDone } = entries[0];
+            const {
+              partner,
+              palette,
+              name,
+              shortName,
+              text,
+              exerciseName,
+              setTail,
+              totalSetsDone,
+            } = entries[0];
             const hasWorkout = partner.workout !== null;
             const vars = palette ? (partnerCssVars(palette) as CSSProperties) : undefined;
             const flashing = flashingIds.has(partner.user_id);
@@ -172,7 +203,14 @@ export function TrainTogetherDeck({
                   <div
                     className={`tt-deck-ticker${hasWorkout ? '' : ' is-muted'}${flashing ? ' is-flashing' : ''}`}
                   >
-                    {text}
+                    {exerciseName && setTail ? (
+                      <>
+                        <span className="tt-deck-ticker-ex">{exerciseName}</span>
+                        <span className="tt-deck-ticker-set num">{` · ${setTail}`}</span>
+                      </>
+                    ) : (
+                      <span className="tt-deck-ticker-ex">{text}</span>
+                    )}
                   </div>
                 </div>
                 <div className="tt-deck-actions">
@@ -215,7 +253,7 @@ export function TrainTogetherDeck({
                 Session
               </button>
             </div>
-            {entries.map(({ partner, palette, name, text }) => {
+            {entries.map(({ partner, palette, name, text, exerciseName, setTail }) => {
               const hasWorkout = partner.workout !== null;
               const vars = palette ? (partnerCssVars(palette) as CSSProperties) : undefined;
               const flashing = flashingIds.has(partner.user_id);
@@ -233,7 +271,18 @@ export function TrainTogetherDeck({
                     pulse={recentlyJoinedIds.has(partner.user_id)}
                   />
                   <div className={`tt-deck-ticker-inline${hasWorkout ? '' : ' is-muted'}`}>
-                    <b>{name}</b> · {text}
+                    <b className="tt-deck-ticker-name">{name}</b>
+                    {exerciseName && setTail ? (
+                      <>
+                        <span className="tt-deck-ticker-sep" aria-hidden="true">
+                          {' · '}
+                        </span>
+                        <span className="tt-deck-ticker-ex">{exerciseName}</span>
+                        <span className="tt-deck-ticker-set num">{` · ${setTail}`}</span>
+                      </>
+                    ) : (
+                      <span className="tt-deck-ticker-ex">{` · ${text}`}</span>
+                    )}
                   </div>
                   {hasWorkout && (
                     <button

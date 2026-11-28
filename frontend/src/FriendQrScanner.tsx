@@ -136,10 +136,7 @@ export function FriendQrScanner({
             inversionAttempts: 'dontInvert',
           });
           if (pausedRef.current) return;
-          if (!code) {
-            lastTrainTokenRef.current = null;
-            return;
-          }
+          if (!code) return;
           const trainToken = trainInviteTokenFromScan(code.data);
           if (trainToken) {
             if (mode === 'train') {

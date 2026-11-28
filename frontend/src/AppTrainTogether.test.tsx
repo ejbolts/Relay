@@ -9,7 +9,7 @@ import { TRAIN_ERRORS, type TrainSession } from './trainTogether';
 import { captureTrainInvite, openTrainInvite, pendingTrainInvite } from './trainTogetherInvite';
 import type { DashboardData, Exercise, User } from './types';
 import { UserContext, type UserSession } from './userContext';
-import { writeActiveWorkoutDraft } from './workoutDraft';
+import { readActiveWorkoutDraft, writeActiveWorkoutDraft } from './workoutDraft';
 import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 import {
   readDashboardCache,
@@ -655,5 +655,90 @@ describe('App train-together review fixes', () => {
     const summary = document.querySelector('.history-card-summary');
     expect(summary).not.toBeNull();
     expect(summary?.querySelector('.tt-with-pill')?.textContent).toContain('with Sam & 1 other');
+  });
+
+  it('counts partner-mode interaction as activity on your own workout inactivity deadline (re-check 3)', async () => {
+    vi.useFakeTimers();
+    try {
+      const start = 1_800_000_000_000;
+      vi.setSystemTime(start);
+      const initialFinishAt = start + 10 * 60_000;
+      writeActiveWorkoutDraft({
+        version: 1,
+        clientSessionId: '33333333-3333-4333-8333-333333333333',
+        startedAt: start - 3600_000,
+        updatedAt: start - 60_000,
+        lastActiveAt: start - 60_000,
+        inactiveFinishAt: initialFinishAt,
+        name: 'My Push',
+        workoutDate: '2026-11-28',
+        category: 'push',
+        notes: '',
+        movements: [
+          {
+            key: 'own-m1',
+            exerciseId: BENCH.id,
+            notes: '',
+            machinePhotoIds: [],
+            supersetKey: null,
+            sets: [
+              {
+                key: 'own-s1',
+                reps: 8,
+                weight_kg: 80,
+                rpe: null,
+                rest_seconds: null,
+                duration_seconds: null,
+                distance_km: null,
+                notes: null,
+                completed: true,
+              },
+            ],
+          },
+        ],
+      });
+      vi.mocked(api.trainTogether.read).mockResolvedValue({
+        session: makePartnerSession(),
+        ended: null,
+      });
+
+      window.history.replaceState(null, '', '/#log');
+      await act(async () =>
+        root.render(
+          <ToastProvider>
+            <UserContext.Provider value={makeSessionContext(ACCOUNT_A)}>
+              <App />
+            </UserContext.Provider>
+          </ToastProvider>,
+        ),
+      );
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(50);
+      });
+
+      const logForBtn = [...document.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+        b.textContent?.includes('Log for'),
+      )!;
+      await act(async () => logForBtn.click());
+      expect(document.body.textContent).toContain('Logging for Sam Rivera');
+
+      // Advance past the 15s activity persistence throttle and interact inside Partner Mode.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000);
+      });
+      const partnerReps = document.querySelector<HTMLInputElement>(
+        '.tt-partner-view input[aria-label*="reps"]',
+      )!;
+      expect(partnerReps).not.toBeNull();
+      await act(async () => {
+        partnerReps.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+        partnerReps.dispatchEvent(new KeyboardEvent('keydown', { key: '9', bubbles: true }));
+      });
+
+      const saved = readActiveWorkoutDraft();
+      expect(saved?.inactiveFinishAt).toBeGreaterThan(initialFinishAt);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

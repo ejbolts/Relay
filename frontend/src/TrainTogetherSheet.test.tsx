@@ -477,17 +477,136 @@ describe('TrainTogetherSheet', () => {
     const dialog = document.querySelector('dialog.train-together-sheet')!;
     expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('That code has expired.');
 
-    // Once the code leaves the frame and comes back, scanning it again triggers a fresh join.
+    // A single missed decode (null frame) between two frames of the same refused code must NOT re-arm.
     vi.mocked(jsQR).mockReturnValueOnce(null);
     const emptyFrame = callbacks.shift()!;
     await act(async () => emptyFrame((frameNow += 500)));
     const returnFrame = callbacks.shift()!;
     await act(async () => returnFrame((frameNow += 500)));
+    expect(joinSpy).toHaveBeenCalledTimes(1);
+    expect(dialog.querySelector('[role="alert"]')?.textContent).toContain('That code has expired.');
+
+    // Pressing "Scan again" re-arms scanning for the same code.
+    const scanAgainBtn = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Scan again',
+    )!;
+    await act(async () => scanAgainBtn.click());
+    const afterRetryFrame = callbacks.shift()!;
+    await act(async () => afterRetryFrame((frameNow += 500)));
     expect(joinSpy).toHaveBeenCalledTimes(2);
     await act(async () => {
       rejectJoin(new ApiError('That code has expired.', TRAIN_ERRORS.inviteExpired, 404));
       await Promise.resolve();
     });
+
+    // Scanning a different code re-arms immediately without pressing Scan again.
+    vi.mocked(jsQR).mockReturnValue({
+      data: 'https://gym.example.com/#train=DifferentValidToken123456',
+    } as ReturnType<typeof jsQR>);
+    const differentCodeFrame = callbacks.shift()!;
+    await act(async () => differentCodeFrame((frameNow += 500)));
+    expect(joinSpy).toHaveBeenCalledTimes(3);
+    expect(joinSpy).toHaveBeenLastCalledWith('DifferentValidToken123456');
+    await act(async () => {
+      rejectJoin(new ApiError('That code has expired.', TRAIN_ERRORS.inviteExpired, 404));
+      await Promise.resolve();
+    });
+  });
+
+  it('replaces an expired code immediately when the server creates a new session id with the sheet open (re-check 2)', async () => {
+    vi.useFakeTimers();
+    try {
+      const start = 1_800_000_000_000;
+      vi.setSystemTime(start);
+      const makeSoloSession = (id: string): TrainSession => ({
+        id,
+        started_at: new Date(start).toISOString(),
+        expires_at: new Date(start + 12 * 3600_000).toISOString(),
+        created_by: USER.id,
+        max_members: 4,
+        members: [
+          {
+            user_id: USER.id,
+            username: USER.username,
+            display_name: USER.display_name,
+            photo_url: null,
+            is_self: true,
+            joined_at: new Date(start).toISOString(),
+            workout: null,
+          },
+        ],
+      });
+
+      const readSpy = vi
+        .spyOn(api.trainTogether, 'read')
+        .mockResolvedValueOnce({ session: makeSoloSession('sess-1'), ended: null })
+        .mockResolvedValueOnce({ session: makeSoloSession('sess-1'), ended: null })
+        .mockResolvedValue({ session: makeSoloSession('sess-2'), ended: null });
+      const inviteSpy = vi
+        .spyOn(api.trainTogether, 'invite')
+        .mockResolvedValueOnce({
+          token: 'FirstExpiringToken123456',
+          expires_at: new Date(start + 3_000).toISOString(),
+          session_id: 'sess-1',
+        })
+        .mockResolvedValueOnce({
+          token: 'RenewedSessionToken12345',
+          expires_at: new Date(start + 303_000).toISOString(),
+          session_id: 'sess-2',
+        });
+
+      function OpenCodeSheet() {
+        const tt = useTrainTogether(USER.id);
+        return (
+          <ToastProvider>
+            <TrainTogetherSheet
+              user={USER}
+              session={tt.session}
+              partners={tt.partners}
+              palettes={partnerPalettes('blue', 1, false)}
+              invite={tt.invite}
+              inviteSeconds={tt.inviteSeconds}
+              creatingInvite={tt.creatingInvite}
+              joining={tt.joining}
+              leaving={tt.leaving}
+              onCreateInvite={tt.createInvite}
+              onJoin={async (token) => {
+                await tt.join(token);
+              }}
+              onLeave={tt.leave}
+              onClose={vi.fn()}
+            />
+          </ToastProvider>
+        );
+      }
+
+      await act(async () => root.render(<OpenCodeSheet />));
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const dialog = document.querySelector('dialog.train-together-sheet')!;
+      expect(inviteSpy).toHaveBeenCalledTimes(1);
+      expect(dialog.querySelector('svg.qr-code')).not.toBeNull();
+
+      // Advance past the 3-second expiry while the sheet stays open (well before the 20s poll).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_000);
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      expect(inviteSpy).toHaveBeenCalledTimes(2);
+      expect(readSpy).toHaveBeenCalledTimes(3);
+      expect(dialog.querySelector('svg.qr-code')).not.toBeNull();
+      const copyBtn = [...dialog.querySelectorAll<HTMLButtonElement>('button')].find((b) =>
+        b.textContent?.includes('Copy link'),
+      )!;
+      expect(copyBtn.disabled).toBe(false);
+      expect(dialog.textContent).not.toContain('0:00');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

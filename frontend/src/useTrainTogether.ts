@@ -452,7 +452,7 @@ export function useTrainTogether(
     void refresh();
   }, [userId, confirmed, refresh]);
 
-  // Refresh on presence socket events, visibility return, focus, and reconnect.
+  // Refresh on presence socket events, visibility return, and reconnect.
   useEffect(() => {
     if (!userId || !confirmed) return;
     const onWake = () => {
@@ -463,12 +463,10 @@ export function useTrainTogether(
     };
     window.addEventListener(TRAIN_TOGETHER_CHANGED, onWake);
     window.addEventListener('online', onWake);
-    window.addEventListener('focus', onWake);
     document.addEventListener('visibilitychange', onVisible);
     return () => {
       window.removeEventListener(TRAIN_TOGETHER_CHANGED, onWake);
       window.removeEventListener('online', onWake);
-      window.removeEventListener('focus', onWake);
       document.removeEventListener('visibilitychange', onVisible);
     };
   }, [userId, confirmed, refresh]);
@@ -518,14 +516,20 @@ export function useTrainTogether(
       ) {
         return null;
       }
-      if (sessionIdRef.current !== null && sessionIdRef.current !== created.session_id) {
-        return null;
-      }
       // Invalidate any session read that was in flight before this invite completed.
       appliedSeqRef.current = ++readSeqRef.current;
+      const replacedSession =
+        sessionIdRef.current !== null && sessionIdRef.current !== created.session_id;
       sessionIdRef.current = created.session_id;
       if (previousReadRef.current === null) {
         previousReadRef.current = { session: null, ended: null };
+      }
+      if (replacedSession) {
+        setRead((current) =>
+          current?.session && current.session.id !== created.session_id
+            ? { session: null, ended: current.ended }
+            : current,
+        );
       }
       setInvite(created);
       setNow(Date.now());
