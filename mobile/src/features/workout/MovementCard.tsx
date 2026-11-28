@@ -41,6 +41,7 @@ import {
   weightInputValue,
   type WeightUnit,
 } from '../../../../frontend/src/weightUnits';
+import { isAllTimePr } from '../../../../frontend/src/workoutPr';
 import type {
   WorkoutDraftMovement,
   WorkoutDraftSet,
@@ -735,8 +736,6 @@ function SetRow({
   // Last time's RPE shows faintly in an unlogged set's RPE, as on the web.
   const rpeText = item.rpe !== null ? String(item.rpe) : lastRpe !== null ? String(lastRpe) : '–';
   const rpeInk = item.rpe !== null ? colors.text : colors.muted;
-  // Last time's numbers stand in faintly for an empty field, as the web's ghost values.
-  const ghost = !item.completed ? previous : undefined;
 
   // The set pill's menu, built each render so it always reflects the set as it is now.
   const setMenu: MenuItem[] = [
@@ -861,7 +860,6 @@ function SetRow({
                     <NumberField
                       ref={firstField}
                       label={`Duration minutes for set ${number}`}
-                      placeholder={minutesFormat(ghost?.duration_seconds ?? null)}
                       value={item.duration_seconds}
                       format={minutesFormat}
                       parse={minutesParse}
@@ -874,7 +872,6 @@ function SetRow({
                     <NumberField
                       ref={secondField}
                       label={`Distance kilometres for set ${number}`}
-                      placeholder={formatPlain(ghost?.distance_km ?? null)}
                       value={item.distance_km}
                       format={formatPlain}
                       parse={parseDecimal}
@@ -890,7 +887,6 @@ function SetRow({
                     <NumberField
                       ref={firstField}
                       label={`Weight ${weightUnit === 'lb' ? 'pounds' : 'kilograms'} for set ${number}`}
-                      placeholder={weightFormat(ghost?.weight_kg ?? null)}
                       value={item.weight_kg}
                       format={weightFormat}
                       parse={weightParse}
@@ -904,7 +900,6 @@ function SetRow({
                     <NumberField
                       ref={secondField}
                       label={`Repetitions for set ${number}`}
-                      placeholder={formatPlain(ghost?.reps ?? null)}
                       keyboardType="number-pad"
                       value={item.reps}
                       format={formatPlain}
@@ -1029,18 +1024,38 @@ function SetDetails({
       {!!ratio && (
         <Text style={[type.footnote, type.number, { color: colors.secondary }]}>{ratio}</Text>
       )}
-      {records && (
-        <View
-          accessible
-          accessibilityLabel={`Set ${number}: ${records.join(', ')}`}
-          style={[styles.record, { backgroundColor: colors.goldSoft, borderRadius: radius.sm }]}
-        >
-          <Icon name="trophy" size={12} color={colors.gold} />
-          <Text style={[type.caption, { color: colors.text, fontWeight: '700', flexShrink: 1 }]}>
-            {records.join(' · ')}
-          </Text>
-        </View>
-      )}
+      {records &&
+        (() => {
+          const allTime = isAllTimePr(records);
+          const pill = (
+            <View
+              accessible
+              accessibilityLabel={`Set ${number}: ${records.join(', ')}`}
+              style={[styles.record, { backgroundColor: colors.goldSoft, borderRadius: radius.sm }]}
+            >
+              <Icon name="trophy" size={12} color={colors.gold} />
+              <Text
+                style={[type.caption, { color: colors.text, fontWeight: '700', flexShrink: 1 }]}
+              >
+                {records.join(' · ')}
+              </Text>
+            </View>
+          );
+          if (!allTime) return pill;
+          return (
+            <View
+              style={{
+                alignSelf: 'flex-start',
+                borderWidth: 1.5,
+                borderColor: colors.allTimeRing,
+                borderRadius: radius.sm + 2,
+                padding: 1.5,
+              }}
+            >
+              {pill}
+            </View>
+          );
+        })()}
       {machine !== undefined && (
         <Text
           style={[

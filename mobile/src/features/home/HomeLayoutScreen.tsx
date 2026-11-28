@@ -23,6 +23,7 @@ import {
   type HomeSectionId,
 } from '../../../../frontend/src/homeLayout';
 import { Button, cardSurface, ErrorState, errorMessage, Loading } from '../../ui/components';
+import { OFFLINE_MESSAGE } from '../../data/offline';
 import { haptics } from '../../ui/haptics';
 import { useTheme } from '../../ui/theme';
 import { showToast } from '../../ui/Toast';
@@ -48,6 +49,9 @@ export function HomeLayoutScreen() {
         <Editor saved={home.layout} />
       ) : home.isError ? (
         <ErrorState message={errorMessage(home.error)} onRetry={() => void home.refetch()} />
+      ) : home.fetchStatus === 'paused' ? (
+        // Offline, a layout copied on this phone is only a placeholder: say so instead of spinning.
+        <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void home.refetch()} />
       ) : (
         <Loading label="Loading your layout" />
       )}

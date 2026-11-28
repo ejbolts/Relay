@@ -99,6 +99,8 @@ describe('a saved workout’s sets as a table', () => {
       'Block PR',
     ]);
     expect(badges[0]?.getAttribute('title')).toBe('All-time Weight PR, Block Weight PR');
+    expect(badges[0]?.classList.contains('is-all-time')).toBe(true);
+    expect(badges[2]?.classList.contains('is-all-time')).toBe(false);
   });
 
   it('shows a bodyweight set as BW and a cardio set as one result across Weight and Reps', () => {

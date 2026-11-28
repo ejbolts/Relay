@@ -5,7 +5,7 @@ import { Alert, Keyboard, Platform, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { TrainingPreferences, User, WorkoutType } from '../../../../frontend/src/types';
 import { DEFAULT_WORKOUT_TYPES } from '../../../../frontend/src/workoutTypes';
-import { ApiError, apiGet, apiSend } from '../../data/api';
+import { ApiError, apiGet, apiSend, request } from '../../data/api';
 import { queryKeys } from '../../data/queries';
 import { promptText, showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
@@ -17,10 +17,14 @@ import { PasswordRequiredScreen } from './PasswordRequiredScreen';
 import { SettingsScreen } from './SettingsScreen';
 import { sectionScrollOffset } from './SettingsSearch';
 import { WorkoutTypesScreen } from './WorkoutTypesScreen';
+import { WhatsNewScreen } from './WhatsNewScreen';
+import { WorkoutTypeExercisesScreen } from './WorkoutTypeExercisesScreen';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 
 const mockRouter = { push: jest.fn(), back: jest.fn(), canGoBack: () => true };
 jest.mock('expo-router', () => ({
   useRouter: () => mockRouter,
+  useLocalSearchParams: () => ({ id: 'arms' }),
   // Header buttons render in place, so tests can press them.
   Stack: {
     Screen: ({ options }: { options?: { headerRight?: () => ReactElement } }) =>
@@ -30,12 +34,24 @@ jest.mock('expo-router', () => ({
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
   apiOrigin: 'https://relay.test',
+  serverOrigin: () => 'https://relay.test',
   apiGet: jest.fn(),
   apiSend: jest.fn(),
   request: jest.fn(),
 }));
 jest.mock('../../ui/prompts', () => ({ showMenu: jest.fn(), promptText: jest.fn() }));
-jest.mock('../../ui/Toast', () => ({ showToast: jest.fn() }));
+// The signed-in session, as the toast host stamps it; a test switches it to another account.
+let mockAccount = 'user:u1';
+jest.mock('../../ui/Toast', () => ({
+  showToast: jest.fn(),
+  toastAccount: () => mockAccount,
+  isToastAccountCurrent: (account: string) => account === mockAccount,
+}));
+jest.mock('../../data/session', () => ({
+  ...jest.requireActual<typeof import('../../data/session')>('../../data/session'),
+  sessionToken: jest.fn(async () => 'token-u1'),
+  forgetSessionTokenIf: jest.fn(async () => undefined),
+}));
 jest.mock('expo-notifications', () => ({
   getPermissionsAsync: jest.fn(async () => ({ granted: false, canAskAgain: true })),
   requestPermissionsAsync: jest.fn(async () => ({ granted: true, canAskAgain: true })),
@@ -221,6 +237,14 @@ describe('Settings', () => {
     // Places the app doesn't have stay out of its results.
     await fireEvent.changeText(search, 'youtube');
     expect(screen.getByText('No sections found. Try “timer” or “username”.')).toBeVisible();
+  });
+
+  it('says Settings is offline instead of spinning, then loads once back online', async () => {
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => show(<SettingsScreen />),
+      () => expect(screen.getByText('Between sets')).toBeVisible(),
+    );
   });
 
   it('shows the split row as offline, not blank, while the split waits for the network', async () => {
@@ -467,30 +491,112 @@ describe('Workout types', () => {
 });
 
 describe('Edit profile', () => {
+  const patched = () =>
+    jest
+      .mocked(request)
+      .mock.calls.filter(([path]) => path === '/api/profile')
+      .map(([, init, token]) => ({ body: JSON.parse(String(init?.body)), token }));
+  beforeEach(() => {
+    mockAccount = 'user:u1';
+    mockUser.display_name = 'Preview';
+    mockUser.sex = null;
+  });
+
   it('saves a new name and confirms a sex before saving it once', async () => {
     const alert = jest.spyOn(Alert, 'alert');
-    jest.mocked(apiSend).mockResolvedValue({ ...mockUser, display_name: 'Sam', sex: 'female' });
+    jest.mocked(request).mockResolvedValue({ ...mockUser, display_name: 'Sam', sex: 'female' });
     await show(<EditProfileScreen />);
     await fireEvent.changeText(screen.getByLabelText('Name'), 'Sam');
     await fireEvent.press(screen.getByRole('radio', { name: 'Female' }));
     await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
     expect(alert.mock.calls[0][0]).toBe('Save your sex as Female?');
-    expect(apiSend).not.toHaveBeenCalled();
+    expect(request).not.toHaveBeenCalled();
     alert.mock.calls[0][2]!.find((button) => button.text === 'Save')!.onPress!();
     await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
-    expect(apiSend).toHaveBeenCalledWith('/api/profile', 'PATCH', {
-      display_name: 'Sam',
-      sex: 'female',
-    });
+    // Sent with the token of the session the screen opened in.
+    expect(patched()).toEqual([
+      { body: { display_name: 'Sam', sex: 'female' }, token: 'token-u1' },
+    ]);
     expect(mockSession.updateUser).toHaveBeenCalledWith(
       expect.objectContaining({ display_name: 'Sam' }),
     );
-    expect(showToast).toHaveBeenCalledWith('Profile saved.');
+    expect(showToast).toHaveBeenCalledWith('Profile saved.', undefined, { account: 'user:u1' });
+  });
+
+  it('sends only what changed, never the draft’s stale copy of a name changed elsewhere', async () => {
+    const alert = jest.spyOn(Alert, 'alert');
+    jest.mocked(request).mockResolvedValue({ ...mockUser, display_name: 'Renamed', sex: 'male' });
+    await show(<EditProfileScreen />);
+    // The account is renamed on another device while the screen is open.
+    mockUser.display_name = 'Renamed';
+    await screen.rerender(
+      <SafeAreaProvider
+        initialMetrics={{
+          frame: { x: 0, y: 0, width: 390, height: 844 },
+          insets: { top: 0, left: 0, right: 0, bottom: 0 },
+        }}
+      >
+        <QueryClientProvider client={client}>
+          <EditProfileScreen />
+        </QueryClientProvider>
+      </SafeAreaProvider>,
+    );
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled();
+    await fireEvent.press(screen.getByRole('radio', { name: 'Male' }));
+    await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
+    alert.mock.calls[0][2]!.find((button) => button.text === 'Save')!.onPress!();
+    await waitFor(() => expect(mockRouter.back).toHaveBeenCalled());
+    expect(patched().map((call) => call.body)).toEqual([{ sex: 'male' }]);
+  });
+
+  it('clears a sex chosen by mistake, leaving nothing to save', async () => {
+    await show(<EditProfileScreen />);
+    expect(screen.queryByRole('button', { name: 'Clear sex' })).toBeNull();
+    await fireEvent.press(screen.getByRole('radio', { name: 'Female' }));
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeEnabled();
+    await fireEvent.press(screen.getByRole('button', { name: 'Clear sex' }));
+    expect(screen.getByRole('radio', { name: 'Female', selected: false })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeDisabled();
+  });
+
+  it('drops a save whose account was switched while it was sent', async () => {
+    let answer!: (user: User) => void;
+    jest
+      .mocked(request)
+      .mockImplementationOnce(
+        () => new Promise((resolve) => (answer = resolve as (user: User) => void)),
+      );
+    await show(<EditProfileScreen />);
+    await fireEvent.changeText(screen.getByLabelText('Name'), 'Sam');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    mockAccount = 'user:u2';
+    await act(async () => answer({ ...mockUser, display_name: 'Sam' }));
+    expect(mockSession.updateUser).not.toHaveBeenCalled();
+    expect(showToast).not.toHaveBeenCalled();
+    expect(mockRouter.back).not.toHaveBeenCalled();
+    // Nothing is sent from a draft opened under another account.
+    await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
+    expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops the spinner when a save fails after an account switch, showing nothing', async () => {
+    let fail!: (reason: Error) => void;
+    jest.mocked(request).mockImplementationOnce(() => new Promise((_, reject) => (fail = reject)));
+    await show(<EditProfileScreen />);
+    await fireEvent.changeText(screen.getByLabelText('Name'), 'Sam');
+    await fireEvent.press(screen.getByRole('button', { name: 'Save profile' }));
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    expect(screen.queryByRole('button', { name: 'Save profile' })).toBeNull();
+    mockAccount = 'user:u2';
+    await act(async () => fail(new ApiError(500, 'Server error')));
+    expect(screen.getByRole('button', { name: 'Save profile' })).toBeVisible();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('shows the web copy for a name another account uses', async () => {
     jest
-      .mocked(apiSend)
+      .mocked(request)
       .mockRejectedValue(new ApiError(409, 'That name is taken.', 'display_name_taken'));
     await show(<EditProfileScreen />);
     await fireEvent.changeText(screen.getByLabelText('Name'), 'Taken');
@@ -540,5 +646,39 @@ describe('Password change required', () => {
       'Choose a different password from the temporary one.',
     );
     expect(mockSession.updateUser).not.toHaveBeenCalled();
+  });
+});
+
+describe('offline with nothing saved', () => {
+  beforeEach(() => {
+    responses['/api/training-blocks'] = { blocks: [], fresh_starts: [] };
+    responses['/api/workout-type-exercises'] = [];
+    responses['/api/exercises'] = [];
+  });
+
+  test('Fresh starts says it is offline, then loads once back online', async () => {
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => show(<FreshStartsScreen />),
+      () => expect(screen.getByRole('button', { name: 'Start fresh' })).toBeVisible(),
+    );
+  });
+
+  test("What's new says it is offline, then loads once back online", async () => {
+    const release = jest.requireActual<{ title: string }>('../../../../frontend/release.json');
+    responses['/release.json'] = release;
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => show(<WhatsNewScreen />),
+      () => expect(screen.getByText(release.title)).toBeVisible(),
+    );
+  });
+
+  test('a workout type’s exercises say they are offline, then load once back online', async () => {
+    await expectOfflineUntilOnline(
+      jest.mocked(apiGet),
+      () => show(<WorkoutTypeExercisesScreen />),
+      () => expect(screen.getByRole('button', { name: 'Save exercises' })).toBeOnTheScreen(),
+    );
   });
 });

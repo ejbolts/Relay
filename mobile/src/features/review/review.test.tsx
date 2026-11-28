@@ -17,7 +17,8 @@ import {
   reviewWorkout,
 } from '../../../../frontend/src/weeklyReviewFixtures';
 import { apiGet, request } from '../../data/api';
-import { recordAppNotices, resetAppNoticeSending, useAppNotices } from './appNotices';
+import { sessionToken } from '../../data/session';
+import { recordAppNotices, resetAppNoticeSending, sendPending, useAppNotices } from './appNotices';
 import { NotificationsBell } from '../social/NotificationsBell';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { finishAppTour, queueAppTour } from '../guides/tourProgress';
@@ -358,6 +359,26 @@ it('a save that finishes after switching accounts never reaches the next account
   await act(async () => reply.resolve({ release_seen: '1.4.0', weekly_review_seen: null }));
   expect(screen.getByText('b: none')).toBeVisible();
   expect(client.getQueryData(['app-notices', 'b'])).toEqual(notices);
+  expect(request).toHaveBeenCalledTimes(1);
+});
+
+it('keeps a marker for later when the session changes while it is read, without failing', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  await render(
+    <QueryClientProvider client={client}>
+      <AccountNotices userId="a" />
+    </QueryClientProvider>,
+  );
+  expect(await screen.findByText('a: none')).toBeVisible();
+  // The first save fails to connect, so the marker waits to be sent again.
+  jest.mocked(request).mockClear();
+  jest.mocked(request).mockRejectedValueOnce(new TypeError('Network request failed'));
+  recordAppNotices(client, 'a', { release_seen: '1.4.0' });
+  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+  await act(async () => undefined);
+  // The next attempt's session read meets a session change: nothing is sent, and it doesn't fail.
+  jest.mocked(sessionToken).mockRejectedValueOnce(new Error('Your account changed'));
+  await expect(sendPending(client, 'a')).resolves.toBeUndefined();
   expect(request).toHaveBeenCalledTimes(1);
 });
 

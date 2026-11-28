@@ -5,7 +5,9 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { haptics } from '../../ui/haptics';
 import { Icon } from '../../ui/Icon';
+import { useCountAsSheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
+import { chartYearLines } from '../settings/devicePreferences';
 import { bodyIcons } from './bodyIcons';
 
 /** The bordered square button that opens a chart full screen in landscape, as on the web. */
@@ -46,6 +48,7 @@ export function LandscapeChartView({
   visible,
   onClose,
   header,
+  yearLines = false,
   children,
 }: {
   title: string;
@@ -53,10 +56,17 @@ export function LandscapeChartView({
   onClose: () => void;
   /** Controls beside the title, such as the timeline's year. */
   header?: ReactNode;
-  children: (size: { width: number; height: number }) => ReactNode;
+  /** Offer the Year lines button: the chart's dates cross a 1 January. */
+  yearLines?: boolean;
+  /** `showYearLines` is true while the Year lines button is on. */
+  children: (size: { width: number; height: number }, showYearLines: boolean) => ReactNode;
 }) {
   const { colors, type } = useTheme();
   const [size, setSize] = useState<{ width: number; height: number } | null>(null);
+  // Kept on the phone, so every long chart opens the way it was last left.
+  const yearLinesOn = chartYearLines.use();
+  // Full screen covers everything, as a sheet does: tips wait until it closes.
+  useCountAsSheet(visible);
   useEffect(() => {
     if (!visible) return;
     void ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE).catch(
@@ -85,6 +95,9 @@ export function LandscapeChartView({
             >
               {title}
             </Text>
+            {yearLines && (
+              <YearLinesButton on={yearLinesOn} onPress={() => chartYearLines.set(!yearLinesOn)} />
+            )}
             {header}
             <Pressable
               accessibilityRole="button"
@@ -103,17 +116,55 @@ export function LandscapeChartView({
             </Pressable>
           </View>
           <View
+            testID="landscape-chart-area"
             style={{ flex: 1 }}
             onLayout={(event) => {
               const { width, height } = event.nativeEvent.layout;
               setSize({ width, height });
             }}
           >
-            {size && size.width > 0 && children(size)}
+            {size && size.width > 0 && children(size, yearLines && yearLinesOn)}
           </View>
         </SafeAreaView>
       </GestureHandlerRootView>
     </Modal>
+  );
+}
+
+/** Turns the dotted line at each 1 January, and the year pills, on or off. */
+function YearLinesButton({ on, onPress }: { on: boolean; onPress: () => void }) {
+  const { colors, type, radius } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Year lines"
+      accessibilityState={{ selected: on }}
+      hitSlop={6}
+      onPress={() => {
+        haptics.selection();
+        onPress();
+      }}
+      style={({ pressed }) => [
+        styles.yearLines,
+        {
+          backgroundColor: on ? colors.accentSoft : colors.surface2,
+          borderColor: on ? colors.accent : colors.lineStrong,
+          borderRadius: radius.sm,
+        },
+        pressed && { opacity: 0.65 },
+      ]}
+    >
+      <Icon
+        name={bodyIcons.yearLines}
+        size={14}
+        color={on ? colors.accentText : colors.secondary}
+      />
+      <Text
+        style={[type.callout, { color: on ? colors.accentText : colors.text, fontWeight: '600' }]}
+      >
+        Year lines
+      </Text>
+    </Pressable>
   );
 }
 
@@ -130,4 +181,12 @@ const styles = StyleSheet.create({
   page: { flex: 1, paddingHorizontal: 16, paddingBottom: 8 },
   bar: { flexDirection: 'row', alignItems: 'center', gap: 12, minHeight: 44 },
   exit: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 6 },
+  yearLines: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    minHeight: 36,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+  },
 });

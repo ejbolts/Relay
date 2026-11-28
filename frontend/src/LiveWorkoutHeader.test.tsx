@@ -148,6 +148,107 @@ it('supports keyboard menu navigation, Escape and outside dismissal', async () =
   expect(container.querySelector('[role="menu"]')).toBeNull();
 });
 
+const types = [
+  { id: 'upper', name: 'Upper body', color: '#8b5cf6' },
+  { id: 'cardio', name: 'Cardio', color: '#22c55e' },
+  { id: 'push', name: 'Push', color: '#ef476f' },
+];
+async function renderWithTypes(
+  onChooseType: (id: string) => void,
+  { typesLoading = false }: { typesLoading?: boolean } = {},
+) {
+  await act(async () =>
+    root.render(
+      <LiveWorkoutHeader
+        name="Cardio workout"
+        durationLabel="Live 0:11"
+        loggedSets={0}
+        paused={false}
+        menuButtonRef={menuButtonRef}
+        workoutTypes={types}
+        selectedTypeId="cardio"
+        typesLoading={typesLoading}
+        onChooseType={onChooseType}
+        {...actions}
+      />,
+    ),
+  );
+}
+const menuItems = () =>
+  [...container.querySelectorAll('[role="menu"] button')].map((item) => item.textContent);
+
+it('changes the workout type from a list opened in the menu', async () => {
+  const onChooseType = vi.fn();
+  await renderWithTypes(onChooseType);
+  await click('Workout options');
+  // The type sits with the workout's own details, showing the current one.
+  expect(menuItems()).toEqual([
+    'Rename workout',
+    'Adjust workout time',
+    'Workout typeCardio',
+    'Add note',
+    'Pause workout',
+    'Discard workout',
+  ]);
+  await click('Workout type: Cardio');
+  const menu = container.querySelector('[role="menu"]')!;
+  expect(menu.getAttribute('aria-label')).toBe('Workout type');
+  expect(menuItems()).toEqual(['Workout type', 'Upper body', 'Cardio', 'Push']);
+  expect(
+    [...menu.querySelectorAll('[role="menuitemradio"]')].map((item) =>
+      item.getAttribute('aria-checked'),
+    ),
+  ).toEqual(['false', 'true', 'false']);
+  expect(
+    button('Push').querySelector<HTMLElement>('.live-workout-menu-swatch')!.style.backgroundColor,
+  ).toBe('rgb(239, 71, 111)');
+  expect(document.activeElement).toBe(button('Cardio'));
+  await click('Push');
+  expect(onChooseType).toHaveBeenCalledExactlyOnceWith('push');
+  expect(container.querySelector('[role="menu"]')).toBeNull();
+  expect(document.activeElement).toBe(menuButtonRef.current);
+  // The menu opens on its actions again, not the list it was closed from.
+  await click('Workout options');
+  expect(menuItems()[0]).toBe('Rename workout');
+});
+
+it('goes back from the workout types and keeps the ticked type without choosing it again', async () => {
+  const onChooseType = vi.fn();
+  await renderWithTypes(onChooseType);
+  await click('Workout options');
+  await click('Workout type: Cardio');
+  await click('Back from workout type');
+  expect(menuItems()[0]).toBe('Rename workout');
+  expect(document.activeElement).toBe(button('Workout type: Cardio'));
+  await key(button('Workout type: Cardio'), 'ArrowDown');
+  expect(document.activeElement).toBe(button('Add note'));
+  await click('Workout type: Cardio');
+  await key(button('Cardio'), 'ArrowDown');
+  expect(document.activeElement).toBe(button('Push'));
+  await click('Cardio');
+  expect(onChooseType).not.toHaveBeenCalled();
+  expect(container.querySelector('[role="menu"]')).toBeNull();
+  await click('Workout options');
+  await click('Workout type: Cardio');
+  await key(button('Cardio'), 'Escape');
+  expect(container.querySelector('[role="menu"]')).toBeNull();
+  expect(document.activeElement).toBe(menuButtonRef.current);
+});
+
+it('holds the workout type item while the types load, and skips it with the arrow keys', async () => {
+  await renderWithTypes(vi.fn(), { typesLoading: true });
+  await click('Workout options');
+  expect(button('Workout type: Cardio').disabled).toBe(true);
+  await key(button('Rename workout'), 'ArrowDown');
+  await key(button('Adjust workout time'), 'ArrowDown');
+  expect(document.activeElement).toBe(button('Add note'));
+});
+
+it('leaves the workout type off the menu when it cannot be changed', async () => {
+  await click('Workout options');
+  expect(container.querySelector('.live-workout-menu-type')).toBeNull();
+});
+
 it('finishes from a labelled button and minimises from the handle', async () => {
   expect(container.querySelector('.live-workout-minimise')).toBeNull();
   // A word, so it cannot be mistaken for the ticks on sets and exercises.

@@ -148,7 +148,7 @@ export function HistorySetTable({
                     <td className="history-set-record">
                       {records[index].length > 0 && (
                         <strong
-                          className="pr-badge"
+                          className={`pr-badge${records[index].some(isAllTimeRecord) ? ' is-all-time' : ''}`}
                           title={records[index]
                             .map((record) => `${recordScopeLabel(record)} ${recordLabel(record)}`)
                             .join(', ')}

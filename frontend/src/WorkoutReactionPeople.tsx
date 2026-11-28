@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import { authErrorMessage } from './authForm';
-import { REACTIONS } from './friendFeedData';
+import { reactionChoice } from './friendFeedData';
 import { PopupDialog } from './PopupDialog';
 import { ProfileAvatar } from './ProfileAvatar';
 import { ShowMoreButton } from './ShowMoreButton';
@@ -90,7 +90,7 @@ export function WorkoutReactionPeople({
         {page && page.items.length > 0 && (
           <ul className="reaction-people-list">
             {page.items.map((person) => {
-              const reaction = REACTIONS.find((entry) => entry.kind === person.reaction)!;
+              const reaction = reactionChoice(person.reaction) ?? { emoji: '', label: '' };
               return (
                 <li
                   key={person.id}

@@ -1,7 +1,8 @@
 import { useRef, useState, type ComponentRef } from 'react';
-import { StyleSheet, View, type TextInput } from 'react-native';
+import { StyleSheet, Text, View, type TextInput } from 'react-native';
 import {
   WORKOUT_TIME_MAX,
+  workoutTimeBelowSaved,
   workoutTimeFields,
   workoutTimeFieldValid,
   workoutTimeSeconds,
@@ -9,6 +10,7 @@ import {
 import { Button } from '../../ui/components';
 import { TextField } from '../../ui/controls';
 import { Sheet } from '../../ui/Sheet';
+import { useTheme } from '../../ui/theme';
 
 /**
  * Corrects the live workout clock, as the web's WorkoutTimeEditor: the training time so far in
@@ -18,15 +20,19 @@ import { Sheet } from '../../ui/Sheet';
 export function WorkoutTimeSheet({
   visible,
   elapsedSeconds,
+  savedMinutes = 0,
   onSave,
   onClose,
 }: {
   visible: boolean;
   elapsedSeconds: number;
+  /** Minutes a resumed workout already saved: the total can't go below them. */
+  savedMinutes?: number;
   /** The corrected training time so far, in seconds. */
   onSave: (seconds: number) => void;
   onClose: () => void;
 }) {
+  const { colors, type } = useTheme();
   const [starting] = useState(() => workoutTimeFields(elapsedSeconds));
   const [hours, setHours] = useState(starting.hours);
   const [minutes, setMinutes] = useState(starting.minutes);
@@ -35,7 +41,10 @@ export function WorkoutTimeSheet({
   // workout is left alone until both fields are valid.
   const hoursValid = workoutTimeFieldValid(hours, WORKOUT_TIME_MAX.hours);
   const minutesValid = workoutTimeFieldValid(minutes, WORKOUT_TIME_MAX.minutes);
-  const valid = hoursValid && minutesValid;
+  // A resumed workout's total below its saved minutes says why beside the fields, as the web's.
+  const belowSaved =
+    hoursValid && minutesValid ? workoutTimeBelowSaved(hours, minutes, savedMinutes) : null;
+  const valid = hoursValid && minutesValid && !belowSaved;
   const save = () => {
     if (valid) onSave(workoutTimeSeconds(hours, minutes));
   };
@@ -69,6 +78,14 @@ export function WorkoutTimeSheet({
           style={styles.field}
         />
       </View>
+      {!!belowSaved && (
+        <Text
+          accessibilityRole="alert"
+          style={[type.footnote, styles.error, { color: colors.danger }]}
+        >
+          {belowSaved}
+        </Text>
+      )}
       <View style={styles.actions}>
         <Button label="Set time" onPress={save} disabled={!valid} block />
         <Button label="Cancel" variant="secondary" onPress={onClose} block />
@@ -80,5 +97,6 @@ export function WorkoutTimeSheet({
 const styles = StyleSheet.create({
   fields: { flexDirection: 'row', gap: 12 },
   field: { flex: 1 },
+  error: { marginTop: 8 },
   actions: { gap: 12, marginTop: 20 },
 });

@@ -133,3 +133,37 @@ def test_export_one_workout_keeps_other_sessions_on_that_day_out(client, other_c
     # Another account cannot export it by ID.
     hidden = other_client.get("/api/workouts/export.csv", params={"workout_id": morning["id"]})
     assert hidden.status_code == 404
+
+
+def test_workout_export_is_named_for_relay_and_an_old_gym_workouts_file_still_imports(
+    client, other_client
+):
+    content = (
+        "Date Lifted,Exercise,Weight (kg),Weight (lb),Reps,Bodyweight (kg),"
+        "Bodyweight (lb),Percentile (%),Warmup\n"
+        "2026-08-28,Barbell Bench Press,80,,8,,,,0\n"
+    )
+    assert (
+        client.post(
+            "/api/workouts/import",
+            files={"file": ("history.csv", content.encode(), "text/csv")},
+        ).status_code
+        == 201
+    )
+    exported = client.get("/api/workouts/export.csv")
+    assert exported.status_code == 200, exported.text
+    disposition = exported.headers["content-disposition"]
+    assert 'filename="relay-workouts-' in disposition
+    assert "gym-workouts" not in disposition
+
+    # A file exported before the rename imports the same: the name is only a label.
+    old = other_client.post(
+        "/api/workouts/import",
+        files={"file": ("gym-workouts-2026-10-09.csv", exported.content, "text/csv")},
+    )
+    assert old.status_code == 201, old.text
+    reread = other_client.get("/api/workouts/export.csv")
+    rows = list(csv.DictReader(StringIO(reread.content.decode("utf-8-sig"))))
+    assert [(row["Date Lifted"], row["Exercise"]) for row in rows] == [
+        ("2026-08-28", "Barbell Bench Press")
+    ]

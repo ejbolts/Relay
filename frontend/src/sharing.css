@@ -1549,6 +1549,17 @@
 .comment-replies:empty {
   display: none;
 }
+.comment-replies > button.comment-more-replies {
+  justify-self: start;
+  min-height: 2rem;
+  border: 0;
+  padding: 0.25rem 0;
+  background: none;
+  color: var(--p-accent-text);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
 .comment-emoji-picker {
   display: flex;
   flex-wrap: wrap;

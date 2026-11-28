@@ -19,7 +19,8 @@ import {
 import { equipmentChoices } from '../../../../frontend/src/exerciseEquipment';
 import type { Exercise, MuscleSetCreditInput } from '../../../../frontend/src/types';
 import { useExercises } from '../../data/queries';
-import { errorMessage, Loading } from '../../ui/components';
+import { errorMessage, ErrorState, Loading } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { Icon } from '../../ui/Icon';
 import { showMenu } from '../../ui/prompts';
 import { showToast } from '../../ui/Toast';
@@ -36,7 +37,11 @@ import { TextField } from '../../ui/controls';
 export function ExerciseEditScreen({ exerciseId }: { exerciseId: string }) {
   const exercises = useExercises();
   const exercise = exercises.data?.find((item) => item.id === exerciseId);
-  if (!exercise) return exercises.isPending ? <Loading label="Loading exercise" /> : null;
+  if (!exercise) {
+    if (waitingForNetwork(exercises))
+      return <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void exercises.refetch()} />;
+    return exercises.isPending ? <Loading label="Loading exercise" /> : null;
+  }
   return <EditForm key={exercise.id} exercise={exercise} exercises={exercises.data ?? []} />;
 }
 

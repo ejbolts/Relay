@@ -13,6 +13,7 @@ import type {
   ImportBatch,
 } from '../../../../frontend/src/types';
 import { apiGet, apiSend, clientVersionHeaders } from '../../data/api';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 import { uploadFile } from '../../data/uploadFile';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { showMenu } from '../../ui/prompts';
@@ -502,6 +503,11 @@ describe('exporting', () => {
       'https://relay.test/api/workouts/export.csv',
       'https://relay.test/api/body-measurements/export.csv',
     ]);
+    // Named as the web names them: Relay's workouts, and the bodyweight file as it was.
+    expect(mockFiles.download.mock.calls.map(([, to]) => String(to).split('/').pop())).toEqual([
+      expect.stringMatching(/^relay-workouts-\d{4}-\d{2}-\d{2}\.csv$/),
+      expect.stringMatching(/^body-weight-\d{4}-\d{2}-\d{2}\.csv$/),
+    ]);
     expect(mockFiles.download.mock.calls[0][2]).toEqual(
       expect.objectContaining({
         headers: { ...clientVersionHeaders(), Authorization: 'Bearer token' },
@@ -691,4 +697,12 @@ describe('backups', () => {
     ).toBeTruthy();
     expect(mockFiles.upload).toHaveBeenCalledTimes(1);
   });
+});
+
+test('offline with nothing saved, the import history says so instead of spinning', async () => {
+  await expectOfflineUntilOnline(
+    jest.mocked(apiGet),
+    () => renderWith(<ImportHistoryScreen />),
+    () => expect(screen.getByText(/^No tracked imports yet/)).toBeTruthy(),
+  );
 });

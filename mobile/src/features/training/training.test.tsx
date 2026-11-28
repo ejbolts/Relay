@@ -225,6 +225,59 @@ test('a calendar day lists its workouts, and the legend hides a type from the lo
   expect(screen.getByText('2 workouts · 3 sets · 1.8 t')).toBeVisible();
 });
 
+test('the workout in progress marks its day in its type’s colour, and the day resumes it', async () => {
+  mockWorkout.live = {
+    name: 'Legs',
+    startedAt: 0,
+    workoutDate: '2026-11-22',
+    category: 'lower',
+    workoutTypeId: null,
+  } as never;
+  await open(<TrainingTabScreen />);
+  const day = await screen.findByRole('button', {
+    name: `Resume workout in progress for ${prettyDate('2026-11-22')}`,
+  });
+  // Lower body's colour: the tint, the dot and today's outline, as on Home and the web.
+  expect(within(day).getByTestId('live-day')).toHaveStyle({ backgroundColor: '#f59e0b' });
+  expect(within(day).getByTestId('live-day-dot')).toHaveStyle({ backgroundColor: '#f59e0b' });
+  expect(within(day).getByTestId('live-today-ring')).toHaveStyle({ borderColor: '#f59e0b' });
+  await fireEvent.press(day);
+  expect(mockWorkout.open).toHaveBeenCalledTimes(1);
+  expect(mockRouter.push).not.toHaveBeenCalled();
+  // Other days are unchanged.
+  expect(
+    screen.getByRole('button', { name: `View 2 workouts for ${prettyDate('2026-11-21')}` }),
+  ).toBeVisible();
+});
+
+test('a live workout dated in an earlier month with no history there is still reachable', async () => {
+  mockWorkout.live = {
+    name: 'Legs',
+    startedAt: 0,
+    workoutDate: '2026-10-30',
+    category: 'lower',
+    workoutTypeId: null,
+  } as never;
+  // A new account: nothing logged, so only the live workout reaches back to October.
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/dashboard?on_date=2026-11-22')
+      return { ...dashboard, heatmap: [], history: null } as never;
+    if (path === '/api/workouts/snapshot?start=2026-08-01')
+      return { revision: '1', workouts: [] } as never;
+    if (!(path in responses)) throw new Error(`Unexpected request ${path}`);
+    return responses[path] as never;
+  });
+  await open(<TrainingTabScreen />);
+  const previous = await screen.findByRole('button', { name: 'Previous month' });
+  expect(previous).toBeEnabled();
+  await fireEvent.press(previous);
+  const day = await screen.findByRole('button', {
+    name: `Resume workout in progress for ${prettyDate('2026-10-30')}`,
+  });
+  await fireEvent.press(day);
+  expect(mockWorkout.open).toHaveBeenCalledTimes(1);
+});
+
 test('an empty day ahead opens its plan, and an empty past day offers a workout dated then', async () => {
   const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
   try {

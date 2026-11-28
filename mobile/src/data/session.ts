@@ -38,19 +38,65 @@ function inTurn<T>(change: () => Promise<T>): Promise<T> {
   return run;
 }
 
-export const sessionToken = (origin: string) => read(SESSION, origin);
-export const saveSessionToken = (origin: string, token: string) =>
-  inTurn(() => write(SESSION, origin, token));
-export const forgetSessionToken = () => inTurn(() => SecureStore.deleteItemAsync(SESSION));
+/**
+ * Moves on once when a change to the saved session begins and once when it ends: odd while one is
+ * under way. A read compares it before and after, so it can tell whether the session it found is
+ * still the one that was saved when it was asked for.
+ */
+let version = 0;
+async function changeSession<T>(change: () => Promise<T>): Promise<T> {
+  version += 1;
+  try {
+    return await change();
+  } finally {
+    version += 1;
+  }
+}
+
+/** The saved session changed (signed out, or another account signed in) before it could be read. */
+export class SessionChanged extends Error {
+  constructor() {
+    super('Your account changed before this could be sent. Try again.');
+    this.name = 'SessionChanged';
+  }
+}
 
 /**
- * Forgets the saved session only while it is still `token`. A request that was refused after
- * another account signed in carries the old token; it mustn't delete the new account's. A refusal
- * of the token still saved clears it.
+ * The session saved at the moment of the call, bound to it: the moment is taken before any await,
+ * and the read rejects with `SessionChanged` when the session changes (or was changing) before it
+ * completes, so work asked for under one account is never sent as the next.
+ */
+export function sessionToken(origin: string): Promise<string | null> {
+  const at = version;
+  return read(SESSION, origin).then((token) => {
+    if (at % 2 === 1 || version !== at) throw new SessionChanged();
+    return token;
+  });
+}
+export const saveSessionToken = (origin: string, token: string) =>
+  inTurn(() => changeSession(() => write(SESSION, origin, token)));
+export const forgetSessionToken = () =>
+  inTurn(() => changeSession(() => SecureStore.deleteItemAsync(SESSION)));
+
+/**
+ * What forgetting a refused session found: `forgotten` (it was the saved one), `other` (another
+ * session is saved, so the refusal was an earlier account's) or `none` (nothing is saved, or it
+ * couldn't be read).
+ */
+export type ForgetResult = 'forgotten' | 'other' | 'none';
+
+/**
+ * Forgets the saved session only while it is still `token`, and says what it found. A request
+ * that was refused after another account signed in carries the old token; it mustn't delete the
+ * new account's. A refusal of the token still saved clears it.
  */
 export const forgetSessionTokenIf = (origin: string, token: string) =>
-  inTurn(async () => {
-    if ((await read(SESSION, origin)) === token) await SecureStore.deleteItemAsync(SESSION);
+  inTurn(async (): Promise<ForgetResult> => {
+    const saved = await read(SESSION, origin);
+    if (saved === null) return 'none';
+    if (saved !== token) return 'other';
+    await changeSession(() => SecureStore.deleteItemAsync(SESSION));
+    return 'forgotten';
   });
 
 const isSaved = (item: unknown): item is Saved =>
@@ -130,11 +176,11 @@ export const startSignOut = (origin: string) =>
   inTurn(async () => {
     const token = await read(SESSION, origin);
     if (!token) {
-      await SecureStore.deleteItemAsync(SESSION);
+      await changeSession(() => SecureStore.deleteItemAsync(SESSION));
       return { token: null, journaled: true };
     }
     const journaled = await journal({ origin, token }, await withLegacy(await readJournal()));
-    if (journaled) await SecureStore.deleteItemAsync(SESSION);
+    if (journaled) await changeSession(() => SecureStore.deleteItemAsync(SESSION));
     return { token, journaled };
   });
 

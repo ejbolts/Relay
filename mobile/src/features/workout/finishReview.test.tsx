@@ -52,6 +52,7 @@ jest.mock('../../ui/prompts', () => ({
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
+  serverOrigin: () => 'https://relay.test',
   apiOrigin: 'https://relay.test',
   currentUser: jest.fn(),
   apiSend: jest.fn(),

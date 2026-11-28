@@ -10,7 +10,7 @@ import { useUpNext } from '../../data/queries';
 import { SessionProvider } from '../../session/SessionProvider';
 import { memoryKv } from '../../testing/memoryKvStore';
 import { showMenu, type MenuOption } from '../../ui/prompts';
-import { showToast } from '../../ui/Toast';
+import { showToast, ToastHost } from '../../ui/Toast';
 import { restTimesPreference } from '../settings/devicePreferences';
 import { ExercisePicker } from './ExercisePicker';
 import {
@@ -82,7 +82,7 @@ jest.mock('../../ui/prompts', () => ({
 }));
 jest.mock('../../ui/Toast', () => ({
   showToast: jest.fn(),
-  ToastHost: () => null,
+  ToastHost: jest.fn(() => null),
   toastShowing: () => false,
   toastAccount: () => 'u1',
   toastAccountFor: () => 'u1',
@@ -325,6 +325,17 @@ test('a logged working set shows what it adds to the week', async () => {
   // Unticking it takes the shelf away.
   await fireEvent.press(screen.getByRole('button', { name: 'Mark set 1 incomplete' }));
   expect(screen.queryByLabelText(/weekly sets/)).toBeNull();
+});
+
+test('a toast sits above the weekly sets shelf and the rest pill, not on top of them', async () => {
+  await openLogger();
+  await fireEvent.press(screen.getByRole('button', { name: 'Complete set 1' }));
+  expect(screen.getByLabelText('Chest 4 of 10 weekly sets, up 1')).toBeVisible();
+  await fireEvent(screen.getByTestId('logger-dock'), 'layout', {
+    nativeEvent: { layout: { x: 0, y: 0, width: 360, height: 170 } },
+  });
+  // The dock sits 12 above the safe area: toasts go 8 above its top.
+  expect(jest.mocked(ToastHost).mock.lastCall?.[0]).toEqual({ bottom: 12 + 170 + 8 });
 });
 
 describe('machines', () => {

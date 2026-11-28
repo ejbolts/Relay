@@ -16,7 +16,7 @@ import {
   progressPointsForChart,
   type ProgressMetric,
 } from '../../../../frontend/src/progressChart';
-import { recordBadgeLabel } from '../../../../frontend/src/recordScope';
+import { isAllTimeRecord, recordBadgeLabel } from '../../../../frontend/src/recordScope';
 import { recordsForBlock } from '../../../../frontend/src/trainingBlocks';
 import {
   dayMonth,
@@ -42,6 +42,7 @@ import { exerciseInfoKeys } from './exerciseInfoQueries';
 import { ExerciseMuscleHelpButton, ExerciseMuscleHelpSheet } from './ExerciseMuscleHelp';
 import { trainingIcons } from './icons';
 import { LandscapeChartView } from '../body/LandscapeChart';
+import { crossesNewYear } from '../../../../frontend/src/chartYears';
 import { LiftLeaderboardCard } from './LiftLeaderboardCard';
 import { Badge, Divider, MoreButton, Note, Segmented } from './parts';
 import { ProgressChart, type ChartPoint } from './ProgressChart';
@@ -396,20 +397,21 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
                               <Text style={[type.callout, { color: colors.text }]}>
                                 {shortDate(point.workout_date)}
                               </Text>
-                              {view.recordIds.has(point.workout_id) && (
-                                <Badge
-                                  tone="gold"
-                                  label={
-                                    view.defaultView
-                                      ? recordBadgeLabel(
-                                          records.filter(
-                                            (record) => record.workout_id === point.workout_id,
-                                          ),
-                                        )
-                                      : 'PR'
-                                  }
-                                />
-                              )}
+                              {view.recordIds.has(point.workout_id) &&
+                                (() => {
+                                  const pointRecords = records.filter(
+                                    (record) => record.workout_id === point.workout_id,
+                                  );
+                                  return (
+                                    <Badge
+                                      tone="gold"
+                                      halo={pointRecords.some(isAllTimeRecord)}
+                                      label={
+                                        view.defaultView ? recordBadgeLabel(pointRecords) : 'PR'
+                                      }
+                                    />
+                                  );
+                                })()}
                             </View>
                             <Text
                               style={[type.footnote, type.number, { color: colors.secondary }]}
@@ -451,8 +453,9 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
           title={`${name} ${metricInfo.series}`}
           visible={landscape}
           onClose={() => setLandscape(false)}
+          yearLines={crossesNewYear(chartPoints.map((point) => point.date))}
         >
-          {(size) => (
+          {(size, showYearLines) => (
             <ProgressChart
               points={chartPoints}
               label={`${name} ${metricInfo.series}`}
@@ -460,6 +463,7 @@ export function ExerciseDetailScreen({ exerciseId }: { exerciseId: string }) {
               height={Math.max(140, size.height - 30)}
               markRecords={metric !== 'volume_kg'}
               formatValue={formatMetric}
+              yearLines={showYearLines}
             />
           )}
         </LandscapeChartView>

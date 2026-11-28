@@ -1,34 +1,18 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import {
-  checkConnectionNow,
-  useConnectionCheck,
+  connectionDetailRows,
+  nextCheckText,
+  offlineNoticeLabel,
   type ConnectionCheck,
   type ConnectionState,
-  type OfflineCause,
-} from './connectionStatus';
+  type WaitingToSync,
+} from './connectionMonitor';
+import { checkConnectionNow, useConnectionCheck } from './connectionStatus';
 import { Icon } from './Icon';
 import { useOfflineNotice } from './useOfflineNotice';
 import './offlineNotice.css';
 
-/** Changes saved on this phone that have not reached the server yet. */
-export interface WaitingToSync {
-  workouts: number;
-  checkIns: number;
-}
-
-const LABELS: Record<OfflineCause, string> = {
-  device: 'No internet',
-  server: 'Offline',
-};
-
-const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
-
-function formatLastConnected(at: number): string {
-  const date = new Date(at);
-  const time = date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  if (date.toDateString() === new Date().toDateString()) return time;
-  return `${date.toLocaleDateString([], { weekday: 'short' })} ${time}`;
-}
+export type { WaitingToSync } from './connectionMonitor';
 
 function NextCheck({ progress }: { progress: ConnectionCheck }) {
   const [now, setNow] = useState(() => Date.now());
@@ -36,10 +20,8 @@ function NextCheck({ progress }: { progress: ConnectionCheck }) {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
   }, []);
-  if (progress.checking) return <small>Checking…</small>;
-  if (progress.nextCheckAt === null) return <small />;
-  const seconds = Math.max(1, Math.ceil((progress.nextCheckAt - now) / 1000));
-  return <small>Next check in {seconds} s</small>;
+  const text = nextCheckText(progress, now);
+  return text ? <small>{text}</small> : <small />;
 }
 
 function Details({
@@ -54,10 +36,6 @@ function Details({
   waiting: WaitingToSync;
 }) {
   const progress = useConnectionCheck();
-  const saved = [
-    waiting.workouts > 0 && count(waiting.workouts, 'workout', 'workouts'),
-    waiting.checkIns > 0 && count(waiting.checkIns, 'check-in', 'check-ins'),
-  ].filter(Boolean);
   return (
     <section id={id} className="offline-notice-details" aria-label="Connection details">
       <strong className="offline-notice-title">
@@ -65,31 +43,12 @@ function Details({
         {label}
       </strong>
       <dl>
-        <div>
-          <dt>Internet</dt>
-          <dd data-state={connection.cause === 'server' ? 'ok' : 'bad'}>
-            {connection.cause === 'server' ? 'Connected' : 'Not connected'}
-          </dd>
-        </div>
-        {/* With no internet there is no way to know how the server is. */}
-        {connection.cause === 'server' && (
-          <div>
-            <dt>Server</dt>
-            <dd data-state="bad">{connection.server === 'down' ? 'Offline' : 'Unreachable'}</dd>
+        {connectionDetailRows(connection, waiting).map((row) => (
+          <div key={row.label}>
+            <dt>{row.label}</dt>
+            <dd data-state={row.state}>{row.value}</dd>
           </div>
-        )}
-        {connection.lastReachedAt !== null && (
-          <div>
-            <dt>Last connected</dt>
-            <dd>{formatLastConnected(connection.lastReachedAt)}</dd>
-          </div>
-        )}
-        {saved.length > 0 && (
-          <div>
-            <dt>Saved on this phone</dt>
-            <dd>{saved.join(' · ')}</dd>
-          </div>
-        )}
+        ))}
       </dl>
       <div className="offline-notice-actions">
         <NextCheck progress={progress} />
@@ -134,7 +93,7 @@ export function OfflineNotice({ waiting }: { waiting: WaitingToSync }) {
 
   if (!visible) return null;
   const back = connection.phase === 'back';
-  const label = back ? 'Back online' : LABELS[connection.cause];
+  const label = offlineNoticeLabel(connection);
 
   return (
     <aside

@@ -5,6 +5,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import {
   groupWorkoutsByWeek,
   addDays,
+  isoLocalDate,
   dayMonth,
   weekGroupLabel,
   weekGroupSummary,
@@ -42,11 +43,14 @@ import { trainingKeys, type useTrainingHistory } from './trainingQueries';
 import { useTrainingContext } from './useTrainingContext';
 import { CalendarLegend, WorkoutCalendar } from './WorkoutCalendar';
 import { WorkoutCard, WorkoutDetails } from './WorkoutCard';
+import { useWithoutPendingDeletions } from './workoutDeletion';
 
 type History = ReturnType<typeof useTrainingHistory>;
 
 /** Sessions: the calendar, then the log two weeks at a time, as the web's Training tab. */
-export function SessionsSection({ history }: { history: History }) {
+export function SessionsSection({ history: loaded }: { history: History }) {
+  // A workout deleted while its Undo shows stays out, even if a refresh brings it back.
+  const history = useWithoutPendingDeletions(loaded);
   const { colors, type } = useTheme();
   const router = useRouter();
   const client = useQueryClient();
@@ -56,8 +60,24 @@ export function SessionsSection({ history }: { history: History }) {
   const today = localDate();
   const { workouts, heatmap, summary, historyStart, hasOlder, loadingOlder, olderError } = history;
 
+  // The workout in progress is marked on its day, and tapping that day resumes it, as on the web.
+  // Only the fields the calendar draws: the logger's every edit makes a new live object, which
+  // must not rebuild the month views.
+  const liveDate = workout.live
+    ? (workout.live.workoutDate ?? isoLocalDate(new Date(workout.live.startedAt)))
+    : null;
+  const liveCategory = workout.live?.category ?? null;
+  const liveTypeId = workout.live?.workoutTypeId ?? null;
+  const live = useMemo(
+    () => (liveDate ? { date: liveDate, category: liveCategory, workoutTypeId: liveTypeId } : null),
+    [liveDate, liveCategory, liveTypeId],
+  );
   // The calendar pages month by month, from the oldest workout to this month.
-  const bounds = calendarBounds(today, [summary?.first_workout_date, heatmap[0]?.workout_date]);
+  const bounds = calendarBounds(today, [
+    summary?.first_workout_date,
+    heatmap[0]?.workout_date,
+    live?.date,
+  ]);
   const [month, setMonth] = useState(() => monthOf(today));
   const shownMonth =
     month < bounds.first ? bounds.first : month > bounds.last ? bounds.last : month;
@@ -69,8 +89,9 @@ export function SessionsSection({ history }: { history: History }) {
   // History is grouped by month once; each month's view is then built at most once.
   const byMonth = useMemo(() => entriesByMonth(heatmap), [heatmap]);
   const viewFor = useMemo(
-    () => monthViews({ byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays }),
-    [byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays],
+    () =>
+      monthViews({ byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays, live }),
+    [byMonth, types, categoryColors, hidden, weekStartDay, today, splitDays, live],
   );
   const months = useMemo(
     () => monthsBetween(bounds.first, bounds.last),
@@ -187,7 +208,7 @@ export function SessionsSection({ history }: { history: History }) {
           viewFor={viewFor}
           onMonthChange={setMonth}
           selectedDate={selectedDay?.workout_date ?? plannedDate}
-          onSelectDay={(day) => pressDay(day.date, day.entry)}
+          onSelectDay={(day) => (day.live ? workout.open() : pressDay(day.date, day.entry))}
           loadingOlder={loadingOlder && `${shownMonth}-01` < historyStart}
           olderError={`${shownMonth}-01` < historyStart ? olderError : null}
           onRetryOlder={history.retryOlder}

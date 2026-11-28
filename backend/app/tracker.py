@@ -2935,7 +2935,7 @@ def export_workout_csv(
     if end_date:
         cardio_statement = cardio_statement.where(CardioSession.session_date <= end_date)
     content = export_workouts(workouts, list(db.scalars(cardio_statement)))
-    filename = f"gym-workouts-{date.today().isoformat()}.csv"
+    filename = f"relay-workouts-{date.today().isoformat()}.csv"
     return Response(
         content=content.encode("utf-8-sig"),
         media_type="text/csv; charset=utf-8",

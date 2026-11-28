@@ -8,7 +8,13 @@ import {
   deleteCommentMessage,
 } from './commentDisplay';
 import { averagePerWeek, firstTrainingDay } from './consistencyWeeks';
-import { FEED_SHOWN_EXERCISES, feedExercises, feedStats, firstName } from './friendFeedData';
+import {
+  FEED_SHOWN_EXERCISES,
+  feedExercises,
+  feedExerciseView,
+  feedStats,
+  firstName,
+} from './friendFeedData';
 import { friendInviteIdFromScan, friendInviteLink } from './friendInviteLink';
 import { presenceDot } from './presenceStatus';
 import {
@@ -80,6 +86,42 @@ describe('feed cards', () => {
       [],
     );
     expect(FEED_SHOWN_EXERCISES).toBe(3);
+  });
+
+  it('expand and collapse extra feed exercises inline without hiding short workouts', () => {
+    const three = [movement('Bench Press'), movement('Row'), movement('Curl')];
+    expect(feedExerciseView(three, false, 'Your Push')).toEqual({
+      listed: three,
+      extra: 0,
+      canExpand: false,
+      toggleText: null,
+      toggleLabel: null,
+    });
+
+    const four = [...three, movement('Dip')];
+    expect(feedExerciseView(four, false, 'Your Push')).toEqual({
+      listed: three,
+      extra: 1,
+      canExpand: true,
+      toggleText: '+1 exercise',
+      toggleLabel: 'Show 1 more exercise in Your Push',
+    });
+
+    const five = [...four, movement('Fly')];
+    expect(feedExerciseView(five, false, 'Alex’s Pull')).toEqual({
+      listed: three,
+      extra: 2,
+      canExpand: true,
+      toggleText: '+2 exercises',
+      toggleLabel: 'Show 2 more exercises in Alex’s Pull',
+    });
+    expect(feedExerciseView(five, true, 'Alex’s Pull')).toEqual({
+      listed: five,
+      extra: 2,
+      canExpand: true,
+      toggleText: 'Show less',
+      toggleLabel: 'Show fewer exercises in Alex’s Pull',
+    });
   });
 
   it('name friends by their first name in the row of friends', () => {

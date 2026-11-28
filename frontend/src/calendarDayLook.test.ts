@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { calendarDayLook, todayOutlineColors, weekStripLabels } from './calendarDayLook';
+import {
+  calendarDayLook,
+  liveWorkoutColor,
+  todayOutlineColors,
+  weekStripLabels,
+} from './calendarDayLook';
 import type { HeatmapDay, WorkoutType } from './types';
 import { DEFAULT_WORKOUT_TYPES, builtinTypeColors } from './workoutTypes';
 
@@ -121,5 +126,28 @@ describe('calendar day look', () => {
       { id: 'lower', text: 'Lower', color: null },
       { id: 'cardio', text: '+2', color: null },
     ]);
+  });
+});
+
+describe('liveWorkoutColor', () => {
+  it('is the colour of the type being logged, a custom type by its id', () => {
+    expect(liveWorkoutColor({ category: 'lower', workoutTypeId: null }, types, colors)).toBe(
+      colors.lower,
+    );
+    const arms: WorkoutType = {
+      id: 'arms',
+      name: 'Arms',
+      color: '#ec4899',
+      is_custom: true,
+      archived: false,
+    };
+    expect(liveWorkoutColor({ category: 'other', workoutTypeId: 'arms' }, [...types, arms])).toBe(
+      '#ec4899',
+    );
+  });
+
+  it('is null without a live workout', () => {
+    expect(liveWorkoutColor(null, types, colors)).toBeNull();
+    expect(liveWorkoutColor(undefined, types, colors)).toBeNull();
   });
 });

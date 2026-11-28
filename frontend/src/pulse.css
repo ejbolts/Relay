@@ -44,6 +44,8 @@
   --p-gold: #e9b44a;
   --p-gold-soft: rgb(201 133 0 / 15%);
   --p-on-gold: #1c1404;
+  --p-all-time-ring: #2ee6d6;
+  --p-all-time-glow: rgb(46 230 214 / 36%);
   --p-danger: #e66767;
   /* Filled buttons: text on the accent or danger fill, and a red that keeps white text readable. */
   --p-on-accent: #fff;
@@ -1870,24 +1872,35 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 }
 
 /* The ripple is a band that grows from the ring's outer edge and fades, matching the flat ripple's
-   timing and reach while keeping every workout colour in its arc. */
+   timing and reach while keeping every workout colour in its arc.
+   Safari runs the opacity on the compositor but the band's size on the main thread, so a loop that
+   jumped from the faded full-size band straight back to the start flashed a solid full-size band
+   for a frame. The band instead shrinks back while it is invisible and only regains its opacity at
+   zero width, so neither property ever jumps and the loop has nothing to flash. */
 .calendar-today-ring::after {
   border-width: 0;
   animation: calendar-today-ring-ripple 2.4s ease-out infinite;
 }
 
 @keyframes calendar-today-ring-ripple {
-  0% {
+  0%,
+  100% {
     inset: 0;
     border-width: 0;
     border-radius: 13px;
     opacity: 0.9;
   }
   70%,
-  100% {
+  80% {
     inset: -7px;
     border-width: 7px;
     border-radius: 20px;
+    opacity: 0;
+  }
+  90% {
+    inset: 0;
+    border-width: 0;
+    border-radius: 13px;
     opacity: 0;
   }
 }
@@ -2958,6 +2971,13 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   font-weight: 700;
 }
 
+.pr-chip.is-all-time {
+  position: relative;
+  outline: 1.5px solid var(--p-all-time-ring);
+  outline-offset: 1px;
+  box-shadow: 0 0 6px var(--p-all-time-glow);
+}
+
 .session-set {
   color: var(--p-ink-2);
 }
@@ -3137,6 +3157,76 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
 .pulse-chart-tooltip-close .pulse-icon {
   width: 0.875rem;
   height: 0.875rem;
+}
+
+/* Year lines: a dotted line at each 1 January and a pill per year above the plot. */
+.pulse-chart-year-line {
+  stroke: var(--p-ink-2);
+  stroke-opacity: 0.45;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 5;
+}
+
+.pulse-chart-year-band {
+  fill: var(--p-accent);
+  fill-opacity: 0.12;
+}
+
+.pulse-chart .pulse-chart-year {
+  position: absolute;
+  z-index: 2;
+  height: 1.5rem;
+  min-height: 0;
+  transform: translateX(-50%);
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0 0.625rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A taller touch area than the pill shows, without reaching the neighbouring year. */
+.pulse-chart .pulse-chart-year::before {
+  position: absolute;
+  inset: -0.625rem -0.125rem;
+  content: '';
+}
+
+.pulse-chart .pulse-chart-year[aria-pressed='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent);
+  color: var(--p-on-accent);
+}
+
+.pulse-chart .pulse-chart-year:focus-visible {
+  outline: 2px solid var(--p-focus-ring);
+  outline-offset: 2px;
+}
+
+.pulse-chart-year-summary {
+  position: absolute;
+  z-index: 2;
+  margin: 0;
+  transform: translateX(-50%);
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 0.375rem 0.625rem;
+  background: var(--p-surface-2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  color: var(--p-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
 }
 
 .pulse-chart-tooltip span,
@@ -3855,6 +3945,39 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: #fff;
   font-size: 0.8125rem;
   font-weight: 650;
+}
+
+.landscape-chart-expanded .landscape-chart-year-lines {
+  height: 2.25rem;
+  min-height: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 11px;
+  padding: 0 0.875rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.landscape-chart-expanded .landscape-chart-year-lines[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--p-accent) 55%, transparent);
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+
+.landscape-chart-year-lines > span {
+  display: grid;
+  place-items: center;
+}
+
+.landscape-chart-year-lines .pulse-icon {
+  display: block;
+  width: 1rem;
+  height: 1rem;
 }
 
 .landscape-chart-expanded .landscape-chart-content {

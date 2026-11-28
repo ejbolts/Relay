@@ -170,6 +170,106 @@ describe('TrendChart day popup', () => {
   });
 });
 
+describe('TrendChart year lines', () => {
+  let root: Root;
+  let host: HTMLDivElement;
+  const points: TrendPoint[] = [
+    { date: '2024-11-01', value: 90 },
+    { date: '2025-01-10', value: 88 },
+    { date: '2025-06-01', value: 85.5 },
+    { date: '2025-12-20', value: 84 },
+    { date: '2026-03-15', value: 84.5 },
+  ];
+
+  beforeEach(() => {
+    vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+    host = document.createElement('div');
+    document.body.append(host);
+    root = createRoot(host);
+  });
+
+  afterEach(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+    vi.unstubAllGlobals();
+  });
+
+  const render = (yearLines: boolean, shown = points) =>
+    act(async () =>
+      root.render(
+        <TrendChart
+          points={shown}
+          unit="kg"
+          label="Bodyweight"
+          seriesLabel="7-day average"
+          yearLines={yearLines}
+        />,
+      ),
+    );
+  const pills = () => [...host.querySelectorAll<HTMLButtonElement>('.pulse-chart-year')];
+  const pill = (year: string) => host.querySelector<HTMLButtonElement>(`[aria-label="${year}"]`)!;
+  const summary = () => host.querySelector('.pulse-chart-year-summary');
+
+  it('draws a dotted line at each 1 January and a pill for each year', async () => {
+    await render(false);
+    expect(host.querySelector('.pulse-chart-year-line')).toBeNull();
+    expect(pills()).toEqual([]);
+
+    await render(true);
+    expect(host.querySelectorAll('.pulse-chart-year-line')).toHaveLength(2);
+    // The two short slices at the ends get the short form of their year.
+    expect(pills().map((item) => item.textContent)).toEqual(['’24', '2025', '’26']);
+    expect(pills().map((item) => item.getAttribute('aria-label'))).toEqual([
+      '2024',
+      '2025',
+      '2026',
+    ]);
+    // The pills sit above the plot, so its top gridline moves down to make room.
+    const gridTops = [...host.querySelectorAll('.pulse-chart-grid')].map((line) =>
+      Number(line.getAttribute('y1')),
+    );
+    expect(Math.min(...gridTops)).toBe(40);
+  });
+
+  it("shows a picked year's start, end and change, and clears it on a second tap", async () => {
+    await render(true);
+    await act(async () => pill('2025').click());
+    expect(pill('2025').getAttribute('aria-pressed')).toBe('true');
+    expect(host.querySelector('.pulse-chart-year-band')).not.toBeNull();
+    expect(summary()?.textContent).toBe('2025 · 88 → 84 kg · −4 kg');
+    expect(host.querySelector('[aria-live="polite"]')?.textContent).toBe(
+      '2025 · 88 → 84 kg · −4 kg',
+    );
+
+    await act(async () => pill('2026').click());
+    expect(pill('2025').getAttribute('aria-pressed')).toBe('false');
+    expect(summary()?.textContent).toBe('2026 · 84.5 → 84.5 kg · 0 kg');
+
+    await act(async () => pill('2026').click());
+    expect(host.querySelector('.pulse-chart-year-band')).toBeNull();
+    expect(summary()).toBeNull();
+  });
+
+  it('forgets the picked year when the lines are turned off', async () => {
+    await render(true);
+    await act(async () => pill('2025').click());
+    await render(false);
+    await render(true);
+    expect(summary()).toBeNull();
+    expect(pill('2025').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('marks nothing while the chart stays inside one year', async () => {
+    await render(true, points.slice(1, 4));
+    expect(host.querySelector('.pulse-chart-year-line')).toBeNull();
+    expect(pills()).toEqual([]);
+    const gridTops = [...host.querySelectorAll('.pulse-chart-grid')].map((line) =>
+      Number(line.getAttribute('y1')),
+    );
+    expect(Math.min(...gridTops)).toBe(12);
+  });
+});
+
 describe('goalLabelY', () => {
   const line = { x1: 40, y1: 40, x2: 330, y2: 120, label: 'Goal 80 kg' };
 

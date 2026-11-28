@@ -8,6 +8,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { TrackedWorkout, User } from '../../../../frontend/src/types';
 import { localDate } from '../../../../frontend/src/utils';
 import { apiGet, apiSend } from '../../data/api';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 import { refreshTraining } from '../../data/queries';
 import { uploadFile } from '../../data/uploadFile';
 import { nextSessionEpoch } from '../../session/sessionEpoch';
@@ -589,4 +590,14 @@ it('deletes standalone sessions and lone cardio workouts, and shares a card', as
   });
   await fireEvent.press(screen.getByRole('button', { name: 'Share card' }));
   expect(screen.getByText('Sharing Row c')).toBeVisible();
+});
+
+test('offline with nothing saved, cardio says so instead of loading, then loads', async () => {
+  jest.mocked(apiGet).mockImplementation(async () => overview([historySession('a', null)]));
+  await expectOfflineUntilOnline(
+    jest.mocked(apiGet),
+    () => open(<CardioSection />),
+    () => expect(screen.getByRole('button', { name: 'Import screenshot' })).toBeTruthy(),
+  );
+  expect(screen.queryByText('Loading cardio…')).toBeNull();
 });

@@ -31,7 +31,7 @@ import { VISIBILITY_LABELS } from '../../../../frontend/src/sharedProfileDisplay
 import type { TrainingPreferences } from '../../../../frontend/src/types';
 import { formatSeconds } from '../../../../frontend/src/utils';
 import { apiOrigin, ApiError } from '../../data/api';
-import { waitingForNetwork } from '../../data/offline';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { useTrainingPreferences, useWorkoutTypes } from '../../data/queries';
 import { useSession, useUser } from '../../session/SessionProvider';
 import { cardSurface, errorMessage, ErrorState, Loading } from '../../ui/components';
@@ -80,6 +80,8 @@ const NO_REST = -1;
 /** Settings, as on the web: training, unfinished workouts, notifications, account and about. */
 export function SettingsScreen() {
   const preferences = useTrainingPreferences();
+  if (waitingForNetwork(preferences))
+    return <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void preferences.refetch()} />;
   if (preferences.isPending) return <Loading label="Loading settings" />;
   if (preferences.error && !preferences.data)
     return (

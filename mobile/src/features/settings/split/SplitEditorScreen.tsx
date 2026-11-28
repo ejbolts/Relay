@@ -68,6 +68,11 @@ import {
   ErrorState,
   Loading,
 } from '../../../ui/components';
+import {
+  OFFLINE_MESSAGE,
+  placeholderWaitingForNetwork,
+  waitingForNetwork,
+} from '../../../data/offline';
 import { Switch } from '../../../ui/controls';
 import { Icon, type IconPair } from '../../../ui/Icon';
 import { promptText, showMenu } from '../../../ui/prompts';
@@ -118,6 +123,21 @@ export function SplitEditorScreen() {
   const routines = useRoutines();
   const split = useTrainingSplit();
   const types = useWorkoutTypes();
+  if (
+    waitingForNetwork(routines) ||
+    waitingForNetwork(split) ||
+    placeholderWaitingForNetwork(types)
+  )
+    return (
+      <ErrorState
+        message={OFFLINE_MESSAGE}
+        onRetry={() => {
+          void routines.refetch();
+          void split.refetch();
+          void types.refetch();
+        }}
+      />
+    );
   if (routines.isPending || split.isPending || types.isPlaceholderData)
     return <Loading label="Loading split" />;
   const error = routines.error ?? split.error ?? types.error;

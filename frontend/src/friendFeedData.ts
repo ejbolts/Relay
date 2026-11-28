@@ -16,6 +16,10 @@ import type {
 import { formatMinutesDuration } from './utils';
 import type { WeightUnit } from './weightUnits';
 
+/**
+ * The seven reactions offered before any emoji could be chosen. They keep their names as the
+ * saved key, so older releases still show them; every other emoji is saved as itself.
+ */
 export const REACTIONS: ReadonlyArray<{ kind: WorkoutReactionKind; emoji: string; label: string }> =
   [
     { kind: 'like', emoji: '👍', label: 'Like' },
@@ -27,8 +31,22 @@ export const REACTIONS: ReadonlyArray<{ kind: WorkoutReactionKind; emoji: string
     { kind: 'trophy', emoji: '🏆', label: 'Trophy' },
   ];
 
+/** The emoji a saved reaction shows: an original reaction's emoji, or the emoji itself. */
 export function reactionEmoji(kind: WorkoutReactionKind): string {
-  return REACTIONS.find((item) => item.kind === kind)?.emoji ?? '';
+  return REACTIONS.find((item) => item.kind === kind)?.emoji ?? kind;
+}
+
+/** A reaction's emoji and spoken name; screen readers name any other emoji themselves. */
+export function reactionChoice(kind: WorkoutReactionKind | null | undefined) {
+  if (!kind) return undefined;
+  const original = REACTIONS.find((item) => item.kind === kind);
+  return original ?? { kind, emoji: kind, label: kind };
+}
+
+/** The key to save for a chosen emoji: an original reaction's name, or the emoji. */
+export function reactionKey(emoji: string): WorkoutReactionKind {
+  const plain = emoji.replace(/\uFE0F/g, '');
+  return REACTIONS.find((item) => item.emoji.replace(/\uFE0F/g, '') === plain)?.kind ?? emoji;
 }
 
 export interface FriendSession {
@@ -128,7 +146,7 @@ export function feedStats(workout: TrackedWorkout, weightUnit: WeightUnit): stri
   return stats;
 }
 
-/** Exercises listed on a feed card before the rest are counted. */
+/** Exercises listed on a feed card before the rest collapse behind a toggle. */
 export const FEED_SHOWN_EXERCISES = 3;
 
 /**
@@ -144,6 +162,43 @@ export function feedExercises(workout: TrackedWorkout): TrackedMovement[] {
     movements.length > 1 ||
     (movements.length === 1 && movements[0].exercise.name.toLocaleLowerCase() !== name);
   return listed ? movements : [];
+}
+
+export interface FeedExerciseView {
+  /** Exercises shown on the card right now: the first three, or every exercise once expanded. */
+  listed: TrackedMovement[];
+  /** Exercises hidden while collapsed; zero when the workout already fits in the compact list. */
+  extra: number;
+  /** Whether the card can expand and collapse its exercise list inline. */
+  canExpand: boolean;
+  /** Visible text for the expand/collapse control, or null when every exercise already fits. */
+  toggleText: string | null;
+  /** Accessible label naming the workout so cards in the feed stay distinct. */
+  toggleLabel: string | null;
+}
+
+/** Which exercises a feed card shows and its inline "+N exercises" / "Show less" toggle. */
+export function feedExerciseView(
+  movements: TrackedMovement[],
+  expanded: boolean,
+  subject: string,
+): FeedExerciseView {
+  const extra = Math.max(0, movements.length - FEED_SHOWN_EXERCISES);
+  const canExpand = extra > 0;
+  const listed = canExpand && !expanded ? movements.slice(0, FEED_SHOWN_EXERCISES) : movements;
+  if (!canExpand) {
+    return { listed, extra: 0, canExpand: false, toggleText: null, toggleLabel: null };
+  }
+  const noun = extra === 1 ? 'exercise' : 'exercises';
+  return {
+    listed,
+    extra,
+    canExpand: true,
+    toggleText: expanded ? 'Show less' : `+${extra} ${noun}`,
+    toggleLabel: expanded
+      ? `Show fewer exercises in ${subject}`
+      : `Show ${extra} more ${noun} in ${subject}`,
+  };
 }
 
 /** "Alex" from "Alex Morgan", for the feed's row of friends. */

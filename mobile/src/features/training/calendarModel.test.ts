@@ -172,3 +172,44 @@ test('groups history by month once and builds each month view once', () => {
     }),
   );
 });
+
+test('the workout in progress takes over its day, in its type’s colour, as the web’s calendar', () => {
+  const live = (category: 'lower' | null) =>
+    calendarMonthView({
+      month: '2026-11',
+      entries: dashboard.heatmap,
+      types: DEFAULT_WORKOUT_TYPES,
+      categoryColors: builtinTypeColors(DEFAULT_WORKOUT_TYPES),
+      hidden: new Set(),
+      weekStartDay: 1,
+      today: '2026-11-22',
+      live: { date: '2026-11-21', category, workoutTypeId: null },
+    });
+  // A resumed workout on a logged day: the live tint and dot replace the logged outline and dots.
+  expect(day(live('lower'), '2026-11-21')).toMatchObject({
+    live: true,
+    liveColor: '#f59e0b',
+    ring: [],
+    dots: [],
+    filteredOut: false,
+  });
+  expect(day(live(null), '2026-11-21')).toMatchObject({ live: true, liveColor: null });
+  expect(day(live('lower'), '2026-11-20')).toMatchObject({ live: false, liveColor: null });
+  // Without a live workout (a friend's calendar), the day keeps what was logged.
+  expect(day(view(), '2026-11-21')).toMatchObject({ live: false, liveColor: null });
+  expect(day(view(), '2026-11-21').ring.length).toBeGreaterThan(0);
+});
+
+test('a live workout whose type is switched off in the legend keeps its colour, as on the web', () => {
+  const month = calendarMonthView({
+    month: '2026-11',
+    entries: dashboard.heatmap,
+    types: DEFAULT_WORKOUT_TYPES,
+    categoryColors: builtinTypeColors(DEFAULT_WORKOUT_TYPES),
+    hidden: new Set(['lower']),
+    weekStartDay: 1,
+    today: '2026-11-22',
+    live: { date: '2026-11-22', category: 'lower', workoutTypeId: null },
+  });
+  expect(day(month, '2026-11-22')).toMatchObject({ live: true, liveColor: '#f59e0b' });
+});

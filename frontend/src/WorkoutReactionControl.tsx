@@ -1,15 +1,18 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { api, isConnectionFailure } from './api';
 import { authErrorMessage } from './authForm';
-import { nextReaction, reactionSummary, REACTIONS } from './friendFeedData';
+import { reactionChoice, reactionSummary } from './friendFeedData';
 import { Icon } from './Icon';
 import { useHeightAnimation } from './motionHooks';
 import { pendingReactionLabel } from './pendingReactionQueue';
 import { queueReaction, usePendingReaction } from './pendingReactions';
-import type { WorkoutReactions, WorkoutComment } from './types';
+import type { WorkoutReactionKind, WorkoutReactions, WorkoutComment } from './types';
 import { WorkoutComments } from './WorkoutComments';
 import { WorkoutReactionPeople } from './WorkoutReactionPeople';
 import type { WorkoutFocus } from './workoutFocus';
+
+// Loaded when first opened, so the emoji catalogue stays out of the app's first download.
+const EmojiReactionSheet = lazy(() => import('./EmojiReactionSheet'));
 
 type Panel = 'reactions' | 'comments' | 'people';
 
@@ -51,7 +54,6 @@ export function WorkoutReactionControl({
   const [focused, setFocused] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [contentLayout, setContentLayout] = useState('');
-  const picker = useRef<HTMLDivElement>(null);
   const container = useRef<HTMLDivElement>(null);
   const reactTrigger = useRef<HTMLButtonElement>(null);
   const commentTrigger = useRef<HTMLButtonElement>(null);
@@ -74,9 +76,9 @@ export function WorkoutReactionControl({
   const yours = reactions.yours;
   const pending = usePendingReaction(workoutId, onChange);
   const waiting = !ownWorkout && pending !== undefined;
-  const pendingChoice = waiting ? REACTIONS.find((entry) => entry.kind === pending) : undefined;
+  const pendingChoice = waiting ? reactionChoice(pending) : undefined;
   const summary = reactionSummary(reactions.counts);
-  const selected = !ownWorkout && REACTIONS.find((entry) => entry.kind === yours);
+  const selected = ownWorkout ? undefined : reactionChoice(yours);
   const comments = reactions.comment_count ?? 0;
   const commentLabel = `${comments} ${comments === 1 ? 'comment' : 'comments'}`;
   const reactionCount = `${summary.total} ${summary.total === 1 ? 'reaction' : 'reactions'}`;
@@ -108,39 +110,25 @@ export function WorkoutReactionControl({
   }, [shown, yours]);
 
   useEffect(() => {
-    if (!shown || shown === 'people') return;
-    if (shown === 'reactions') {
-      const selectedButton =
-        picker.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]');
-      (selectedButton ?? picker.current?.querySelector<HTMLButtonElement>('button'))?.focus();
-    }
-    const trigger = shown === 'reactions' ? reactTrigger : commentTrigger;
-    function outside(event: PointerEvent) {
-      if (container.current?.contains(event.target as Node)) return;
-      setPanel(null);
-      closeRef.current(false);
-    }
+    // The emoji sheet and the people sheet close themselves.
+    if (shown !== 'comments') return;
     function escape(event: KeyboardEvent) {
       if (event.key !== 'Escape') return;
       setPanel(null);
       closeRef.current(false);
-      trigger.current?.focus();
+      commentTrigger.current?.focus();
     }
-    // Only the reaction picker closes on a tap elsewhere. A comment thread stays open while you
-    // scroll, tap away or dismiss the keyboard, until its button or Escape closes it.
-    if (shown === 'reactions') document.addEventListener('pointerdown', outside);
+    // A comment thread stays open while you scroll, tap away or dismiss the keyboard, until its
+    // button or Escape closes it.
     document.addEventListener('keydown', escape);
-    return () => {
-      document.removeEventListener('pointerdown', outside);
-      document.removeEventListener('keydown', escape);
-    };
+    return () => document.removeEventListener('keydown', escape);
   }, [shown]);
 
-  async function react(chosen: (typeof REACTIONS)[number]['kind']) {
+  /** Saves a reaction, or removes yours when `next` is null. */
+  async function react(next: WorkoutReactionKind | null) {
     if (busy) return;
     setBusy(true);
     setError(null);
-    const next = nextReaction(yours, chosen);
     const wait = () => {
       queueReaction(workoutId, next);
       show(null);
@@ -175,8 +163,8 @@ export function WorkoutReactionControl({
       }
       title={waiting ? "Sends when you're back online" : undefined}
       aria-description={reactionCount}
+      aria-haspopup="dialog"
       aria-expanded={shown === 'reactions'}
-      aria-controls={`reactions-${workoutId}`}
       disabled={waiting}
       onClick={() => show(shown === 'reactions' ? null : 'reactions')}
     >
@@ -234,8 +222,8 @@ export function WorkoutReactionControl({
       <div className="workout-discussion-actions">
         {compact && compactReactions}
         {!compact &&
-          REACTIONS.map(({ kind, emoji, label }) => {
-            const count = reactions.counts.find((entry) => entry.reaction === kind)?.count ?? 0;
+          reactions.counts.map(({ reaction: kind, count }) => {
+            const { emoji, label } = reactionChoice(kind) ?? { emoji: kind, label: kind };
             const mine = selected && yours === kind;
             if (count <= 0 && !mine) return null;
             const peopleButton = (
@@ -292,33 +280,16 @@ export function WorkoutReactionControl({
         />
       )}
       {shown === 'reactions' && (
-        <div
-          ref={picker}
-          id={`reactions-${workoutId}`}
-          className="friend-react-picker"
-          role="dialog"
-          aria-label={`Choose a reaction to ${subject}`}
-          aria-busy={busy}
-        >
-          {REACTIONS.map(({ kind, emoji, label }) => (
-            <button
-              key={kind}
-              type="button"
-              aria-label={label}
-              aria-pressed={yours === kind}
-              title={label}
-              disabled={busy}
-              onClick={() => void react(kind)}
-            >
-              <span aria-hidden="true">{emoji}</span>
-            </button>
-          ))}
-          {error && (
-            <p className="inline-error friend-react-error" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
+        <Suspense fallback={null}>
+          <EmojiReactionSheet
+            title={`React to ${subject}`}
+            yours={selected ? yours : null}
+            busy={busy}
+            error={error}
+            onChoose={(next) => void react(next)}
+            onClose={() => show(null)}
+          />
+        </Suspense>
       )}
       {(shown === 'comments' || visited) && (
         <div

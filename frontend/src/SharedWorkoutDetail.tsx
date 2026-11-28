@@ -76,7 +76,7 @@ export function SharedSetList({
                 )}
                 {earned.length > 0 && (
                   <strong
-                    className="pr-badge"
+                    className={allTime ? 'pr-badge is-all-time' : 'pr-badge'}
                     title={describeRecord ? earned.map(describeRecord).join(', ') : undefined}
                   >
                     {allTime ? 'PR' : recordBadgeLabel(earned)}

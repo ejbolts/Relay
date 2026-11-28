@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { EDGE_SWIPE_START_PX } from './edgeSwipe';
 import { chartDateTicks, chartPointerX, goalLabelY } from './chartLayout';
+import { chartYearChange, chartYearLabel, chartYears, chartYearSummary } from './chartYears';
 import { Icon } from './Icon';
 import type {
   CSSProperties,
@@ -71,6 +72,11 @@ export interface TrendChartProps {
    * above 1 means the fingers spread. `onEnd` runs when the gesture finishes.
    */
   pinchZoom?: { onChange: (scale: number) => void; onEnd: () => void };
+  /**
+   * A dotted line at each 1 January, with a pill per year above the plot that shows where that
+   * year started and ended. Nothing is drawn while the chart stays inside one year.
+   */
+  yearLines?: boolean;
 }
 
 export interface GoalPath {
@@ -84,6 +90,8 @@ export interface GoalPath {
 }
 
 const defaultFormat = (value: number) => Number(value.toFixed(1)).toLocaleString('en-GB');
+/** Room above the plot for the year pills. */
+const YEAR_PILL_SPACE = 40;
 
 export function TrendChart({
   points,
@@ -102,10 +110,12 @@ export function TrendChart({
   formatValue = defaultFormat,
   onSelect,
   pinchZoom,
+  yearLines = false,
 }: TrendChartProps) {
   const { ref, width, height: measuredHeight } = useElementSize<HTMLDivElement>(340, compactHeight);
   const height = fillHeight ? measuredHeight : compactHeight;
   const [active, setActive] = useState<number | null>(null);
+  const [pickedYear, setPickedYear] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const pad = { left: 40, right: 12, top: 12, bottom: 26 };
   const pinchZoomRef = useRef(pinchZoom);
@@ -145,13 +155,15 @@ export function TrendChart({
     const tMin = Math.min(...times, ...backgroundTimes, ...goalTimes);
     const tMax = Math.max(...times, ...backgroundTimes, ...goalTimes);
     const span = Math.max(tMax - tMin, 1);
+    const years = yearLines ? chartYears(tMin, tMax) : [];
+    const top = years.length ? YEAR_PILL_SPACE : pad.top;
     const plotWidth = Math.max(width - pad.left - pad.right, 10);
-    const plotHeight = height - pad.top - pad.bottom;
+    const plotHeight = height - top - pad.bottom;
     const x = (time: number) =>
       points.length === 1 && !backgroundPoints.length && !goalPath
         ? pad.left + plotWidth / 2
         : pad.left + ((time - tMin) / span) * plotWidth;
-    const y = (value: number) => pad.top + (1 - (value - yMin) / (yMax - yMin || 1)) * plotHeight;
+    const y = (value: number) => top + (1 - (value - yMin) / (yMax - yMin || 1)) * plotHeight;
     const coords = points.map((point, index) => ({ x: x(times[index]), y: y(point.value) }));
     const goalLine = goalPath
       ? {
@@ -190,14 +202,30 @@ export function TrendChart({
           : xTicks,
       baseline: y(yMin),
       goalLine,
+      top,
+      years: years.map((item) => ({ year: item.year, x0: x(item.start), x1: x(item.end) })),
     };
     // pad is a constant literal; width/height drive the layout.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [points, backgroundPoints, goal, goalPath, width, height, markRecords, recordDirection]);
+  }, [
+    points,
+    backgroundPoints,
+    goal,
+    goalPath,
+    width,
+    height,
+    markRecords,
+    recordDirection,
+    yearLines,
+  ]);
 
   useEffect(() => {
     setActive(null);
   }, [points]);
+
+  useEffect(() => {
+    setPickedYear(null);
+  }, [yearLines]);
 
   useEffect(() => {
     if (!pinchActiveRef.current && !pinchSettlingRef.current) setPinchDrawKey(null);
@@ -294,7 +322,7 @@ export function TrendChart({
     );
   }
 
-  const { coords, records, ticks, y, xTicks, baseline, background, goalLine } = model;
+  const { coords, records, ticks, y, xTicks, baseline, background, goalLine, top, years } = model;
   const line = coords
     .map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)},${point.y.toFixed(1)}`)
     .join('');
@@ -339,6 +367,10 @@ export function TrendChart({
   const tooltipLeft = activeCoord
     ? Math.min(Math.max(activeCoord.x - 70, 4), Math.max(width - 144, 4))
     : 0;
+  // A picked year is shaded, with where it started and ended in a label near the bottom.
+  const picked = years.find((item) => item.year === pickedYear) ?? null;
+  const pickedChange = picked ? chartYearChange(points, picked.year) : null;
+  const yearSummary = pickedChange ? chartYearSummary(pickedChange, formatValue, unit) : null;
 
   return (
     <div className="pulse-chart" ref={ref}>
@@ -408,6 +440,25 @@ export function TrendChart({
             {tick.label}
           </text>
         ))}
+        {picked && (
+          <rect
+            className="pulse-chart-year-band"
+            x={picked.x0}
+            y={top}
+            width={Math.max(picked.x1 - picked.x0, 1)}
+            height={Math.max(baseline - top, 0)}
+          />
+        )}
+        {years.slice(1).map((item) => (
+          <line
+            className="pulse-chart-year-line"
+            key={item.year}
+            x1={item.x0}
+            x2={item.x0}
+            y1={top - 4}
+            y2={baseline}
+          />
+        ))}
         {goal !== null && (
           <g className="pulse-chart-goal">
             <line x1={pad.left} x2={width - pad.right} y1={y(goal)} y2={y(goal)} />
@@ -470,11 +521,40 @@ export function TrendChart({
         )}
         {activeCoord && (
           <g className="pulse-chart-cursor" aria-hidden="true">
-            <line x1={activeCoord.x} x2={activeCoord.x} y1={pad.top} y2={baseline} />
+            <line x1={activeCoord.x} x2={activeCoord.x} y1={top} y2={baseline} />
             <circle cx={activeCoord.x} cy={activeCoord.y} r="5" />
           </g>
         )}
       </svg>
+      {years.map((item) => {
+        const text = chartYearLabel(item.year, item.x1 - item.x0);
+        if (!text) return null;
+        return (
+          <button
+            type="button"
+            className="pulse-chart-year"
+            key={item.year}
+            aria-label={String(item.year)}
+            aria-pressed={item.year === pickedYear}
+            style={{ left: (item.x0 + item.x1) / 2, top: 6 }}
+            onClick={() => setPickedYear((current) => (current === item.year ? null : item.year))}
+          >
+            {text}
+          </button>
+        );
+      })}
+      {picked && yearSummary && (
+        <p
+          className="pulse-chart-year-summary"
+          aria-hidden="true"
+          style={{
+            left: Math.min(Math.max((picked.x0 + picked.x1) / 2, 110), Math.max(width - 110, 110)),
+            top: Math.max(baseline - 40, top),
+          }}
+        >
+          {yearSummary}
+        </p>
+      )}
       {activePoint && activeCoord && (
         <div
           className="pulse-chart-tooltip"
@@ -515,7 +595,7 @@ export function TrendChart({
       <p className="sr-only" aria-live="polite">
         {activePoint
           ? `${shortDate(activePoint.date)}: ${seriesLabel} ${formatValue(activePoint.value)} ${unit}${activePoint.detail ? `, ${activePoint.detail}` : ''}`
-          : ''}
+          : (yearSummary ?? '')}
       </p>
     </div>
   );

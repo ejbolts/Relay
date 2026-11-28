@@ -283,6 +283,12 @@ test('a workout beyond the feed opens its comments on their own', async () => {
   expect(await screen.findByText('Great session')).toBeVisible();
 });
 
+/** Searches the open emoji sheet and chooses an emoji by its Unicode name. */
+async function chooseEmoji(search: string, name: string) {
+  await fireEvent.changeText(screen.getByLabelText('Search emoji'), search);
+  await fireEvent.press(screen.getByRole('button', { name }));
+}
+
 test('a reaction chosen offline waits on the phone and sends once back online', async () => {
   jest
     .mocked(apiSend)
@@ -292,7 +298,7 @@ test('a reaction chosen offline waits on the phone and sends once back online', 
   await fireEvent.press(
     await screen.findByRole('button', { name: 'React to Sam Patel’s Leg day' }),
   );
-  await fireEvent.press(screen.getByRole('button', { name: 'Strong' }));
+  await chooseEmoji('flexed', 'flexed biceps');
   expect(
     await screen.findByRole('button', {
       name: "Strong reaction to Sam Patel’s Leg day sends when you're back online",

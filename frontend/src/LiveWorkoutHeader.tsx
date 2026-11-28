@@ -6,6 +6,15 @@ import { useLiveWorkoutSheet } from './liveWorkoutSheetContext';
 import { leavesMenu } from './menuDismiss';
 import './liveWorkout.css';
 
+/** A workout type offered in the menu, with the colour its days are drawn in. */
+export interface LiveWorkoutTypeOption {
+  id: string;
+  name: string;
+  color: string;
+}
+
+type MenuView = 'actions' | 'types';
+
 export function LiveWorkoutHeader({
   name,
   dateLabel = null,
@@ -17,6 +26,10 @@ export function LiveWorkoutHeader({
   onRename,
   onAdjustTime,
   onAddNote,
+  workoutTypes = [],
+  selectedTypeId = null,
+  typesLoading = false,
+  onChooseType,
   onTogglePause,
   onStartRest,
   restRunning = false,
@@ -36,6 +49,11 @@ export function LiveWorkoutHeader({
   onRename: () => void;
   onAdjustTime?: () => void;
   onAddNote: () => void;
+  workoutTypes?: LiveWorkoutTypeOption[];
+  selectedTypeId?: string | null;
+  typesLoading?: boolean;
+  /** Switches the workout to another type; left out to keep the type off the menu. */
+  onChooseType?: (id: string) => void;
   onTogglePause: () => void;
   /** Starts a rest of the chosen length; left out when rest timers are turned off. */
   onStartRest?: (seconds: number) => void;
@@ -46,7 +64,10 @@ export function LiveWorkoutHeader({
   onFinish: () => void;
   saving?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  // Closed, the everyday actions, or the workout types opened from them.
+  const [view, setView] = useState<MenuView | null>(null);
+  const open = view !== null;
+  const backToTypeItem = useRef(false);
   const sheet = useLiveWorkoutSheet();
   const minimise = sheet?.minimise ?? onMinimise;
   const root = useRef<HTMLElement>(null);
@@ -54,10 +75,23 @@ export function LiveWorkoutHeader({
   const menuId = useId();
 
   useEffect(() => {
+    if (!view) return;
+    // The types open on the ticked one; coming back lands on the item that opened them.
+    const items = menu.current;
+    const target =
+      view === 'types'
+        ? items?.querySelector<HTMLButtonElement>('[aria-checked="true"]')
+        : backToTypeItem.current
+          ? items?.querySelector<HTMLButtonElement>('.live-workout-menu-type')
+          : null;
+    backToTypeItem.current = false;
+    (target ?? items?.querySelector<HTMLButtonElement>('button'))?.focus();
+  }, [view]);
+
+  useEffect(() => {
     if (!open) return;
-    menu.current?.querySelector<HTMLButtonElement>('button')?.focus();
     const outside = (event: Event) => {
-      if (leavesMenu(root.current, event)) setOpen(false);
+      if (leavesMenu(root.current, event)) setView(null);
     };
     document.addEventListener('pointerdown', outside);
     document.addEventListener('focusin', outside);
@@ -67,10 +101,32 @@ export function LiveWorkoutHeader({
     };
   }, [open]);
 
-  const actions: Array<{ label: string; icon: IconName; run: () => void; danger?: boolean }> = [
+  const selectedType = workoutTypes.find((type) => type.id === selectedTypeId);
+  const actions: Array<{
+    label: string;
+    icon: IconName;
+    run: () => void;
+    danger?: boolean;
+    /** The current value, shown at the end of an item that opens a list to change it. */
+    value?: string;
+    opensList?: boolean;
+    disabled?: boolean;
+  }> = [
     { label: 'Rename workout', icon: 'edit', run: onRename },
     ...(onAdjustTime
       ? [{ label: 'Adjust workout time', icon: 'timer' as const, run: onAdjustTime }]
+      : []),
+    ...(onChooseType
+      ? [
+          {
+            label: 'Workout type',
+            icon: 'tag' as const,
+            run: () => setView('types'),
+            value: selectedType?.name,
+            opensList: true,
+            disabled: typesLoading || workoutTypes.length === 0,
+          },
+        ]
       : []),
     { label: 'Add note', icon: 'comment', run: onAddNote },
     {
@@ -89,7 +145,7 @@ export function LiveWorkoutHeader({
         if (event.key === 'Escape' && open) {
           event.preventDefault();
           event.stopPropagation();
-          setOpen(false);
+          setView(null);
           menuButtonRef.current?.focus();
         }
       }}
@@ -152,11 +208,11 @@ export function LiveWorkoutHeader({
           aria-haspopup="menu"
           aria-expanded={open}
           aria-controls={open ? menuId : undefined}
-          onClick={() => setOpen((value) => !value)}
+          onClick={() => setView((value) => (value ? null : 'actions'))}
           onKeyDown={(event) => {
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
               event.preventDefault();
-              setOpen(true);
+              setView((value) => value ?? 'actions');
             }
           }}
         >
@@ -180,9 +236,11 @@ export function LiveWorkoutHeader({
           id={menuId}
           className="live-workout-menu"
           role="menu"
-          aria-label="Workout options"
+          aria-label={view === 'types' ? 'Workout type' : 'Workout options'}
           onKeyDown={(event) => {
-            const buttons = Array.from(menu.current?.querySelectorAll('button') ?? []);
+            const buttons = Array.from(
+              menu.current?.querySelectorAll<HTMLButtonElement>('button:not(:disabled)') ?? [],
+            );
             const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
             let next: number;
             if (event.key === 'ArrowDown') next = (index + 1) % buttons.length;
@@ -194,23 +252,77 @@ export function LiveWorkoutHeader({
             buttons[next]?.focus();
           }}
         >
-          {actions.map((action) => (
-            <button
-              key={action.label}
-              type="button"
-              role="menuitem"
-              aria-label={action.label}
-              className={action.danger ? 'danger' : undefined}
-              onClick={() => {
-                setOpen(false);
-                menuButtonRef.current?.focus();
-                action.run();
-              }}
-            >
-              <Icon name={action.icon} />
-              {action.label}
-            </button>
-          ))}
+          {view === 'types' ? (
+            <>
+              <button
+                type="button"
+                role="menuitem"
+                aria-label="Back from workout type"
+                className="live-workout-menu-back"
+                onClick={() => {
+                  backToTypeItem.current = true;
+                  setView('actions');
+                }}
+              >
+                <Icon name="chevron-left" />
+                Workout type
+              </button>
+              {workoutTypes.map((type) => {
+                const selected = type.id === selectedTypeId;
+                return (
+                  <button
+                    key={type.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={selected}
+                    aria-label={type.name}
+                    onClick={() => {
+                      setView(null);
+                      menuButtonRef.current?.focus();
+                      if (!selected) onChooseType?.(type.id);
+                    }}
+                  >
+                    <span
+                      className="live-workout-menu-swatch"
+                      style={{ backgroundColor: type.color }}
+                      aria-hidden="true"
+                    />
+                    <span className="live-workout-menu-label">{type.name}</span>
+                    {selected && <Icon name="check" />}
+                  </button>
+                );
+              })}
+            </>
+          ) : (
+            actions.map((action) => (
+              <button
+                key={action.label}
+                type="button"
+                role="menuitem"
+                aria-label={action.value ? `${action.label}: ${action.value}` : action.label}
+                className={
+                  action.danger ? 'danger' : action.opensList ? 'live-workout-menu-type' : undefined
+                }
+                disabled={action.disabled}
+                onClick={() => {
+                  if (!action.opensList) {
+                    setView(null);
+                    menuButtonRef.current?.focus();
+                  }
+                  action.run();
+                }}
+              >
+                <Icon name={action.icon} />
+                {action.label}
+                {action.opensList && (
+                  <span className="live-workout-menu-value">
+                    {action.value && <span>{action.value}</span>}
+                    <Icon name="chevron-right" />
+                  </span>
+                )}
+              </button>
+            ))
+          )}
         </div>
       )}
     </header>

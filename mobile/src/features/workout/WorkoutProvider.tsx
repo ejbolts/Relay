@@ -1,4 +1,4 @@
-import { onlineManager, useQueryClient } from '@tanstack/react-query';
+import { onlineManager, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import {
@@ -89,6 +89,7 @@ import { rememberSavedWorkout } from '../review/justSavedWorkouts';
 import { restTimerPreference } from '../settings/devicePreferences';
 import { refreshFriendPresence, socialKeys, updateFriendPresence } from '../social/socialQueries';
 import { FinishedQueueSender, type QueueStatus } from './finishedQueueSender';
+import { sessionBound } from './sessionBound';
 import {
   addSet as addSetRule,
   checkFinish,
@@ -444,6 +445,20 @@ function sameIds(left: Exercise[], right: Exercise[]) {
 }
 
 // Memoised: its parent re-renders whenever the engine publishes, which must not loop back.
+/**
+ * Asks the server whether this sign-in still holds. A 401 lands in the query cache, where the
+ * session provider sees it and shows the sign-in form; the account's waiting work stays queued.
+ */
+function checkSession(client: QueryClient, userId: string) {
+  void client
+    .fetchQuery({
+      queryKey: ['live-session-check', userId],
+      queryFn: ({ signal }) => currentUser(signal),
+      retry: false,
+    })
+    .catch(() => undefined);
+}
+
 const WorkoutEngine = memo(function WorkoutEngine({
   user,
   publish,
@@ -681,19 +696,34 @@ const WorkoutEngine = memo(function WorkoutEngine({
     // Taken from the engine's own user, as the toast hosts may not have caught up with a sign-in
     // that has only just happened.
     const account = toastAccountFor(user.id);
+    // Each save goes with this session's own token: never with none (a sign-out deletes the
+    // token before the session ends) or another account's. A session that has ended here leaves
+    // the workout queued for its account, as a connection failure would, rather than refused.
+    const session = sessionBound({ onEnded: () => checkSession(client, user.id) });
     const sender = new FinishedQueueSender({
       storage: deviceStorage,
       userId: user.id,
       send: (item: FinishedWorkout) =>
-        item.pendingSave.workoutId
-          ? apiSend<TrackedWorkout>(
-              `/api/workouts/${encodeURIComponent(item.pendingSave.workoutId)}`,
-              'PUT',
-              item.pendingSave.payload,
-            )
-          : apiSend<TrackedWorkout>('/api/workouts', 'POST', item.pendingSave.payload),
+        session.send((token) =>
+          item.pendingSave.workoutId
+            ? apiSend<TrackedWorkout>(
+                `/api/workouts/${encodeURIComponent(item.pendingSave.workoutId)}`,
+                'PUT',
+                item.pendingSave.payload,
+                undefined,
+                token,
+              )
+            : apiSend<TrackedWorkout>(
+                '/api/workouts',
+                'POST',
+                item.pendingSave.payload,
+                undefined,
+                token,
+              ),
+        ),
       online: () => onlineManager.isOnline(),
       describe: (error) => ({
+        // A session that ended here has no status: it waits, never a refused save.
         status: error instanceof ApiError ? error.status : undefined,
         outdated: error instanceof ApiError && error.status === 426,
         message: error instanceof Error ? error.message : 'Relay could not save this workout.',
@@ -1225,15 +1255,24 @@ const WorkoutEngine = memo(function WorkoutEngine({
       (saved.base!.draft === null || isActiveWorkoutDraft(saved.base!.draft))
         ? saved.base!
         : null;
+    // The shared copy is read and written for this session only, as the finished queue is: a
+    // reply after a sign-out or another sign-in never lands in this account's workout.
+    const session = sessionBound({ onEnded: () => checkSession(client, user.id) });
     const sync = new ActiveWorkoutSynchronizer(
       {
-        read: async () => snapshotOf(await apiGet<unknown>('/api/active-workout')),
+        read: async () =>
+          snapshotOf(await session.read(() => apiGet<unknown>('/api/active-workout'))),
         put: async (change) => {
           const autoSave = autoSaveRef.current(change.draft);
-          const result = await apiSend<unknown>('/api/active-workout', 'PUT', {
-            ...change,
-            ...(autoSave && { autoSave }),
-          });
+          const result = await session.send((token) =>
+            apiSend<unknown>(
+              '/api/active-workout',
+              'PUT',
+              { ...change, ...(autoSave && { autoSave }) },
+              undefined,
+              token,
+            ),
+          );
           return {
             ...snapshotOf(result),
             conflict: Boolean((result as { conflict?: boolean }).conflict),
@@ -1270,14 +1309,7 @@ const WorkoutEngine = memo(function WorkoutEngine({
       // The bell refreshes at once, as the web's does, instead of on its next check.
       onNotifications: () => void client.invalidateQueries({ queryKey: socialKeys.notifications }),
       // The session provider observes 401s in the query cache.
-      onSignedOut: () =>
-        void client
-          .fetchQuery({
-            queryKey: ['live-session-check', user.id],
-            queryFn: ({ signal }) => currentUser(signal),
-            retry: false,
-          })
-          .catch(() => undefined),
+      onSignedOut: () => checkSession(client, user.id),
     });
     presenceRef.current = presence;
     // Keep pulling periodically in case the socket is down or silently drops an event.

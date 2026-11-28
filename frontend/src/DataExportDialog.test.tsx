@@ -80,7 +80,7 @@ describe('Relay export choices', () => {
     await click(download());
     expect(api.exportWorkouts).toHaveBeenCalledWith({});
     expect(api.exportBodyMeasurements).not.toHaveBeenCalled();
-    expect(downloads).toEqual([expect.stringMatching(/^gym-workouts-.*\.csv$/)]);
+    expect(downloads).toEqual([expect.stringMatching(/^relay-workouts-.*\.csv$/)]);
     expect(onExported).toHaveBeenCalledWith('CSV downloaded.');
     expect(document.querySelector('[role=status]')).toBeNull();
     expect(URL.createObjectURL).toHaveBeenCalledWith(workoutBlob);
@@ -111,7 +111,7 @@ describe('Relay export choices', () => {
     expect(api.exportWorkouts).toHaveBeenCalledWith(range);
     expect(api.exportBodyMeasurements).toHaveBeenCalledWith(range);
     expect(downloads).toEqual([
-      'gym-workouts-2026-09-18-to-2026-10-18.csv',
+      'relay-workouts-2026-09-18-to-2026-10-18.csv',
       'body-weight-2026-09-18-to-2026-10-18.csv',
     ]);
     expect(onExported).toHaveBeenLastCalledWith('Both CSV files downloaded.');

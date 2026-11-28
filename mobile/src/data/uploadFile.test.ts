@@ -1,3 +1,4 @@
+import { sessionToken } from './session';
 import { uploadFile, UploadStopped } from './uploadFile';
 
 jest.mock('./api', () => ({
@@ -5,7 +6,10 @@ jest.mock('./api', () => ({
   apiOrigin: 'https://relay.test',
   clientVersionHeaders: () => ({ 'X-Relay-Version': '1.3.2' }),
 }));
-jest.mock('./session', () => ({ sessionToken: jest.fn(async () => 'phone-token') }));
+jest.mock('./session', () => ({
+  ...jest.requireActual<typeof import('./session')>('./session'),
+  sessionToken: jest.fn(async () => 'phone-token'),
+}));
 
 /** A stand-in XHR that records what was sent and can be answered or aborted. */
 class Xhr {
@@ -71,4 +75,15 @@ it('stops the request when its signal aborts', async () => {
   controller.abort();
   await expect(done).rejects.toBeInstanceOf(UploadStopped);
   expect(Xhr.last.abort).toHaveBeenCalled();
+});
+
+it('reads the session when asked for, and sends nothing when it changes before the read', async () => {
+  const { SessionChanged } = jest.requireActual<typeof import('./session')>('./session');
+  jest.mocked(sessionToken).mockRejectedValueOnce(new SessionChanged());
+  const before = Xhr.last;
+  const done = uploadFile('/api/sessions/s1/clips', 'POST', file);
+  // Taken at the call, before anything is awaited.
+  expect(sessionToken).toHaveBeenCalledWith('https://relay.test');
+  await expect(done).rejects.toBeInstanceOf(SessionChanged);
+  expect(Xhr.last).toBe(before);
 });

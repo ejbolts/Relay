@@ -44,11 +44,40 @@ function Harness({
 }
 
 function button(label: string) {
-  return host.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+  return document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)!;
+}
+
+/** An emoji in the open reaction sheet, by its Unicode name. */
+function emoji(name: string) {
+  return document.querySelector<HTMLButtonElement>(
+    `.emoji-reaction-sheet button[aria-label="${name}"]`,
+  )!;
+}
+
+const sheet = () => document.querySelector('.emoji-reaction-sheet');
+
+/** Opens the emoji sheet from a React button, waiting for it to load. */
+async function openPicker(label = 'React to Upper body') {
+  await act(async () => button(label).click());
+  await vi.waitFor(() => expect(sheet()).not.toBeNull());
+}
+
+async function search(text: string) {
+  const input = document.querySelector<HTMLInputElement>('.emoji-reaction-sheet input')!;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, text);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 }
 
 beforeEach(() => {
   vi.stubGlobal('IS_REACT_ACT_ENVIRONMENT', true);
+  HTMLDialogElement.prototype.showModal = function () {
+    this.open = true;
+  };
+  HTMLDialogElement.prototype.close = function () {
+    this.open = false;
+  };
   host = document.createElement('div');
   document.body.append(host);
   root = createRoot(host);
@@ -73,9 +102,7 @@ it.each([false, true])(
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(function (
       this: HTMLElement,
     ) {
-      if (this.querySelector('.workout-discussion-thread:not([hidden])')) return 240;
-      if (this.querySelector('.friend-react-picker')) return 100;
-      return 44;
+      return this.querySelector('.workout-discussion-thread:not([hidden])') ? 240 : 44;
     });
     const animate = vi.fn(() => ({ onfinish: null, oncancel: null }));
     Object.assign(HTMLElement.prototype, { animate });
@@ -88,31 +115,26 @@ it.each([false, true])(
       return style;
     });
     await act(async () => root.render(<Harness />));
-    await act(async () => button('React to Upper body').click());
+    await act(async () => button('0 comments on Upper body').click());
     const layout = contents ? host : host.querySelector('.workout-discussion');
     expect(animate.mock.contexts[0]).toBe(layout);
     expect(animate.mock.calls[0]).toEqual([
-      [{ height: '44px' }, { height: '100px' }],
+      [{ height: '44px' }, { height: '240px' }],
       expect.objectContaining({ duration: 340 }),
     ]);
-    expect(document.activeElement).toBe(button('Like'));
-
-    await act(async () => button('0 comments on Upper body').click());
-    expect(animate).toHaveBeenLastCalledWith(
-      [{ height: '100px' }, { height: '240px' }],
-      expect.anything(),
-    );
-    await act(async () => button('0 comments on Upper body').click());
+    // Reacting swaps the thread for the emoji sheet, which opens over the page.
+    await openPicker();
     expect(animate).toHaveBeenLastCalledWith(
       [{ height: '240px' }, { height: '44px' }],
       expect.anything(),
     );
 
     document.documentElement.setAttribute('data-reduce-motion', '');
+    await act(async () => button('Close React to Upper body').click());
+    expect(sheet()).toBeNull();
     animate.mockClear();
-    await act(async () => button('React to Upper body').click());
+    await act(async () => button('0 comments on Upper body').click());
     expect(animate).not.toHaveBeenCalled();
-    expect(document.activeElement).toBe(button('Like'));
   },
 );
 
@@ -126,8 +148,9 @@ it('shows a smiley-plus and unselected counts before reacting, with no default c
   // No comments yet: the icon alone, with the count kept in its label.
   expect(comments.textContent).toBe('');
   expect(comments.querySelector('svg')).not.toBeNull();
-  await act(async () => button('React to Upper body').click());
-  expect(host.querySelector('[aria-pressed="true"]')).toBeNull();
+  await openPicker();
+  expect(document.querySelector('[aria-pressed="true"]')).toBeNull();
+  expect(document.querySelector('.emoji-reaction-remove')).toBeNull();
   expect(host.querySelector('.is-yours')).toBeNull();
   expect(react).not.toHaveBeenCalled();
 });
@@ -202,9 +225,10 @@ it('combines matching reactions, moves only your highlight when changing, and re
     });
   const remove = vi.spyOn(api.sharing, 'removeReaction').mockResolvedValue(others);
   await act(async () => root.render(<Harness />));
-  await act(async () => button('React to Upper body').click());
-  await act(async () => button('Like').click());
+  await openPicker();
+  await act(async () => emoji('thumbs up').click());
   expect(react).toHaveBeenLastCalledWith('w1', 'like');
+  expect(sheet()).toBeNull();
   expect(host.querySelector('.is-yours')?.textContent).toBe('👍 3');
   expect(host.querySelectorAll('.is-yours')).toHaveLength(1);
   expect(host.querySelectorAll('.discussion-reaction-summary')).toHaveLength(2);
@@ -213,21 +237,47 @@ it('combines matching reactions, moves only your highlight when changing, and re
 
   const mine = button('Your reaction to Upper body: Like. Change reaction');
   expect(document.activeElement).toBe(mine);
-  await act(async () => mine.click());
-  expect(button('Like').getAttribute('aria-pressed')).toBe('true');
-  await act(async () => button('Love').click());
+  await openPicker('Your reaction to Upper body: Like. Change reaction');
+  expect(emoji('thumbs up').getAttribute('aria-pressed')).toBe('true');
+  await act(async () => emoji('red heart').click());
   expect(react).toHaveBeenLastCalledWith('w1', 'love');
   expect(host.querySelector('.is-yours')?.textContent).toBe('❤️ 2');
   expect(host.querySelectorAll('.is-yours')).toHaveLength(1);
   expect(button('View 2 Like reactions on Upper body').closest('.is-yours')).toBeNull();
 
-  await act(async () => button('Your reaction to Upper body: Love. Change reaction').click());
-  await act(async () => button('Love').click());
+  await openPicker('Your reaction to Upper body: Love. Change reaction');
+  // Choosing your reaction again takes it away, as does the Remove button.
+  expect(document.querySelector('.emoji-reaction-remove')?.textContent).toBe('❤️ Remove reaction');
+  await act(async () => emoji('red heart').click());
   expect(remove).toHaveBeenCalledWith('w1');
   expect(host.querySelector('.is-yours')).toBeNull();
   expect(button('React to Upper body').querySelector('svg')).not.toBeNull();
   expect(host.querySelectorAll('.discussion-reaction-summary')).toHaveLength(2);
   expect(document.activeElement).toBe(button('React to Upper body'));
+});
+
+it('removes your reaction from the sheet’s Remove button', async () => {
+  const remove = vi.spyOn(api.sharing, 'removeReaction').mockResolvedValue(others);
+  await act(async () =>
+    root.render(
+      <Harness
+        initial={{
+          counts: [
+            { reaction: 'like', count: 2 },
+            { reaction: '🫡', count: 1 },
+          ],
+          yours: '🫡',
+        }}
+      />,
+    ),
+  );
+  await openPicker('Your reaction to Upper body: 🫡. Change reaction');
+  await act(async () =>
+    document.querySelector<HTMLButtonElement>('.emoji-reaction-remove')!.click(),
+  );
+  expect(remove).toHaveBeenCalledWith('w1');
+  expect(sheet()).toBeNull();
+  expect(host.querySelector('.is-yours')).toBeNull();
 });
 
 it('keeps the default control and counts when saving fails, and permits retry', async () => {
@@ -236,15 +286,15 @@ it('keeps the default control and counts when saving fails, and permits retry', 
     .mockRejectedValueOnce(new Error('Connection lost'))
     .mockResolvedValueOnce({ counts: [{ reaction: 'fire', count: 1 }], yours: 'fire' });
   await act(async () => root.render(<Harness initial={{ counts: [], yours: null }} />));
-  await act(async () => button('React to Upper body').click());
-  await act(async () => button('Fire').click());
-  expect(host.querySelector('[role="alert"]')?.textContent).toContain('Connection lost');
+  await openPicker();
+  await act(async () => emoji('fire').click());
+  expect(document.querySelector('[role="alert"]')?.textContent).toContain('Connection lost');
   expect(host.querySelector('.is-yours')).toBeNull();
   expect(button('React to Upper body')).not.toBeNull();
-  await act(async () => button('Fire').click());
+  await act(async () => emoji('fire').click());
   expect(react).toHaveBeenCalledTimes(2);
   expect(host.querySelector('.is-yours')?.textContent).toBe('🔥 1');
-  expect(host.querySelector('[role="alert"]')).toBeNull();
+  expect(document.querySelector('[role="alert"]')).toBeNull();
 });
 
 it('grays out an offline reaction and sends it when the connection returns', async () => {
@@ -253,14 +303,14 @@ it('grays out an offline reaction and sends it when the connection returns', asy
     .spyOn(api.sharing, 'react')
     .mockResolvedValue({ counts: [{ reaction: 'fire', count: 1 }], yours: 'fire' });
   await act(async () => root.render(<Harness initial={{ counts: [], yours: null }} />));
-  await act(async () => button('React to Upper body').click());
-  await act(async () => button('Fire').click());
+  await openPicker();
+  await act(async () => emoji('fire').click());
   expect(react).not.toHaveBeenCalled();
   const waiting = button("Fire reaction to Upper body sends when you're back online");
   expect(waiting.disabled).toBe(true);
   expect(waiting.classList.contains('is-pending')).toBe(true);
   expect(waiting.textContent).toBe('🔥');
-  expect(host.querySelector('.friend-react-picker')).toBeNull();
+  expect(sheet()).toBeNull();
   expect(JSON.parse(localStorage.getItem(PENDING_REACTIONS_KEY)!)).toEqual({
     owner: 'A',
     items: { w1: 'fire' },
@@ -284,8 +334,12 @@ it('queues a reaction when the server cannot be reached, then retries', async ()
       .mockResolvedValueOnce({ counts: [{ reaction: 'like', count: 1 }], yours: 'like' });
     await act(async () => root.render(<Harness initial={{ counts: [], yours: null }} />));
     await act(async () => button('React to Upper body').click());
-    await act(async () => button('Like').click());
-    expect(host.querySelector('[role="alert"]')).toBeNull();
+    // The sheet loads on first use; fake timers need a nudge for it to arrive.
+    for (let tries = 0; !sheet() && tries < 50; tries += 1) {
+      await act(async () => vi.advanceTimersByTimeAsync(10));
+    }
+    await act(async () => emoji('thumbs up').click());
+    expect(document.querySelector('[role="alert"]')).toBeNull();
     expect(host.querySelector<HTMLButtonElement>('.is-pending')?.disabled).toBe(true);
     await act(async () => vi.advanceTimersByTimeAsync(5000));
     expect(react).toHaveBeenCalledTimes(3);
@@ -330,12 +384,60 @@ it('keeps comments open while tapping or scrolling elsewhere, until the button o
   expect(thread()?.hasAttribute('hidden')).toBe(true);
 });
 
-it('still closes the reaction picker on a tap elsewhere', async () => {
+it('closes the emoji sheet without reacting', async () => {
+  document.documentElement.setAttribute('data-reduce-motion', '');
+  const react = vi.spyOn(api.sharing, 'react');
   await act(async () => root.render(<Harness />));
-  await act(async () => button('React to Upper body').click());
-  expect(host.querySelector('.friend-react-picker')).not.toBeNull();
-  await act(async () => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
-  expect(host.querySelector('.friend-react-picker')).toBeNull();
+  await openPicker();
+  await act(async () => button('Close React to Upper body').click());
+  expect(sheet()).toBeNull();
+  expect(button('React to Upper body').getAttribute('aria-expanded')).toBe('false');
+  expect(react).not.toHaveBeenCalled();
+});
+
+it('reacts with any emoji found by name, and shows emojis others chose', async () => {
+  const react = vi.spyOn(api.sharing, 'react').mockResolvedValue({
+    counts: [
+      { reaction: 'like', count: 2 },
+      { reaction: '🫡', count: 2 },
+    ],
+    yours: '🫡',
+  });
+  await act(async () =>
+    root.render(
+      <Harness
+        initial={{
+          counts: [
+            { reaction: 'like', count: 2 },
+            { reaction: '🫡', count: 1 },
+          ],
+          yours: null,
+        }}
+      />,
+    ),
+  );
+  expect(button('View 1 🫡 reaction on Upper body').textContent).toBe('🫡 1');
+  await openPicker();
+  await search('salut');
+  expect(document.querySelector('.emoji-reaction-tabs')).toBeNull();
+  await act(async () => emoji('saluting face').click());
+  expect(react).toHaveBeenCalledWith('w1', '🫡');
+  expect(host.querySelector('.is-yours')?.textContent).toBe('🫡 2');
+  expect(button('Your reaction to Upper body: 🫡. Change reaction').textContent).toBe('🫡');
+});
+
+it('reacts with an emoji typed from the keyboard, such as one with a skin tone', async () => {
+  const react = vi
+    .spyOn(api.sharing, 'react')
+    .mockResolvedValue({ counts: [{ reaction: '👍🏽', count: 1 }], yours: '👍🏽' });
+  await act(async () => root.render(<Harness initial={{ counts: [], yours: null }} />));
+  await openPicker();
+  await search('👍🏽');
+  await act(async () => emoji('👍🏽').click());
+  expect(react).toHaveBeenCalledWith('w1', '👍🏽');
+  await openPicker('Your reaction to Upper body: 👍🏽. Change reaction');
+  await search('nothing like this');
+  expect(document.querySelector('.emoji-reaction-empty')?.textContent).toBe('No emoji found');
 });
 
 it('shows counts without an add button or personal highlight on your own workout', async () => {
@@ -361,12 +463,6 @@ it('stacks only the two most common emojis beside the total in a card header', a
 });
 
 it('opens the people list from your combined count without opening the picker', async () => {
-  HTMLDialogElement.prototype.showModal = function () {
-    this.open = true;
-  };
-  HTMLDialogElement.prototype.close = function () {
-    this.open = false;
-  };
   const people = vi.spyOn(api.sharing, 'reactionPeople').mockResolvedValue({
     items: [
       { id: 'sample', display_name: 'Taylor Sample', profile_photo_url: null, reaction: 'like' },
@@ -387,6 +483,6 @@ it('opens the people list from your combined count without opening the picker', 
   await act(async () => button('View 1 Like reaction on Upper body').click());
   expect(people).toHaveBeenCalledExactlyOnceWith('w1');
   expect(document.querySelector('dialog[open]')?.textContent).toContain('Taylor Sample');
-  expect(host.querySelector('.friend-react-picker')).toBeNull();
+  expect(sheet()).toBeNull();
   expect(host.querySelectorAll('.is-yours')).toHaveLength(1);
 });

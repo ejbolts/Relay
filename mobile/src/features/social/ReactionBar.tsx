@@ -1,15 +1,11 @@
 import { onlineManager, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  View,
-  type StyleProp,
-  type ViewStyle,
-} from 'react-native';
-import { nextReaction, reactionSummary, REACTIONS } from '../../../../frontend/src/friendFeedData';
+  reactionChoice,
+  reactionEmoji,
+  reactionSummary,
+} from '../../../../frontend/src/friendFeedData';
 import { pendingReactionLabel } from '../../../../frontend/src/pendingReactionQueue';
 import type { WorkoutReactionKind, WorkoutReactions } from '../../../../frontend/src/types';
 import { useUser } from '../../session/SessionProvider';
@@ -20,6 +16,7 @@ import { Sheet } from '../../ui/Sheet';
 import { useTheme } from '../../ui/theme';
 import { isToastAccountCurrent, toastAccount } from '../../ui/Toast';
 import { Avatar } from './Avatar';
+import { EmojiReactionSheet } from './EmojiReactionSheet';
 import { socialIcons } from './icons';
 import { queueReaction, usePendingReaction } from './pendingReactions';
 import { connectionFailed, socialApi } from './socialApi';
@@ -63,12 +60,12 @@ export function useReactionControl({
     showReactions(client, workoutId, { comment_count: comments, ...updated });
   const pending = usePendingReaction(account, workoutId, show);
   const waiting = !ownWorkout && pending !== undefined;
-  const pendingChoice = waiting ? REACTIONS.find((item) => item.kind === pending) : undefined;
-  const selected = ownWorkout ? undefined : REACTIONS.find((item) => item.kind === reactions.yours);
+  const pendingChoice = waiting ? reactionChoice(pending) : undefined;
+  const selected = ownWorkout ? undefined : reactionChoice(reactions.yours);
   const reactionCount = `${summary.total} ${summary.total === 1 ? 'reaction' : 'reactions'}`;
   const react = useMutation({
-    mutationFn: async (chosen: WorkoutReactionKind) => {
-      const next = nextReaction(reactions.yours, chosen);
+    /** Saves a reaction, or removes yours when `next` is null. */
+    mutationFn: async (next: WorkoutReactionKind | null) => {
       const wait = () => {
         queueReaction(account, workoutId, next);
         return null;
@@ -119,70 +116,26 @@ export function useReactionControl({
 
 export type ReactionControlState = ReturnType<typeof useReactionControl>;
 
-/** The floating or inline emoji reaction picker, styled as the web's .friend-react-picker. */
+/** The emoji sheet for reacting to a workout, as the web's EmojiReactionSheet. */
 export function ReactionPicker({
   subject,
   yours,
   control,
-  floating = false,
-  style,
 }: {
   subject: string;
   yours: WorkoutReactionKind | null;
   control: ReactionControlState;
-  floating?: boolean;
-  style?: StyleProp<ViewStyle>;
 }) {
-  const { colors, radius, type } = useTheme();
-  const { react } = control;
+  const { react, setPicking } = control;
   return (
-    <View style={[floating && styles.floatingWrap, style]}>
-      <View
-        accessibilityLabel={`Choose a reaction to ${subject}`}
-        style={[
-          styles.picker,
-          {
-            backgroundColor: colors.surface,
-            borderColor: colors.lineStrong,
-            borderRadius: radius.pill,
-          },
-          floating && [styles.floatingPicker, { shadowColor: colors.shadow }],
-        ]}
-      >
-        {REACTIONS.map((item) => {
-          const mine = yours === item.kind;
-          return (
-            <Pressable
-              key={item.kind}
-              accessibilityRole="button"
-              accessibilityLabel={item.label}
-              accessibilityState={{ selected: mine, disabled: react.isPending }}
-              disabled={react.isPending}
-              onPress={() => {
-                haptics.tap();
-                react.mutate(item.kind);
-              }}
-              style={({ pressed }) => [styles.choice, pressed && { transform: [{ scale: 1.18 }] }]}
-            >
-              <View
-                style={[
-                  styles.choiceFace,
-                  mine && { backgroundColor: colors.accentSoft, borderColor: colors.accent },
-                ]}
-              >
-                <Text style={styles.emojiLarge}>{item.emoji}</Text>
-              </View>
-            </Pressable>
-          );
-        })}
-        {react.isPending && <ActivityIndicator size="small" color={colors.accentText} />}
-      </View>
-      {react.error && (
-        <Text accessibilityRole="alert" style={[type.footnote, { color: colors.danger }]}>
-          {errorMessage(react.error)}
-        </Text>
-      )}
-    </View>
+    <EmojiReactionSheet
+      title={`React to ${subject}`}
+      yours={yours}
+      busy={react.isPending}
+      error={react.error}
+      onChoose={(next) => react.mutate(next)}
+      onClose={() => setPicking(false)}
+    />
   );
 }
 
@@ -492,9 +445,7 @@ export function ReactionPeopleSheet({
                 <Text style={[type.body, { color: colors.text, flex: 1 }]} numberOfLines={1}>
                   {person.display_name}
                 </Text>
-                <Text style={styles.emoji}>
-                  {REACTIONS.find((item) => item.kind === person.reaction)?.emoji}
-                </Text>
+                <Text style={styles.emoji}>{reactionEmoji(person.reaction)}</Text>
               </Pressable>
             </View>
           ))}
@@ -564,47 +515,6 @@ const styles = StyleSheet.create({
   compactCount: { paddingLeft: 3, paddingRight: 6 },
   emoji: { fontSize: 18 },
   emojiSmall: { fontSize: 15, letterSpacing: -2 },
-  emojiLarge: { fontSize: 24 },
-  floatingWrap: {
-    position: 'absolute',
-    top: 56,
-    right: 12,
-    zIndex: 20,
-    elevation: 10,
-    alignItems: 'flex-end',
-    gap: 4,
-  },
-  picker: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-  },
-  floatingPicker: {
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.28,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  // 44 pt touch frames, side by side; the selected ring stays a compact circle inside.
-  choice: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  choiceFace: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    borderWidth: 1,
-    borderColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   person: {
     flexDirection: 'row',
     alignItems: 'center',

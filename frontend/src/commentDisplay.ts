@@ -41,6 +41,34 @@ export function commentThreads(
     .map((root) => ({ root, replies: items.filter((item) => item.parent_id === root.id) }));
 }
 
+/** Replies shown under a comment before the rest fold behind a "+N replies" button. */
+export const SHOWN_REPLIES = 2;
+
+/**
+ * The replies to show under a comment and how many are folded away. An expanded thread, or one
+ * holding a highlighted reply (opened from a notification), shows them all.
+ */
+export function visibleReplies(
+  replies: WorkoutComment[],
+  expanded: boolean,
+  highlightId?: string | null,
+): { shown: WorkoutComment[]; hidden: number } {
+  const folded = replies.slice(SHOWN_REPLIES);
+  if (expanded || !folded.length || folded.some((item) => item.id === highlightId))
+    return { shown: replies, hidden: 0 };
+  return { shown: replies.slice(0, SHOWN_REPLIES), hidden: folded.length };
+}
+
+/** The button that unfolds a thread's other replies: "+1 reply", "+3 replies". */
+export function moreRepliesLabel(hidden: number): string {
+  return `+${hidden} ${hidden === 1 ? 'reply' : 'replies'}`;
+}
+
+/** The thread a comment belongs to: its own id, or its top-level comment's for a reply. */
+export function threadRoot(comment: WorkoutComment): string {
+  return comment.parent_id ?? comment.id;
+}
+
 /** What deleting a comment removes, for its confirmation. */
 export function deleteCommentMessage(items: WorkoutComment[], comment: WorkoutComment): string {
   return items.some((item) => item.parent_id === comment.id)

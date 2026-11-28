@@ -166,7 +166,7 @@ beforeEach(() => {
   mockSessionStatus = { kind: 'signed-in', user: mockUser };
   resetVideoUploadStore();
   jest.mocked(sessionToken).mockResolvedValue('tok-A');
-  jest.mocked(forgetSessionTokenIf).mockResolvedValue(undefined);
+  jest.mocked(forgetSessionTokenIf).mockResolvedValue('forgotten');
   mockClipPlayers.length = 0;
   mockNextPlayerStatus = 'idle';
   client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -1238,6 +1238,85 @@ it('never lets a failing session cleanup block sign-out and leaves Retry offered
   });
   // If sign-out itself fails and the user stays signed in, the interrupted clip offers Retry.
   expect(await screen.findByRole('button', { name: 'Retry failed uploads' })).toBeVisible();
+  await view.unmount();
+});
+
+it('stops an upload whose session changes as it starts, rather than sending it unbound', async () => {
+  stoppableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  const view = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Switched');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('1 clip');
+
+  const { SessionChanged } =
+    jest.requireActual<typeof import('../../data/session')>('../../data/session');
+  jest.mocked(sessionToken).mockRejectedValueOnce(new SessionChanged());
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  expect(
+    await screen.findByText('Your account changed before this could be sent. Try again.'),
+  ).toBeVisible();
+  // No session was created, and the form is still there to try again.
+  expect(apiSend).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Upload session' })).toBeVisible();
+  await view.unmount();
+});
+
+it('after sign-out deleted the upload session, a failed sign-out never retries into it', async () => {
+  stoppableTransfers();
+  jest.mocked(apiSend).mockImplementation(async (path: string, method: string) => {
+    if (path === '/api/sessions') return session;
+    if (path === '/api/sessions/s1' && method === 'DELETE') return undefined;
+    throw new Error(`Unexpected ${method} ${path}`);
+  });
+  const view = await open(
+    <>
+      <VideoUploadSessionSync />
+      <VideosScreen />
+    </>,
+  );
+  jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+    canceled: false,
+    assets: [clipAsset('one.mp4')],
+  } as ImagePicker.ImagePickerResult);
+  await screen.findByText('Sample Lifts');
+  await fireEvent.changeText(screen.getByLabelText('Session name'), 'Gone session');
+  await fireEvent.press(screen.getByRole('button', { name: 'Add set videos' }));
+  const options = jest.mocked(showMenu).mock.lastCall![1];
+  await act(async () => options.find((option) => option.label === 'Choose videos')!.onPress());
+  await screen.findByText('1 clip');
+  await fireEvent.press(screen.getByRole('button', { name: 'Upload session' }));
+  await screen.findByText('UPLOADING SESSION');
+
+  // The cleanup deletes the session on the server; sign-out itself then fails, so the same
+  // session stays signed in.
+  await act(async () => {
+    await runBeforeSignOut();
+  });
+  expect(screen.queryByRole('button', { name: 'Retry failed uploads' })).toBeNull();
+  // The clips are back on the form, and uploading again makes a new session.
+  const upload = await screen.findByRole('button', { name: 'Upload session' });
+  expect(screen.getByText('1 clip')).toBeVisible();
+  await fireEvent.press(upload);
+  await waitFor(() =>
+    expect(
+      jest.mocked(apiSend).mock.calls.filter(([path]) => path === '/api/sessions'),
+    ).toHaveLength(2),
+  );
   await view.unmount();
 });
 

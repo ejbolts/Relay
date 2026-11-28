@@ -5,6 +5,7 @@ import type { ReactNode } from 'react';
 import { Alert, ScrollView } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { commentTime } from '../../../../frontend/src/commentDisplay';
+import { exerciseIconFor } from '../../../../frontend/src/exerciseIcons';
 import { feedStats } from '../../../../frontend/src/friendFeedData';
 import { connectionDate } from '../../../../frontend/src/sharedProfileDisplay';
 import { VISIBILITY_CONFIRM } from '../../../../frontend/src/sharingChoices';
@@ -26,7 +27,8 @@ import { FriendQrSheet } from './FriendQrSheet';
 import { FriendsActivityCard } from './FriendsActivityCard';
 import * as linkedScroll from './linkedScroll';
 import { ProfileScreen } from './ProfileScreen';
-import { commentSpoken } from './Comments';
+import { commentSpoken, CommentsSheet } from './Comments';
+import { expectOfflineUntilOnline } from '../../testing/offlineScreen';
 import { SharedWorkoutScreen } from './SharedWorkoutScreen';
 import { SharingSettingsScreen } from './SharingSettingsScreen';
 import { SocialScreen } from './SocialScreen';
@@ -267,6 +269,12 @@ beforeEach(() => {
   });
 });
 
+/** Searches the open emoji sheet and chooses an emoji by its Unicode name. */
+async function chooseEmoji(search: string, name: string) {
+  await fireEvent.changeText(screen.getByLabelText('Search emoji'), search);
+  await fireEvent.press(screen.getByRole('button', { name }));
+}
+
 async function show(children: ReactNode) {
   // No garbage-collection timers, so Jest can exit when the tests finish.
   client = new QueryClient({
@@ -307,24 +315,46 @@ test("the feed shows friends' workouts, and a reaction is sent and shown", async
   expect(screen.getByText(feedStats(upper, 'kg').join(' · '))).toBeVisible();
   expect(feedStats(upper, 'kg')[0]).toBe('1h 2min');
   expect(screen.getByText('1 PR')).toBeVisible();
-  // Three exercises with their pictures, then the rest counted, which opens the workout.
+  // Three exercises with their pictures, then the rest expand inline with their pictures.
+  const exerciseImageSources = () => {
+    const sources: unknown[] = [];
+    const visit = (node: unknown) => {
+      if (!node || typeof node !== 'object') return;
+      const element = node as { type?: unknown; props?: { source?: unknown }; children?: unknown[] };
+      if (element.type === 'Image') sources.push(element.props?.source);
+      element.children?.forEach(visit);
+    };
+    visit(screen.getByLabelText('Exercises'));
+    return sources;
+  };
   for (const name of ['Bench Press', 'Barbell Row', 'Overhead Press'])
     expect(screen.getByText(name)).toBeVisible();
   expect(screen.queryByText('Bicep Curl')).toBeNull();
-  await fireEvent.press(
-    screen.getByRole('button', {
-      name: 'Open Alex Morgan’s Upper body workout, with 1 more exercise',
-    }),
+  expect(exerciseImageSources()).toEqual(
+    upper.movements.slice(0, 3).map((item) => exerciseIconFor(item.exercise)),
   );
-  expect(mockRouter.push).toHaveBeenCalledWith(
-    expect.objectContaining({
-      pathname: '/social/workout/[id]',
-      params: expect.objectContaining({ id: 'w1' }),
-    }),
+  const expandButton = screen.getByRole('button', {
+    name: 'Show 1 more exercise in Alex Morgan’s Upper body',
+  });
+  expect(expandButton).toHaveProp('accessibilityState', { expanded: false });
+  await fireEvent.press(expandButton);
+  expect(mockRouter.push).not.toHaveBeenCalled();
+  expect(screen.getByText('Bicep Curl')).toBeVisible();
+  expect(exerciseImageSources()).toEqual(
+    upper.movements.map((item) => exerciseIconFor(item.exercise)),
+  );
+  const collapseButton = screen.getByRole('button', {
+    name: 'Show fewer exercises in Alex Morgan’s Upper body',
+  });
+  expect(collapseButton).toHaveProp('accessibilityState', { expanded: true });
+  await fireEvent.press(collapseButton);
+  expect(screen.queryByText('Bicep Curl')).toBeNull();
+  expect(exerciseImageSources()).toEqual(
+    upper.movements.slice(0, 3).map((item) => exerciseIconFor(item.exercise)),
   );
 
   await fireEvent.press(screen.getByRole('button', { name: 'React to Alex Morgan’s Upper body' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Strong' }));
+  await chooseEmoji('flexed', 'flexed biceps');
   await waitFor(() =>
     expect(apiSend).toHaveBeenCalledWith('/api/sharing/workouts/w1/reaction', 'PUT', {
       reaction: 'strong',
@@ -1020,6 +1050,33 @@ test('scanning a friend code opens their invite, and other codes say why not', a
   expect(onScanned).toHaveBeenCalledWith('alex');
 });
 
+test('the QR code leaves out the invite only for an older server, never hiding a failure', async () => {
+  const unreachable = new Error('Could not reach Relay. Check your connection, then try again.');
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/auth/friend-invite') throw unreachable;
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  const sheet = (
+    <FriendQrSheet visible onClose={jest.fn()} onChooseSharing={jest.fn()} onScanned={jest.fn()} />
+  );
+  await show(sheet);
+  expect(await screen.findByLabelText('QR code to add Preview as a friend')).toBeVisible();
+  // No connection stays a failure: it is never turned into an answer from Relay.
+  await waitFor(() =>
+    expect(client.getQueryState(['social', 'friend-invite'])?.status).toBe('error'),
+  );
+  expect(client.getQueryData(['social', 'friend-invite'])).toBeUndefined();
+
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path === '/api/auth/friend-invite') throw new ApiError(404, 'Not found');
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  await act(async () => {
+    await client.refetchQueries({ queryKey: ['social', 'friend-invite'] });
+  });
+  expect(client.getQueryData(['social', 'friend-invite'])).toEqual({ invite_code: null });
+});
+
 test("Home's card lists friends' latest sessions and opens Social", async () => {
   const feed: FriendFeed = {
     items: [{ friend: alex, workout: upper, reactions }],
@@ -1074,6 +1131,93 @@ test('a shared workout shows its comments and sends a reply', async () => {
       reaction: null,
     }),
   );
+});
+
+test('a comment takes any emoji as a reaction, and shows emojis others chose', async () => {
+  const comment: WorkoutComment = {
+    id: 'c1',
+    author: alex,
+    body: 'Brutal set',
+    reaction: '😮‍💨',
+    parent_id: null,
+    reply_to: null,
+    created_at: `${today}T09:30:00Z`,
+    edited_at: null,
+    can_edit: false,
+    can_delete: false,
+    reactions: { counts: [{ reaction: '🫠', count: 1 }], yours: null },
+  };
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path.startsWith('/api/sharing/profiles/alex/workouts'))
+      return { total: 1, workouts: [upper], personal_records: [], reactions: { w1: reactions } };
+    if (path === '/api/sharing/profiles/alex') return { ...casey, ...alex, can_view: true };
+    if (path.startsWith('/api/sharing/workouts/w1/comments'))
+      return { total: 1, next_offset: null, items: [comment] };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  jest.mocked(apiSend).mockResolvedValue({
+    ...comment,
+    reactions: {
+      counts: [
+        { reaction: '🫠', count: 1 },
+        { reaction: '🫡', count: 1 },
+      ],
+      yours: '🫡',
+    },
+  });
+  await show(<SharedWorkoutScreen workoutId="w1" memberId="alex" date={today} />);
+  expect(await screen.findByText('Brutal set')).toBeVisible();
+  expect(screen.getByText(' reacted 😮‍💨')).toBeVisible();
+  expect(screen.getByRole('button', { name: '🫠, 1' })).toBeVisible();
+  expect(commentSpoken(comment)).toBe('Alex Morgan, reacted 😮‍💨: Brutal set');
+
+  await fireEvent.press(screen.getByRole('button', { name: 'React' }));
+  expect(screen.getByRole('header', { name: 'React to Alex Morgan' + "'s comment" })).toBeVisible();
+  await chooseEmoji('salut', 'saluting face');
+  await waitFor(() =>
+    expect(apiSend).toHaveBeenCalledWith('/api/sharing/comments/c1/reaction', 'PUT', {
+      reaction: '🫡',
+    }),
+  );
+  expect(screen.queryByLabelText('Search emoji')).toBeNull();
+});
+
+test('a comment shows two replies and folds the rest behind +N replies', async () => {
+  const root: WorkoutComment = {
+    id: 'c1',
+    author: alex,
+    body: 'Nice',
+    parent_id: null,
+    reply_to: null,
+    created_at: `${today}T09:30:00Z`,
+    edited_at: null,
+    can_edit: false,
+    can_delete: false,
+    reactions: { counts: [], yours: null },
+  };
+  const replies = ['Sheesh', 'Lol', 'Gg', 'Pop'].map((body, index) => ({
+    ...root,
+    id: `r${index}`,
+    body,
+    parent_id: 'c1',
+  }));
+  jest.mocked(apiGet).mockImplementation(async (path: string) => {
+    if (path.startsWith('/api/sharing/profiles/alex/workouts'))
+      return { total: 1, workouts: [upper], personal_records: [], reactions: { w1: reactions } };
+    if (path === '/api/sharing/profiles/alex') return { ...casey, ...alex, can_view: true };
+    if (path.startsWith('/api/sharing/workouts/w1/comments'))
+      return { total: 5, next_offset: null, items: [root, ...replies] };
+    throw new Error(`Unexpected GET ${path}`);
+  });
+  await show(<SharedWorkoutScreen workoutId="w1" memberId="alex" date={today} />);
+  expect(await screen.findByText('Lol')).toBeVisible();
+  expect(screen.queryByText('Gg')).toBeNull();
+  await fireEvent.press(
+    screen.getByRole('button', { name: "Show 2 more replies to Alex Morgan's comment" }),
+  );
+  expect(screen.getByText('Gg')).toBeVisible();
+  expect(screen.getByText('Pop')).toBeVisible();
+  expect(screen.queryByText('+2 replies')).toBeNull();
 });
 
 test('profile sharing shows the visibility status badge and selectable visibility cards', async () => {
@@ -1220,58 +1364,74 @@ test('a visibility this release does not know shows neutrally', async () => {
     );
 });
 
-test('one reaction picker opens at a time, and a refused reaction can be tried again', async () => {
-  const sam = { id: 'sam', display_name: 'Sam Rivera', profile_photo_url: null };
-  const legs = { ...upper, id: 'w2', name: 'Leg day' } as unknown as TrackedWorkout;
-  const twoCards: Timeline = {
-    items: [
-      ...timeline.items,
-      { member: { ...sam, is_you: false }, workout: legs, reactions, record_count: 0 },
-    ],
-    has_more: false,
-  };
-  jest.mocked(apiGet).mockImplementation(async (path: string) => {
-    if (path.startsWith('/api/sharing/timeline')) return twoCards;
-    if (path === '/api/sharing/friends') return friends;
-    if (path.startsWith('/api/sharing/suggestions'))
-      return { profiles: [], total: 0, page: 1, page_size: 10 };
-    if (path === '/api/sharing') return { visibility: 'public', pending_requests: 1 };
-    throw new Error(`Unexpected GET ${path}`);
-  });
+test('the emoji sheet closes without reacting, and a refused reaction can be tried again', async () => {
   await show(<SocialScreen />);
-  expect(await screen.findByText('Leg day')).toBeVisible();
-  const alexPicker = 'Choose a reaction to Alex Morgan’s Upper body';
-  const samPicker = 'Choose a reaction to Sam Rivera’s Leg day';
+  expect(await screen.findByText('Upper body')).toBeVisible();
+  const sheetTitle = { name: 'React to Alex Morgan’s Upper body' };
   await fireEvent.press(screen.getByRole('button', { name: 'React to Alex Morgan’s Upper body' }));
-  expect(screen.getByLabelText(alexPicker)).toBeVisible();
-  // Opening the other card's picker closes the first.
-  await fireEvent.press(screen.getByRole('button', { name: 'React to Sam Rivera’s Leg day' }));
-  expect(screen.getByLabelText(samPicker)).toBeVisible();
-  expect(screen.queryByLabelText(alexPicker)).toBeNull();
-  await fireEvent.press(screen.getByRole('button', { name: 'React to Sam Rivera’s Leg day' }));
-  expect(screen.queryByLabelText(samPicker)).toBeNull();
+  expect(screen.getByRole('header', sheetTitle)).toBeVisible();
+  expect(screen.queryByRole('button', { name: 'Remove reaction' })).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.queryByRole('header', sheetTitle)).toBeNull();
+  expect(apiSend).not.toHaveBeenCalled();
 
-  // A refused reaction leaves the server's reactions as they were and the picker open to retry.
+  // A refused reaction leaves the server's reactions as they were and the sheet open to retry.
   jest.mocked(apiSend).mockRejectedValueOnce(new ApiError(500, 'Relay hit a snag.'));
   await fireEvent.press(screen.getByRole('button', { name: 'React to Alex Morgan’s Upper body' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Strong' }));
+  await chooseEmoji('salut', 'saluting face');
   expect(await screen.findByText('Relay hit a snag.')).toBeVisible();
-  expect(screen.getByLabelText(alexPicker)).toBeVisible();
+  expect(screen.getByRole('header', sheetTitle)).toBeVisible();
   expect(
     screen.getByRole('button', { name: 'View 2 reactions on Alex Morgan’s Upper body' }),
   ).toBeVisible();
   jest.mocked(apiSend).mockResolvedValueOnce({
     counts: [
       { reaction: 'fire', count: 2 },
-      { reaction: 'strong', count: 1 },
+      { reaction: '🫡', count: 1 },
     ],
-    yours: 'strong',
+    yours: '🫡',
   });
-  await fireEvent.press(screen.getByRole('button', { name: 'Strong' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'saluting face' }));
+  expect(apiSend).toHaveBeenLastCalledWith('/api/sharing/workouts/w1/reaction', 'PUT', {
+    reaction: '🫡',
+  });
   expect(
     await screen.findByRole('button', {
-      name: 'Your reaction to Alex Morgan’s Upper body: Strong. Change reaction',
+      name: 'Your reaction to Alex Morgan’s Upper body: 🫡. Change reaction',
     }),
   ).toBeVisible();
-  expect(screen.queryByLabelText(alexPicker)).toBeNull();
+  expect(screen.queryByRole('header', sheetTitle)).toBeNull();
+
+  // Remove reaction takes it away.
+  jest
+    .mocked(apiSend)
+    .mockResolvedValueOnce({ counts: [{ reaction: 'fire', count: 2 }], yours: null });
+  await fireEvent.press(
+    screen.getByRole('button', {
+      name: 'Your reaction to Alex Morgan’s Upper body: 🫡. Change reaction',
+    }),
+  );
+  await fireEvent.press(screen.getByRole('button', { name: 'Remove reaction' }));
+  expect(apiSend).toHaveBeenLastCalledWith('/api/sharing/workouts/w1/reaction', 'DELETE');
+  expect(
+    await screen.findByRole('button', { name: 'React to Alex Morgan’s Upper body' }),
+  ).toBeVisible();
+});
+
+test('offline with nothing saved, comments say so instead of spinning, then load', async () => {
+  workoutWithComments({ 0: { items: [comment('c1', alex, 'Strong pressing!')], next: null } });
+  await expectOfflineUntilOnline(
+    jest.mocked(apiGet),
+    () =>
+      show(
+        <CommentsSheet
+          workoutId="w1"
+          title="Comments"
+          onClose={jest.fn()}
+          onOpenPerson={jest.fn()}
+        />,
+      ),
+    () => expect(screen.getByText('Strong pressing!')).toBeVisible(),
+  );
+  expect(screen.queryByLabelText('Loading comments')).toBeNull();
 });

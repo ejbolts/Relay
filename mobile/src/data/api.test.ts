@@ -12,6 +12,9 @@ jest.mock('expo-constants', () => ({
 const mockKeychain = new Map<string, string>();
 // When set, the next read takes its snapshot at once but delivers it only once the gate opens.
 let mockReadGate: Promise<void> | null = null;
+// When set, the next read answers only once this gate opens, with what is saved by then: a
+// keystore that answers a read after a write that came later.
+let mockLateReadGate: Promise<void> | null = null;
 // Keys whose reads fail, as when the keystore is unavailable.
 const mockFailingReads = new Set<string>();
 // Keys whose writes fail, as when the keystore refuses a write.
@@ -19,6 +22,12 @@ const mockFailingWrites = new Set<string>();
 jest.mock('expo-secure-store', () => ({
   getItemAsync: async (key: string) => {
     if (mockFailingReads.has(key)) throw new Error('Keystore unavailable');
+    const late = mockLateReadGate;
+    mockLateReadGate = null;
+    if (late) {
+      await late;
+      return mockKeychain.get(key) ?? null;
+    }
     const value = mockKeychain.get(key) ?? null;
     const gate = mockReadGate;
     mockReadGate = null;
@@ -468,4 +477,73 @@ test('a refusal of the token still saved clears it', async () => {
   fetchMock.mockResolvedValueOnce(reply(401, { error: { message: 'Sign in to continue.' } }));
   await expect(api.apiGet('/api/dashboard')).rejects.toMatchObject({ status: 401 });
   expect(mockKeychain.has('relay.session')).toBe(false);
+});
+
+test('a request asked for under one account is never sent as the account that signs in next', async () => {
+  const api = signedIn();
+  fetchMock.mockImplementation(async (url: string) => {
+    const path = new URL(url).pathname;
+    if (path === '/api/auth/logout-session') return reply(204);
+    if (path === '/api/auth/login') return reply(200, { id: 'b', session_token: 'next-token' });
+    return reply(200, {});
+  });
+  // The write is asked for while the first account is signed in, but its read of the session
+  // answers only after that account has signed out and the next one has signed in.
+  let open!: () => void;
+  mockLateReadGate = new Promise<void>((resolve) => (open = resolve));
+  const write = api.apiSend('/api/workouts', 'POST', { name: 'Sample' });
+  await api.signOut();
+  await api.signIn('casey', 'pw');
+  fetchMock.mockClear();
+  open();
+  await expect(write).rejects.toMatchObject({ name: 'SessionChanged' });
+  expect(fetchMock).not.toHaveBeenCalled();
+  // The next account's own requests are signed in as it.
+  await api.apiGet('/api/dashboard');
+  expect(headers(0).Authorization).toBe('Bearer next-token');
+  fetchMock.mockImplementation(async (url: string) => {
+    const body = answers[new URL(url).pathname];
+    return { ok: true, status: 200, json: async () => body } as Response;
+  });
+});
+
+test("a refusal of an old account's request says it was for a session that has ended", async () => {
+  const api = signedIn();
+  let answer!: (response: Response) => void;
+  fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+  const late = api.apiGet('/api/dashboard');
+  await settle();
+  mockKeychain.set('relay.session', saved('https://relay.test', 'next-token'));
+  answer(reply(401, { error: { message: 'Sign in to continue.' } }));
+  await expect(late).rejects.toMatchObject({ status: 401, staleSession: true });
+
+  // A refusal of the session saved now is not stale: it ended this phone's session.
+  fetchMock.mockResolvedValueOnce(reply(401, { error: { message: 'Sign in to continue.' } }));
+  await expect(api.apiGet('/api/dashboard')).rejects.toMatchObject({
+    status: 401,
+    staleSession: false,
+  });
+});
+
+test('a refusal after another caller already forgot the session is not stale: it ended here', async () => {
+  const api = signedIn();
+  let answer!: (response: Response) => void;
+  fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+  const query = api.apiGet('/api/dashboard');
+  await settle();
+  // An explicit-token caller (a clip upload, a tip sync) was refused first and forgot the token.
+  mockKeychain.delete('relay.session');
+  answer(reply(401, { error: { message: 'Sign in to continue.' } }));
+  await expect(query).rejects.toMatchObject({ status: 401, staleSession: false });
+});
+
+test("a refusal while the keystore can't be read is not stale either", async () => {
+  const api = signedIn();
+  let answer!: (response: Response) => void;
+  fetchMock.mockImplementationOnce(() => new Promise<Response>((resolve) => (answer = resolve)));
+  const query = api.apiGet('/api/dashboard');
+  await settle();
+  mockFailingReads.add('relay.session');
+  answer(reply(401, { error: { message: 'Sign in to continue.' } }));
+  await expect(query).rejects.toMatchObject({ status: 401, staleSession: false });
 });

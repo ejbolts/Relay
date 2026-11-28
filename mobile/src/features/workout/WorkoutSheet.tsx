@@ -8,8 +8,19 @@ import {
   useRef,
   useState,
   type ComponentRef,
+  type ReactNode,
 } from 'react';
-import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import {
+  Alert,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { machineAliases } from '../../../../frontend/src/exerciseHistory';
 import { exerciseLastDoneDates } from '../../../../frontend/src/exerciseLastDone';
@@ -35,6 +46,7 @@ import {
   type PrCelebrations,
 } from '../../../../frontend/src/workoutPr';
 import { activeElapsedSeconds } from '../../../../frontend/src/workoutPause';
+import { workoutTimeSoFarSeconds } from '../../../../frontend/src/workoutTimeCorrection';
 import { isSupersetUpNext, nextInSupersetRound } from '../../../../frontend/src/workoutSupersets';
 import {
   machineTipEligible,
@@ -109,11 +121,14 @@ export function WorkoutSheet() {
   // Leaving the summary (Done or dragging the sheet away) clears it.
   useEffect(() => () => closeFinished?.(), [closeFinished]);
 
+  // The height of the live logger's bottom dock (the rest pill or notch and the weekly sets
+  // shelf), so toasts sit above it as on the web, never on top of the shelf.
+  const [dockHeight, setDockHeight] = useState(0);
   let content = <NoWorkout onClose={() => router.back()} />;
   if (logger?.state)
     content = (
       <LoggerTipsProvider>
-        <LiveLogger logger={logger} state={logger.state} />
+        <LiveLogger logger={logger} state={logger.state} onDockHeight={setDockHeight} />
       </LoggerTipsProvider>
     );
   else if (logger?.finished)
@@ -123,8 +138,43 @@ export function WorkoutSheet() {
       {content}
       <SyncConflictButton bottom={logger?.rest.timer || logger?.rest.done ? 112 : 32} />
       <SyncConflictSheet />
-      <ToastHost bottom={logger?.rest.timer || logger?.rest.done ? 104 : 24} />
+      <ToastHost
+        bottom={
+          logger?.state && dockHeight > 0
+            ? DOCK_BOTTOM + dockHeight + TOAST_GAP
+            : logger?.rest.timer || logger?.rest.done
+              ? 104
+              : 24
+        }
+      />
       <PromptHost />
+    </View>
+  );
+}
+
+/** The dock's gap above the safe area, and a toast's gap above the dock. */
+const DOCK_BOTTOM = 12;
+const TOAST_GAP = 8;
+
+/** The logger's bottom dock, reporting its height while it shows and none once it goes. */
+function Dock({
+  onHeight,
+  style,
+  children,
+}: {
+  onHeight: (height: number) => void;
+  style: StyleProp<ViewStyle>;
+  children: ReactNode;
+}) {
+  useEffect(() => () => onHeight(0), [onHeight]);
+  return (
+    <View
+      testID="logger-dock"
+      pointerEvents="box-none"
+      style={style}
+      onLayout={(event) => onHeight(Math.ceil(event.nativeEvent.layout.height))}
+    >
+      {children}
     </View>
   );
 }
@@ -160,7 +210,15 @@ function NoWorkout({ onClose }: { onClose: () => void }) {
   );
 }
 
-function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }) {
+function LiveLogger({
+  logger,
+  state,
+  onDockHeight,
+}: {
+  logger: LoggerApi;
+  state: LoggerState;
+  onDockHeight: (height: number) => void;
+}) {
   // Settings › Rest timer off hides the header's rest button, as on the web.
   const restTimerOn = restTimerPreference.use();
   const router = useRouter();
@@ -180,15 +238,26 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
   const recentRemoval = useRef<TipRemoval | null>(null);
   const identity = workoutIdentity(state, types);
   const elapsed = useElapsed(state.startedAt, state.pause, state.previousDurationMinutes);
-  // The clock correction opens on the clock as it reads then (this session's training time),
+  // The clock correction opens on the clock as it reads then (the whole workout's training time,
+  // with minutes saved before a resume),
   // for the workout it was opened for: another workout replacing it (from the web, say) closes
   // it, and its save never reaches the replacement.
-  const [timeEditor, setTimeEditor] = useState({ open: false, seconds: 0, key: 0, sessionId: '' });
+  const [timeEditor, setTimeEditor] = useState({
+    open: false,
+    seconds: 0,
+    savedMinutes: 0,
+    key: 0,
+    sessionId: '',
+  });
   const openTimeEditor = () => {
     const latest = getState() ?? state;
     setTimeEditor((current) => ({
       open: true,
-      seconds: activeElapsedSeconds(latest.startedAt, latest.pause, Date.now()),
+      seconds: workoutTimeSoFarSeconds(
+        activeElapsedSeconds(latest.startedAt, latest.pause, Date.now()),
+        latest.previousDurationMinutes,
+      ),
+      savedMinutes: latest.previousDurationMinutes,
       key: current.key + 1,
       sessionId: latest.clientSessionId,
     }));
@@ -911,9 +980,9 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         />
       </ScrollView>
       {(restShown || shelf) && (
-        <View
-          pointerEvents="box-none"
-          style={[styles.dock, { bottom: insets.bottom + 12, gap: shelfJoined ? 0 : 8 }]}
+        <Dock
+          onHeight={onDockHeight}
+          style={[styles.dock, { bottom: insets.bottom + DOCK_BOTTOM, gap: shelfJoined ? 0 : 8 }]}
         >
           {/* The shelf stays mounted while the rest is hidden, above the notch as on the web, so
               hiding or showing the rest never restarts its countdown or drops a hold. */}
@@ -939,7 +1008,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
             onShow={() => setRestHiddenFor(null)}
             onDismissDone={logger.dismissRestDone}
           />
-        </View>
+        </Dock>
       )}
       <MachineSheet
         target={
@@ -978,6 +1047,7 @@ function LiveLogger({ logger, state }: { logger: LoggerApi; state: LoggerState }
         key={timeEditor.key}
         visible={timeEditor.open}
         elapsedSeconds={timeEditor.seconds}
+        savedMinutes={timeEditor.savedMinutes}
         onClose={closeTimeEditor}
         onSave={(seconds) => {
           const { sessionId } = timeEditor;

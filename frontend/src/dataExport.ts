@@ -53,5 +53,5 @@ export function exportFilesNote(
 /** The exported files' names: the time frame's dates, or today's for all time. */
 export function exportFileNames(range: DateRange, today: string) {
   const suffix = range.start_date ? `${range.start_date}-to-${range.end_date}` : today;
-  return { workouts: `gym-workouts-${suffix}.csv`, bodyweight: `body-weight-${suffix}.csv` };
+  return { workouts: `relay-workouts-${suffix}.csv`, bodyweight: `body-weight-${suffix}.csv` };
 }

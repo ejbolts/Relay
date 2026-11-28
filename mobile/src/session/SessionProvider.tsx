@@ -59,7 +59,10 @@ export function useUser(): User {
   return status.user;
 }
 
-const signedOutError = (error: unknown) => error instanceof ApiError && error.status === 401;
+// A refusal of a session that has already ended here (an old account's late request) leaves the
+// session signed in now alone.
+const signedOutError = (error: unknown) =>
+  error instanceof ApiError && error.status === 401 && !error.staleSession;
 // A request that never reached the server fails with a plain error; an answer is an ApiError.
 const unreachable = (error: unknown) => !(error instanceof ApiError);
 

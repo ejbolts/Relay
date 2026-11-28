@@ -2,7 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useEffect, type ReactNode } from 'react';
 import { Alert, Keyboard, Platform, StyleSheet, TextInput } from 'react-native';
-import { readActiveWorkoutDraft } from '../../../../frontend/src/workoutDraft';
+import {
+  readActiveWorkoutDraft,
+  writeActiveWorkoutDraft,
+} from '../../../../frontend/src/workoutDraft';
 import { freshTips, parseTips, tipStorageKey } from '../../../../frontend/src/tipsState';
 import { resetTipsForTests, startTipSync, tipsFor } from '../guides/tips';
 import { apiGet, apiSend, currentUser } from '../../data/api';
@@ -71,6 +74,7 @@ jest.mock('../../ui/Toast', () => ({
 jest.mock('../../data/session', () => ({ sessionToken: jest.fn(async () => 'token') }));
 jest.mock('../../data/api', () => ({
   ...jest.requireActual<typeof import('../../data/api')>('../../data/api'),
+  serverOrigin: () => 'https://relay.test',
   apiOrigin: 'https://relay.test',
   currentUser: jest.fn(),
   apiSend: jest.fn(),
@@ -218,6 +222,50 @@ describe('correcting the workout time', () => {
     await fireEvent.press(screen.getByRole('button', { name: 'Finish workout' }));
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0].duration_minutes).toBe(45);
+    // It ends when it was finished, and the corrected 45 minutes move its start back.
+    const clockMinutes = (time: string | null | undefined) => {
+      const [hours, minutes] = (time ?? '').split(':').map(Number);
+      return hours * 60 + minutes;
+    };
+    const finished = new Date();
+    const nowMinutes = finished.getHours() * 60 + finished.getMinutes();
+    expect((nowMinutes - clockMinutes(saved[0].end_time) + 1440) % 1440).toBeLessThanOrEqual(1);
+    expect(
+      (clockMinutes(saved[0].end_time) - clockMinutes(saved[0].start_time) + 1440) % 1440,
+    ).toBe(45);
+  });
+
+  test('a resumed workout opens on its whole time and saves the corrected total', async () => {
+    const first = await openLogger();
+    await first.unmount();
+    client.clear();
+    // As if this workout had been saved with 35 minutes and then resumed.
+    writeActiveWorkoutDraft(
+      { ...draft()!, resumingWorkoutId: 'saved-1', previousDurationMinutes: 35 },
+      deviceStorage,
+    );
+    await openLogger(false);
+    await fireEvent.press(
+      await screen.findByRole('button', { name: /^Correct workout time, Live 35:0\d$/ }),
+    );
+    // The clock and the correction both count the 35 minutes already saved.
+    expect(screen.getByLabelText('Minutes').props.value).toBe('35');
+    // Below the 35 minutes already saved: it says so beside the fields and won't save.
+    await fireEvent.changeText(screen.getByLabelText('Minutes'), '30');
+    expect(screen.getByText('At least 35 min, already saved')).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Set time' }).props.accessibilityState).toMatchObject(
+      { disabled: true },
+    );
+    await fireEvent.changeText(screen.getByLabelText('Minutes'), '50');
+    await fireEvent.press(screen.getByRole('button', { name: 'Set time' }));
+    expect(
+      await screen.findByRole('button', { name: /^Correct workout time, Live 50:0\d$/ }),
+    ).toBeVisible();
+    await fireEvent.press(screen.getAllByRole('button', { name: 'Complete set 1' })[0]);
+    await fireEvent.press(screen.getByRole('button', { name: 'Finish workout' }));
+    await waitFor(() => expect(saved).toHaveLength(1));
+    // 50 in all, not 35 + 50.
+    expect(saved[0].duration_minutes).toBe(50);
   });
 
   test('the workout menu opens the same correction, and Cancel leaves the clock alone', async () => {

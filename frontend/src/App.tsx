@@ -112,6 +112,7 @@ import {
   type OlderHistoryProps,
 } from './WorkoutCalendar';
 import { workoutTypeColor } from './dayColors';
+import { liveWorkoutColor } from './calendarDayLook';
 import {
   appendOlderWorkouts,
   hasOlderHistory,
@@ -366,6 +367,11 @@ import {
 } from './finishedWorkoutQueue';
 import { useDeferredDelete } from './useDeferredDelete';
 import {
+  queuedWorkoutIds,
+  WORKOUT_SYNCING_MESSAGE,
+  workoutBlockedWhileSyncing,
+} from './workoutDeletion';
+import {
   dashboardWithPreview,
   isPendingWorkoutId,
   pendingWorkoutPreview,
@@ -397,6 +403,7 @@ import {
 } from './finishSummary';
 import type { LiveWorkoutSummary } from './liveWorkoutSummary';
 import { WorkoutTimeEditor } from './WorkoutTimeEditor';
+import { correctedSessionSeconds, workoutTimeSoFarSeconds } from './workoutTimeCorrection';
 import { useDiscardChangesGuard, type LeaveGuard } from './WorkoutEditGuard';
 import { useUnsavedWorkoutChanges } from './workoutEditChanges';
 
@@ -461,6 +468,7 @@ import {
 import {
   calculateScopedDraftPrs,
   initialPrCelebrations,
+  isAllTimePr,
   newPrCelebrations,
   prBadgeLabel,
   prToastLines,
@@ -476,7 +484,7 @@ import {
 import './relativeStrength.css';
 import { TrainingBlocksProvider } from './TrainingBlocksProvider';
 import { useTrainingBlocks } from './trainingBlocksContext';
-import { recordBadgeLabel, recordScopeLabel } from './recordScope';
+import { isAllTimeRecord, recordBadgeLabel, recordScopeLabel } from './recordScope';
 import { setResult } from './historySetFormat';
 import { canResumeWorkout } from './workoutResume';
 import { loggedSetCount as loggedSetCountRule } from './workoutAutoSave';
@@ -510,6 +518,7 @@ import { LoadingState } from './LoadingState';
 import { BodyCompositionScreen } from './BodyCompositionScreen';
 import { CardioScreen } from './CardioScreen';
 import { LandscapeChartFrame } from './LandscapeChartFrame';
+import { crossesNewYear } from './chartYears';
 import { onWorkoutFocusRequested } from './workoutFocus';
 
 // Screens that live in their own files; re-exported for existing imports of './App'.
@@ -933,19 +942,11 @@ function AppContent() {
     [finishedPreviews],
   );
   // A workout still syncing, or with changes waiting to sync, cannot be edited or deleted yet.
-  const queuedWorkoutIds = useMemo(
-    () =>
-      new Set(
-        finishedQueue.items.flatMap((finished) =>
-          finished.pendingSave.workoutId ? [finished.pendingSave.workoutId] : [],
-        ),
-      ),
-    [finishedQueue.items],
-  );
+  const queuedIds = useMemo(() => queuedWorkoutIds(finishedQueue.items), [finishedQueue.items]);
   /** Reports and refuses changes to a workout whose save has not reached the server yet. */
   const blockedWhileSyncing = (id: string) => {
-    if (!isPendingWorkoutId(id) && !queuedWorkoutIds.has(id)) return false;
-    showToast({ message: 'You can change this workout once it has synced.', variant: 'warning' });
+    if (!workoutBlockedWhileSyncing(id, queuedIds)) return false;
+    showToast({ message: WORKOUT_SYNCING_MESSAGE, variant: 'warning' });
     return true;
   };
   // After each save, its on-device figures stay until the refreshed dashboard replaces them.
@@ -3298,15 +3299,7 @@ function InteractiveWorkoutCalendar({
   const splitDays = useMemo(() => splitCalendarDays(split, today, 42), [split, today]);
   // The live day takes the colour of the workout type being logged.
   const activeDraft = activeWorkoutDate ? readActiveWorkoutDraft() : null;
-  const activeWorkoutColor = activeDraft
-    ? workoutTypeColor(
-        effectiveWorkoutType(
-          { category: activeDraft.category, workout_type_id: activeDraft.workoutTypeId },
-          types,
-        ),
-        categoryColors,
-      )
-    : null;
+  const activeWorkoutColor = liveWorkoutColor(activeDraft, types, categoryColors);
   const toggleCategory = (category: string) => {
     const next = new Set(hiddenCategories);
     if (!next.delete(category)) next.add(category);
@@ -4963,6 +4956,14 @@ function WorkoutLogger({
           onRename={openNameEditor}
           onAdjustTime={() => setTimeEditorOpen(true)}
           onAddNote={() => revealDetails('.workout-notes textarea')}
+          workoutTypes={typeOptions.map((type) => ({
+            id: type.id,
+            name: type.archived ? `${type.name} (removed)` : type.name,
+            color: workoutTypeColor(type, categoryColors),
+          }))}
+          selectedTypeId={customTypeId ?? category}
+          typesLoading={workoutTypes.loading}
+          onChooseType={readOnly ? undefined : chooseWorkoutType}
           onTogglePause={toggleWorkoutPause}
           onStartRest={restTimerEnabled ? startRestTimer : undefined}
           restRunning={restActive}
@@ -5528,12 +5529,20 @@ function WorkoutLogger({
 
       {timeEditorOpen && (
         <WorkoutTimeEditor
-          elapsedSeconds={elapsed}
+          elapsedSeconds={workoutTimeSoFarSeconds(elapsed, previousDurationMinutes)}
+          savedMinutes={previousDurationMinutes}
           onClose={() => setTimeEditorOpen(false)}
           onSave={(seconds) => {
-            // A corrected clock replaces a fixed total kept from an earlier finish attempt.
+            // A corrected clock replaces a fixed total kept from an earlier finish attempt. It is
+            // the whole workout's time: a resumed workout's saved minutes are already in it.
             setDurationOverrideMinutes(null);
-            setPause((current) => withElapsedSeconds(current, startedAt, seconds));
+            setPause((current) =>
+              withElapsedSeconds(
+                current,
+                startedAt,
+                correctedSessionSeconds(seconds, previousDurationMinutes),
+              ),
+            );
             setTimeEditorOpen(false);
           }}
         />
@@ -6227,7 +6236,10 @@ function MovementCard({
                     {item.weight_kg === null ? '–' : formatWeight(item.weight_kg, weightUnit)}
                   </span>
                   {prBadges.has(item.key) && (
-                    <b className="pr-badge" title={prBadges.get(item.key)?.join(', ')}>
+                    <b
+                      className={`pr-badge${isAllTimePr(prBadges.get(item.key)!) ? ' is-all-time' : ''}`}
+                      title={prBadges.get(item.key)?.join(', ')}
+                    >
                       {prBadgeLabel(prBadges.get(item.key)!)}
                     </b>
                   )}
@@ -7345,7 +7357,7 @@ function MachinePhotoChooser({
                           setError(null);
                         }}
                       >
-                        Merge
+                        Select
                       </button>
                     </TipSlot>
                   </div>
@@ -8245,8 +8257,9 @@ export function ProgressScreen({
                   <LandscapeChartFrame
                     title={`${progress.exercise.name} · ${metricInfo.series}${weekly ? ' (best per week)' : ''}`}
                     controls={null}
+                    yearLines={crossesNewYear(chartPoints.map((point) => point.date))}
                   >
-                    {(expanded, close) => (
+                    {(expanded, close, showYearLines) => (
                       <TrendChart
                         points={chartPoints}
                         label={`${progress.exercise.name} ${metricInfo.series}${weekly ? ', best per week' : ''}`}
@@ -8261,6 +8274,7 @@ export function ProgressScreen({
                         markRecords={metric !== 'volume_kg'}
                         formatValue={formatMetric}
                         pinchZoom={pinchZoom}
+                        yearLines={showYearLines}
                         onSelect={
                           browseFirst
                             ? undefined
@@ -8371,19 +8385,21 @@ export function ProgressScreen({
                               >
                                 <span className="session-date">
                                   {shortDate(point.workout_date)}
-                                  {recordIds.has(point.workout_id) && (
-                                    <em className="pr-chip">
-                                      {defaultView
-                                        ? recordBadgeLabel(
-                                            personalRecords.filter(
-                                              (record) =>
-                                                record.workout_id === point.workout_id &&
-                                                record.exercise_id === exerciseId,
-                                            ),
-                                          )
-                                        : 'PR'}
-                                    </em>
-                                  )}
+                                  {recordIds.has(point.workout_id) &&
+                                    (() => {
+                                      const pointRecords = personalRecords.filter(
+                                        (record) =>
+                                          record.workout_id === point.workout_id &&
+                                          record.exercise_id === exerciseId,
+                                      );
+                                      return (
+                                        <em
+                                          className={`pr-chip${pointRecords.some(isAllTimeRecord) ? ' is-all-time' : ''}`}
+                                        >
+                                          {defaultView ? recordBadgeLabel(pointRecords) : 'PR'}
+                                        </em>
+                                      );
+                                    })()}
                                 </span>
                                 <span className="session-set num">
                                   {formatWeight(point.raw_best_weight_kg, weightUnit)} ×{' '}
@@ -10161,17 +10177,20 @@ function HistorySetFlow({
                     ? 'Attempted'
                     : ''}
             </em>
-            {personalRecords.some((record) => record.set_id === item.id) && (
-              <strong
-                className="pr-badge"
-                title={personalRecords
-                  .filter((record) => record.set_id === item.id)
-                  .map((record) => `${recordScopeLabel(record)} ${recordTypeLabel(record)}`)
-                  .join(', ')}
-              >
-                {recordBadgeLabel(personalRecords.filter((record) => record.set_id === item.id))}
-              </strong>
-            )}
+            {personalRecords.some((record) => record.set_id === item.id) &&
+              (() => {
+                const setRecords = personalRecords.filter((record) => record.set_id === item.id);
+                return (
+                  <strong
+                    className={`pr-badge${setRecords.some(isAllTimeRecord) ? ' is-all-time' : ''}`}
+                    title={setRecords
+                      .map((record) => `${recordScopeLabel(record)} ${recordTypeLabel(record)}`)
+                      .join(', ')}
+                  >
+                    {recordBadgeLabel(setRecords)}
+                  </strong>
+                );
+              })()}
           </div>
           {index < sets.length - 1 && (
             <div className="history-rest-gap">

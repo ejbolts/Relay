@@ -24,6 +24,7 @@ import { SEX_LABELS } from '../../../../frontend/src/profileDisplay';
 import type { AdminUser, Sex } from '../../../../frontend/src/types';
 import { useUser } from '../../session/SessionProvider';
 import { Button, Card, errorMessage, ErrorState, Loading } from '../../ui/components';
+import { OFFLINE_MESSAGE, waitingForNetwork } from '../../data/offline';
 import { showToast } from '../../ui/Toast';
 import { useTheme } from '../../ui/theme';
 import { useNow } from '../../ui/useNow';
@@ -48,6 +49,8 @@ export function AdminAccountScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const users = useAdminUsers();
   useAdminActivity();
+  if (waitingForNetwork(users))
+    return <ErrorState message={OFFLINE_MESSAGE} onRetry={() => void users.refetch()} />;
   if (users.isPending) return <Loading label="Loading account" />;
   if (users.error && !users.data)
     return <ErrorState message={errorMessage(users.error)} onRetry={() => void users.refetch()} />;
