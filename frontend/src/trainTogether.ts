@@ -452,11 +452,12 @@ type PartnerEdit = (draft: ActiveWorkoutDraft) => ActiveWorkoutDraft;
 type PartnerCopy = { revision: number; draft: ActiveWorkoutDraft | null };
 
 /**
- * The request loop for one partner's draft. One PUT at a time, against the last acknowledged
- * copy. The edits not yet acknowledged are kept as functions, so after each answer the ones made
- * while the request ran are replayed on the server's copy and sent next. On a conflict the
- * server's copy wins: the edits that request carried are reported as not applied (`notApplied`)
- * and later ones are replayed and sent. A failed request keeps its edits until `retry()` or the
+ * The request loop for one partner's draft. One PUT at a time. The edits not yet acknowledged
+ * are kept as functions: the screen shows them replayed on the server's latest copy, but each
+ * follow-up is sent against the copy its edits were made on (what was sent, or after a conflict
+ * the refused request's base), so the server's three-way merge decides, as it does between the
+ * owner's own devices. On a conflict the server's copy wins: the edits that request carried are
+ * reported as not applied (`notApplied`) and later ones are sent next. A failed request keeps its edits until `retry()` or the
  * next edit. A newer copy read while a request runs is applied once the queue has settled, and
  * an answer to a request that is no longer current changes nothing.
  */
@@ -464,6 +465,10 @@ export class PartnerWorkoutSync {
   private base: PartnerCopy;
   private local: ActiveWorkoutDraft | null;
   private edits: PartnerEdit[] = [];
+  /** The copy the unsent edits were made on: the next request's `base`, so the server merges. */
+  private origin: PartnerCopy;
+  /** The unsent edits applied to `origin`: the next request's `draft`. */
+  private pending: ActiveWorkoutDraft | null;
   private newest: PartnerCopy | null = null;
   private generation = 0;
   private running: Promise<void> | null = null;
@@ -475,7 +480,9 @@ export class PartnerWorkoutSync {
     initial: PartnerCopy,
   ) {
     this.base = initial;
+    this.origin = initial;
     this.local = initial.draft;
+    this.pending = initial.draft;
     this.state = {
       revision: initial.revision,
       draft: initial.draft,
@@ -504,19 +511,27 @@ export class PartnerWorkoutSync {
     if (!this.stopped) this.deps.changed(this.state);
   }
 
-  /** Puts the queued edits on top of `copy`, dropping any that no longer change anything. */
-  private rebase(copy: PartnerCopy, edits: PartnerEdit[]) {
+  /**
+   * Shows `copy` (the server's latest answer) with the unsent edits on top, and keeps those edits
+   * relative to `origin`, the copy they were made on, for sending. Edits that change nothing on
+   * `origin` are dropped.
+   */
+  private rebase(copy: PartnerCopy, edits: PartnerEdit[], origin: PartnerCopy = copy) {
     this.base = copy;
-    let draft = copy.draft;
     this.edits = [];
-    for (const edit of draft ? edits : []) {
-      const next = edit(draft!);
-      if (next !== draft) {
+    let pending = origin.draft;
+    for (const edit of pending ? edits : []) {
+      const next = edit(pending!);
+      if (next !== pending) {
         this.edits.push(edit);
-        draft = next;
+        pending = next;
       }
     }
-    this.local = draft;
+    this.origin = this.edits.length ? origin : copy;
+    this.pending = this.edits.length ? pending : copy.draft;
+    let shown = copy.draft;
+    for (const edit of shown ? this.edits : []) shown = edit(shown!);
+    this.local = this.origin === copy ? this.pending : shown;
   }
 
   /** Apply an edit (for example `draft => addPartnerSet(draft, …)`) and send it. */
@@ -525,6 +540,8 @@ export class PartnerWorkoutSync {
     const next = change(this.local);
     if (next === this.local) return this.running ?? Promise.resolve();
     this.edits.push(change);
+    // While nothing separates them, what is sent is exactly what is shown.
+    this.pending = this.pending === this.local || !this.pending ? next : change(this.pending);
     this.local = next;
     this.report({ status: 'syncing', notApplied: false, error: null });
     return this.send();
@@ -549,7 +566,7 @@ export class PartnerWorkoutSync {
       this.generation += 1;
       this.newest = null;
       this.rebase(remote, []);
-      this.report({ status: 'synced', error: null });
+      this.report({ status: 'synced', notApplied: false, error: null });
       return;
     }
     if (this.running || this.unsent) {
@@ -557,7 +574,7 @@ export class PartnerWorkoutSync {
       return;
     }
     this.rebase(remote, []);
-    this.report({ status: 'synced', error: null });
+    this.report({ status: 'synced', notApplied: false, error: null });
   }
 
   private send(): Promise<void> {
@@ -574,20 +591,24 @@ export class PartnerWorkoutSync {
     this.newest = null;
     if (newest.revision > this.base.revision) {
       this.rebase(newest, []);
-      this.report({ status: 'synced', error: null });
+      this.report({ status: 'synced', notApplied: false, error: null });
     }
   }
 
   private async drain() {
-    while (!this.stopped && this.unsent && this.local && this.base.draft) {
+    while (!this.stopped && this.unsent && this.pending && this.origin.draft) {
       const generation = this.generation;
-      const sent = this.local;
-      const base = this.base;
+      const origin = this.origin;
+      const sent = this.pending;
       const count = this.edits.length;
       this.report({ status: 'syncing', error: null });
       let response: TrainPartnerWriteResult;
       try {
-        response = await this.deps.put({ revision: base.revision, base: base.draft!, draft: sent });
+        response = await this.deps.put({
+          revision: origin.revision,
+          base: origin.draft!,
+          draft: sent,
+        });
       } catch (reason) {
         if (this.stopped) return;
         if (generation !== this.generation) continue;
@@ -597,12 +618,18 @@ export class PartnerWorkoutSync {
       if (this.stopped) return;
       if (generation !== this.generation) continue;
       const later = this.edits.slice(count);
-      this.rebase({ revision: response.revision, draft: response.draft }, later);
+      const answer = { revision: response.revision, draft: response.draft };
+      // Later edits are sent against the copy they were made on, never the server's answer, so
+      // a change the owner made meanwhile to the same thing comes back as a conflict.
+      const madeOn = response.conflict ? origin.draft : sent;
+      this.rebase(answer, later, { revision: response.revision, draft: madeOn });
       if (response.conflict) {
         this.report({ status: 'conflict', notApplied: true, exercises: response.exercises });
       } else {
         this.report({
           status: this.unsent ? 'syncing' : 'synced',
+          // Once the replayed edits are acknowledged, nothing is left unapplied to report.
+          notApplied: this.unsent && this.state.notApplied,
           exercises: response.exercises,
         });
       }

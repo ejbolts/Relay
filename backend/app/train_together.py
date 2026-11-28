@@ -19,13 +19,15 @@ from __future__ import annotations
 
 import re
 import secrets
+import uuid
 from collections import Counter
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import and_, delete, or_, select, update
+from sqlalchemy import and_, delete, literal, or_, select, update
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session, aliased
 
 from .active_workouts import DraftChange, change_draft
@@ -43,6 +45,7 @@ from .models import (
     TrainTogetherMember,
     TrainTogetherSession,
     User,
+    UserSetting,
     utc_now,
 )
 from .presence import hub
@@ -55,7 +58,7 @@ from .sharing import (
     friendships_of,
     photo_url,
 )
-from .tracker import bump_workout_cache_revision, hidden_exercise_ids
+from .tracker import WORKOUT_CACHE_REVISION_KEY, hidden_exercise_ids
 from .tracker_schemas import TrainedWithRead
 
 MAX_MEMBERS = 4
@@ -204,6 +207,8 @@ def _leave(db: Session, member: TrainTogetherMember, reason: Reason, now: dateti
     affected = {member.user_id, *(other.user_id for other in remaining)}
     if session is not None and session.ended_at is None and len(remaining) < 2:
         _end(db, session, reason, member.user_id, now)
+    # Sessions here do not autoflush: a later member query must not still see them in it.
+    db.flush()
     return affected
 
 
@@ -303,25 +308,39 @@ def _partner(db: Session, user: User, user_id: str) -> TrainTogetherMember:
     return partner
 
 
-def shared_history_ids(db: Session, user_id: str) -> set[str]:
-    """Everyone who has been in a session with the account, and the account itself."""
-    mine, other = aliased(TrainTogetherMember), aliased(TrainTogetherMember)
-    return {
-        user_id,
-        *db.scalars(
-            select(other.user_id)
-            .join(mine, mine.session_id == other.session_id)
-            .where(mine.user_id == user_id)
-            .distinct()
-        ),
-    }
-
-
-def refresh_shared_histories(db: Session, user_id: str) -> None:
+def refresh_shared_histories(db: Session, user_id: str, *, include_self: bool = True) -> None:
     """Saved workouts name partners by what the viewer may see; a change to that must reach
-    every cached history that names this account (or that this account reads)."""
-    for member_id in shared_history_ids(db, user_id):
-        bump_workout_cache_revision(db, member_id)
+    every cached history that names this account (or that this account reads).
+
+    Nothing happens for an account that has never been in a session. Otherwise one upsert gives
+    everyone it trained with (and, unless excluded, the account itself) a new workout cache
+    revision, so it cannot race another bump into a duplicate row.
+    """
+    if (
+        db.scalar(select(TrainTogetherMember.id).where(TrainTogetherMember.user_id == user_id))
+        is None
+    ):
+        return
+    mine, other = aliased(TrainTogetherMember), aliased(TrainTogetherMember)
+    accounts = (
+        select(
+            other.user_id,
+            literal(WORKOUT_CACHE_REVISION_KEY),
+            literal(str(uuid.uuid4())),
+        )
+        .join(mine, mine.session_id == other.session_id)
+        .where(mine.user_id == user_id)
+        .distinct()
+    )
+    if not include_self:
+        accounts = accounts.where(other.user_id != user_id)
+    upsert = sqlite_insert(UserSetting).from_select(["user_id", "key", "value"], accounts)
+    db.execute(
+        upsert.on_conflict_do_update(
+            index_elements=[UserSetting.user_id, UserSetting.key],
+            set_={"value": upsert.excluded.value},
+        )
+    )
 
 
 # Exercises
@@ -407,6 +426,9 @@ def _ended(db: Session, user_id: str, now: datetime) -> TrainEnded | None:
     else:
         # They left a session that carried on without them.
         reason, by = member.left_reason, user_id
+    if reason == "unfriended" and by != user_id:
+        # Blocks and unfriending stay silent: to everyone else it reads as an ordinary leave.
+        reason = "left"
     account = db.get(User, by) if by else None
     return TrainEnded(
         session_id=session.id,
@@ -421,22 +443,35 @@ def read_session(db: Session, user: User) -> TrainTogetherRead:
     finding one ends the caller's attendance instead (``unfriended``)."""
     now = utc_now()
     member, affected = settle(db, user.id, now)
+    # One member list: the same rows are checked and then shown.
+    members = _active_members(db, member.session_id) if member is not None else []
     if member is not None:
         blocked = blocked_member_ids(db, user.id)
-        partners = [
-            other for other in _active_members(db, member.session_id) if other.user_id != user.id
-        ]
-        if any(not _friends(db, user.id, other.user_id, blocked) for other in partners):
+        if any(
+            not _friends(db, user.id, other.user_id, blocked)
+            for other in members
+            if other.user_id != user.id
+        ):
             affected |= _leave(db, member, "unfriended", now)
             member = None
     if affected:
         db.commit()
         notify(affected)
+    if member is not None:
+        # Another request may have ended this attendance meanwhile: then show nothing.
+        db.refresh(member)
+        if member.left_at is not None:
+            member = None
     if member is None:
         return TrainTogetherRead(session=None, ended=_ended(db, user.id, now))
     session = db.get(TrainTogetherSession, member.session_id)
-    members = _active_members(db, session.id)
     members.sort(key=lambda other: other.user_id != user.id)
+    # Name the creator only while they are a partner here (and so a friend), or the caller.
+    creator = (
+        session.created_by
+        if any(other.user_id == session.created_by for other in members)
+        else None
+    )
     read: list[TrainMember] = []
     for other in members:
         account = db.get(User, other.user_id)
@@ -466,7 +501,7 @@ def read_session(db: Session, user: User) -> TrainTogetherRead:
             id=session.id,
             started_at=as_utc(session.created_at),
             expires_at=as_utc(session.expires_at),
-            created_by=session.created_by,
+            created_by=creator,
             members=read,
         ),
         ended=None,
@@ -626,8 +661,7 @@ def account_removed(db: Session, user_id: str) -> set[str]:
     member, affected = settle(db, user_id, utc_now())
     if member is not None:
         affected |= _leave(db, member, "left", utc_now())
-    for member_id in shared_history_ids(db, user_id) - {user_id}:
-        bump_workout_cache_revision(db, member_id)
+    refresh_shared_histories(db, user_id, include_self=False)
     db.flush()
     return affected
 
