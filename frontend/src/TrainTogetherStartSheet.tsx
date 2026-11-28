@@ -1,4 +1,5 @@
 import { exercisesToCopy, memberName, type TrainMember } from './trainTogether';
+import { partnerExerciseChips, partnerWorkoutName } from './trainTogetherView';
 import { PopupDialog } from './PopupDialog';
 import { TrainTogetherAvatar } from './TrainTogetherAvatar';
 import type { PartnerPalette } from './trainTogetherTheme';
@@ -25,22 +26,9 @@ export function TrainTogetherStartSheet({
   const name = memberName(partner);
   const workout = partner.workout;
   const copied = workout ? exercisesToCopy(workout) : { exerciseIds: [], unmatched: [] };
-  const exerciseById = new Map((workout?.exercises ?? []).map((item) => [item.id, item]));
-  const movements = workout?.draft.movements ?? [];
-  const chips: Array<{ key: string; name: string; matched: boolean }> = [];
-  const seen = new Set<string>();
-  for (const movement of movements) {
-    const ex = exerciseById.get(movement.exerciseId);
-    if (!ex || seen.has(ex.id)) continue;
-    seen.add(ex.id);
-    chips.push({
-      key: movement.key,
-      name: ex.name,
-      matched: Boolean(ex.same_as_exercise_id),
-    });
-  }
+  const chips = workout ? partnerExerciseChips(workout) : [];
 
-  const workoutName = workout?.draft.name?.trim() || 'workout';
+  const workoutName = workout ? partnerWorkoutName(workout) : 'workout';
   const exerciseCount = chips.length;
 
   return (
@@ -71,7 +59,7 @@ export function TrainTogetherStartSheet({
         {chips.length > 0 && (
           <div className="tt-chip-wrap" aria-label={`${name}'s exercises`}>
             {chips.map((chip) => (
-              <span key={chip.key} className={`tt-ex-chip${chip.matched ? '' : ' is-unmatched'}`}>
+              <span key={chip.id} className={`tt-ex-chip${chip.matched ? '' : ' is-unmatched'}`}>
                 {chip.matched ? chip.name : `${chip.name} · no match`}
               </span>
             ))}

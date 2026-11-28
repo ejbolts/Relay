@@ -63,7 +63,10 @@ function isOwnEndNotice(next: TrainTogetherRead, userId: string): boolean {
   return ended.reason === 'left' || ended.reason === 'finished' || ended.reason === 'discarded';
 }
 
-function pruneRecord<T>(current: Record<string, T>, keepIds: ReadonlySet<string>): Record<string, T> {
+function pruneRecord<T>(
+  current: Record<string, T>,
+  keepIds: ReadonlySet<string>,
+): Record<string, T> {
   let pruned = false;
   const next: Record<string, T> = {};
   for (const [id, value] of Object.entries(current)) {
@@ -254,7 +257,7 @@ export function useTrainTogether(
                   return;
                 }
                 setPartnerSyncStates((prev) => ({ ...prev, [partnerId]: state }));
-                if (state.status === 'synced' || state.status === 'conflict') {
+                if ((state.status === 'synced' || state.status === 'conflict') && !sync.unsent) {
                   setPartnerAcknowledgedDrafts((prev) => ({ ...prev, [partnerId]: state.draft }));
                 }
                 if (state.exercises?.length) {
@@ -375,6 +378,8 @@ export function useTrainTogether(
 
   // Reset cleanly on sign-out, account switch, or unmount; stop all syncs and drop in-flight work.
   useEffect(() => {
+    const syncs = syncsRef.current;
+    const partnerNames = partnerNamesRef.current;
     const accountChanged = activeUserRef.current !== userId;
     activeUserRef.current = userId;
     if (accountChanged) {
@@ -401,9 +406,9 @@ export function useTrainTogether(
       inFlightReadsRef.current = 0;
       inviteGenRef.current += 1;
       sessionIdRef.current = null;
-      for (const sync of syncsRef.current.values()) sync.stop();
-      syncsRef.current.clear();
-      partnerNamesRef.current.clear();
+      for (const sync of syncs.values()) sync.stop();
+      syncs.clear();
+      partnerNames.clear();
       if (joinPulseTimerRef.current !== null) {
         window.clearTimeout(joinPulseTimerRef.current);
         joinPulseTimerRef.current = null;

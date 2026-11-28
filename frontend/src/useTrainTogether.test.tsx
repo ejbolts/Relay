@@ -101,13 +101,7 @@ let root: Root;
 let latest: TrainTogetherController;
 const notices: string[] = [];
 
-function Harness({
-  userId,
-  confirmed = true,
-}: {
-  userId: string | null;
-  confirmed?: boolean;
-}) {
+function Harness({ userId, confirmed = true }: { userId: string | null; confirmed?: boolean }) {
   latest = useTrainTogether(userId, (message) => notices.push(message), { confirmed });
   return null;
 }

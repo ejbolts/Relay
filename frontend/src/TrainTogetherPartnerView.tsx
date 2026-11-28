@@ -9,6 +9,7 @@ import {
   addPartnerSet,
   loggingForLabel,
   memberName,
+  memberShortName,
   removePartnerMovement,
   removePartnerSet,
   updatePartnerSet,
@@ -16,6 +17,7 @@ import {
   type TrainExercise,
   type TrainMember,
 } from './trainTogether';
+import { partnerSetLabel, partnerWorkoutName } from './trainTogetherView';
 import { TrainTogetherAvatar } from './TrainTogetherAvatar';
 import { partnerCssVars, type PartnerPalette } from './trainTogetherTheme';
 import {
@@ -104,15 +106,16 @@ function setBadgeLabel(sets: StoredDraftSet[], index: number): { label: string; 
   return { label: String(working), warmup: false };
 }
 
-function formatCardioSet(item: StoredDraftSet): string {
-  const parts: string[] = [];
-  if (item.duration_seconds && item.duration_seconds > 0) {
-    parts.push(`${Math.max(1, Math.round(item.duration_seconds / 60))} min`);
-  }
-  if (item.distance_km && item.distance_km > 0) {
-    parts.push(`${Number(item.distance_km.toFixed(1))} km`);
-  }
-  return parts.join(' · ') || 'Logged';
+function formatCardioSet(item: StoredDraftSet, weightUnit: WeightUnit): string {
+  return partnerSetLabel(
+    {
+      weight_kg: null,
+      reps: null,
+      duration_seconds: item.duration_seconds ?? null,
+      distance_km: item.distance_km ?? null,
+    },
+    weightUnit,
+  );
 }
 
 function PartnerSetRow({
@@ -172,7 +175,10 @@ function PartnerSetRow({
   return (
     <div className="tt-partner-set-entry">
       <div className={rowClass} data-set-key={set.key}>
-        <span className="tt-partner-set-num num" aria-label={warmup ? 'Warm-up set' : `Set ${label}`}>
+        <span
+          className="tt-partner-set-num num"
+          aria-label={warmup ? 'Warm-up set' : `Set ${label}`}
+        >
           {label}
         </span>
         <input
@@ -429,6 +435,7 @@ export function TrainTogetherPartnerView({
   const bannerRef = useRef<HTMLDivElement>(null);
 
   const name = memberName(partner);
+  const shortName = memberShortName(partner);
   const draft = syncState?.draft ?? partner.workout?.draft ?? null;
   const pause = draftPause(draft);
   const paused = Boolean(draft && pause.pausedAt !== null);
@@ -467,7 +474,7 @@ export function TrainTogetherPartnerView({
     (sum, movement) => sum + movement.sets.filter((s) => s.completed === true).length,
     0,
   );
-  const workoutTitle = draft?.name?.trim() || 'workout';
+  const workoutTitle = draft ? partnerWorkoutName({ draft }) : 'workout';
   const showOfflineBar = syncState?.status === 'failed' && isConnectionFailure(syncState.error);
   const refusalMessage =
     syncState?.status === 'failed' && !showOfflineBar
@@ -538,7 +545,9 @@ export function TrainTogetherPartnerView({
           <div className="tt-partner-meta num">
             <span className={`tt-partner-live${paused ? ' is-paused' : ''}`}>
               <span className="tt-partner-live-dot" aria-hidden="true" />
-              {paused ? `Paused ${formatElapsed(elapsedSeconds)}` : `Live ${formatElapsed(elapsedSeconds)}`}
+              {paused
+                ? `Paused ${formatElapsed(elapsedSeconds)}`
+                : `Live ${formatElapsed(elapsedSeconds)}`}
             </span>
             <span aria-hidden="true">·</span>
             <span>
@@ -589,8 +598,8 @@ export function TrainTogetherPartnerView({
                         <h2>{exerciseName}</h2>
                         <p className="num">
                           {isCardio
-                            ? `${name}’s cardio · read-only`
-                            : `${name}’s sets · ${doneCount} done`}
+                            ? `${shortName}’s cardio · read-only`
+                            : `${shortName}’s sets · ${doneCount} done`}
                         </p>
                       </div>
                       {canRemoveMovement && (
@@ -619,7 +628,7 @@ export function TrainTogetherPartnerView({
                               .map((s, idx) => (
                                 <li key={s.key}>
                                   <span>Set {idx + 1}</span>
-                                  <strong>{formatCardioSet(s)}</strong>
+                                  <strong>{formatCardioSet(s, weightUnit)}</strong>
                                 </li>
                               ))}
                           </ul>
@@ -693,7 +702,7 @@ export function TrainTogetherPartnerView({
             </div>
 
             <button type="button" className="tt-partner-add-ex" onClick={() => setPickerOpen(true)}>
-              + Add exercise for {name}
+              + Add exercise for {shortName}
             </button>
           </>
         )}

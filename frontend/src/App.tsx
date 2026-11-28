@@ -526,6 +526,7 @@ import {
   type TrainMember,
   type TrainTogetherRead,
 } from './trainTogether';
+import { partnerStartTemplate, unmatchedExercisesNotice } from './trainTogetherView';
 import {
   captureTrainInvite,
   claimTrainInviteToken,
@@ -3489,51 +3490,28 @@ function AppContent() {
                 palette={trainPalettes[index]}
                 catalogueLoaded={exerciseCatalogue.loaded}
                 catalogueError={exerciseCatalogue.error}
-                onRetryCatalogue={() =>
-                  void refreshData({ activityLabel: 'Reloading exercises…' })
-                }
-                onStartWithPartner={(exerciseIds, unmatched) => {
+                onRetryCatalogue={() => void refreshData({ activityLabel: 'Reloading exercises…' })}
+                onStartWithPartner={() => {
                   if (!exerciseCatalogue.loaded) return;
                   setTrainStartPartnerId(null);
-                  const byId = new Map(exercises.map((item) => [item.id, item]));
-                  const matched = exerciseIds
-                    .map((id) => byId.get(id))
-                    .filter((item): item is Exercise => Boolean(item));
-                  const missingMatchedCount = exerciseIds.length - matched.length;
-                  const category = partner.workout?.draft.category ?? 'other';
-                  const templateName = partner.workout?.draft.name?.trim() || 'Workout';
                   const date = localDate();
-                  const template: SessionTemplate | null = matched.length
-                    ? {
-                        category,
-                        sourceWorkout: {
-                          id: 'train-together-template',
-                          name: templateName,
-                          workout_date: date,
-                          category,
-                          notes: null,
-                          duration_minutes: null,
-                          start_time: null,
-                          end_time: null,
-                          is_sample: false,
-                          created_at: new Date().toISOString(),
-                          updated_at: new Date().toISOString(),
-                          movements: [],
-                        },
-                        exercises: matched.map((exercise) => ({
-                          exercise,
-                          topSet: null,
-                          summary: '–',
-                        })),
-                      }
-                    : null;
-                  startWorkout(date, false, template, category);
-                  const totalUnmatched = unmatched.length + missingMatchedCount;
-                  if (totalUnmatched > 0) {
-                    showToast(
-                      `${totalUnmatched} ${totalUnmatched === 1 ? "exercise wasn't" : "exercises weren't"} in your library.`,
-                    );
+                  if (!partner.workout) {
+                    startWorkout(date);
+                    return;
                   }
+                  const { template, unmatched } = partnerStartTemplate(
+                    partner.workout,
+                    exercises,
+                    date,
+                  );
+                  startWorkout(
+                    date,
+                    false,
+                    template.exercises.length > 0 ? template : null,
+                    template.category,
+                  );
+                  const notice = unmatchedExercisesNotice(unmatched.length);
+                  if (notice) showToast(notice);
                 }}
                 onStartOwn={() => {
                   setTrainStartPartnerId(null);

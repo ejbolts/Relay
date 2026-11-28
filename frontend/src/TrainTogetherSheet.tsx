@@ -19,6 +19,7 @@ import {
   type TrainSession,
 } from './trainTogether';
 import { TrainTogetherAvatar } from './TrainTogetherAvatar';
+import { partnerWorkoutName } from './trainTogetherView';
 import type { PartnerPalette } from './trainTogetherTheme';
 import type { User } from './types';
 
@@ -251,12 +252,7 @@ export function TrainTogetherSheet({
       </div>
 
       {tab === 'scan' ? (
-        <div
-          id={scanPanelId}
-          role="tabpanel"
-          aria-labelledby={scanTabId}
-          className="tt-sheet-scan"
-        >
+        <div id={scanPanelId} role="tabpanel" aria-labelledby={scanTabId} className="tt-sheet-scan">
           <FriendQrScanner
             userId={user.id}
             mode="train"
@@ -302,12 +298,7 @@ export function TrainTogetherSheet({
           )}
         </div>
       ) : (
-        <div
-          id={codePanelId}
-          role="tabpanel"
-          aria-labelledby={codeTabId}
-          className="tt-sheet-body"
-        >
+        <div id={codePanelId} role="tabpanel" aria-labelledby={codeTabId} className="tt-sheet-body">
           {sessionFull ? (
             <div className="tt-sheet-full" role="status">
               <strong>
@@ -398,9 +389,7 @@ export function TrainTogetherSheet({
                     <span className="tt-sheet-member-copy">
                       <strong>{memberName(partner)}</strong>
                       <small>
-                        {partner.workout
-                          ? partner.workout.draft.name || 'Live workout'
-                          : 'No workout open'}
+                        {partner.workout ? partnerWorkoutName(partner.workout) : 'No workout open'}
                       </small>
                     </span>
                   </li>

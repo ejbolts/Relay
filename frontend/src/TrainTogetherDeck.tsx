@@ -4,35 +4,28 @@ import { useNow } from './presence';
 import {
   inviteCountdownLabel,
   memberName,
+  memberShortName,
   partnerSummary,
   type TrainMember,
   type TrainSession,
 } from './trainTogether';
-import { formatPartnerSetValue } from './trainTogetherFormat';
+import { partnerTicker } from './trainTogetherView';
 import { TrainTogetherAvatar } from './TrainTogetherAvatar';
 import { partnerCssVars, type PartnerPalette } from './trainTogetherTheme';
 import type { WeightUnit } from './weightUnits';
 import './trainTogether.css';
 
-function partnerTickerText(
+function partnerTickerInfo(
   partner: TrainMember,
   now: number,
   weightUnit: WeightUnit,
 ): { text: string; totalSetsDone: number; setSignature: string } {
+  const text = partnerTicker(partner.workout, weightUnit, now);
   if (!partner.workout) {
-    return { text: 'No workout open', totalSetsDone: 0, setSignature: '' };
+    return { text, totalSetsDone: 0, setSignature: '' };
   }
   const summary = partnerSummary(partner.workout, now);
-  const setValue = summary.lastSet ? formatPartnerSetValue(summary.lastSet, weightUnit) : null;
-  let text: string;
-  if (summary.movementKey && setValue) {
-    text = `${summary.name} · ${setValue}`;
-  } else if (summary.movementKey) {
-    text = `${summary.name} · Starting`;
-  } else {
-    text = 'Starting workout';
-  }
-  const sig = `${summary.totalSetsDone}:${summary.movementKey ?? ''}:${setValue ?? ''}`;
+  const sig = `${summary.totalSetsDone}:${summary.movementKey ?? ''}:${text}`;
   return { text, totalSetsDone: summary.totalSetsDone, setSignature: sig };
 }
 
@@ -100,7 +93,8 @@ export function TrainTogetherDeck({
     partner,
     palette: palettes[index],
     name: memberName(partner),
-    ...partnerTickerText(partner, now, weightUnit),
+    shortName: memberShortName(partner),
+    ...partnerTickerInfo(partner, now, weightUnit),
   }));
 
   const signatureKey = entries.map((e) => `${e.partner.user_id}=${e.setSignature}`).join('|');
@@ -153,7 +147,7 @@ export function TrainTogetherDeck({
       <div className="tt-live-deck">
         {entries.length === 1 ? (
           (() => {
-            const { partner, palette, name, text, totalSetsDone } = entries[0];
+            const { partner, palette, name, shortName, text, totalSetsDone } = entries[0];
             const hasWorkout = partner.workout !== null;
             const vars = palette ? (partnerCssVars(palette) as CSSProperties) : undefined;
             const flashing = flashingIds.has(partner.user_id);
@@ -189,7 +183,7 @@ export function TrainTogetherDeck({
                       data-tt-log-for={partner.user_id}
                       onClick={() => onLogForPartner(partner.user_id)}
                     >
-                      <span>Log for {name}</span>
+                      <span>Log for {shortName}</span>
                       <Icon name="chevron-right" />
                     </button>
                   )}

@@ -4,7 +4,15 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import { LiveWorkoutHeader } from './LiveWorkoutHeader';
-import { TRAIN_ERRORS, type PartnerSyncState, type TrainMember, type TrainSession } from './trainTogether';
+import {
+  PartnerWorkoutSync,
+  TRAIN_ERRORS,
+  type PartnerSyncState,
+  type TrainMember,
+  type TrainPartnerChange,
+  type TrainPartnerWriteResult,
+  type TrainSession,
+} from './trainTogether';
 import { TrainTogetherDeck, TrainTogetherEntryButton } from './TrainTogetherDeck';
 import { TrainTogetherPaceStrip } from './TrainTogetherPaceStrip';
 import { TrainTogetherPartnerView } from './TrainTogetherPartnerView';
@@ -168,8 +176,8 @@ describe('TrainTogetherEntryButton and Live Deck', () => {
     expect(container.textContent).toContain('Waiting · 4:32');
   });
 
-  it('renders 1-partner Live Deck, hides Log when partner has no workout, and scales to 3 partners', async () => {
-    const sam = makePartner('u-sam', 'Sam', true);
+  it('renders 1-partner Live Deck with full title and short Log button, hides Log without workout, and scales to 3 partners', async () => {
+    const sam = makePartner('u-sam', 'Sam Rivera', true);
     const onLog = vi.fn();
     const onSession = vi.fn();
     await act(async () =>
@@ -185,9 +193,10 @@ describe('TrainTogetherEntryButton and Live Deck', () => {
         />,
       ),
     );
-    expect(container.textContent).toContain('Sam');
+    expect(container.querySelector('.tt-deck-name')?.textContent).toBe('Sam Rivera');
     expect(container.textContent).toContain('2 sets');
-    expect(container.textContent).toContain('Log for Sam');
+    expect(container.querySelector('.tt-deck-log-btn')?.textContent).toContain('Log for Sam');
+    expect(container.querySelector('.tt-deck-log-btn')?.textContent).not.toContain('Rivera');
     const logBtn = [...container.querySelectorAll('button')].find((b) =>
       b.textContent?.includes('Log for Sam'),
     )!;
@@ -237,8 +246,8 @@ describe('TrainTogetherEntryButton and Live Deck', () => {
 });
 
 describe('TrainTogetherPaceStrip', () => {
-  it('shows partner latest completed set on matching exercise in viewer weight unit', async () => {
-    const sam = makePartner('u-sam', 'Sam', true);
+  it('shows partner latest completed set on matching exercise in viewer weight unit with short name', async () => {
+    const sam = makePartner('u-sam', 'Sam Rivera', true);
     await act(async () =>
       root.render(
         <TrainTogetherPaceStrip
@@ -250,6 +259,7 @@ describe('TrainTogetherPaceStrip', () => {
       ),
     );
     expect(container.textContent).toContain('Sam · 80 kg × 8');
+    expect(container.textContent).not.toContain('Rivera');
     expect(container.textContent).toContain('Set 1');
 
     // Pounds conversion (finding 23).
@@ -439,6 +449,121 @@ describe('TrainTogetherPartnerView', () => {
     expect(firstRun.movements[0].sets[1].key).toBe(secondRun.movements[0].sets[1].key);
   });
 
+  it('replays queued add, edit and complete under one key after a conflict with PartnerWorkoutSync (finding 2)', async () => {
+    const sam = makePartner('u-sam', 'Sam Rivera', true);
+    const initialDraft = makePartnerDraft(false);
+    const serverConflictDraft = makePartnerDraft(false);
+    serverConflictDraft.movements[0].sets[0].weight_kg = 82.5;
+
+    let resolveFirstPut!: (value: TrainPartnerWriteResult) => void;
+    const putCalls: TrainPartnerChange[] = [];
+    const put = vi
+      .fn<(change: TrainPartnerChange) => Promise<TrainPartnerWriteResult>>()
+      .mockImplementationOnce((change) => {
+        putCalls.push(change);
+        return new Promise((resolve) => (resolveFirstPut = resolve));
+      })
+      .mockImplementationOnce(async (change) => {
+        putCalls.push(change);
+        return { revision: 6, draft: change.draft, conflict: false, exercises: [] };
+      });
+
+    let syncState: PartnerSyncState;
+    const sync = new PartnerWorkoutSync(
+      {
+        put,
+        changed: (next) => {
+          syncState = next;
+        },
+      },
+      { revision: 4, draft: initialDraft },
+    );
+    syncState = sync.current;
+
+    const renderView = async () => {
+      await act(async () =>
+        root.render(
+          <TrainTogetherPartnerView
+            partner={sam}
+            palette={partnerPalettes('blue', 1, false)[0]}
+            syncState={syncState}
+            acknowledgedDraft={sync.unsent ? initialDraft : syncState.draft}
+            weightUnit="kg"
+            onEdit={async (change) => {
+              void sync.edit(change);
+            }}
+            onRetry={() => sync.retry()}
+            onRegisterExercises={vi.fn()}
+            onBackToMine={vi.fn()}
+          />,
+        ),
+      );
+    };
+    const setInputValue = (input: HTMLInputElement, value: string) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!;
+      setter.call(input, value);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+
+    await renderView();
+
+    // First edit starts PUT #1 (held in flight).
+    const firstReps = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Bench Press set 1 reps"]',
+    )!;
+    await act(async () => setInputValue(firstReps, '9'));
+    await renderView();
+    expect(putCalls).toHaveLength(1);
+
+    // While PUT #1 is in flight: add a set, enter 10 reps on it, and tick it.
+    const addSetBtn = [...container.querySelectorAll('button')].find(
+      (b) => b.textContent === '+ Add set',
+    )!;
+    await act(async () => addSetBtn.click());
+    await renderView();
+    const addedKey = syncState.draft!.movements[0].sets[1].key;
+
+    const secondReps = container.querySelector<HTMLInputElement>(
+      'input[aria-label="Bench Press set 2 reps"]',
+    )!;
+    await act(async () => setInputValue(secondReps, '10'));
+    await renderView();
+
+    const secondTick = container.querySelector<HTMLButtonElement>(
+      'button[aria-label="Saving Bench Press set 2"], button[aria-label="Complete Bench Press set 2"]',
+    )!;
+    await act(async () => secondTick.click());
+    await renderView();
+
+    // Let PUT #1 conflict: PartnerWorkoutSync replays add + reps(10) + complete(true) onto server copy.
+    await act(async () => {
+      resolveFirstPut({
+        revision: 5,
+        draft: serverConflictDraft,
+        conflict: true,
+        exercises: [],
+      });
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+
+    expect(putCalls).toHaveLength(2);
+    const replayedSets = putCalls[1].draft.movements[0].sets;
+    expect(replayedSets).toHaveLength(2);
+    expect(replayedSets[0].weight_kg).toBe(82.5);
+    expect(replayedSets[1]).toMatchObject({
+      key: addedKey,
+      reps: 10,
+      completed: true,
+    });
+    // Also verify item A: short name used in tight labels, full name in banner/header.
+    await renderView();
+    expect(container.querySelector('.tt-partner-banner')?.textContent).toContain(
+      'Logging for Sam Rivera',
+    );
+    expect(container.textContent).toContain('Sam’s sets');
+    expect(container.textContent).toContain('+ Add exercise for Sam');
+  });
+
   it('uses acknowledged draft for saved counts and marks numeric edits on done rows as pending (finding 11)', async () => {
     const sam = makePartner('u-sam', 'Sam', true);
     // Case A: local ticked set 1, server has NOT acknowledged it yet.
@@ -514,7 +639,11 @@ describe('TrainTogetherPartnerView', () => {
             draft: baseDraft,
             status: 'failed',
             notApplied: false,
-            error: new ApiError('Reps must be between 0 and 10,000.', TRAIN_ERRORS.changeNotAllowed, 422),
+            error: new ApiError(
+              'Reps must be between 0 and 10,000.',
+              TRAIN_ERRORS.changeNotAllowed,
+              422,
+            ),
             exercises: null,
           }}
           acknowledgedDraft={baseDraft}

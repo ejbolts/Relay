@@ -264,14 +264,12 @@ describe('TrainTogetherSheet', () => {
     const addFriendSpy = vi
       .spyOn(api.sharing, 'addFriend')
       .mockResolvedValue({ status: 'outgoing' });
-    const onJoin = vi
-      .fn()
-      .mockRejectedValue(
-        new ApiError('Add Jordan as a friend to train together.', TRAIN_ERRORS.notFriends, 403, {
-          user_id: 'u-jordan',
-          name: 'Jordan',
-        }),
-      );
+    const onJoin = vi.fn().mockRejectedValue(
+      new ApiError('Add Jordan as a friend to train together.', TRAIN_ERRORS.notFriends, 403, {
+        user_id: 'u-jordan',
+        name: 'Jordan',
+      }),
+    );
 
     await act(async () =>
       root.render(
@@ -421,9 +419,7 @@ describe('TrainTogetherSheet', () => {
     let rejectJoin!: (reason: unknown) => void;
     const joinSpy = vi
       .spyOn(api.trainTogether, 'join')
-      .mockImplementation(
-        () => new Promise((_resolve, reject) => (rejectJoin = reject)),
-      );
+      .mockImplementation(() => new Promise((_resolve, reject) => (rejectJoin = reject)));
 
     function ScanWithHook() {
       const tt = useTrainTogether(USER.id);
@@ -516,9 +512,11 @@ describe('FriendQrScanner cross-handoff', () => {
     let resolveMedia!: (stream: MediaStream) => void;
     vi.stubGlobal('navigator', {
       mediaDevices: {
-        getUserMedia: vi.fn().mockImplementation(
-          () => new Promise<MediaStream>((resolve) => (resolveMedia = resolve)),
-        ),
+        getUserMedia: vi
+          .fn()
+          .mockImplementation(
+            () => new Promise<MediaStream>((resolve) => (resolveMedia = resolve)),
+          ),
       },
     });
     vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({

@@ -589,7 +589,9 @@ describe('App train-together review fixes', () => {
 
   it('captures a train fragment navigation while signed out on the sign-in screen (finding 20)', async () => {
     const { AuthGate } = await import('./AuthGate');
-    vi.spyOn(api.auth, 'me').mockRejectedValueOnce(new ApiError('Not authenticated', 'not_authenticated', 401));
+    vi.spyOn(api.auth, 'me').mockRejectedValueOnce(
+      new ApiError('Not authenticated', 'not_authenticated', 401),
+    );
     vi.spyOn(api.auth, 'config').mockResolvedValueOnce({
       registration_enabled: false,
       invite_required: false,
@@ -632,9 +634,7 @@ describe('App train-together review fixes', () => {
         is_sample: false,
         created_at: '2026-11-28T10:00:00Z',
         updated_at: '2026-11-28T10:00:00Z',
-        trained_with: [
-          { user_id: 'u-sam', display_name: 'Sam', username: 'sam', photo_url: null },
-        ],
+        trained_with: [{ user_id: 'u-sam', display_name: 'Sam', username: 'sam', photo_url: null }],
         trained_with_count: 2,
         movements: [],
       },
