@@ -38,6 +38,19 @@ const NOBODY: TrainTogetherRead = { session: null, ended: null };
 
 export const trainSessionKey = (userId: string) => [...trainTogetherKeys.session, userId] as const;
 
+/** No answer, or a proxy's, rather than a refusal from Relay itself. */
+export function isConnectionFailure(error: unknown) {
+  return !(error instanceof ApiError) || [502, 503, 504].includes(error.status);
+}
+
+/** A read that belongs to `userId`: no session, or one where `userId` is the caller. */
+export function readIsFor(read: TrainTogetherRead, userId: string) {
+  return (
+    !read.session ||
+    read.session.members.some((member) => member.is_self && member.user_id === userId)
+  );
+}
+
 function failure(error: unknown): TrainJoinFailure {
   if (error instanceof ApiError)
     return { message: error.message, ...(error.member && { member: error.member }) };
@@ -61,9 +74,18 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
   const workout = useOptionalWorkout();
   const pathname = usePathname();
   const key = trainSessionKey(userId);
+  // Moves on whenever a join, leave or new code answers: a read started before then is older
+  // than that answer and is dropped when it arrives.
+  const generation = useRef(0);
   const query = useQuery({
     queryKey: key,
-    queryFn: ({ signal }) => sessionBound().read(() => trainTogetherApi.read(signal)),
+    queryFn: async ({ signal }) => {
+      const started = generation.current;
+      const result = await sessionBound().read(() => trainTogetherApi.read(signal));
+      if (!readIsFor(result, userId)) throw new Error('That session belongs to another account.');
+      const current = client.getQueryData<TrainTogetherRead>(key);
+      return started !== generation.current && current ? current : result;
+    },
     refetchInterval: (current) => (current.state.data?.session ? SESSION_POLL_MS : false),
   });
   const read = query.data ?? null;
@@ -81,6 +103,12 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
     setTrainState({ userId });
     const loops = syncs.current;
     const readKey = trainSessionKey(userId);
+    // False once this account's host has gone: late answers then do nothing.
+    let alive = true;
+    let leaving = false;
+    let inviting = false;
+    /** Tokens already sent to join, so the same code is never submitted twice. */
+    const submitted = new Set<string>();
 
     function stopSync(partnerId: string) {
       loops.get(partnerId)?.sync.stop();
@@ -132,13 +160,19 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
                 variant: 'warning',
               });
             }
-            // A change the server refuses can never be sent: start again from its copy.
-            if (
-              next.status === 'failed' &&
-              next.error instanceof ApiError &&
-              next.error.code === TRAIN_ERRORS.changeNotAllowed
-            ) {
-              showToast(next.error.message, undefined, { variant: 'error' });
+            // A refusal is not "offline": it can never be sent. Close their logger, read the
+            // session again and say why; the next real copy starts a new loop.
+            if (next.status === 'failed' && !isConnectionFailure(next.error)) {
+              const error = next.error as ApiError;
+              const gone =
+                error.code === TRAIN_ERRORS.notPartner || error.code === TRAIN_ERRORS.noWorkout;
+              showToast(
+                gone
+                  ? `${partnerNamed(partnerId)}'s workout is no longer open to you.`
+                  : error.message,
+                undefined,
+                { variant: 'error' },
+              );
               stopSync(partnerId);
               void latest.current.client.invalidateQueries({ queryKey: readKey });
             }
@@ -170,23 +204,33 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
       if (state.loggingFor && !loops.has(state.loggingFor)) setTrainState({ loggingFor: null });
       if (state.startWith && !live.has(state.startWith)) setTrainState({ startWith: null });
       if (!next.session) setTrainState({ invite: null, added: {} });
+      // A code belongs to one session: drop one held for another.
+      const invite = getTrainState().invite;
+      if (invite && next.session && invite.session_id !== next.session.id)
+        setTrainState({ invite: null });
     }
 
     /** Takes an answer from the server as the session now. */
     async function adopt(next: TrainTogetherRead) {
-      // A read already on its way is older than this answer: drop it (its cancel settles first,
-      // so it can't put back what was there before).
+      // A read already on its way is older than this answer: it is dropped (generation) and
+      // cancelled; the cancel settles first, so it can't put back what was there before.
+      generation.current += 1;
       const { client } = latest.current;
       await client.cancelQueries({ queryKey: readKey }, { revert: false });
-      client.setQueryData(readKey, next);
+      if (alive && readIsFor(next, userId)) client.setQueryData(readKey, next);
     }
 
     const actions: TrainActions = {
       async join(token, from) {
+        if (submitted.has(token)) return null;
+        submitted.add(token);
         let result: TrainTogetherRead;
         try {
           result = await sessionBound().read(() => trainTogetherApi.join(token));
         } catch (error) {
+          if (!alive) return null;
+          // Refused, so the same code may be tried again (after adding the friend, say).
+          submitted.delete(token);
           const reason = failure(error);
           haptics.error();
           if (from === 'link') {
@@ -199,9 +243,11 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
           }
           return reason;
         }
+        if (!alive) return null;
         // The join is announced even before the first read has answered.
         previous.current ??= NOBODY;
         await adopt(result);
+        if (!alive) return null;
         haptics.success();
         setTrainState({ sheet: { ...getTrainState().sheet, open: false } });
         const { workout: engine, pathname: path } = latest.current;
@@ -214,25 +260,46 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
         return null;
       },
       leave() {
+        // A second press while leaving does nothing.
+        if (leaving) return;
+        leaving = true;
         void sessionBound()
           .read(() => trainTogetherApi.leave())
           .then((result) => {
+            if (!alive) return;
             // Your own leaving says nothing.
             previous.current = result;
+            setTrainState({ loggingFor: null, invite: null });
             return adopt(result);
           })
-          .catch((error: unknown) =>
-            showToast(failure(error).message, undefined, { variant: 'error' }),
-          );
-        setTrainState({ loggingFor: null, invite: null });
+          .catch((error: unknown) => {
+            if (alive)
+              showToast(`Couldn't leave the session. ${failure(error).message}`, undefined, {
+                variant: 'error',
+              });
+          })
+          .finally(() => {
+            leaving = false;
+          });
       },
       async newInvite() {
+        // One request at a time, never retried by itself.
+        if (inviting) return;
+        inviting = true;
+        const session = getTrainState().read?.session?.id ?? null;
         try {
           const invite = await sessionBound().read(() => trainTogetherApi.invite());
+          if (!alive) return;
+          // The session changed while the code was being made: it belongs to the old one.
+          if (session && (getTrainState().read?.session?.id ?? null) !== session) return;
+          generation.current += 1;
           setTrainState({ invite, inviteError: null });
+          await latest.current.client.cancelQueries({ queryKey: readKey }, { revert: false });
           void latest.current.client.invalidateQueries({ queryKey: readKey });
         } catch (error) {
-          setTrainState({ invite: null, inviteError: failure(error).message });
+          if (alive) setTrainState({ invite: null, inviteError: failure(error).message });
+        } finally {
+          inviting = false;
         }
       },
       openSheet(tab = 'code') {
@@ -260,16 +327,19 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
         void loops.get(partnerId)?.sync.retry();
       },
       addFriend(member) {
+        // A notice's button can be pressed after the account changed: then it does nothing.
+        if (!alive || getTrainState().userId !== userId) return;
         void sessionBound()
           .read(() => socialApi.addFriend(member.user_id))
           .then(() => {
+            if (!alive) return;
             haptics.success();
             showToast(`Friend request sent to ${member.name}`);
             void latest.current.client.invalidateQueries({ queryKey: socialKeys.friends });
           })
-          .catch((error: unknown) =>
-            showToast(failure(error).message, undefined, { variant: 'error' }),
-          );
+          .catch((error: unknown) => {
+            if (alive) showToast(failure(error).message, undefined, { variant: 'error' });
+          });
       },
       closeStartWith() {
         setTrainState({ startWith: null });
@@ -286,6 +356,7 @@ export function TrainTogetherHost({ userId }: { userId: string }) {
       if (online) loops.forEach((loop) => void loop.sync.retry());
     });
     return () => {
+      alive = false;
       stopListening();
       stopNet();
       loops.forEach((loop) => loop.sync.stop());
