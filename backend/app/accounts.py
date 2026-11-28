@@ -366,9 +366,9 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
     )
 
     # Train together: leave a session first, so partners are told and it ends properly.
-    from .train_together import account_removed, account_rows
+    from .train_together import account_removed, account_rows, notify
 
-    account_removed(db, user_id)
+    trained = account_removed(db, user_id)
 
     workout_ids = select(TrainingWorkout.id).where(TrainingWorkout.user_id == user_id)
     movement_ids = select(WorkoutMovement.id).where(WorkoutMovement.workout_id.in_(workout_ids))
@@ -421,6 +421,7 @@ def delete_account(db: Session, settings: Settings, user: User, app_state=None) 
     for statement in statements:
         db.execute(statement)
     db.commit()
+    notify(trained)
     session_events.changed(user_id)
     if youtube_credentials:
         revoke_credentials(youtube_credentials)

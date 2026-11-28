@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -14,12 +17,13 @@ from alembic.operations import Operations
 from conftest import TEST_PASSWORD, register_user
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, event, inspect, select, text
-from test_auth import named
+from sqlalchemy.exc import IntegrityError
+from test_auth import named, upload_photo
 from test_sharing import befriend, share
 
 from app import train_together
 from app.active_workouts import DraftChange
-from app.auth import hash_token
+from app.auth import as_utc, hash_token
 from app.database import SessionLocal, engine
 from app.models import (
     TrainTogetherInvite,
@@ -69,7 +73,9 @@ def new_draft(exercise_id: str, **fields) -> dict:
                 "notes": "",
                 "machinePhotoIds": [],
                 "supersetKey": None,
-                "sets": [{"key": "s1", "reps": 8, "weight_kg": 60, "completed": True}],
+                "sets": [
+                    {"key": "s1", "reps": 8, "weight_kg": 60, "completed": True, "notes": None}
+                ],
             }
         ],
         **fields,
@@ -577,14 +583,15 @@ def test_a_stale_session_without_a_friendship_cannot_be_used(client, other_clien
         partner_put(other_client, client, revision=1, base=value, draft=with_set(value)).status_code
         == 404
     )
-    assert read(other_client)["session"]["members"][1]["workout"] is None
+    # Reading the session ends the attendance rather than showing them.
+    assert read(other_client)["session"] is None
 
 
 # Saved workouts
 
 
-def finish(test_client: TestClient, value: dict, revision: int) -> dict:
-    payload = {
+def finish_payload(value: dict, revision: int) -> dict:
+    return {
         "name": value["name"],
         "workout_date": value["workoutDate"],
         "category": "push",
@@ -598,7 +605,10 @@ def finish(test_client: TestClient, value: dict, revision: int) -> dict:
             }
         ],
     }
-    response = test_client.post("/api/workouts", json=payload)
+
+
+def finish(test_client: TestClient, value: dict, revision: int) -> dict:
+    response = test_client.post("/api/workouts", json=finish_payload(value, revision))
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -728,15 +738,415 @@ def test_deleting_an_account_in_a_session_ends_it_for_the_partner(client, other_
         }
 
 
-def test_deleting_the_creator_removes_their_sessions(client, other_client):
-    friends(client, other_client)
-    link(other_client, client)
-    deleted = other_client.request("DELETE", "/api/profile", json={"password": TEST_PASSWORD})
+def test_deleting_the_creator_keeps_a_live_group_of_three(client, other_client, third_client):
+    friends(client, other_client, third_client)
+    mine, theirs = start(other_client), start(third_client)
+    session = link(client, other_client)["session"]["id"]
+    link(client, third_client)
+    deleted = client.request("DELETE", "/api/profile", json={"password": TEST_PASSWORD})
     assert deleted.status_code == 204, deleted.text
-    assert read(client) == {"session": None, "ended": None}
+    live = read(other_client)["session"]
+    assert live["id"] == session and live["created_by"] is None
+    assert [member["user_id"] for member in live["members"]] == [
+        account(other_client),
+        account(third_client),
+    ]
+    first = finish(other_client, mine, 1)
+    assert [person["user_id"] for person in first["trained_with"]] == [account(third_client)]
+    second = finish(third_client, theirs, 1)
+    assert second["trained_with_count"] == 1
+
+
+def test_saved_history_survives_the_creators_deletion(client, other_client, third_client):
+    friends(client, other_client, third_client)
+    values = {
+        name: start(test_client)
+        for name, test_client in (("a", client), ("b", other_client), ("c", third_client))
+    }
+    link(client, other_client)
+    link(client, third_client)
+    finish(client, values["a"], 1)
+    saved = finish(other_client, values["b"], 1)
+    finish(third_client, values["c"], 1)
+    deleted = client.request("DELETE", "/api/profile", json={"password": TEST_PASSWORD})
+    assert deleted.status_code == 204
+    kept = other_client.get(f"/api/workouts/{saved['id']}").json()
+    assert [person["user_id"] for person in kept["trained_with"]] == [account(third_client)]
+    assert kept["trained_with_count"] == 1
+
+
+# Review fixes
+
+
+@pytest.fixture
+def fourth_client(client):
+    with TestClient(client.app) as fourth:
+        fourth.user = register_user(fourth, "fourth", "Fourth")
+        share(fourth)
+        yield fourth
+
+
+def test_a_write_answered_after_access_ends_returns_no_snapshot(client, other_client, monkeypatch):
+    friends(client, other_client)
+    value = start(client)
+    link(client, other_client)
+    real = train_together.change_draft
+
+    def revoked_meanwhile(*args, **kwargs):
+        result = real(*args, **kwargs)
+        with SessionLocal() as db:
+            db.execute(text("DELETE FROM friendships"))
+            db.commit()
+        return result
+
+    monkeypatch.setattr(train_together, "change_draft", revoked_meanwhile)
+    response = partner_put(other_client, client, revision=1, base=value, draft=with_set(value))
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {"code": "train_not_partner", "message": "You are not training with them now."}
+    }
+
+
+def slow_checks(monkeypatch):
+    """Widen the window between admission checks and the insert, as a slow request would."""
+    real = train_together._friends
+
+    def slow(*args):
+        time.sleep(0.05)
+        return real(*args)
+
+    monkeypatch.setattr(train_together, "_friends", slow)
+
+
+def at_once(*calls):
+    barrier = threading.Barrier(len(calls))
+
+    def run(call):
+        barrier.wait()
+        return call()
+
+    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
+        futures = [pool.submit(run, call) for call in calls]
+        return [future.result() for future in futures]
+
+
+def open_memberships(user_id: str) -> int:
     with SessionLocal() as db:
-        assert db.scalar(select(TrainTogetherSession)) is None
-        assert db.scalar(select(TrainTogetherInvite)) is None
+        rows = db.scalars(
+            select(TrainTogetherMember).where(
+                TrainTogetherMember.user_id == user_id, TrainTogetherMember.left_at.is_(None)
+            )
+        )
+        return len(rows.all())
+
+
+def test_one_code_scanned_twice_at_once_admits_one(client, other_client, third_client, monkeypatch):
+    friends(client, other_client, third_client)
+    token = invite(client)
+    slow_checks(monkeypatch)
+    results = at_once(lambda: join(other_client, token), lambda: join(third_client, token))
+    assert sorted(result.status_code for result in results) == [200, 404]
+    assert len(read(client)["session"]["members"]) == 2
+
+
+def test_the_last_place_goes_to_one_of_two_arrivals(
+    client, other_client, third_client, fourth_client, monkeypatch
+):
+    friends(client, other_client, third_client, fourth_client)
+    monkeypatch.setattr(train_together, "MAX_MEMBERS", 3)
+    link(client, other_client)
+    first, second = invite(client), invite(other_client)
+    slow_checks(monkeypatch)
+    results = at_once(lambda: join(third_client, first), lambda: join(fourth_client, second))
+    assert sorted(result.status_code for result in results) == [200, 409]
+    assert len(read(client)["session"]["members"]) == 3
+
+
+def test_one_account_joining_two_sessions_at_once_ends_up_in_one(
+    client, other_client, third_client, monkeypatch
+):
+    friends(client, other_client, third_client)
+    first, second = invite(client), invite(third_client)
+    slow_checks(monkeypatch)
+    results = at_once(lambda: join(other_client, first), lambda: join(other_client, second))
+    assert all(result.status_code == 200 for result in results)
+    assert open_memberships(account(other_client)) == 1
+
+
+def test_the_schema_allows_one_open_membership_per_account(client, other_client):
+    friends(client, other_client)
+    link(client, other_client)
+    with pytest.raises(IntegrityError), SessionLocal() as db:
+        # A second, separate session: still only one open attendance is allowed.
+        other = TrainTogetherSession(
+            created_by=account(other_client), expires_at=utc_now() + timedelta(hours=1)
+        )
+        db.add(other)
+        db.flush()
+        db.add(TrainTogetherMember(session_id=other.id, user_id=account(other_client)))
+        db.commit()
+
+
+def test_rejoining_records_a_separate_attendance_and_links_both_workouts(
+    client, other_client, third_client, fourth_client
+):
+    friends(client, other_client, third_client, fourth_client)
+    first = start(other_client)
+    link(client, other_client)
+    link(client, third_client)
+    earlier = finish(other_client, first, 1)
+    link(client, fourth_client)  # joins while Other is away
+    second = new_draft(lift(other_client))
+    other_client.put("/api/active-workout", json={"revision": 2, "base": None, "draft": second})
+    link(client, other_client)
+    later = finish(other_client, second, 3)
+    assert read(other_client)["session"] is None
+    history = {item["id"]: item for item in other_client.get("/api/workouts").json()}
+    assert {person["user_id"] for person in history[earlier["id"]]["trained_with"]} == {
+        account(client),
+        account(third_client),
+    }
+    assert {person["user_id"] for person in history[later["id"]]["trained_with"]} == {
+        account(client),
+        account(third_client),
+        account(fourth_client),
+    }
+
+
+def test_a_failed_finish_retried_ends_up_linked(client, other_client, monkeypatch):
+    friends(client, other_client)
+    value = start(client)
+    link(client, other_client)
+    real = train_together.workout_saved
+    calls = []
+
+    def fails_once(*args, **kwargs):
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("stopped mid-save")
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr(train_together, "workout_saved", fails_once)
+    with pytest.raises(RuntimeError):
+        client.post("/api/workouts", json=finish_payload(value, 1))
+    retried = finish(client, value, 1)
+    assert retried["trained_with_count"] == 1
+    assert read(other_client)["ended"]["reason"] == "finished"
+
+
+def test_a_repeated_finish_repairs_a_missing_link(client, other_client):
+    friends(client, other_client)
+    value = start(client)
+    link(client, other_client)
+    saved = finish(client, value, 1)
+    with SessionLocal() as db:
+        for member in db.scalars(select(TrainTogetherMember)):
+            member.workout_id = None
+        db.commit()
+    again = finish(client, value, 1)
+    assert again["id"] == saved["id"] and again["trained_with_count"] == 1
+
+
+def test_discarding_an_old_draft_keeps_a_session_joined_since(client, other_client):
+    friends(client, other_client)
+    start(other_client)
+    link(client, other_client)
+    old = new_draft(lift(other_client))
+    with SessionLocal() as db:
+        affected = train_together.draft_changed(db, account(other_client), old, None)
+        db.commit()
+    assert affected == set()
+    assert len(read(client)["session"]["members"]) == 2
+
+
+def test_a_read_after_the_friendship_lapsed_says_nothing_about_the_other_person(
+    client, other_client
+):
+    friends(client, other_client)
+    start(client)
+    link(client, other_client)
+    with SessionLocal() as db:
+        db.execute(text("DELETE FROM friendships"))
+        db.commit()
+    body = other_client.get(BASE).text
+    for detail in (account(client), '"owner"', "Owner"):
+        assert detail not in body
+    assert read(other_client)["session"] is None
+    assert open_memberships(account(other_client)) == 0
+
+
+@pytest.mark.parametrize("change", ["block", "unblock", "unfriend", "private", "delete"])
+def test_a_partners_change_invalidates_cached_history(client, other_client, change):
+    friends(client, other_client)
+    mine, theirs = start(client), start(other_client)
+    link(client, other_client)
+    finish(client, mine, 1)
+    finish(other_client, theirs, 1)
+    if change == "unblock":
+        other_client.post(f"/api/sharing/blocks/{account(client)}")
+    before = client.get("/api/workouts/revision").json()["revision"]
+    if change == "block":
+        other_client.post(f"/api/sharing/blocks/{account(client)}")
+    elif change == "unblock":
+        other_client.delete(f"/api/sharing/blocks/{account(client)}")
+    elif change == "unfriend":
+        other_client.delete(f"/api/sharing/friends/{account(client)}")
+    elif change == "private":
+        share(other_client, "private")
+    else:
+        other_client.request("DELETE", "/api/profile", json={"password": TEST_PASSWORD})
+    assert client.get("/api/workouts/revision").json()["revision"] != before
+
+
+def test_disabling_a_partner_invalidates_cached_history(client, other_client):
+    friends(client, other_client)
+    mine = start(client)
+    link(client, other_client)
+    finish(client, mine, 1)
+    before = client.get("/api/workouts/revision").json()["revision"]
+    disabled = client.patch(f"/api/admin/users/{account(other_client)}", json={"disabled": True})
+    assert disabled.status_code == 200, disabled.text
+    assert client.get("/api/workouts/revision").json()["revision"] != before
+
+
+def test_restoring_an_older_archive_keeps_the_partner_on_the_other_history(client, other_client):
+    friends(client, other_client)
+    archive = client.get("/api/account-archive").content
+    mine, theirs = start(client), start(other_client)
+    link(client, other_client)
+    finish(client, mine, 1)
+    saved = finish(other_client, theirs, 1)
+    restored = client.post(
+        "/api/account-archive/restore",
+        files={"file": ("relay-archive.zip", archive, "application/zip")},
+    )
+    assert restored.status_code == 200, restored.text
+    kept = other_client.get(f"/api/workouts/{saved['id']}").json()
+    assert [person["user_id"] for person in kept["trained_with"]] == [account(client)]
+
+
+def test_new_references_are_checked_against_the_stored_draft(client, other_client):
+    friends(client, other_client)
+    value = start(client)
+    link(client, other_client)
+    sneaky = deepcopy(value)
+    sneaky["movements"].append(
+        {**deepcopy(value["movements"][0]), "key": "m2", "exerciseId": lift(other_client)}
+    )
+    # The base claims the partner's own exercise was already in the workout.
+    refused = partner_put(other_client, client, revision=1, base=sneaky, draft=with_set(sneaky))
+    assert refused.status_code == 422 and error(refused)["code"] == "train_change_not_allowed"
+    swapped = deepcopy(value)
+    swapped["movements"][0]["exerciseId"] = lift(client, "Back Squat")
+    refused = partner_put(other_client, client, revision=1, base=value, draft=swapped)
+    assert refused.status_code == 422 and error(refused)["code"] == "train_change_not_allowed"
+    photo = deepcopy(value)
+    photo["movements"][0]["machinePhotoIds"] = ["someone-elses-photo"]
+    refused = partner_put(other_client, client, revision=1, base=value, draft=photo)
+    assert refused.status_code == 422 and error(refused)["code"] == "train_change_not_allowed"
+    assert client.get("/api/active-workout").json()["revision"] == 1
+
+
+@pytest.mark.parametrize("missing", ["notes", "completed"])
+def test_a_partner_draft_must_stay_readable_by_the_owners_app(client, other_client, missing):
+    friends(client, other_client)
+    value = start(client)
+    link(client, other_client)
+    changed = with_set(value)
+    del changed["movements"][0]["sets"][-1][missing]
+    refused = partner_put(other_client, client, revision=1, base=value, draft=changed)
+    assert refused.status_code == 422 and error(refused)["code"] == "train_change_not_allowed"
+
+
+def expire(session_id: str, ago: timedelta = timedelta(seconds=1)) -> datetime:
+    at = utc_now() - ago
+    with SessionLocal() as db:
+        db.get(TrainTogetherSession, session_id).expires_at = at
+        db.commit()
+    return at
+
+
+def test_a_new_workout_after_expiry_is_not_linked(client, other_client):
+    friends(client, other_client)
+    session = link(client, other_client)["session"]["id"]
+    expire(session)
+    value = start(other_client)
+    saved = finish(other_client, value, 1)
+    assert saved["trained_with_count"] == 0
+
+
+def test_a_draft_linked_during_the_session_still_links_when_finished_late(client, other_client):
+    friends(client, other_client)
+    value = start(other_client)
+    session = link(client, other_client)["session"]["id"]
+    with SessionLocal() as db:
+        # The session started an hour ago and lapsed half an hour ago.
+        for member in db.scalars(select(TrainTogetherMember)):
+            member.joined_at = utc_now() - timedelta(hours=1)
+        db.commit()
+    at = expire(session, timedelta(minutes=30))
+    saved = finish(other_client, value, 1)
+    assert saved["trained_with_count"] == 1
+    with SessionLocal() as db:
+        ended = db.get(TrainTogetherSession, session)
+        assert ended.ended_reason == "expired"
+        assert abs(as_utc(ended.ended_at) - at) < timedelta(seconds=1)
+    # The notice window counts from the real expiry, so it has already passed.
+    assert read(client)["ended"] is None
+
+
+def test_the_same_exercise_twice_answers_a_conflict(client, other_client):
+    friends(client, other_client)
+    value = start(client)
+    link(client, other_client)
+    squat = lift(client, "Back Squat")
+
+    def with_squat(draft: dict, key: str) -> dict:
+        changed = deepcopy(draft)
+        changed["movements"].append(
+            {**deepcopy(draft["movements"][0]), "key": key, "exerciseId": squat}
+        )
+        return changed
+
+    # Both add squats against the same copy, and the owner's lands first.
+    owner = with_squat(value, "owner-squat")
+    client.put("/api/active-workout", json={"revision": 1, "base": value, "draft": owner})
+    response = partner_put(
+        other_client, client, revision=1, base=value, draft=with_squat(value, "p")
+    )
+    assert response.status_code == 200 and response.json()["conflict"] is True
+    assert response.json()["draft"] == owner
+    # Adding an exercise the workout already has.
+    again = partner_put(other_client, client, revision=2, base=owner, draft=with_squat(owner, "p2"))
+    assert again.json()["conflict"] is True
+    assert client.get("/api/active-workout").json()["revision"] == 2
+
+
+def test_every_workout_response_carries_who_it_was_trained_with(client, other_client):
+    friends(client, other_client)
+    uploaded = upload_photo(client, lift(client))
+    assert uploaded.status_code in (200, 201), uploaded.text
+    photo = uploaded.json()["id"]
+    value = start(client)
+    link(client, other_client)
+    payload = finish_payload(value, 1)
+    payload["movements"][0]["machine_photo_ids"] = [photo]
+    payload["movements"][0]["sets"][0]["machine_photo_id"] = photo
+    first = client.post("/api/workouts", json=payload)
+    assert first.status_code == 201, first.text
+    retry = client.post("/api/workouts", json=payload)
+    assert retry.status_code == 201, retry.text
+    detail = client.get(f"/api/workouts/{first.json()['id']}")
+    pinned = client.get(f"/api/machine-photos/{photo}/workouts")
+    for body in (first.json(), retry.json(), detail.json(), pinned.json()[0]):
+        assert body["trained_with_count"] == 1
+        assert body["trained_with"][0]["user_id"] == account(other_client)
+
+
+def test_an_overlong_code_reads_as_expired(client, other_client):
+    friends(client, other_client)
+    refused = join(other_client, "x" * 201)
+    assert refused.status_code == 404 and error(refused)["code"] == "train_invite_expired"
 
 
 # Migration

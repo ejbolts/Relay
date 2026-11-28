@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Callable
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 from uuid import UUID
@@ -229,7 +230,12 @@ def change_draft(
     change: DraftChange,
     attempts: int = 3,
     client_version: str | None = None,
+    accept: Callable[[dict | None, dict | None], bool] | None = None,
 ) -> dict:
+    """``accept(stored, merged)``, when given, can refuse a merge as a conflict (train together)."""
+    # Train together keeps a member's session in step with their draft, in this transaction.
+    from .train_together import draft_changed, notify
+
     row = db.get(ActiveWorkoutSync, user_id)
     current = snapshot(row)
     remote = current["draft"]
@@ -288,6 +294,8 @@ def change_draft(
                 format_validation_errors(error.errors())
                 or "The combined workout exceeds the live draft limits.",
             ) from error
+        if accept is not None and not accept(remote, merged):
+            return {**current, "conflict": True}
         session_id = merged["clientSessionId"]
         if (
             db.query(TrainingWorkout.id)
@@ -324,6 +332,8 @@ def change_draft(
     if row is None:
         db.add(ActiveWorkoutSync(user_id=user_id, **values))
         try:
+            db.flush()
+            affected = draft_changed(db, user_id, remote, merged)
             db.commit()
         except IntegrityError:
             db.rollback()
@@ -341,14 +351,12 @@ def change_draft(
             db.rollback()
             db.expire_all()
             if attempts > 1:
-                return change_draft(db, user_id, change, attempts - 1, client_version)
+                return change_draft(db, user_id, change, attempts - 1, client_version, accept)
             return {**snapshot(db.get(ActiveWorkoutSync, user_id)), "conflict": True}
+        affected = draft_changed(db, user_id, remote, merged)
         db.commit()
     hub.active_workout_changed(user_id)
-    # Train together: keep the member's session current and tell their partners.
-    from .train_together import draft_changed
-
-    draft_changed(db, user_id, merged)
+    notify(affected)
     return {"revision": values["revision"], "draft": merged, "conflict": False}
 
 

@@ -596,18 +596,25 @@ calls to registration/login and password hashing always use the real implementat
 ## Training together
 
 A train-together **session** links two to four friends' live workouts so either phone can log
-for either person (`backend/app/train_together.py`, routes under `/api/train-together`). A
-member is in at most one session; it ends when fewer than two members remain, after 12 hours,
-or, while only its creator is in it, when the creator's last code expires. Finishing or
-discarding your workout, unfriending or blocking a partner, and deleting your account all leave
-the session. Expired sessions and codes are ended lazily, when next read or written.
+for either person (`backend/app/train_together.py`, routes under `/api/train-together`). Each
+stint in a session is its own attendance row (`train_together_members`), so a rejoin starts a
+new one, and an account has at most one open attendance (a partial unique index). A session
+ends when fewer than two members remain, after 12 hours, or, while only its creator is in it,
+when the creator's last code expires. Finishing or discarding the workout an attendance belongs
+to, unfriending or blocking a partner, and deleting or disabling your account all leave the
+session. Lapsed sessions and codes are ended lazily, when next read or written, and are recorded
+as ending at the time they lapsed. Deleting the account that started a session clears its
+`created_by` (the API then sends `null`); the session and everyone else's attendance stay.
 
 **Invites.** `POST /api/train-together/invite` returns a 128-bit random token, stored only as a
 hash, valid for five minutes and usable once; a new one cancels the creator's unused code. The
 QR code and share link are `<origin>/#train=<token>`. `POST /api/train-together/join` is the
 consent: the joiner becomes a member at once, provided they have an accepted friendship with
 every current member and no block either way. Profile visibility does not matter for joining.
-An unknown, used or expired code says only that it has expired.
+Admission takes SQLite's write lock first and claims the code with a conditional update, so two
+scans of one code, two arrivals for the last place or one account joining two sessions are
+decided one at a time; any refusal rolls the claim back. An unknown, used, expired or malformed
+code (whatever its length) says only that it has expired.
 
 **Partner writes.** Each member keeps their own live draft (`active_workout_sync`). A partner's
 edit, `PUT /api/train-together/members/{user_id}/workout` with `{revision, base, draft}`, runs
@@ -615,22 +622,44 @@ the same `change_draft` three-way merge on the owner's row that another of the o
 would. The owner's apps, of any version, receive it through their ordinary draft sync, two
 people editing at once merge like two devices, and nothing new is stored inside the draft. A
 partner may change only `movements` and the activity times (`updatedAt`, `lastActiveAt`,
-`inactiveFinishAt`), and may add only the owner's own exercises and machine photos. The server
-refuses a change without a `base` or `draft`, with `replace` or `autoSave`, to any other field,
-or for another workout session (`422 train_change_not_allowed`). Every read and write checks
-again that both accounts are active members of the same session and still friends.
+`inactiveFinishAt`). Checked against the owner's stored draft, never the caller's base, a
+partner may add only the owner's own exercises, may not change which exercise an existing
+movement is and may not bring in a machine photo the workout does not already use. Every set
+must carry `completed` and `notes`, as the owner's apps require. The server refuses a change
+without a `base` or `draft`, with `replace` or `autoSave`, to any other field, or for another
+workout session (`422 train_change_not_allowed`). A merge that would leave the same exercise in
+the workout twice answers `conflict: true` with the stored copy. Every read and write checks
+again that both accounts are active members of the same session and still friends, including
+after the write and before the answer: if access ended meanwhile, the answer is `404` with no
+draft. A session read that finds a member the caller is no longer friends with ends the
+caller's attendance (`unfriended`) instead of showing them.
+
+**Auto-save after a partner's edit.** The server saves only the finished workout the owner's
+app prepared for exactly the stored revision (`autoSave`), and never builds one itself. A
+partner's edit makes a new revision, so the prepared copy is cleared until the owner's app next
+syncs an edit of its own. Until then the workout stays in progress rather than saving itself,
+and the owner is asked to finish it when they open the app.
 
 **Saved workouts.** Saving a workout from a session's draft (by the app or by auto-save) links it
-through the member row, never the workout's own fields, so the full-replace workout save is
-unchanged. `TrainingWorkoutRead` carries `trained_with` (the viewer and the members they may
-see) and `trained_with_count` (everyone who was in the session at the same time).
+to the newest attendance with that draft, in the same transaction as the save, never through the
+workout's own fields, so the full-replace workout save is unchanged. A repeated finish repairs a
+missing link, and a workout saved after its session ended still links. `TrainingWorkoutRead`
+carries `trained_with` (the viewer and the members they may see) and `trained_with_count`
+(everyone whose attendance overlapped), on every path that returns a workout. Because the list
+depends on what the viewer may see, blocking, unblocking, removing a friend, changing profile
+visibility, and disabling or deleting an account refresh the workout cache revision of everyone
+who has shared a session with that account. Restoring an account archive clears links to
+workouts the archive does not have, rather than removing the attendance.
 
-**Socket.** `{"type": "train_together"}`, with no contents, goes to every window of every member
-(and anyone just removed) after a join, a leave, the session ending, and any member's draft
-changing. Clients refetch `GET /api/train-together`. Older apps ignore the unknown type.
+**Hooks and the socket.** The draft, save, friendship and account hooks change the session in
+the same transaction as the change that causes them, and notify after it commits.
+`{"type": "train_together"}`, with no contents, goes to every window of every member (and anyone
+just removed) after a join, a leave, the session ending, and any member's draft changing.
+Clients refetch `GET /api/train-together`. Older apps ignore the unknown type.
 
-The shared rules, wording and the partner request loop are in `frontend/src/trainTogether.ts`,
-which the web and the native app both import.
+The shared rules, wording and the partner request loop (`PartnerWorkoutSync`, which replays later
+edits after a refused one and applies the newest read once its queue settles) are in
+`frontend/src/trainTogether.ts`, which the web and the native app both import.
 
 ## App versions and API compatibility
 
