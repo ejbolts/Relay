@@ -59,6 +59,21 @@ function publishAdminActivity(activity: AdminActivity | null) {
   adminListeners.forEach((listener) => listener(activity));
 }
 
+// Train together: the socket says `train_together` when a session or a member's workout changes,
+// and the session is read again. A reconnect is also a reason to read it again, since messages
+// sent while the socket was down are lost.
+const trainListeners = new Set<() => void>();
+
+/** Hears `train_together` messages and socket reconnects. Returns the unsubscribe. */
+export function onTrainTogether(listener: () => void): () => void {
+  trainListeners.add(listener);
+  return () => void trainListeners.delete(listener);
+}
+
+function publishTrainTogether() {
+  trainListeners.forEach((listener) => listener());
+}
+
 /** One socket for the signed-in engine, while the app is visible and the network is available. */
 export function connectLivePresence(listeners: Listeners) {
   let socket: WebSocket | null = null;
@@ -128,6 +143,7 @@ export function connectLivePresence(listeners: Listeners) {
         adminSubscribed = false;
         sendAdminSubscription();
         listeners.onOpen();
+        publishTrainTogether();
       };
       current.onmessage = (event) => {
         if (socket !== current) return;
@@ -135,6 +151,7 @@ export function connectLivePresence(listeners: Listeners) {
         if (message?.type === 'active_workout') listeners.onActiveWorkout();
         if (message?.type === 'presence') listeners.onFriendPresence(message);
         if (message?.type === 'notifications') listeners.onNotifications?.();
+        if (message?.type === 'train_together') publishTrainTogether();
         if (message?.type === 'admin_activity_sync') publishAdminActivity(null);
         if (message?.type === 'admin_activity')
           publishAdminActivity({ userId: message.user_id, presence: message.presence });

@@ -371,8 +371,13 @@ def update_user(
     if payload.disabled and user.id == admin.id:
         raise api_error(409, "cannot_disable_self", "You cannot disable your own account.")
     endpoints: list[str] = []
+    # Train together: a disabled account leaves its session; histories naming it refresh.
+    from .train_together import account_removed, notify
+
+    trained: set[str] = set()
     if payload.disabled and user.disabled_at is None:
         user.disabled_at = utc_now()
+        trained = account_removed(db, user.id)
         # Sign the account out everywhere and stop any alerts it has scheduled.
         db.execute(delete(UserSession).where(UserSession.user_id == user.id))
         remove_account_tokens(db, user.id)
@@ -382,6 +387,7 @@ def update_user(
     elif not payload.disabled:
         user.disabled_at = None
     db.commit()
+    notify(trained)
     for endpoint in endpoints:
         request.app.state.rest_timer_notifications.cancel_endpoint(endpoint)
         request.app.state.workout_reminders.cancel(endpoint=endpoint, user_id=user.id)

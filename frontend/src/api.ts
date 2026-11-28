@@ -1,5 +1,12 @@
 import type { AppNotices } from './appNotices';
 import type { BodySizeLog } from './bodySizes';
+import type {
+  TrainExercise,
+  TrainInvite,
+  TrainPartnerChange,
+  TrainPartnerWriteResult,
+  TrainTogetherRead,
+} from './trainTogether';
 import type { ActiveWorkoutDraft } from './workoutDraft';
 import type { NotificationReadReference } from './types';
 import type {
@@ -130,11 +137,17 @@ import {
   type BodyMeasurementTransport,
 } from './bodyMeasurementStore';
 
+export interface ApiErrorMember {
+  user_id: string;
+  name: string;
+}
+
 export class ApiError extends Error {
   constructor(
     message: string,
     public readonly code = 'request_failed',
     public readonly status = 0,
+    public readonly member?: ApiErrorMember,
   ) {
     super(message);
   }
@@ -277,7 +290,7 @@ async function request<T>(
   if (!serverDown) reportServerReached();
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as {
-      error?: { code?: string; message?: string };
+      error?: { code?: string; message?: string; member?: unknown };
     } | null;
     checkAccount();
     if (isClientOutdated(response.status, body?.error?.code)) reportClientOutdated();
@@ -288,10 +301,22 @@ async function request<T>(
     ) {
       emitAuthExpired();
     }
+    const rawMember = body?.error?.member;
+    const member =
+      rawMember &&
+      typeof rawMember === 'object' &&
+      typeof (rawMember as { user_id?: unknown }).user_id === 'string' &&
+      typeof (rawMember as { name?: unknown }).name === 'string'
+        ? {
+            user_id: (rawMember as { user_id: string }).user_id,
+            name: (rawMember as { name: string }).name,
+          }
+        : undefined;
     throw new ApiError(
       body?.error?.message ?? `Request failed (${response.status})`,
       body?.error?.code,
       response.status,
+      member,
     );
   }
   const value = response.status === 204 ? (undefined as T) : ((await response.json()) as T);
@@ -567,6 +592,32 @@ export const api = {
         body: JSON.stringify(change),
       },
     ),
+  // Train together; see trainTogether.ts.
+  trainTogether: {
+    read: () => request<TrainTogetherRead>('/api/train-together'),
+    invite: () => request<TrainInvite>('/api/train-together/invite', { method: 'POST' }),
+    join: (token: string) =>
+      request<TrainTogetherRead>('/api/train-together/join', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token }),
+      }),
+    leave: () => request<TrainTogetherRead>('/api/train-together/leave', { method: 'POST' }),
+    partnerExercises: (userId: string) =>
+      request<TrainExercise[]>(
+        `/api/train-together/members/${encodeURIComponent(userId)}/exercises`,
+      ),
+    changePartnerWorkout: (userId: string, change: TrainPartnerChange) =>
+      request<TrainPartnerWriteResult>(
+        `/api/train-together/members/${encodeURIComponent(userId)}/workout`,
+        {
+          method: 'PUT',
+          signal: AbortSignal.timeout(10_000),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(change),
+        },
+      ),
+  },
   youtube: {
     connection: () => request<YouTubeConnection>('/api/youtube/connection'),
     connect: () => request<{ url: string }>('/api/youtube/connect', { method: 'POST' }),

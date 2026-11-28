@@ -206,6 +206,19 @@ class PresenceHub:
                         deliver(window, {"type": "notifications"}), window.loop
                     )
 
+    def train_together_changed(self, *user_ids: str) -> None:
+        """Ask train-together members to refetch their session, after the change commits.
+
+        Like inboxes, nothing about the session travels over the socket; each window fetches
+        what its own account may see.
+        """
+        for window in self.windows_for(list(set(user_ids))):
+            if not window.loop.is_closed():
+                with contextlib.suppress(RuntimeError):
+                    asyncio.run_coroutine_threadsafe(
+                        deliver(window, {"type": "train_together"}), window.loop
+                    )
+
 
 hub = PresenceHub()
 

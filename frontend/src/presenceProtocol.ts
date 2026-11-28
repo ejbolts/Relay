@@ -37,7 +37,7 @@ export type FriendPresenceEvent = {
 
 type PresenceEvent =
   | FriendPresenceEvent
-  | { type: 'active_workout' | 'notifications' | 'admin_activity_sync' }
+  | { type: 'active_workout' | 'notifications' | 'admin_activity_sync' | 'train_together' }
   | { type: 'admin_activity'; user_id: string; presence: FriendPresence };
 
 export function decodePresenceEvent(data: unknown): PresenceEvent | null {
@@ -46,7 +46,12 @@ export function decodePresenceEvent(data: unknown): PresenceEvent | null {
     const message: unknown = JSON.parse(data);
     if (!message || typeof message !== 'object' || !('type' in message)) return null;
     const { type } = message;
-    if (type === 'active_workout' || type === 'notifications' || type === 'admin_activity_sync')
+    if (
+      type === 'active_workout' ||
+      type === 'notifications' ||
+      type === 'admin_activity_sync' ||
+      type === 'train_together'
+    )
       return { type };
     if (!('user_id' in message) || typeof message.user_id !== 'string' || !('presence' in message))
       return null;

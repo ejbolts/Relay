@@ -79,6 +79,7 @@ import './settingsHub.css';
 import './colourThemes.css';
 import './adminScreen.css';
 import './liveWorkout.css';
+import './trainTogether.css';
 import './finishedWorkout.css';
 import './workoutEditGuard.css';
 import './weeklySetsShelf.css';

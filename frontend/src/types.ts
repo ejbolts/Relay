@@ -1,4 +1,5 @@
 import type { BodySizeLog } from './bodySizes';
+import type { TrainedWith } from './trainTogether';
 export type SessionStatus =
   | 'draft'
   | 'uploading'
@@ -242,6 +243,10 @@ export interface TrackedWorkout {
   movements: TrackedMovement[];
   /** Absent from data saved before workouts could carry photos. */
   photos?: WorkoutPhoto[];
+  /** Train together: who it was trained with, as the viewer may see them. Absent from older servers. */
+  trained_with?: TrainedWith[];
+  /** Everyone it was trained with, including people the viewer cannot see. */
+  trained_with_count?: number;
 }
 
 export interface WorkoutCacheRevision {
