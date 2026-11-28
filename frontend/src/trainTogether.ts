@@ -651,6 +651,42 @@ export function partnerConflictNotice(name: string): string {
   return `${name}'s workout changed. Your last edit wasn't applied.`;
 }
 
+// A failed write to a partner's workout. Each app reads `status` and `code` from its own error
+// type and asks these, so both handle a refusal the same way.
+
+const ACCESS_ENDED_CODES: readonly string[] = [TRAIN_ERRORS.notPartner, TRAIN_ERRORS.noWorkout];
+const REFUSED_CODES: readonly string[] = [...ACCESS_ENDED_CODES, TRAIN_ERRORS.changeNotAllowed];
+
+/**
+ * Whether the server refused the change, so sending it again cannot help: a train-together
+ * refusal code, or any 4xx other than a timeout (408) or a rate limit (429). No answer, no
+ * status, 408, 429 and every 5xx are not refusals: keep the edit and offer Retry.
+ */
+export function partnerWriteRefused(status: number | undefined, code: string | undefined): boolean {
+  if (code !== undefined && REFUSED_CODES.includes(code)) return true;
+  return status !== undefined && status >= 400 && status <= 499 && status !== 408 && status !== 429;
+}
+
+/** Whether the refusal means the partner's workout is no longer open to the caller. */
+export function partnerAccessEnded(code: string | undefined): boolean {
+  return code !== undefined && ACCESS_ENDED_CODES.includes(code);
+}
+
+export function partnerAccessEndedNotice(name: string): string {
+  return `${name}\u2019s workout is no longer open to you.`;
+}
+
+/** The server's own words for a refused change, or a general line when it sent none. */
+export function partnerChangeRefusedNotice(message: string | undefined): string {
+  return message?.trim() || 'That change could not be saved.';
+}
+
+export const leaveFailedNotice = 'Couldn\u2019t leave the session. Try again.';
+
+export function friendRequestSentNotice(name: string): string {
+  return `Friend request sent to ${name}`;
+}
+
 /** Whole seconds until a code expires, never below zero. */
 export function inviteSecondsLeft(expiresAt: string | number, now: number): number {
   const at = typeof expiresAt === 'number' ? expiresAt : Date.parse(expiresAt);
