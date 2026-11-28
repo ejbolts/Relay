@@ -227,7 +227,6 @@ describe('swapping an exercise', () => {
       option(jest.mocked(showMenu).mock.calls[0][1], 'Swap exercise').onPress(),
     );
     expect(await screen.findByText('Swap Bench Press')).toBeVisible();
-    expect(screen.getByText('2 planned sets move across')).toBeVisible();
     // Nothing in the sample library trains the same muscles, so browse every exercise.
     expect(screen.getByText('No close alternatives')).toBeVisible();
     // The saved machines: one, for another exercise, so the list shows once they have loaded.
@@ -268,6 +267,26 @@ describe('swapping an exercise', () => {
     await act(async () => undo!.run());
     expect(readActiveWorkoutDraft(deviceStorage)?.movements.map((item) => item.exerciseId)).toEqual(
       ['bench'],
+    );
+  });
+
+  it('searches the whole library from the swap sheet', async () => {
+    await openLogger();
+    await fireEvent.press(screen.getByRole('button', { name: 'Actions for Bench Press' }));
+    await act(async () =>
+      option(jest.mocked(showMenu).mock.calls[0][1], 'Swap exercise').onPress(),
+    );
+    expect(await screen.findByText('Swap Bench Press')).toBeVisible();
+    const search = screen.getByLabelText('Search exercises');
+    await fireEvent.changeText(search, 'zzz');
+    expect(screen.getByText('No exercises match that search.')).toBeVisible();
+    // Overhead Press is no alternative to a bench press, but a search finds it, typo and all.
+    await fireEvent.changeText(search, 'overhed');
+    expect(screen.getByText('Search results')).toBeVisible();
+    await fireEvent.press(screen.getByRole('button', { name: 'Overhead Press' }));
+    expect(await screen.findByText('Swapped from Bench Press')).toBeVisible();
+    expect(readActiveWorkoutDraft(deviceStorage)?.movements.map((item) => item.exerciseId)).toEqual(
+      ['press'],
     );
   });
 });

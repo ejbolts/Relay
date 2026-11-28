@@ -1,4 +1,5 @@
 import { exerciseEquipment } from './exerciseEquipment';
+import { rankExerciseSearchMatches } from './exerciseSearch';
 import type { Exercise } from './types';
 import type { WorkoutDraftMovement, WorkoutDraftSet } from './workoutMovements';
 
@@ -92,6 +93,39 @@ export function rankSwapAlternatives(
         (recentRank.get(a.exercise.id) ?? Infinity) - (recentRank.get(b.exercise.id) ?? Infinity) ||
         a.exercise.name.localeCompare(b.exercise.name),
     );
+}
+
+/**
+ * The swap sheet's search: any exercise in the library, not only the close alternatives, ranked
+ * as the exercise picker ranks a search, typos included. An exercise keeps its muscle match when
+ * it is close enough to be offered as an alternative.
+ */
+export function searchSwapAlternatives(
+  original: Exercise,
+  exercises: Exercise[],
+  query: string,
+  {
+    excludedIds = [],
+    recentExerciseIds = [],
+  }: {
+    excludedIds?: readonly string[];
+    recentExerciseIds?: readonly string[];
+  } = {},
+): SwapAlternative[] {
+  if (!query.trim()) return [];
+  const excluded = new Set([original.id, ...excludedIds]);
+  const candidates = exercises.filter((exercise) => !excluded.has(exercise.id) && !exercise.hidden);
+  return rankExerciseSearchMatches(candidates, query, recentExerciseIds).map((exercise) => {
+    const match =
+      original.kind === 'cardio' || exercise.kind !== original.kind
+        ? null
+        : muscleMatchPercent(original, exercise);
+    return {
+      exercise,
+      match: match !== null && match >= MIN_SWAP_MATCH ? match : null,
+      equipment: exerciseEquipment(exercise.equipment),
+    };
+  });
 }
 
 function isWarmup(set: WorkoutDraftSet): boolean {
@@ -201,20 +235,6 @@ export function swapAlternativeGroups(
           items: alternatives.filter((item) => (item.match ?? 0) < SAME_MUSCLES_MATCH),
         },
       ];
-}
-
-const plural = (count: number, word: string) => `${count} ${word}${count === 1 ? '' : 's'}`;
-
-/** What a swap does with the sets: "2 planned sets move across · 1 logged set stays". */
-export function swapCarrySummary(plannedSetCount: number, loggedSetCount: number): string {
-  return [
-    plannedSetCount ? `${plural(plannedSetCount, 'planned set')} move across` : null,
-    loggedSetCount
-      ? `${plural(loggedSetCount, 'logged set')} ${loggedSetCount === 1 ? 'stays' : 'stay'}`
-      : null,
-  ]
-    .filter(Boolean)
-    .join(' · ');
 }
 
 /** The original's muscles an alternative does not train, shown crossed out beside its own. */

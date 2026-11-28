@@ -5,10 +5,11 @@ import {
   missingSwapMuscles,
   rankSwapAlternatives,
   SAME_MUSCLES_MATCH,
+  searchSwapAlternatives,
   swapAlternativeGroups,
-  swapCarrySummary,
   swapMuscleCreditList,
 } from './exerciseSwap';
+import { FuzzyHighlightedText } from './FuzzyHighlightedText';
 import { Icon } from './Icon';
 import { PopupDialog } from './PopupDialog';
 import type { Exercise } from './types';
@@ -44,11 +45,12 @@ function MuscleChips({ original, alternative }: { original: Exercise; alternativ
   );
 }
 
-/** Pick a replacement for an exercise mid-workout, ranked by its muscle-credit overlap. */
+/**
+ * Pick a replacement for an exercise mid-workout, ranked by its muscle-credit overlap. A search
+ * looks through the whole library instead.
+ */
 export function ExerciseSwapSheet({
   exercise,
-  plannedSetCount,
-  loggedSetCount,
   exercises,
   excludedIds,
   recentExerciseIds,
@@ -58,8 +60,6 @@ export function ExerciseSwapSheet({
   onClose,
 }: {
   exercise: Exercise;
-  plannedSetCount: number;
-  loggedSetCount: number;
   exercises: Exercise[];
   excludedIds: string[];
   recentExerciseIds: string[];
@@ -70,9 +70,16 @@ export function ExerciseSwapSheet({
 }) {
   const [today] = useState(localDate);
   const [equipment, setEquipment] = useState(ALL_EQUIPMENT);
+  const [search, setSearch] = useState('');
+  const [searchFocused, setSearchFocused] = useState(false);
+  const query = search.trim();
   const alternatives = useMemo(
     () => rankSwapAlternatives(exercise, exercises, { excludedIds, recentExerciseIds }),
     [exercise, exercises, excludedIds, recentExerciseIds],
+  );
+  const results = useMemo(
+    () => searchSwapAlternatives(exercise, exercises, query, { excludedIds, recentExerciseIds }),
+    [exercise, exercises, query, excludedIds, recentExerciseIds],
   );
   const equipmentOptions = useMemo(
     () => [...new Set(alternatives.map((item) => item.equipment))].sort(),
@@ -82,19 +89,36 @@ export function ExerciseSwapSheet({
     (item) => equipment === ALL_EQUIPMENT || item.equipment === equipment,
   );
   const cardio = exercise.kind === 'cardio';
-  const groups = swapAlternativeGroups(shown, cardio);
-  const carry = swapCarrySummary(plannedSetCount, loggedSetCount);
+  const groups = query
+    ? [{ label: 'Search results', items: results }]
+    : swapAlternativeGroups(shown, cardio);
 
   return (
     <PopupDialog
       variant="sheet"
       title={`Swap ${exercise.name}`}
-      className="exercise-swap-sheet"
+      // Searching holds the sheet at full height, so the field stays put as results narrow.
+      className={`exercise-swap-sheet${query || searchFocused ? ' is-searching' : ''}`}
       onClose={onClose}
     >
       <div className="exercise-swap-body">
-        {carry && <p className="exercise-swap-carry">{carry}</p>}
-        {equipmentOptions.length > 1 && (
+        <label className="exercise-swap-search">
+          <Icon name="search" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            onFocus={() => setSearchFocused(true)}
+            onBlur={() => setSearchFocused(false)}
+            placeholder="Search exercises"
+            aria-label="Search exercises"
+            enterKeyHint="search"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+          />
+        </label>
+        {!query && equipmentOptions.length > 1 && (
           <div className="exercise-swap-filters" role="group" aria-label="Equipment">
             {[ALL_EQUIPMENT, ...equipmentOptions].map((option) => (
               <button
@@ -128,7 +152,9 @@ export function ExerciseSwapSheet({
                           </span>
                           <span className="exercise-swap-copy">
                             <span className="exercise-swap-title">
-                              <strong>{alternative.name}</strong>
+                              <strong>
+                                <FuzzyHighlightedText value={alternative.name} query={query} />
+                              </strong>
                               {match !== null && (
                                 <span
                                   className={`exercise-swap-match ${match >= SAME_MUSCLES_MATCH ? 'same' : 'close'}`}
@@ -157,9 +183,13 @@ export function ExerciseSwapSheet({
               </section>
             ),
         )}
-        {!shown.length && (
+        {(query ? !results.length : !shown.length) && (
           <p className="exercise-swap-empty">
-            {alternatives.length ? 'No matches with this equipment' : 'No close alternatives'}
+            {query
+              ? 'No exercises match that search.'
+              : alternatives.length
+                ? 'No matches with this equipment'
+                : 'No close alternatives'}
           </p>
         )}
         <button type="button" className="exercise-swap-browse" onClick={onBrowseAll}>

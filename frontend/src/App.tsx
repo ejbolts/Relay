@@ -5608,8 +5608,6 @@ function WorkoutLogger({
         <ExerciseSwapSheet
           key={swapSheetMovement.key}
           exercise={swapSheetMovement.exercise}
-          plannedSetCount={swapSheetMovement.sets.filter((item) => !item.completed).length}
-          loggedSetCount={swapSheetMovement.sets.filter((item) => item.completed).length}
           exercises={exercises}
           excludedIds={movements.map((item) => item.exercise.id)}
           recentExerciseIds={recentExerciseIds}
