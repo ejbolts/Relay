@@ -4956,6 +4956,14 @@ function WorkoutLogger({
           onRename={openNameEditor}
           onAdjustTime={() => setTimeEditorOpen(true)}
           onAddNote={() => revealDetails('.workout-notes textarea')}
+          workoutTypes={typeOptions.map((type) => ({
+            id: type.id,
+            name: type.archived ? `${type.name} (removed)` : type.name,
+            color: workoutTypeColor(type, categoryColors),
+          }))}
+          selectedTypeId={customTypeId ?? category}
+          typesLoading={workoutTypes.loading}
+          onChooseType={readOnly ? undefined : chooseWorkoutType}
           onTogglePause={toggleWorkoutPause}
           onStartRest={restTimerEnabled ? startRestTimer : undefined}
           restRunning={restActive}

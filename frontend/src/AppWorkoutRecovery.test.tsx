@@ -26,6 +26,7 @@ import {
 } from './finishedWorkoutQueue';
 import { isStrengthPrEligible } from './workoutPr';
 import { createWorkoutSet } from './workoutSets';
+import { DEFAULT_WORKOUT_TYPES } from './workoutTypes';
 import { applyReduceMotion } from './motion';
 import type {
   DashboardData,
@@ -1460,6 +1461,27 @@ describe('rest time controls', () => {
     expect(details.querySelector<HTMLTextAreaElement>('.workout-notes textarea')?.value).toBe(
       'Workout notes survive',
     );
+  });
+
+  it('changes the workout type from the workout menu, and its automatic name with it', async () => {
+    vi.spyOn(api, 'getWorkoutTypes').mockResolvedValue(DEFAULT_WORKOUT_TYPES);
+    vi.spyOn(api, 'getWorkoutTypeExercises').mockResolvedValue([]);
+    writeActiveWorkoutDraft(storedDraft({ name: '' }));
+    await mount();
+    const title = () => container.querySelector('.live-workout-header strong')?.textContent;
+    expect(title()).toBe('Upper body workout');
+    await click('Workout options');
+    await click('Workout type: Upper body');
+    await click('Push');
+    expect(readActiveWorkoutDraft()!.category).toBe('push');
+    expect(title()).toBe('Push workout');
+    // The details' own menu shows the same choice.
+    const select = [...container.querySelectorAll('label')]
+      .find((label) => label.textContent?.startsWith('Workout type'))!
+      .querySelector('select')!;
+    expect(select.value).toBe('push');
+    await click('Workout options');
+    expect(container.querySelector('[aria-label="Workout type: Push"]')).not.toBeNull();
   });
 
   it.each([false, true])(

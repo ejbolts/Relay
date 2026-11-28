@@ -83,6 +83,8 @@ const PATHS = {
   lock: 'M7.5 11V8a4.5 4.5 0 0 1 9 0v3M6.5 11h11a1.5 1.5 0 0 1 1.5 1.5v6.5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19v-6.5A1.5 1.5 0 0 1 6.5 11z',
   male: 'M10 19.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM14 10l6-6M15 4h5v5',
   female: 'M12 14.5a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11zM12 14.5v7M8.5 18h7',
+  // A price tag, for a workout's type.
+  tag: 'M3.5 6v5.6a1.5 1.5 0 0 0 .4 1.1l7.9 7.9a1.5 1.5 0 0 0 2.1 0l6.2-6.2a1.5 1.5 0 0 0 0-2.1l-7.9-7.9a1.5 1.5 0 0 0-1.1-.4H5.5a2 2 0 0 0-2 2zM8 8.5h.01',
   // Two dotted vertical lines, for the lines marking each new year on a chart.
   'year-lines': 'M8 4v2.5M8 10.75v2.5M8 17.5V20M16 4v2.5M16 10.75v2.5M16 17.5V20',
 } as const;
