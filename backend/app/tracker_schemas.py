@@ -106,6 +106,8 @@ class ExerciseRead(BaseModel):
     hidden: bool = False
     partial_sets_default: bool = Field(default=True, validation_alias="partial_sets_enabled")
     partial_set_weeks: list[ExercisePartialSetWeekRead] = []
+    # The logger offers partial and assisted reps on this exercise's sets.
+    extra_reps_enabled: bool = False
     muscle_contributions: list[MuscleContributionRead] = []
 
     @computed_field
@@ -154,6 +156,8 @@ class ExerciseUpdate(BaseModel):
 
     name: str | None = Field(default=None, min_length=1, max_length=160)
     hidden: bool | None = None
+    # Strength exercises only: track partial and assisted reps on its sets.
+    extra_reps_enabled: bool | None = None
     equipment: str | None = Field(default=None, max_length=100)
     muscle_set_credits: list[MuscleSetCreditCreate] | None = Field(
         default=None, min_length=1, max_length=100
@@ -240,6 +244,10 @@ class MachinePhotoUsageRead(MachinePhotoRead):
 class WorkoutSetCreate(BaseModel):
     machine_photo_id: str | None = Field(default=None, max_length=36)
     reps: int | None = Field(default=None, ge=0, le=10_000)
+    # Reps after the full ones: through part of the range, or with help. Apps that predate them
+    # leave them out, and a replaced set then keeps what it had (see client_versions).
+    partial_reps: int | None = Field(default=None, ge=0, le=10_000)
+    assisted_reps: int | None = Field(default=None, ge=0, le=10_000)
     weight_kg: float | None = Field(default=None, ge=0, le=10_000)
     rpe: float | None = Field(default=None, ge=1, le=10)
     rest_seconds: int | None = Field(default=None, ge=0, le=7_200)
@@ -375,6 +383,8 @@ class WorkoutSetRead(BaseModel):
     id: str
     order_index: int
     reps: int | None
+    partial_reps: int | None = None
+    assisted_reps: int | None = None
     weight_kg: float | None
     rpe: float | None
     rest_seconds: int | None

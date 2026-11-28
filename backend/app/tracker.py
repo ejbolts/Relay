@@ -1229,6 +1229,11 @@ def update_exercise(
         hidden = hidden_exercise_ids(db, user.id)
         hidden = hidden | {exercise.id} if payload.hidden else hidden - {exercise.id}
         set_setting(db, user.id, HIDDEN_EXERCISES_KEY, json.dumps(sorted(hidden)))
+    if payload.extra_reps_enabled is not None:
+        if payload.extra_reps_enabled and exercise.kind == ExerciseKind.CARDIO:
+            raise HTTPException(status_code=422, detail="Cardio exercises have no reps to track.")
+        # Sets keep the partial and assisted reps they already have when this is turned off.
+        exercise.extra_reps_enabled = payload.extra_reps_enabled
     bump_workout_cache_revision(db, user.id)
     try:
         db.commit()

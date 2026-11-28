@@ -1,3 +1,4 @@
+import { extraRepsText } from './extraReps';
 import type { StoredDraftSet, ActiveWorkoutDraft } from './workoutDraft';
 import { formatWeight, type WeightUnit } from './weightUnits';
 
@@ -19,7 +20,9 @@ export function syncSetText(set: StoredDraftSet | undefined, unit: WeightUnit): 
     set.duration_seconds != null ? `${Math.round(set.duration_seconds / 60)} min` : null,
     set.distance_km != null ? `${set.distance_km} km` : null,
   ].filter(Boolean);
-  const text = (strength.length ? strength.join(' × ') : cardio.join(' · ')) || '–';
+  const extras = extraRepsText(set);
+  const result = (strength.length ? strength.join(' × ') : cardio.join(' · ')) || '–';
+  const text = extras ? `${result} ${extras}` : result;
   return set.completed ? `${text} ✓` : text;
 }
 

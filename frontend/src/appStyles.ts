@@ -83,6 +83,7 @@ import './finishedWorkout.css';
 import './workoutEditGuard.css';
 import './weeklySetsShelf.css';
 import './relativeStrength.css';
+import './extraReps.css';
 import './bodyMeasurementHistory.css';
 import './bodyScreen.css';
 

@@ -396,6 +396,8 @@ def test_workout_sets_notes_rest_and_rpe_are_saved(client):
         "id": workout["movements"][0]["sets"][0]["id"],
         "order_index": 0,
         "reps": 5,
+        "partial_reps": None,
+        "assisted_reps": None,
         "weight_kg": 100.0,
         "rpe": 8.5,
         "rest_seconds": 180,
@@ -766,7 +768,7 @@ def test_csv_import_and_export_use_supplied_column_format(client):
         "Distance (km),Calories (kcal),Average heart rate (bpm),Speed (km/h),Incline (%),"
         "Cardio session calories (kcal),Cardio session average heart rate (bpm),"
         "Cardio session distance (km),Average speed (km/h),Cardio session incline (%),"
-        "Average power (W),Average METs,Elevation gain (m)"
+        "Average power (W),Average METs,Elevation gain (m),Partial reps,Assisted reps"
     )
     assert "2026-07-17,Machine Reverse Fly,45,99.2,10,83.6,184.3,38,1" in decoded
 

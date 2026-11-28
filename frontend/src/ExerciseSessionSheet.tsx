@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from './api';
+import { extraRepsText, hasExtraReps } from './extraReps';
 import { MachineSettingsSummary } from './MachineSettingsEditor';
 import { PopupDialog } from './PopupDialog';
 import { useWeightUnit } from './trainingPreferencesContext';
@@ -114,7 +115,12 @@ export function ExerciseSessionSheet({
                       {set.failed ? ' · Attempted' : ''}
                     </td>
                     <td>{set.weight_kg == null ? '—' : formatWeight(set.weight_kg, weightUnit)}</td>
-                    <td>{set.reps ?? '—'}</td>
+                    <td>
+                      {set.reps ?? '—'}
+                      {hasExtraReps(set) && (
+                        <small className="session-extra-reps">{extraRepsText(set)}</small>
+                      )}
+                    </td>
                     <td>{set.rpe ?? '—'}</td>
                   </tr>
                 ))}

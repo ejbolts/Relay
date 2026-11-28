@@ -107,7 +107,7 @@ export const upper = workout(
       [
         set('s-warm', { weight_kg: 60, reps: 8, set_type: 'warmup', warmup: true }),
         set('s-top', { weight_kg: 100, reps: 5, rpe: 8 }),
-        set('s-back', { weight_kg: 95, reps: 6 }),
+        set('s-back', { weight_kg: 95, reps: 6, partial_reps: 3, assisted_reps: 1 }),
       ],
     ],
   ],

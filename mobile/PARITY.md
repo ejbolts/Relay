@@ -41,7 +41,7 @@ What the native app covers compared with the web app, which it will replace. Upd
 
 ## Differences by design
 
-- **Workout logging:** a set is picked up by holding its row (the web drags a dotted handle), and the logger doesn't show the reorder or cardio tips, whose text describes web-only controls. Moving a set still counts as learning to reorder.
+- **Workout logging:** a set is picked up by holding its row (the web drags a dotted handle), and the logger doesn't show the reorder or cardio tips, whose text describes web-only controls. Moving a set still counts as learning to reorder. On an exercise that tracks partial and assisted reps, the app shows the two counts under every set, where the web shows them in the set once it is opened and as a line under it when folded; the app's exercise menu names the switch by what it does (Track, or Stop tracking, partial & assisted reps), because its menu has no tick to show.
 - **Social:** a friend's feed card opens their workout's own screen, whose owner row opens their profile at that workout. On the web, the feed card opens the profile directly.
 - **Social: Profiles:** a calendar day, a head-to-head lift or a friend's machine photo (All workouts on this machine) filters the history and brings it into view with the filter sheet closed, showing the count on the filter button; the web opens its inline filters too. Your own profile also shows your Account UUID with Copy; the web shows it on other people's profiles and in Settings.
 - **Split library:** after Save split on a friend's profile, the toast offers Edit; the web opens the editor at once.

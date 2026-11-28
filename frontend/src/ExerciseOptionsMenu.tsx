@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef, useState } from 'react';
+import { EXTRA_REPS_SETTING } from './extraReps';
 import { Icon } from './Icon';
 import './exerciseMerge.css';
 import { leavesMenu } from './menuDismiss';
@@ -6,17 +7,23 @@ import { leavesMenu } from './menuDismiss';
 export function ExerciseOptionsMenu({
   exerciseName,
   hidden = false,
+  extraReps = false,
   onEdit,
   onMerge,
   onToggleHidden,
+  onToggleExtraReps,
 }: {
   exerciseName: string;
   hidden?: boolean;
+  /** The logger offers partial and assisted reps on this exercise's sets. */
+  extraReps?: boolean;
   /** Custom exercises only. */
   onEdit?: (trigger: HTMLButtonElement) => void;
   /** Custom exercises only. */
   onMerge?: (trigger: HTMLButtonElement) => void;
   onToggleHidden?: () => void;
+  /** Strength exercises only. */
+  onToggleExtraReps?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLSpanElement>(null);
@@ -43,7 +50,7 @@ export function ExerciseOptionsMenu({
     if (action && trigger.current) action(trigger.current);
   }
 
-  if (!onEdit && !onMerge && !onToggleHidden) return null;
+  if (!onEdit && !onMerge && !onToggleHidden && !onToggleExtraReps) return null;
 
   return (
     <span
@@ -105,6 +112,20 @@ export function ExerciseOptionsMenu({
             <button type="button" role="menuitem" onClick={() => choose(onMerge)}>
               <Icon name="link" />
               Merge with another exercise
+            </button>
+          )}
+          {onToggleExtraReps && (
+            <button
+              type="button"
+              role="menuitemcheckbox"
+              aria-checked={extraReps}
+              onClick={() => {
+                setOpen(false);
+                onToggleExtraReps();
+              }}
+            >
+              <Icon name={extraReps ? 'check' : 'plus'} />
+              {EXTRA_REPS_SETTING}
             </button>
           )}
           {onToggleHidden && (

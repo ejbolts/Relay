@@ -371,6 +371,22 @@ describe('an exercise’s progress', () => {
     expect(apiSend).toHaveBeenLastCalledWith('/api/exercises/press', 'PATCH', { hidden: false });
   });
 
+  test('the header menu turns partial and assisted reps on for the exercise', async () => {
+    jest.mocked(apiSend).mockImplementation(async (_path, _method, body) => ({
+      ...press,
+      ...(body as object),
+    }));
+    await open(<ExerciseDetailScreen exerciseId="press" />);
+    const menu = within(await screen.findByLabelText('Options for Chest Press'));
+    await fireEvent.press(menu.getByText('Partial & assisted reps'));
+    await waitFor(() =>
+      expect(showToast).toHaveBeenCalledWith('Partial and assisted reps on for Chest Press'),
+    );
+    expect(apiSend).toHaveBeenCalledWith('/api/exercises/press', 'PATCH', {
+      extra_reps_enabled: true,
+    });
+  });
+
   test('a custom exercise offers its likely duplicate, until marked not the same', async () => {
     const view = await open(<ExerciseDetailScreen exerciseId="raises" />);
     const menu = within(await screen.findByLabelText('Options for Lateral raises'));

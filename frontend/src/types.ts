@@ -134,6 +134,8 @@ export interface Exercise {
   partial_sets_enabled?: boolean;
   partial_sets_default?: boolean;
   partial_set_weeks?: { week_start: string; enabled: boolean }[];
+  /** The logger offers partial and assisted reps on this exercise's sets (see extraReps.ts). */
+  extra_reps_enabled?: boolean;
 }
 
 export interface MuscleSetCreditInput {
@@ -182,7 +184,10 @@ export interface TrackedSet {
   machine_photo_id?: string | null;
   id: string;
   order_index: number;
+  /** Full reps. Partial and assisted reps are counted beside them, never in them. */
   reps: number | null;
+  partial_reps?: number | null;
+  assisted_reps?: number | null;
   weight_kg: number | null;
   rpe: number | null;
   rest_seconds: number | null;
@@ -255,6 +260,8 @@ export interface WorkoutSnapshot extends WorkoutCacheRevision {
 export interface WorkoutSetInput {
   machine_photo_id?: string | null;
   reps: number | null;
+  partial_reps?: number | null;
+  assisted_reps?: number | null;
   weight_kg: number | null;
   rpe: number | null;
   rest_seconds: number | null;

@@ -1,4 +1,5 @@
 import { Fragment } from 'react';
+import { extraRepsText } from './extraReps';
 import { isAllTimeRecord, recordBadgeLabel, recordScopeLabel } from './recordScope';
 import { relativeStrength } from './relativeStrength';
 import { SET_KINDS, setKindOf, setNumberLabels } from './setFieldValues';
@@ -102,6 +103,7 @@ export function HistorySetTable({
                 ? (machinePhotos.find((photo) => photo.id === item.machine_photo_id)?.caption ??
                   'Machine not assigned')
                 : null;
+            const extraReps = extraRepsText(item);
             return (
               <Fragment key={item.id}>
                 <tr data-set-type={kind}>
@@ -165,10 +167,11 @@ export function HistorySetTable({
                     </td>
                   )}
                 </tr>
-                {(machine || item.notes) && (
+                {(extraReps || machine || item.notes) && (
                   <tr className="history-set-extra" data-set-type={kind}>
                     <td />
                     <td colSpan={columns - 1}>
+                      {extraReps && <span className="history-set-extra-reps">{extraReps}</span>}
                       {machine && <span className="history-set-machine">{machine}</span>}
                       {item.notes && <span className="history-set-note">{item.notes}</span>}
                     </td>

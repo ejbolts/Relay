@@ -1,3 +1,4 @@
+import { hasExtraReps, withFullRepsCounted } from './extraReps';
 import { setKindOf } from './setFieldValues';
 import type { ExerciseKind, TrackedSet, TrackedWorkout, WorkoutSetInput } from './types';
 
@@ -151,14 +152,16 @@ export function restTimerSecondsAfterSetUpdate(
 
 /**
  * Whether a set has something to log: reps for strength (weight is optional for bodyweight
- * lifts), or any measurement for cardio. Bodyweight and percentile are attached automatically,
- * so they do not count as an entry.
+ * lifts), full, partial or assisted, or any measurement for cardio. Bodyweight and percentile
+ * are attached automatically, so they do not count as an entry.
  */
 export function hasRecordedPerformance(
   kind: ExerciseKind,
   item: Pick<
     WorkoutSetInput,
     | 'reps'
+    | 'partial_reps'
+    | 'assisted_reps'
     | 'duration_seconds'
     | 'distance_km'
     | 'calories_kcal'
@@ -177,7 +180,7 @@ export function hasRecordedPerformance(
       item.speed_kph,
     ].some((value) => value != null);
   }
-  return item.reps != null;
+  return item.reps != null || hasExtraReps(item);
 }
 
 /**
@@ -191,6 +194,6 @@ export function completeRemainingSets<T extends WorkoutSetInput & { fromPrevious
   return sets.map((item) =>
     item.completed || !hasRecordedPerformance(kind, item)
       ? item
-      : { ...item, completed: true, fromPrevious: false },
+      : withFullRepsCounted(kind, { ...item, completed: true, fromPrevious: false }),
   );
 }

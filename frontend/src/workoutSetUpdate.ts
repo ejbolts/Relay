@@ -1,3 +1,4 @@
+import { withFullRepsCounted } from './extraReps';
 import { hasUnassignedMachineSets } from './setMachines';
 import { workoutSetAfterEdit } from './workoutAutoSave';
 import type { WorkoutDraftMovement, WorkoutDraftSet } from './workoutMovements';
@@ -67,17 +68,20 @@ export function movementAfterSetUpdate(
 ): WorkoutDraftMovement {
   const sets = movement.sets.map((item) =>
     item.key === setKey
-      ? workoutSetAfterEdit(item, {
-          restRevealed: item.completed || (item.restRevealed ?? !item.fromPrevious),
-          ...update,
-          ...(update.completed === true && {
-            restRevealed: true,
-            ...(movement.exercise.kind === 'strength' && {
-              bodyweight_kg: item.bodyweight_kg ?? workoutBodyweight,
+      ? withFullRepsCounted(
+          movement.exercise.kind,
+          workoutSetAfterEdit(item, {
+            restRevealed: item.completed || (item.restRevealed ?? !item.fromPrevious),
+            ...update,
+            ...(update.completed === true && {
+              restRevealed: true,
+              ...(movement.exercise.kind === 'strength' && {
+                bodyweight_kg: item.bodyweight_kg ?? workoutBodyweight,
+              }),
             }),
+            ...(update.rest_seconds !== undefined && { restConfirmed: true }),
           }),
-          ...(update.rest_seconds !== undefined && { restConfirmed: true }),
-        })
+        )
       : item,
   );
   return {

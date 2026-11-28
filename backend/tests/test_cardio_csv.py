@@ -5,7 +5,13 @@ from io import StringIO
 
 import pytest
 
-from app.tracker_csv import CARDIO_HEADERS, CSV_HEADERS, SESSION_HEADERS, WORKOUT_TYPE_HEADERS
+from app.tracker_csv import (
+    CARDIO_HEADERS,
+    CSV_HEADERS,
+    REP_METRICS,
+    SESSION_HEADERS,
+    WORKOUT_TYPE_HEADERS,
+)
 
 
 def upload(client, content, *, preview=False):
@@ -24,7 +30,8 @@ def export(client, **params):
 def csv_content(rows):
     stream = StringIO()
     writer = csv.DictWriter(
-        stream, (*CSV_HEADERS, *SESSION_HEADERS, *WORKOUT_TYPE_HEADERS, *CARDIO_HEADERS)
+        stream,
+        (*CSV_HEADERS, *SESSION_HEADERS, *WORKOUT_TYPE_HEADERS, *CARDIO_HEADERS, *REP_METRICS),
     )
     writer.writeheader()
     writer.writerows(rows)

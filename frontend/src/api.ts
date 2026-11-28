@@ -918,6 +918,8 @@ export const api = {
     changes: {
       name?: string;
       hidden?: boolean;
+      /** Strength exercises only: log partial and assisted reps on its sets. */
+      extra_reps_enabled?: boolean;
       /** Custom exercises only. */
       equipment?: string | null;
       muscle_set_credits?: MuscleSetCreditInput[];

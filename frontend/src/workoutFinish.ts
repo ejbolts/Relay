@@ -1,3 +1,4 @@
+import { withFullRepsCounted } from './extraReps';
 import { hasUnassignedMachineSets } from './setMachines';
 import type { WorkoutCategory, WorkoutInput, WorkoutSetInput, WorkoutType } from './types';
 import { workoutSetForAutoSave } from './workoutAutoSave';
@@ -158,6 +159,8 @@ function invalidSetFieldMessage(movements: WorkoutDraftMovement[]): string | nul
         checkRange(set.distance_km, 0, 10_000, 'distance', ' km') ??
         checkRange(set.calories_kcal, 0, 100_000, 'calories', ' kcal', true) ??
         checkRange(set.reps, 0, 10_000, 'reps', '', true) ??
+        checkRange(set.partial_reps, 0, 10_000, 'partial reps', '', true) ??
+        checkRange(set.assisted_reps, 0, 10_000, 'assisted reps', '', true) ??
         checkRange(set.weight_kg, 0, 10_000, 'weight', ' kg') ??
         checkRange(set.rpe, 1, 10, 'RPE') ??
         (set.rest_seconds != null &&
@@ -208,7 +211,7 @@ export function checkWorkoutFinish(
       // before this check existed); it is kept as an unticked set instead.
       return !editing && set.completed && !hasRecordedPerformance(movement.exercise.kind, set)
         ? { ...set, completed: false }
-        : set;
+        : withFullRepsCounted(movement.exercise.kind, set);
     }),
   }));
   const cardioDurationSeconds = completedCardioDurationSeconds(movementsToSave);
@@ -293,6 +296,10 @@ export function finishedWorkoutInput(
       machine_settings: movement.machineSettings ?? [],
       sets: movement.sets.map((item) => ({
         reps: item.reps,
+        // Always sent, even when empty: it tells the server this app knows these fields, so
+        // clearing one is kept (an older app leaves them out and the saved values stay).
+        partial_reps: item.partial_reps ?? null,
+        assisted_reps: item.assisted_reps ?? null,
         machine_photo_id:
           item.machine_photo_id ??
           (movement.machinePhotoIds.length === 1 ? movement.machinePhotoIds[0] : null),
