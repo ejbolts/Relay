@@ -7,6 +7,11 @@ import {
   LIGHT_STYLES,
 } from '../../../../frontend/src/appearanceChoices';
 import {
+  CHART_YEAR_LINES_KEY,
+  parseChartYearLines,
+  serializeChartYearLines,
+} from '../../../../frontend/src/chartYears';
+import {
   BODY_TREND_PREFERENCE_KEY,
   parseBodyTrendPreference,
   type BodyTrendPreference,
@@ -71,6 +76,12 @@ export const reduceMotion = preference(
   'gym-logger-reduce-motion',
   (saved) => saved === 'reduced',
   (reduced) => (reduced ? 'reduced' : 'full'),
+);
+/** Year lines on long charts in landscape, kept on the phone under the web's key. */
+export const chartYearLines = preference(
+  CHART_YEAR_LINES_KEY,
+  parseChartYearLines,
+  serializeChartYearLines,
 );
 export const bodyTrendPreference = preference<BodyTrendPreference>(
   BODY_TREND_PREFERENCE_KEY,

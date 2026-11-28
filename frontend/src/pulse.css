@@ -3159,6 +3159,76 @@ html[data-reduce-motion] .app-tab-items[aria-hidden] {
   height: 0.875rem;
 }
 
+/* Year lines: a dotted line at each 1 January and a pill per year above the plot. */
+.pulse-chart-year-line {
+  stroke: var(--p-ink-2);
+  stroke-opacity: 0.45;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-dasharray: 0.1 5;
+}
+
+.pulse-chart-year-band {
+  fill: var(--p-accent);
+  fill-opacity: 0.12;
+}
+
+.pulse-chart .pulse-chart-year {
+  position: absolute;
+  z-index: 2;
+  height: 1.5rem;
+  min-height: 0;
+  transform: translateX(-50%);
+  border: 1px solid var(--p-line-strong);
+  border-radius: 999px;
+  padding: 0 0.625rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* A taller touch area than the pill shows, without reaching the neighbouring year. */
+.pulse-chart .pulse-chart-year::before {
+  position: absolute;
+  inset: -0.625rem -0.125rem;
+  content: '';
+}
+
+.pulse-chart .pulse-chart-year[aria-pressed='true'] {
+  border-color: var(--p-accent);
+  background: var(--p-accent);
+  color: var(--p-on-accent);
+}
+
+.pulse-chart .pulse-chart-year:focus-visible {
+  outline: 2px solid var(--p-focus-ring);
+  outline-offset: 2px;
+}
+
+.pulse-chart-year-summary {
+  position: absolute;
+  z-index: 2;
+  margin: 0;
+  transform: translateX(-50%);
+  border: 1px solid var(--p-line-strong);
+  border-radius: 10px;
+  padding: 0.375rem 0.625rem;
+  background: var(--p-surface-2);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 35%);
+  color: var(--p-ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
 .pulse-chart-tooltip span,
 .pulse-chart-tooltip small {
   color: #b9bfc4;
@@ -3875,6 +3945,39 @@ html.edge-swipe-ready .edge-swipe-indicator {
   color: #fff;
   font-size: 0.8125rem;
   font-weight: 650;
+}
+
+.landscape-chart-expanded .landscape-chart-year-lines {
+  height: 2.25rem;
+  min-height: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border: 1px solid var(--p-line-strong);
+  border-radius: 11px;
+  padding: 0 0.875rem;
+  background: var(--p-surface-2);
+  color: var(--p-ink);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.landscape-chart-expanded .landscape-chart-year-lines[aria-pressed='true'] {
+  border-color: color-mix(in srgb, var(--p-accent) 55%, transparent);
+  background: var(--p-accent-soft);
+  color: var(--p-accent-text);
+}
+
+.landscape-chart-year-lines > span {
+  display: grid;
+  place-items: center;
+}
+
+.landscape-chart-year-lines .pulse-icon {
+  display: block;
+  width: 1rem;
+  height: 1rem;
 }
 
 .landscape-chart-expanded .landscape-chart-content {

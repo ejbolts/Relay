@@ -11,6 +11,13 @@ import Svg, {
 } from 'react-native-svg';
 import { niceTicks, parseLocalDate, shortDate } from '../../../../frontend/src/trainingSummary';
 import { useTheme } from '../../ui/theme';
+import {
+  chartYearMarks,
+  usePickedYear,
+  YEAR_PILL_SPACE,
+  YearLinesSvg,
+  YearPills,
+} from '../body/ChartYearMarks';
 
 export interface ChartPoint {
   date: string;
@@ -24,7 +31,7 @@ const PAD = { top: 12, right: 12, bottom: 24, left: 40 };
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** Where each point, gridline and date label sits in a chart of the given size. */
-export function chartModel(points: ChartPoint[], width: number, height: number) {
+export function chartModel(points: ChartPoint[], width: number, height: number, yearLines = false) {
   if (!points.length || width <= 0) return null;
   const times = points.map((point) => parseLocalDate(point.date).getTime());
   const values = points.map((point) => point.value);
@@ -32,12 +39,16 @@ export function chartModel(points: ChartPoint[], width: number, height: number) 
   const yMin = ticks[0];
   const yMax = ticks[ticks.length - 1];
   const tMin = Math.min(...times);
-  const span = Math.max(Math.max(...times) - tMin, 1);
+  const tMax = Math.max(...times);
+  const span = Math.max(tMax - tMin, 1);
   const plotWidth = Math.max(width - PAD.left - PAD.right, 10);
-  const plotHeight = height - PAD.top - PAD.bottom;
   const x = (time: number) =>
     points.length === 1 ? PAD.left + plotWidth / 2 : PAD.left + ((time - tMin) / span) * plotWidth;
-  const y = (value: number) => PAD.top + (1 - (value - yMin) / (yMax - yMin || 1)) * plotHeight;
+  const years = chartYearMarks(yearLines, tMin, tMax, x);
+  // The year pills sit above the plot, so it starts lower while they show.
+  const top = years.length ? YEAR_PILL_SPACE : PAD.top;
+  const plotHeight = height - top - PAD.bottom;
+  const y = (value: number) => top + (1 - (value - yMin) / (yMax - yMin || 1)) * plotHeight;
   const coords = points.map((point, index) => ({
     x: x(times[index]),
     y: y(point.value),
@@ -69,6 +80,8 @@ export function chartModel(points: ChartPoint[], width: number, height: number) 
     gridlines: ticks.map((value) => ({ y: y(value), value })),
     dates,
     baseline: y(yMin),
+    top,
+    years,
   };
 }
 
@@ -88,6 +101,7 @@ export function ProgressChart({
   height = 200,
   markRecords,
   formatValue,
+  yearLines = false,
 }: {
   points: ChartPoint[];
   label: string;
@@ -95,11 +109,15 @@ export function ProgressChart({
   height?: number;
   markRecords: boolean;
   formatValue: (value: number) => string;
+  /** A dotted line at each 1 January and a pill per year, as on the web's landscape chart. */
+  yearLines?: boolean;
 }) {
   const { colors, type } = useTheme();
   const [width, setWidth] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
-  const model = chartModel(points, width, height);
+  const [pickedYear, setPickedYear] = usePickedYear(yearLines);
+  const model = chartModel(points, width, height, yearLines);
+  const pickedMark = model?.years.find((item) => item.year === pickedYear) ?? null;
   const active = selected !== null && selected < points.length ? selected : null;
   const select = (x: number) => {
     if (model) setSelected(nearestPoint(model.coords, x));
@@ -175,6 +193,12 @@ export function ProgressChart({
                 {date.label}
               </SvgText>
             ))}
+            <YearLinesSvg
+              years={model.years}
+              picked={pickedMark}
+              top={model.top}
+              baseline={model.baseline}
+            />
             {area && <Path d={area} fill="url(#progress-fill)" />}
             {line && (
               <Path
@@ -204,7 +228,7 @@ export function ProgressChart({
                 <Line
                   x1={model.coords[active].x}
                   x2={model.coords[active].x}
-                  y1={PAD.top}
+                  y1={model.top}
                   y2={model.baseline}
                   stroke={colors.lineStrong}
                   strokeWidth={1}
@@ -220,6 +244,18 @@ export function ProgressChart({
               </>
             )}
           </Svg>
+        )}
+        {model && model.years.length > 0 && (
+          <YearPills
+            years={model.years}
+            pickedYear={pickedYear}
+            onPick={setPickedYear}
+            points={points}
+            format={formatValue}
+            unit={unit}
+            width={width}
+            summaryTop={Math.max(model.baseline - 40, model.top)}
+          />
         )}
       </View>
     </View>

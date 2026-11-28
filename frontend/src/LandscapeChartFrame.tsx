@@ -1,7 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal, flushSync } from 'react-dom';
+import { CHART_YEAR_LINES_KEY, parseChartYearLines, serializeChartYearLines } from './chartYears';
 import { Icon } from './Icon';
+
+function readYearLines(): boolean {
+  try {
+    return parseChartYearLines(window.localStorage.getItem(CHART_YEAR_LINES_KEY));
+  } catch {
+    return false;
+  }
+}
+
+function saveYearLines(on: boolean) {
+  try {
+    window.localStorage.setItem(CHART_YEAR_LINES_KEY, serializeChartYearLines(on));
+  } catch {
+    // The choice still applies until the page reloads.
+  }
+}
 
 type LockableScreenOrientation = ScreenOrientation & {
   lock?: (orientation: 'landscape') => Promise<void>;
@@ -13,6 +30,7 @@ export function LandscapeChartFrame({
   controls,
   modal = false,
   iconOnly = false,
+  yearLines = false,
   className = '',
   children,
 }: {
@@ -22,10 +40,15 @@ export function LandscapeChartFrame({
   modal?: boolean;
   /** Show only the icon on the compact toggle; its accessible name stays the same. */
   iconOnly?: boolean;
+  /** Offer the Year lines button in full screen: the chart's dates cross a 1 January. */
+  yearLines?: boolean;
   className?: string;
-  children: (expanded: boolean, close: () => void) => ReactNode;
+  /** `showYearLines` is true in full screen while the Year lines button is on. */
+  children: (expanded: boolean, close: () => void, showYearLines: boolean) => ReactNode;
 }) {
   const [expanded, setExpanded] = useState(false);
+  // Kept on the device, so every long chart opens the way it was last left.
+  const [yearLinesOn, setYearLinesOn] = useState(readYearLines);
   const expandedRef = useRef(false);
   const viewerRef = useRef<HTMLElement | null>(null);
   const toggleRef = useRef<HTMLButtonElement>(null);
@@ -51,7 +74,10 @@ export function LandscapeChartFrame({
   async function enterLandscape() {
     // Mount the portal synchronously while the click still grants fullscreen permission.
     expandedRef.current = true;
-    flushSync(() => setExpanded(true));
+    flushSync(() => {
+      setYearLinesOn(readYearLines());
+      setExpanded(true);
+    });
     const viewer = viewerRef.current;
     // A modal viewer must be open before it can enter fullscreen.
     if (viewer instanceof HTMLDialogElement && !viewer.open) viewer.showModal();
@@ -130,6 +156,23 @@ export function LandscapeChartFrame({
       <div className="landscape-chart-toolbar">
         <strong className="landscape-chart-title">{title}</strong>
         <div className="landscape-chart-options">{controls}</div>
+        {expanded && yearLines && (
+          <button
+            type="button"
+            className="landscape-chart-year-lines"
+            aria-pressed={yearLinesOn}
+            onClick={() => {
+              const next = !yearLinesOn;
+              setYearLinesOn(next);
+              saveYearLines(next);
+            }}
+          >
+            <span aria-hidden="true">
+              <Icon name="year-lines" />
+            </span>
+            Year lines
+          </button>
+        )}
         <button
           type="button"
           ref={toggleRef}
@@ -145,7 +188,9 @@ export function LandscapeChartFrame({
           {expanded ? 'Exit' : iconOnly ? null : 'Landscape'}
         </button>
       </div>
-      <div className="landscape-chart-content">{children(expanded, close)}</div>
+      <div className="landscape-chart-content">
+        {children(expanded, close, expanded && yearLines && yearLinesOn)}
+      </div>
     </div>
   );
 
