@@ -129,6 +129,13 @@ async function click(target: HTMLElement) {
   await act(async () => target.click());
 }
 
+async function type(input: HTMLInputElement, value: string) {
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
+}
+
 function cardTitles() {
   return [...container.querySelectorAll('.movement-card .movement-history-link')].map(
     (item) => item.textContent,
@@ -224,9 +231,6 @@ describe('swapping an exercise mid-workout', () => {
     expect(sheet.classList).toContain('popup-dialog--sheet');
     expect(sheet.querySelector('header > .sheet-grabber')).not.toBeNull();
     expect(sheet.querySelector('h2')?.textContent).toBe(`Swap ${chestPress.name}`);
-    expect(sheet.querySelector('.exercise-swap-carry')?.textContent).toBe(
-      '2 planned sets move across · 1 logged set stays',
-    );
     const options = () =>
       [...sheet.querySelectorAll('.exercise-swap-option strong')].map((item) => item.textContent);
     // Leg press trains none of the same muscles, so it is not offered.
@@ -269,6 +273,40 @@ describe('swapping an exercise mid-workout', () => {
     expect(cardTitles()).toEqual([chestPress.name]);
     expect(readActiveWorkoutDraft()!.movements[0].sets).toHaveLength(3);
     expect(container.querySelector('.movement-swapped-from')).toBeNull();
+  });
+
+  it('searches the whole library from the sheet', async () => {
+    await act(async () => root.render(<App />));
+    await click(button('Swap exercise'));
+    const sheet = document.querySelector<HTMLDialogElement>('.exercise-swap-sheet')!;
+    const search = sheet.querySelector<HTMLInputElement>('input[aria-label="Search exercises"]')!;
+    const options = () =>
+      [...sheet.querySelectorAll('.exercise-swap-option strong')].map((item) => item.textContent);
+    const groups = () =>
+      [...sheet.querySelectorAll('.exercise-swap-group')].map((item) => item.textContent);
+
+    // Leg press is no alternative to a chest press, but a search still finds it, typo and all.
+    await type(search, 'leg pres');
+    expect(options()).toEqual([legPress.name]);
+    expect(groups()).toEqual(['Search results']);
+    expect(sheet.querySelector('.exercise-swap-option .exercise-search-match')).not.toBeNull();
+    // The equipment chips narrow the alternatives, so they step aside for a search.
+    expect(sheet.querySelector('.exercise-swap-filters')).toBeNull();
+
+    await type(search, 'zzz');
+    expect(options()).toEqual([]);
+    expect(sheet.querySelector('.exercise-swap-empty')?.textContent).toBe(
+      'No exercises match that search.',
+    );
+
+    await type(search, '');
+    expect(options()).toEqual([dumbbellBench.name, pecDeck.name]);
+    expect(groups()).toEqual(['Same muscles', 'Close match']);
+
+    await type(search, 'legpress');
+    await click(sheet.querySelector<HTMLButtonElement>('.exercise-swap-option')!);
+    expect(document.querySelector('.exercise-swap-sheet')).toBeNull();
+    expect(cardTitles()).toEqual([chestPress.name, legPress.name]);
   });
 
   it('falls back to the full exercise picker', async () => {

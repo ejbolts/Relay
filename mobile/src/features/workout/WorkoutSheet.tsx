@@ -1061,8 +1061,6 @@ function LiveLogger({
       />
       <SwapSheet
         exercise={swapMovement?.exercise ?? null}
-        plannedSetCount={swapMovement?.sets.filter((item) => !item.completed).length ?? 0}
-        loggedSetCount={swapMovement?.sets.filter((item) => item.completed).length ?? 0}
         exercises={logger.exercises}
         excludedIds={state.movements.map((item) => item.exercise.id)}
         recentIds={recentIds}

@@ -3,8 +3,8 @@ import {
   missingSwapMuscles,
   muscleMatchPercent,
   rankSwapAlternatives,
+  searchSwapAlternatives,
   swapAlternativeGroups,
-  swapCarrySummary,
   swapMovementExercise,
   swapMuscleCreditList,
 } from './exerciseSwap';
@@ -114,6 +114,36 @@ describe('muscle matching', () => {
     expect(rankSwapAlternatives(treadmill, [bike, chestPress])).toEqual([
       { exercise: bike, match: null, equipment: 'Machine' },
     ]);
+  });
+});
+
+describe('searching for a swap', () => {
+  const hiddenPress = exercise('Hidden press', { Chest: 1 }, { hidden: true });
+  const library = [chestPress, dumbbellBench, pecDeck, lateralRaise, treadmill, hiddenPress];
+  const found = (query: string, options?: Parameters<typeof searchSwapAlternatives>[3]) =>
+    searchSwapAlternatives(chestPress, library, query, options).map((item) => [
+      item.exercise.id,
+      item.match,
+    ]);
+
+  it('looks through the whole library, keeping a close alternative’s match', () => {
+    // Lateral raise trains none of the press's muscles, yet a search still finds it.
+    expect(found('lateral')).toEqual([['Lateral raise', null]]);
+    expect(found('deck')).toEqual([['Pec deck', 50]]);
+    // A typo still finds the bench press.
+    expect(found('bemch')).toEqual([['Dumbbell bench press', 100]]);
+  });
+
+  it('leaves out the exercise being swapped, the workout’s others and hidden ones', () => {
+    expect(found('press', { excludedIds: [dumbbellBench.id] })).toEqual([]);
+    expect(found('   ')).toEqual([]);
+  });
+
+  it('gives cardio, and an exercise of the other kind, no match percentage', () => {
+    expect(searchSwapAlternatives(treadmill, [bike, chestPress], 'bike')).toEqual([
+      { exercise: bike, match: null, equipment: 'Machine' },
+    ]);
+    expect(found('tread')).toEqual([['Treadmill', null]]);
   });
 });
 
@@ -234,10 +264,7 @@ describe('the swap sheet', () => {
     ]);
   });
 
-  it('says what happens to the sets, and which muscles an alternative misses', () => {
-    expect(swapCarrySummary(2, 1)).toBe('2 planned sets move across · 1 logged set stays');
-    expect(swapCarrySummary(1, 0)).toBe('1 planned set move across');
-    expect(swapCarrySummary(0, 3)).toBe('3 logged sets stay');
+  it('says which muscles an alternative misses', () => {
     expect(missingSwapMuscles(chestPress, pecDeck)).toEqual(['Front delts', 'Triceps']);
   });
 
