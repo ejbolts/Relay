@@ -10,13 +10,16 @@ A partner may change only the movements and the activity times of someone's draf
 creates, finishes, discards or replaces it. Every read and write re-checks that both accounts
 are active members of the same session and are still friends.
 
-Expired sessions and invites are ended lazily, when they are next read or written.
+Expired sessions and invites are ended lazily, when they are next read or written, and are
+recorded as ending when they lapsed. Each attendance (a member row) is its own interval, so a
+rejoin starts a new one; an account has at most one open attendance.
 """
 
 from __future__ import annotations
 
 import re
 import secrets
+from collections import Counter
 from datetime import datetime, timedelta
 from typing import Annotated, Any, Literal
 
@@ -34,7 +37,6 @@ from .lift_comparison import lift_key
 from .models import (
     ActiveWorkoutSync,
     Exercise,
-    MachinePhoto,
     ProfileSharing,
     TrainingWorkout,
     TrainTogetherInvite,
@@ -53,7 +55,7 @@ from .sharing import (
     friendships_of,
     photo_url,
 )
-from .tracker import hidden_exercise_ids
+from .tracker import bump_workout_cache_revision, hidden_exercise_ids
 from .tracker_schemas import TrainedWithRead
 
 MAX_MEMBERS = 4
@@ -104,7 +106,8 @@ class TrainSession(BaseModel):
     id: str
     started_at: datetime
     expires_at: datetime
-    created_by: str
+    # None once the account that started it has been deleted.
+    created_by: str | None = None
     max_members: int = MAX_MEMBERS
     # Active members, the caller first.
     members: list[TrainMember]
@@ -129,8 +132,8 @@ class TrainInviteRead(BaseModel):
 
 
 class TrainJoin(BaseModel):
-    # Any malformed code reads as expired, rather than as a validation error.
-    token: str = Field(max_length=200)
+    # Any malformed code, however long, reads as expired rather than as a validation error.
+    token: str = Field(max_length=10_000)
 
 
 class PartnerDraftChange(DraftChange):
@@ -147,6 +150,16 @@ class TrainPartnerWriteRead(BaseModel):
 
 
 # Session state
+#
+# Nothing here commits. A route commits once and then tells the affected accounts' windows;
+# a hook called from existing code returns who to tell, and that code commits its own change
+# together with the session change before notifying (see ``notify``).
+
+
+def notify(affected: set[str]) -> None:
+    """Tell members' windows to refetch; call only after the change has committed."""
+    if affected:
+        hub.train_together_changed(*affected)
 
 
 def _active_members(db: Session, session_id: str) -> list[TrainTogetherMember]:
@@ -162,29 +175,23 @@ def _active_members(db: Session, session_id: str) -> list[TrainTogetherMember]:
     )
 
 
-def _membership(db: Session, user_id: str) -> TrainTogetherMember | None:
-    """The account's current member row, in a session that has not ended."""
+def _open_row(db: Session, user_id: str) -> TrainTogetherMember | None:
+    """The account's one open attendance, whether or not its session has lapsed yet."""
     return db.scalar(
-        select(TrainTogetherMember)
-        .join(TrainTogetherSession, TrainTogetherSession.id == TrainTogetherMember.session_id)
-        .where(
-            TrainTogetherMember.user_id == user_id,
-            TrainTogetherMember.left_at.is_(None),
-            TrainTogetherSession.ended_at.is_(None),
+        select(TrainTogetherMember).where(
+            TrainTogetherMember.user_id == user_id, TrainTogetherMember.left_at.is_(None)
         )
-        .order_by(TrainTogetherMember.joined_at.desc())
-        .limit(1)
     )
 
 
 def _end(
-    db: Session, session: TrainTogetherSession, reason: Reason, by: str | None, now: datetime
+    db: Session, session: TrainTogetherSession, reason: Reason, by: str | None, at: datetime
 ) -> set[str]:
-    """End the session; everyone still in it leaves with the session's reason."""
-    session.ended_at, session.ended_reason, session.ended_by = now, reason, by
+    """End the session at ``at``; everyone still in it leaves with the session's reason."""
+    session.ended_at, session.ended_reason, session.ended_by = at, reason, by
     affected = set()
     for member in _active_members(db, session.id):
-        member.left_at, member.left_reason = now, reason
+        member.left_at, member.left_reason = at, reason
         affected.add(member.user_id)
     return affected
 
@@ -192,9 +199,7 @@ def _end(
 def _leave(db: Session, member: TrainTogetherMember, reason: Reason, now: datetime) -> set[str]:
     """One member leaves; fewer than two left ends the session. Returns who to tell."""
     session = db.get(TrainTogetherSession, member.session_id)
-    remaining = [
-        other for other in _active_members(db, member.session_id) if other.user_id != member.user_id
-    ]
+    remaining = [other for other in _active_members(db, member.session_id) if other.id != member.id]
     member.left_at, member.left_reason = now, reason
     affected = {member.user_id, *(other.user_id for other in remaining)}
     if session is not None and session.ended_at is None and len(remaining) < 2:
@@ -202,62 +207,60 @@ def _leave(db: Session, member: TrainTogetherMember, reason: Reason, now: dateti
     return affected
 
 
-def _has_live_invite(db: Session, session_id: str, now: datetime) -> bool:
-    return any(
-        as_utc(expires) > now
+def _last_invite_expiry(db: Session, session_id: str) -> datetime | None:
+    expiries = [
+        as_utc(expires)
         for expires in db.scalars(
             select(TrainTogetherInvite.expires_at).where(
                 TrainTogetherInvite.session_id == session_id,
                 TrainTogetherInvite.used_at.is_(None),
             )
         )
-    )
+    ]
+    return max(expiries, default=None)
 
 
 def _refresh(db: Session, session: TrainTogetherSession, now: datetime) -> set[str]:
-    """End what has lapsed: the 12 hours, disabled members, or a lone creator's last invite."""
+    """End what has lapsed: the 12 hours, disabled members, or a lone creator's last invite.
+
+    A lapsed session ends at the time it lapsed, not when it is noticed, so the notice window
+    and the attendance it records are the real ones.
+    """
     if session.ended_at is not None:
         return set()
     if as_utc(session.expires_at) <= now:
-        return _end(db, session, "expired", None, now)
+        return _end(db, session, "expired", None, as_utc(session.expires_at))
     affected: set[str] = set()
-    members = _active_members(db, session.id)
-    for member in members:
+    for member in _active_members(db, session.id):
         account = db.get(User, member.user_id)
         if account is None or account.disabled_at is not None:
             affected |= _leave(db, member, "left", now)
     if session.ended_at is not None:
         return affected
     members = _active_members(db, session.id)
+    if len(members) >= 2:
+        return affected
+    last_invite = _last_invite_expiry(db, session.id)
     waiting = (
         len(members) == 1
         and members[0].user_id == session.created_by
-        and _has_live_invite(db, session.id, now)
+        and last_invite is not None
+        and last_invite > now
     )
-    if len(members) < 2 and not waiting:
-        affected |= _end(db, session, "expired", None, now)
+    if not waiting:
+        at = min(last_invite, now) if last_invite else now
+        affected |= _end(db, session, "expired", None, at)
     return affected
 
 
-def _notify(db: Session, affected: set[str]) -> None:
-    if affected:
-        db.commit()
-        hub.train_together_changed(*affected)
-
-
-def current_membership(
-    db: Session, user_id: str
-) -> tuple[TrainTogetherSession, TrainTogetherMember] | None:
-    """The account's live session, ending it first if it has lapsed."""
-    member = _membership(db, user_id)
+def settle(db: Session, user_id: str, now: datetime) -> tuple[TrainTogetherMember | None, set[str]]:
+    """The account's live attendance, after ending its session if that has lapsed."""
+    member = _open_row(db, user_id)
     if member is None:
-        return None
+        return None, set()
     session = db.get(TrainTogetherSession, member.session_id)
-    affected = _refresh(db, session, utc_now())
-    _notify(db, affected)
-    if session.ended_at is not None or member.left_at is not None:
-        return None
-    return session, member
+    affected = _refresh(db, session, now)
+    return (member if member.left_at is None else None), affected
 
 
 def _draft_session(db: Session, user_id: str) -> str | None:
@@ -282,21 +285,43 @@ def _friends(db: Session, user_id: str, other_id: str, blocked: set[str]) -> boo
     )
 
 
-def _partner(
-    db: Session, user: User, user_id: str
-) -> tuple[TrainTogetherSession, TrainTogetherMember]:
-    """The caller's active partner ``user_id``, re-checking membership and friendship."""
+def _partner(db: Session, user: User, user_id: str) -> TrainTogetherMember:
+    """The caller's active partner ``user_id``, checking membership and friendship again."""
     refused = api_error(404, "train_not_partner", "You are not training with them now.")
-    current = current_membership(db, user.id)
-    if current is None or user_id == user.id:
+    member, affected = settle(db, user.id, utc_now())
+    if affected:
+        db.commit()
+        notify(affected)
+    if member is None or user_id == user.id:
         raise refused
-    session, _ = current
     partner = next(
-        (member for member in _active_members(db, session.id) if member.user_id == user_id), None
+        (other for other in _active_members(db, member.session_id) if other.user_id == user_id),
+        None,
     )
     if partner is None or not _friends(db, user.id, user_id, blocked_member_ids(db, user.id)):
         raise refused
-    return session, partner
+    return partner
+
+
+def shared_history_ids(db: Session, user_id: str) -> set[str]:
+    """Everyone who has been in a session with the account, and the account itself."""
+    mine, other = aliased(TrainTogetherMember), aliased(TrainTogetherMember)
+    return {
+        user_id,
+        *db.scalars(
+            select(other.user_id)
+            .join(mine, mine.session_id == other.session_id)
+            .where(mine.user_id == user_id)
+            .distinct()
+        ),
+    }
+
+
+def refresh_shared_histories(db: Session, user_id: str) -> None:
+    """Saved workouts name partners by what the viewer may see; a change to that must reach
+    every cached history that names this account (or that this account reads)."""
+    for member_id in shared_history_ids(db, user_id):
+        bump_workout_cache_revision(db, member_id)
 
 
 # Exercises
@@ -392,26 +417,38 @@ def _ended(db: Session, user_id: str, now: datetime) -> TrainEnded | None:
 
 
 def read_session(db: Session, user: User) -> TrainTogetherRead:
+    """The caller's session. Nothing about a member they are no longer friends with is shown:
+    finding one ends the caller's attendance instead (``unfriended``)."""
     now = utc_now()
-    current = current_membership(db, user.id)
-    if current is None:
+    member, affected = settle(db, user.id, now)
+    if member is not None:
+        blocked = blocked_member_ids(db, user.id)
+        partners = [
+            other for other in _active_members(db, member.session_id) if other.user_id != user.id
+        ]
+        if any(not _friends(db, user.id, other.user_id, blocked) for other in partners):
+            affected |= _leave(db, member, "unfriended", now)
+            member = None
+    if affected:
+        db.commit()
+        notify(affected)
+    if member is None:
         return TrainTogetherRead(session=None, ended=_ended(db, user.id, now))
-    session, _ = current
-    blocked = blocked_member_ids(db, user.id)
+    session = db.get(TrainTogetherSession, member.session_id)
     members = _active_members(db, session.id)
-    members.sort(key=lambda member: member.user_id != user.id)
+    members.sort(key=lambda other: other.user_id != user.id)
     read: list[TrainMember] = []
-    for member in members:
-        account = db.get(User, member.user_id)
-        is_self = member.user_id == user.id
+    for other in members:
+        account = db.get(User, other.user_id)
+        is_self = other.user_id == user.id
         workout = None
-        if not is_self and _friends(db, user.id, member.user_id, blocked):
-            row = db.get(ActiveWorkoutSync, member.user_id)
+        if not is_self:
+            row = db.get(ActiveWorkoutSync, other.user_id)
             if row is not None and row.draft is not None:
                 workout = TrainPartnerWorkout(
                     revision=row.revision,
                     draft=row.draft,
-                    exercises=draft_exercises(db, member.user_id, user.id, row.draft),
+                    exercises=draft_exercises(db, other.user_id, user.id, row.draft),
                 )
         read.append(
             TrainMember(
@@ -420,7 +457,7 @@ def read_session(db: Session, user: User) -> TrainTogetherRead:
                 display_name=account.display_name,
                 photo_url=photo_url(account),
                 is_self=is_self,
-                joined_at=as_utc(member.joined_at),
+                joined_at=as_utc(other.joined_at),
                 workout=workout,
             )
         )
@@ -475,117 +512,141 @@ def _references(draft: dict) -> tuple[set[str], set[str]]:
     return exercises, photos
 
 
-def _owns_new_references(db: Session, owner_id: str, base: dict, draft: dict) -> bool:
-    """A partner may add only the owner's own exercises and machine photos."""
-    old_exercises, old_photos = _references(base)
+def allowed_references(db: Session, owner_id: str, stored: dict, draft: dict) -> bool:
+    """Checked against the owner's stored draft, never the caller's own base.
+
+    A partner may add only the owner's own exercises, may not change which exercise an existing
+    movement is, and may not bring in a machine photo the workout does not already use.
+    """
+    stored_exercises, stored_photos = _references(stored)
     new_exercises, new_photos = _references(draft)
-    added_exercises, added_photos = new_exercises - old_exercises, new_photos - old_photos
-    if added_exercises:
-        owned = set(
-            db.scalars(
-                select(Exercise.id).where(
-                    Exercise.user_id == owner_id, Exercise.id.in_(added_exercises)
-                )
-            )
-        )
-        if owned != added_exercises:
-            return False
-    if added_photos:
-        owned = set(
-            db.scalars(
-                select(MachinePhoto.id).where(
-                    MachinePhoto.user_id == owner_id, MachinePhoto.id.in_(added_photos)
-                )
-            )
-        )
-        if owned != added_photos:
-            return False
-    return True
+    if new_photos - stored_photos:
+        return False
+    existing = {movement["key"]: movement["exerciseId"] for movement in stored["movements"]}
+    if any(
+        existing.get(movement["key"], movement["exerciseId"]) != movement["exerciseId"]
+        for movement in draft.get("movements", [])
+    ):
+        return False
+    added = new_exercises - stored_exercises
+    if not added:
+        return True
+    owned = set(
+        db.scalars(select(Exercise.id).where(Exercise.user_id == owner_id, Exercise.id.in_(added)))
+    )
+    return owned == added
 
 
-# Hooks from existing code, each called after that code has committed
+def readable_by_owner(draft: dict) -> bool:
+    """Every set carries the fields the owner's apps require when they read the draft back."""
+    return all(
+        isinstance(item.get("completed"), bool)
+        and "notes" in item
+        and (item["notes"] is None or isinstance(item["notes"], str))
+        for movement in draft.get("movements", [])
+        for item in movement["sets"]
+    )
 
 
-def draft_changed(db: Session, user_id: str, draft: dict | None) -> None:
-    """Keep the member's draft session current, leave on discard, and tell the partners."""
-    member = _membership(db, user_id)
+def no_new_duplicate_exercises(stored: dict | None, merged: dict | None) -> bool:
+    """A merged partner edit may not leave the same exercise in the workout twice (a workout
+    with a repeated exercise cannot be saved), unless the owner already had it twice."""
+    if merged is None:
+        return True
+    before = Counter(movement["exerciseId"] for movement in (stored or {}).get("movements", []))
+    after = Counter(movement["exerciseId"] for movement in merged["movements"])
+    return all(count <= max(1, before[exercise_id]) for exercise_id, count in after.items())
+
+
+# Hooks from existing code. Each runs inside that code's transaction, before it commits, and
+# returns who to tell; the caller commits, then passes the result to ``notify``.
+
+
+def draft_changed(db: Session, user_id: str, previous: dict | None, draft: dict | None) -> set[str]:
+    """Keep the member's draft session current, and leave when their session's draft is
+    discarded. Discarding some other draft (from before they joined) leaves them in place."""
+    member, affected = settle(db, user_id, utc_now())
     if member is None:
-        return
+        return affected
     if draft is None:
-        affected = _leave(db, member, "discarded", utc_now())
-    else:
-        member.draft_session_id = draft["clientSessionId"]
-        affected = {other.user_id for other in _active_members(db, member.session_id)}
-    _notify(db, affected)
+        if previous is not None and member.draft_session_id == previous["clientSessionId"]:
+            affected |= _leave(db, member, "discarded", utc_now())
+        return affected
+    member.draft_session_id = draft["clientSessionId"]
+    return affected | {other.user_id for other in _active_members(db, member.session_id)}
 
 
-def workout_saved(db: Session, user_id: str, draft_session_id: str | None, workout_id: str) -> None:
-    """Link a workout saved from a draft to its member row, and leave the session as finished.
+def workout_saved(
+    db: Session, user_id: str, draft_session_id: str | None, workout_id: str
+) -> set[str]:
+    """Link a workout saved from a draft to the attendance it came from, and leave as finished.
 
-    This also links a workout saved after its session ended (the partner finished first).
+    This also links a workout saved after its session ended (the partner finished first, or the
+    session lapsed), and repairs the link when a repeated finish finds it missing.
     """
     if not draft_session_id:
-        return
+        return set()
+    _, affected = settle(db, user_id, utc_now())
     member = db.scalar(
         select(TrainTogetherMember)
         .where(
             TrainTogetherMember.user_id == user_id,
             TrainTogetherMember.draft_session_id == draft_session_id,
-            TrainTogetherMember.workout_id.is_(None),
+            or_(
+                TrainTogetherMember.workout_id.is_(None),
+                TrainTogetherMember.workout_id == workout_id,
+            ),
         )
         .order_by(TrainTogetherMember.joined_at.desc())
         .limit(1)
     )
-    if member is None:
-        return
+    if member is None or member.workout_id == workout_id:
+        return affected
     member.workout_id = workout_id
-    affected = {user_id}
+    affected.add(user_id)
     session = db.get(TrainTogetherSession, member.session_id)
     if member.left_at is None and session is not None and session.ended_at is None:
         affected |= _leave(db, member, "finished", utc_now())
-    db.commit()
-    hub.train_together_changed(*affected)
+    return affected
 
 
-def friendship_ended(db: Session, user_id: str, other_id: str) -> None:
+def friendship_ended(db: Session, user_id: str, other_id: str) -> set[str]:
     """Unfriending or blocking a partner: the member who did it leaves their shared session."""
-    member = _membership(db, user_id)
+    member, affected = settle(db, user_id, utc_now())
     if member is None:
-        return
+        return affected
     if any(other.user_id == other_id for other in _active_members(db, member.session_id)):
-        _notify(db, _leave(db, member, "unfriended", utc_now()))
+        affected |= _leave(db, member, "unfriended", utc_now())
+    return affected
 
 
-def account_removed(db: Session, user_id: str) -> None:
-    """Before an account is deleted, it leaves its session so its partners are told."""
-    member = _membership(db, user_id)
+def account_removed(db: Session, user_id: str) -> set[str]:
+    """Before an account is deleted or disabled: it leaves its session, and the saved histories
+    that name it are refreshed. Flushed, so raw deletes that follow see it."""
+    member, affected = settle(db, user_id, utc_now())
     if member is not None:
-        _notify(db, _leave(db, member, "left", utc_now()))
+        affected |= _leave(db, member, "left", utc_now())
+    for member_id in shared_history_ids(db, user_id) - {user_id}:
+        bump_workout_cache_revision(db, member_id)
+    db.flush()
+    return affected
 
 
 def account_rows(user_id: str) -> tuple:
-    """Deletes for a deleted account's rows, in order (explicit, like the other tables)."""
-    created = select(TrainTogetherSession.id).where(TrainTogetherSession.created_by == user_id)
+    """Deletes for a deleted account's own rows. Sessions and other members' rows stay, so a
+    group carries on and everyone else's history keeps the rest of the group."""
     return (
-        delete(TrainTogetherInvite).where(
-            or_(
-                TrainTogetherInvite.created_by == user_id,
-                TrainTogetherInvite.session_id.in_(created),
-            )
-        ),
+        delete(TrainTogetherInvite).where(TrainTogetherInvite.created_by == user_id),
         update(TrainTogetherInvite)
         .where(TrainTogetherInvite.used_by == user_id)
         .values(used_by=None),
-        delete(TrainTogetherMember).where(
-            or_(
-                TrainTogetherMember.user_id == user_id,
-                TrainTogetherMember.session_id.in_(created),
-            )
-        ),
+        delete(TrainTogetherMember).where(TrainTogetherMember.user_id == user_id),
         update(TrainTogetherSession)
         .where(TrainTogetherSession.ended_by == user_id)
         .values(ended_by=None),
-        delete(TrainTogetherSession).where(TrainTogetherSession.created_by == user_id),
+        update(TrainTogetherSession)
+        .where(TrainTogetherSession.created_by == user_id)
+        .values(created_by=None),
     )
 
 
@@ -650,6 +711,11 @@ def attach_trained_with[T](db: Session, viewer: User, workouts: T) -> T:
 # Routes
 
 
+def _write_lock(db: Session) -> None:
+    """Take SQLite's write lock before reading, so admissions are decided one at a time."""
+    db.connection().exec_driver_sql("BEGIN IMMEDIATE")
+
+
 @router.get("", response_model=TrainTogetherRead)
 def get_train_together(user: CurrentUser, db: Db) -> TrainTogetherRead:
     return read_session(db, user)
@@ -657,9 +723,11 @@ def get_train_together(user: CurrentUser, db: Db) -> TrainTogetherRead:
 
 @router.post("/invite", response_model=TrainInviteRead)
 def create_invite(user: CurrentUser, db: Db) -> TrainInviteRead:
+    _write_lock(db)
     now = utc_now()
-    current = current_membership(db, user.id)
-    if current is None:
+    member, affected = settle(db, user.id, now)
+    if member is None:
+        db.flush()  # close a lapsed attendance before opening the new one
         session = TrainTogetherSession(
             created_by=user.id, created_at=now, expires_at=now + SESSION_LIFETIME
         )
@@ -674,18 +742,18 @@ def create_invite(user: CurrentUser, db: Db) -> TrainInviteRead:
             )
         )
     else:
-        session, _ = current
+        session = db.get(TrainTogetherSession, member.session_id)
         if len(_active_members(db, session.id)) >= MAX_MEMBERS:
+            db.rollback()
             raise api_error(409, "train_full", "This session is full.")
     # A new code replaces the creator's unused one for this session.
-    for previous in db.scalars(
-        select(TrainTogetherInvite).where(
+    db.execute(
+        delete(TrainTogetherInvite).where(
             TrainTogetherInvite.session_id == session.id,
             TrainTogetherInvite.created_by == user.id,
             TrainTogetherInvite.used_at.is_(None),
         )
-    ):
-        db.delete(previous)
+    )
     token = secrets.token_urlsafe(16)
     expires_at = now + INVITE_LIFETIME
     db.add(
@@ -698,37 +766,54 @@ def create_invite(user: CurrentUser, db: Db) -> TrainInviteRead:
         )
     )
     db.commit()
+    notify(affected)
     return TrainInviteRead(token=token, expires_at=expires_at, session_id=session.id)
 
 
 @router.post("/join", response_model=TrainTogetherRead)
 def join(payload: TrainJoin, user: CurrentUser, db: Db) -> TrainTogetherRead:
-    now = utc_now()
     expired = api_error(404, "train_invite_expired", "This code has expired. Ask for a new one.")
-    invite = (
-        db.get(TrainTogetherInvite, hash_token(payload.token))
-        if TOKEN.fullmatch(payload.token)
-        else None
-    )
-    if invite is None or invite.used_at is not None or as_utc(invite.expires_at) <= now:
+    if not TOKEN.fullmatch(payload.token):
         raise expired
-    session = db.get(TrainTogetherSession, invite.session_id)
-    affected = _refresh(db, session, now)
-    if session.ended_at is not None:
-        _notify(db, affected)
+    _write_lock(db)
+    now = utc_now()
+    token_hash = hash_token(payload.token)
+    invite = db.get(TrainTogetherInvite, token_hash)
+    session = db.get(TrainTogetherSession, invite.session_id) if invite else None
+    # End a lapsed session before the code is claimed: a waiting creator's code keeps it open.
+    if session is not None:
+        _refresh(db, session, now)
+    if session is None or session.ended_at is not None:
+        db.rollback()
+        raise expired
+    # Claim the code: only one request can use it, and any refusal below rolls it back.
+    claimed = db.execute(
+        update(TrainTogetherInvite)
+        .where(
+            TrainTogetherInvite.token_hash == token_hash,
+            TrainTogetherInvite.used_at.is_(None),
+            TrainTogetherInvite.expires_at > now,
+        )
+        .values(used_at=now, used_by=user.id)
+        .execution_options(synchronize_session=False)
+    )
+    if claimed.rowcount != 1:
+        db.rollback()
         raise expired
     if invite.created_by == user.id:
+        db.rollback()
         raise api_error(
             400, "train_own_invite", "That's your own code. Ask your friend to scan it."
         )
     members = _active_members(db, session.id)
     if any(member.user_id == user.id for member in members):
-        _notify(db, affected)
+        db.rollback()  # already here: the code stays unused
         return read_session(db, user)
     blocked = blocked_member_ids(db, user.id)
     for member in members:
         if not _friends(db, user.id, member.user_id, blocked):
             account = db.get(User, member.user_id)
+            db.rollback()
             error = api_error(
                 403,
                 "train_not_friends",
@@ -737,36 +822,40 @@ def join(payload: TrainJoin, user: CurrentUser, db: Db) -> TrainTogetherRead:
             error.detail["error"]["member"] = {"user_id": account.id, "name": account.display_name}
             raise error
     if len(members) >= MAX_MEMBERS:
+        db.rollback()
         raise api_error(409, "train_full", "This session is full.")
-    previous = _membership(db, user.id)
+    previous, affected = settle(db, user.id, now)
     if previous is not None:
         affected |= _leave(db, previous, "left", now)
-    rejoining = db.get(TrainTogetherMember, (session.id, user.id))
-    draft_session = _draft_session(db, user.id)
-    if rejoining is None:
-        db.add(
-            TrainTogetherMember(
-                session_id=session.id,
-                user_id=user.id,
-                joined_at=now,
-                draft_session_id=draft_session,
-            )
+    db.flush()  # close the earlier attendance before opening this one
+    # A rejoin is a new attendance, so each stint keeps its own times, draft and workout.
+    db.add(
+        TrainTogetherMember(
+            session_id=session.id,
+            user_id=user.id,
+            joined_at=now,
+            draft_session_id=_draft_session(db, user.id),
         )
-    else:
-        rejoining.left_at = rejoining.left_reason = None
-        rejoining.draft_session_id = draft_session
-    invite.used_at, invite.used_by = now, user.id
+    )
+    db.flush()
+    if len(_active_members(db, session.id)) > MAX_MEMBERS:
+        db.rollback()
+        raise api_error(409, "train_full", "This session is full.")
     affected |= {user.id, *(member.user_id for member in members)}
     db.commit()
-    hub.train_together_changed(*affected)
+    notify(affected)
     return read_session(db, user)
 
 
 @router.post("/leave", response_model=TrainTogetherRead)
 def leave(user: CurrentUser, db: Db) -> TrainTogetherRead:
-    current = current_membership(db, user.id)
-    if current is not None:
-        _notify(db, _leave(db, current[1], "left", utc_now()))
+    _write_lock(db)
+    now = utc_now()
+    member, affected = settle(db, user.id, now)
+    if member is not None:
+        affected |= _leave(db, member, "left", now)
+    db.commit()
+    notify(affected)
     return read_session(db, user)
 
 
@@ -796,13 +885,18 @@ def change_partner_workout(
     row = db.get(ActiveWorkoutSync, user_id)
     if row is None or row.draft is None:
         raise api_error(409, "train_no_workout", "They have no workout in progress.")
-    if not allowed_partner_change(row.draft, payload) or not _owns_new_references(
-        db, user_id, payload.base, payload.draft
+    if (
+        not allowed_partner_change(row.draft, payload)
+        or not allowed_references(db, user_id, row.draft, payload.draft)
+        or not readable_by_owner(payload.draft)
     ):
         raise api_error(
             422, "train_change_not_allowed", "Only their sets and exercises can be changed."
         )
-    result = change_draft(db, user_id, payload)
+    result = change_draft(db, user_id, payload, accept=no_new_duplicate_exercises)
+    # Access may have ended while the write ran: then nothing about the workout goes back.
+    db.expire_all()
+    _partner(db, user, user_id)
     return TrainPartnerWriteRead(
         **result, exercises=draft_exercises(db, user_id, user.id, result["draft"])
     )

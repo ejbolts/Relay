@@ -658,7 +658,10 @@ class TrainTogetherSession(Base):
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
-    created_by: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # Cleared when that account is deleted; the session and everyone else's history stay.
+    created_by: Mapped[str | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -670,7 +673,10 @@ class TrainTogetherSession(Base):
 
 
 class TrainTogetherMember(Base):
-    """One account's time in a session, and the workout it saved from it."""
+    """One attendance: an account's time in a session, and the workout it saved from it.
+
+    A rejoin is a new row. An account has at most one open row (``left_at`` is null).
+    """
 
     __tablename__ = "train_together_members"
     __table_args__ = (
@@ -680,12 +686,11 @@ class TrainTogetherMember(Base):
         ),
     )
 
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_uuid)
     session_id: Mapped[str] = mapped_column(
-        ForeignKey("train_together_sessions.id", ondelete="CASCADE"), primary_key=True
+        ForeignKey("train_together_sessions.id", ondelete="CASCADE"), index=True
     )
-    user_id: Mapped[str] = mapped_column(
-        ForeignKey("users.id", ondelete="CASCADE"), primary_key=True, index=True
-    )
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
     left_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     left_reason: Mapped[str | None] = mapped_column(String(20), nullable=True)
@@ -694,6 +699,14 @@ class TrainTogetherMember(Base):
     workout_id: Mapped[str | None] = mapped_column(
         ForeignKey("training_workouts.id", ondelete="SET NULL"), nullable=True, index=True
     )
+
+
+Index(
+    "uq_train_together_members_open",
+    TrainTogetherMember.user_id,
+    unique=True,
+    sqlite_where=TrainTogetherMember.left_at.is_(None),
+)
 
 
 class TrainTogetherInvite(Base):

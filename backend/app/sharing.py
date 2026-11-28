@@ -640,6 +640,17 @@ def with_trained_with(db: Session, viewer: User, workouts):
     return train_together.attach_trained_with(db, viewer, workouts)
 
 
+def partner_relationship_changed(db: Session, user_id: str, other_id: str | None = None) -> set:
+    """Train together, before the change commits: unfriending or blocking a partner leaves the
+    shared session, and saved histories that name these accounts are refreshed. Pass the result
+    to ``hub.train_together_changed`` after the commit."""
+    from . import train_together  # train_together builds on this module
+
+    trained = train_together.friendship_ended(db, user_id, other_id) if other_id else set()
+    train_together.refresh_shared_histories(db, user_id)
+    return trained
+
+
 def shared_workout(workout: TrainingWorkout, sharing: ProfileSharing) -> TrainingWorkoutRead:
     """A workout with only what its owner shares: notes, body weight and photos on request."""
     shared = TrainingWorkoutRead.model_validate(workout)
@@ -795,6 +806,7 @@ def update_sharing(payload: SharingChoices, user: CurrentUser, db: Db) -> Sharin
     for key, value in payload.model_dump().items():
         setattr(sharing, key, value)
     # Friend requests keep waiting: anyone can see a public profile, but friends are chosen.
+    partner_relationship_changed(db, user.id)
     db.commit()
     db.refresh(sharing)
     # Friends' open windows show or hide live activity straight away.
@@ -1279,11 +1291,10 @@ def accept_friend(user_id: str, user: CurrentUser, db: Db) -> FriendRequestRead:
 def remove_friend(user_id: str, user: CurrentUser, db: Db) -> None:
     """Remove a friend, cancel your request or decline theirs. Always allowed."""
     db.execute(delete(Friendship).where(*friendship_key(user.id, user_id)))
+    trained = partner_relationship_changed(db, user.id, user_id)
     db.commit()
     hub.notifications_changed(user.id, user_id)
-    from . import train_together  # train_together builds on this module
-
-    train_together.friendship_ended(db, user.id, user_id)
+    hub.train_together_changed(*trained)
 
 
 def friendship_key(user_id: str, other_id: str):
@@ -1925,11 +1936,10 @@ def block_member(user_id: str, user: CurrentUser, db: Db) -> None:
             )
         )
     )
+    trained = partner_relationship_changed(db, user.id, user_id)
     db.commit()
     hub.notifications_changed(user.id, user_id)
-    from . import train_together  # train_together builds on this module
-
-    train_together.friendship_ended(db, user.id, user_id)
+    hub.train_together_changed(*trained)
 
 
 @sharing_router.delete("/blocks/{user_id}", status_code=204)
@@ -1939,5 +1949,6 @@ def unblock_member(user_id: str, user: CurrentUser, db: Db) -> None:
             ProfileBlock.blocker_id == user.id, ProfileBlock.blocked_id == user_id
         )
     )
+    partner_relationship_changed(db, user.id)
     db.commit()
     hub.notifications_changed(user.id, user_id)
